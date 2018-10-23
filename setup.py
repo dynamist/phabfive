@@ -12,18 +12,11 @@ except ImportError:
 # Allow setup.py to be run from any path
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
-try:
-    import pypandoc
-
-    README = pypandoc.convert_file("README.md", "rst")
-    CHANGELOG = pypandoc.convert_file("CHANGELOG.md", "rst")
-except ImportError:
-    print("README and CHANGELOG not converted, install pypandoc")
-    README = ""
-    CHANGELOG = ""
+README = "README.md"
+CHANGELOG = "CHANGELOG.md"
 
 install_requires = ["anyconfig", "appdirs", "phabricator", "pyyaml", "docopt"]
-tests_require = ["coverage", "pypandoc", "pytest", "tox"]
+tests_require = ["coverage", "pytest", "tox"]
 download_url = "{}/tarball/v{}".format(
     "https://github.com/dynamist/phabfive", phabfive.__version__
 )
@@ -51,14 +44,15 @@ setup(
         # 'Development Status :: 5 - Production/Stable',
         # 'Development Status :: 6 - Mature',
         # 'Development Status :: 7 - Inactive',
+        "Intended Audience :: System Administrators",
         "Intended Audience :: Developers",
         "Operating System :: OS Independent",
         "Environment :: Console",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.6",
-        "License :: Other/Proprietary License",
+        "License :: OSI Approved :: Apache Software License",
         "Natural Language :: English",
     ],
     platforms=["OS Independent"],
-    license="Proprietary License",
+    license='Apache License 2.0',
 )
