@@ -5,7 +5,7 @@ import re
 import sys
 
 # phabfive imports
-from phabfive import passphrase, diffusion
+from phabfive import passphrase, diffusion, paste
 from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -21,9 +21,10 @@ base_args = """
 Usage:
     phabfive [-v ...] [options] <command> [<args> ...]
 
-Available unifik commands are:
+Available phabfive commands are:
     passphrase         The passphrase app
     diffusion          The diffusion app
+    paste              The paste app
 
 Shortcuts to Phabricator monograms:
 
@@ -56,6 +57,14 @@ Arguments:
 Options:
     -h, --help          Show this help message and exit
     -u, --url           Show url
+"""
+
+sub_paste_args = """
+Usage:
+    phabfive paste list 
+
+Options:
+    -h, --help          Show this help message and exit
 """
 
 
@@ -98,6 +107,8 @@ def parse_cli():
         sub_args = docopt(sub_passphrase_args, argv=argv)
     elif cli_args["<command>"] == "diffusion":
         sub_args = docopt(sub_diffusion_args, argv=argv)
+    elif cli_args["<command>"] == "paste":
+        sub_args = docopt(sub_paste_args, argv=argv)
     else:
         extras(True, phabfive.__version__, [Option("-h", "--help", 0, True)], base_args)
         sys.exit(1)
@@ -131,6 +142,11 @@ def run(cli_args, sub_args):
 
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
+
+        elif cli_args["<command>"] == "paste":
+            p = paste.Paste()
+            if sub_args["list"]:
+                p.print_pastes()
 
     except (
         PhabfiveConfigException,
