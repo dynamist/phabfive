@@ -62,3 +62,4 @@ setup(
     ],
     platforms=["OS Independent"],
     license='Apache License 2.0',
+)
