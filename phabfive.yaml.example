@@ -1,0 +1,4 @@
+# -*- mode: yaml -*-
+
+# https://<name>.phacility.com/settings/user/USER/page/apitokens/
+PHAB_TOKEN: api-abc123

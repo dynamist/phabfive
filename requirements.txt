@@ -1,0 +1,5 @@
+anyconfig>=0.9.0
+appdirs
+phabricator
+pyyaml
+docopt
