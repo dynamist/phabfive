@@ -10,7 +10,6 @@ from phabfive.exceptions import PhabfiveDataException
 
 # 3rd party imports
 from phabricator import APIError
-import emoji
 
 
 class Diffusion(Phabfive):
