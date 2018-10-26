@@ -35,7 +35,7 @@ class Diffusion(Phabfive):
         ]
         repository = self.phab.diffusion.repository.edit(transactions=transactions)
 
-        print(emoji.emojize("Successfully created {} :sparkles:").format(name))
+        print("Successfully created {}".format(name))
 
     def get_repositories(self, query_key=None, attachments=None, constraints=None):
         """Phabfive wrapper that connects to Phabricator and retrieves information

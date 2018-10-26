@@ -3,4 +3,3 @@ appdirs
 phabricator
 pyyaml
 docopt
-emoji
