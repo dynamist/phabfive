@@ -7,26 +7,27 @@ import re
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException
 
+
 class Paste(Phabfive):
     def __init__(self):
         super(Paste, self).__init__()
 
-    def get_pastes(self, queryKey=None, attachments=None, constraints=None):
+    def get_pastes(self, query_key=None, attachments=None, constraints=None):
         """Wrapper that connects to Phabricator and retrieves information about pastes.
 
-        `queryKey` defaults to "all".
+        `query_key` defaults to "all".
 
-        :type queryKey: str
+        :type query_key: str
         :type attachments: dict
         :type constraints: dict
 
         :rtype: dict
         """
-        queryKey = "all" if not queryKey else queryKey
+        query_key = "all" if not query_key else query_key
         attachments = {} if not attachments else attachments
         constraints = {} if not constraints else constraints
         response = self.phab.paste.search(
-            queryKey=queryKey, attachments=attachments, constraints=constraints
+            queryKey=query_key, attachments=attachments, constraints=constraints
         )
 
         pastes = response.get("data", {})
