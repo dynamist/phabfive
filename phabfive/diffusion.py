@@ -37,20 +37,23 @@ class Diffusion(Phabfive):
 
         print(emoji.emojize("Successfully created {} :sparkles:").format(name))
 
-    def get_repositories(self, queryKey="all", attachments=None, constraints=None):
+    def get_repositories(self, query_key=None, attachments=None, constraints=None):
         """Phabfive wrapper that connects to Phabricator and retrieves information
         about repositories.
 
-        :type queryKey: str
+        `query_key` defaults to "all".
+
+        :type query_key: str
         :type attachments: dict
         :type constraints: dict
 
         :rtype: dict
         """
+        query_key = "all" if not query_key else query_key
         attachments = {} if not attachments else attachments
         constraints = {} if not constraints else constraints
         response = self.phab.diffusion.repository.search(
-            queryKey=queryKey, attachments=attachments, constraints=constraints
+            queryKey=query_key, attachments=attachments, constraints=constraints
         )
 
         repositories = response.get("data", {})
@@ -61,8 +64,8 @@ class Diffusion(Phabfive):
         return repositories
 
     def get_branches(self, repo_id=None, repo_callsign=None, repo_shortname=None):
-        """Phabfive wrapper that connects to Phabricator and retrieves information
-        about branches for a specified repository.
+        """Wrapper that connects to Phabricator and retrieves information about branches
+        for a specified repository.
 
         :type repo_id: str
         :type repo_callsign: str

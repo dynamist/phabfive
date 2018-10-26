@@ -17,7 +17,7 @@ A summary of the currently supported actions, as well as planned features:
   - [ ] Add repository
   - [ ] Edit URI
 - Paste
-  - [ ] List pastes
+  - [X] List pastes
   - [ ] Get specified paste
   - [ ] Add paste
 
