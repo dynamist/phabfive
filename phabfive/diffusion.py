@@ -10,11 +10,32 @@ from phabfive.exceptions import PhabfiveDataException
 
 # 3rd party imports
 from phabricator import APIError
+import emoji
 
 
 class Diffusion(Phabfive):
     def __init__(self):
         super(Diffusion, self).__init__()
+
+    def create_repository(self, name=None):
+        """Phabfive wrapper that connects to Phabricator and creates repositories.
+
+        :type name: str
+
+        :rtype: str
+        """
+        for repo in self.get_repositories():
+            if name in repo["fields"]["name"]:
+                raise PhabfiveDataException("Name of repository already exist")
+
+        transactions = [
+            {"type": "name", "value": name},
+            {"type": "vcs", "value": "git"},
+            {"type": "status", "value": "active"},
+        ]
+        repository = self.phab.diffusion.repository.edit(transactions=transactions)
+
+        print(emoji.emojize("Successfully created {} :sparkles:").format(name))
 
     def get_repositories(self, queryKey="all", attachments=None, constraints=None):
         """Phabfive wrapper that connects to Phabricator and retrieves information
