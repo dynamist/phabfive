@@ -128,7 +128,6 @@ def run(cli_args, sub_args):
         if cli_args["<command>"] == "passphrase":
             p = passphrase.Passphrase()
             p.print_secret(sub_args["<id>"])
-
         elif cli_args["<command>"] == "diffusion":
             d = diffusion.Diffusion()
             if sub_args["repo"]:
@@ -139,20 +138,15 @@ def run(cli_args, sub_args):
                         status = ["inactive"]
                     else:
                         status = REPO_STATUS_CHOICES
-
                     d.print_repositories(status=status, url=sub_args["--url"])
-
                 elif sub_args["create"]:
-                    d.create_repository(name=sub_args["<name>"])
-
+                    d.print_repository_url(name=sub_args["<name>"])
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
-
         elif cli_args["<command>"] == "paste":
             p = paste.Paste()
             if sub_args["list"]:
                 p.print_pastes()
-
     except (
         PhabfiveConfigException,
         PhabfiveDataException,

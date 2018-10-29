@@ -21,20 +21,45 @@ class Diffusion(Phabfive):
 
         :type name: str
 
-        :rtype: str
+        :rtype: unicode
         """
-        for repo in self.get_repositories():
-            if name in repo["fields"]["name"]:
-                raise PhabfiveDataException("Name of repository already exist")
+        response = self.phab.diffusion.repository.search(queryKey="all")
+
+        repos = response.get("data", {})
 
         transactions = [
             {"type": "name", "value": name},
             {"type": "vcs", "value": "git"},
             {"type": "status", "value": "active"},
         ]
-        repository = self.phab.diffusion.repository.edit(transactions=transactions)
 
-        print("Successfully created {}".format(name))
+        # check if there are any exisiting repos
+        if not repos:
+            new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
+
+        # if there are exisiting repos, check if input name already exist
+        elif repos:
+            for repo in repos:
+                if name in repo["fields"]["name"]:
+                    raise PhabfiveDataException("Name of repository already exist")
+
+            new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
+
+        return new_repo["object"]["phid"]
+
+    def print_repository_url(self, name=None):
+        """Method used by the Phabfive CLI.
+        """
+        created_repo_phid = self.create_repository(name)
+
+        repos = self.get_repositories(attachments={"uris": "--url"})
+
+        for repo in repos:
+            uris = repo["attachments"]["uris"]["uris"]
+            get_repo_phid = uris[0]["fields"]["repositoryPHID"]
+
+            if get_repo_phid == created_repo_phid:
+                print("git clone {}".format(uris[0]["fields"]["uri"]["effective"]))
 
     def get_repositories(self, query_key=None, attachments=None, constraints=None):
         """Phabfive wrapper that connects to Phabricator and retrieves information
