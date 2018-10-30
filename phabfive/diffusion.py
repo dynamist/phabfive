@@ -16,16 +16,14 @@ class Diffusion(Phabfive):
     def __init__(self):
         super(Diffusion, self).__init__()
 
-    def create_repository(self, name=None):
+    def create_repository(self, name=None, vcs=None, status=None):
         """Phabfive wrapper that connects to Phabricator and creates repositories.
 
         :type name: str
 
         :rtype: unicode
         """
-        response = self.phab.diffusion.repository.search(queryKey="all")
-
-        repos = response.get("data", {})
+        repos = self.get_repositories()
 
         transactions = [
             {"type": "name", "value": name},
@@ -33,21 +31,15 @@ class Diffusion(Phabfive):
             {"type": "status", "value": "active"},
         ]
 
-        # check if there are any exisiting repos
-        if not repos:
-            new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
+        for repo in repos:
+            if name in repo["fields"]["name"]:
+                raise PhabfiveDataException("Name of repository already exist")
 
-        # if there are exisiting repos, check if input name already exist
-        elif repos:
-            for repo in repos:
-                if name in repo["fields"]["name"]:
-                    raise PhabfiveDataException("Name of repository already exist")
-
-            new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
+        new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
 
         return new_repo["object"]["phid"]
 
-    def print_repository_url(self, name=None):
+    def print_created_repository_url(self, name=None):
         """Method used by the Phabfive CLI.
         """
         created_repo_phid = self.create_repository(name)
@@ -81,9 +73,6 @@ class Diffusion(Phabfive):
         )
 
         repositories = response.get("data", {})
-
-        if not repositories:
-            raise PhabfiveDataException("No data or other error.")
 
         return repositories
 
@@ -120,6 +109,9 @@ class Diffusion(Phabfive):
         status = REPO_STATUS_CHOICES if not status else status
 
         repos = self.get_repositories(attachments={"uris": url})
+
+        if not repos:
+            raise PhabfiveDataException("No data or other error.")
 
         # filter based on active or inactive status
         repos = [repo for repo in repos if repo["fields"]["status"] in status]

@@ -140,7 +140,7 @@ def run(cli_args, sub_args):
                         status = REPO_STATUS_CHOICES
                     d.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
-                    d.print_repository_url(name=sub_args["<name>"])
+                    d.print_created_repository_url(name=sub_args["<name>"])
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
         elif cli_args["<command>"] == "paste":
