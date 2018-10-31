@@ -30,6 +30,7 @@ Shortcuts to Phabricator monograms:
 
     K[0-9]+            Passphrase object, example K123
     R[0-9]+            Diffusion repo, example R123
+    P[0-9]+            Paste object, example P123
 
 Options:
     -h, --help          Show this help message and exit
@@ -62,6 +63,10 @@ Options:
 sub_paste_args = """
 Usage:
     phabfive paste list 
+    phabfive paste show <id> [options]
+
+Arguments:
+    <id>                Paste monogram (P123)
 
 Options:
     -h, --help          Show this help message and exit
@@ -100,6 +105,8 @@ def parse_cli():
             argv = [app] + argv
         elif app == "diffusion":
             argv = [app, "branch", "list"] + argv
+        elif app == "paste":
+            argv = [app, "show"] + argv
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
         sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)
@@ -137,16 +144,16 @@ def run(cli_args, sub_args):
                     status = ["inactive"]
                 else:
                     status = REPO_STATUS_CHOICES
-
                 d.print_repositories(status=status, url=sub_args["--url"])
-
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
-
         elif cli_args["<command>"] == "paste":
             p = paste.Paste()
             if sub_args["list"]:
                 p.print_pastes()
+            elif sub_args["show"]:
+                if sub_args["<id>"]:
+                    p.print_pastes(ids=sub_args["<id>"])
 
     except (
         PhabfiveConfigException,
