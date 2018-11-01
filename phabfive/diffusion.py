@@ -26,7 +26,7 @@ class Diffusion(Phabfive):
         :type vcs: str
         :type status: str
 
-        :rtype: unicode
+        :rtype: str
         """
         vcs = vcs if vcs else "git"
         status = status if status else "active"
