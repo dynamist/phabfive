@@ -17,15 +17,19 @@ class Paste(Phabfive):
         return re.match("^" + MONOGRAMS["paste"] + "$", id_)
 
     def convert_ids(self, ids):
-        """Method used by print function
-        """
-        if not self._validate_identifier(ids):
-            raise PhabfiveDataException('Identifier "{0}" is not valid.'.format(ids))
+        """Method used by print function"""
+        ids_list_int = []
+        constraints = {}
 
-        ids = ids.replace("P", "")
-        # constraints takes int
-        ids = int(ids)
-        constraints = {"ids": [ids]}
+        for id in ids:
+            if not self._validate_identifier(id):
+                raise PhabfiveDataException('Identifier "{0}" is not valid.'.format(id))
+            id = id.replace("P", "")
+            # constraints takes int
+            id = int(id)
+            ids_list_int.append(id)
+
+        constraints.update({"ids": ids_list_int})
 
         return constraints
 
@@ -47,13 +51,13 @@ class Paste(Phabfive):
         response = self.phab.paste.search(
             queryKey=query_key, attachments=attachments, constraints=constraints
         )
+
         pastes = response.get("data", {})
 
         return pastes
 
     def print_pastes(self, ids=None):
-        """Method used by the Phabfive CLI.
-        """
+        """Method used by the Phabfive CLI."""
         if ids:
             constraints = self.convert_ids(ids=ids)
             pastes = self.get_pastes(constraints=constraints)
