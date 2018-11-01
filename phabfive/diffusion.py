@@ -59,11 +59,10 @@ class Diffusion(Phabfive):
         for repo in repos:
             uris = repo["attachments"]["uris"]["uris"]
             get_repo_phid = uris[0]["fields"]["repositoryPHID"]
-
             if get_repo_phid == created_repo_phid:
                 print(
                     "{0} {1}".format(
-                        VCS_CLONE_MAP[uris[0]["fields"]["vcs"]],
+                        VCS_CLONE_MAP[repo["fields"]["vcs"]],
                         uris[0]["fields"]["uri"]["effective"],
                     )
                 )
