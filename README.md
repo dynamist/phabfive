@@ -18,7 +18,7 @@ A summary of the currently supported actions, as well as planned features:
   - [ ] Edit URI
 - Paste
   - [X] List pastes
-  - [ ] Get specified paste
+  - [X] Get specified paste
   - [ ] Add paste
 
 ## Example usage
