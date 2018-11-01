@@ -12,9 +12,60 @@ from phabfive.exceptions import PhabfiveDataException
 from phabricator import APIError
 
 
+VCS_CLONE_MAP = {"git": "git clone", "hg": "hg clone", "svn": "svn checkout"}
+
+
 class Diffusion(Phabfive):
     def __init__(self):
         super(Diffusion, self).__init__()
+
+    def create_repository(self, name=None, vcs=None, status=None):
+        """Phabfive wrapper that connects to Phabricator and creates repositories.
+
+        `vcs` defaults to "git".
+        `status` defaults to "active".
+
+        :type name: str
+        :type vcs: str
+        :type status: str
+
+        :rtype: str
+        """
+        vcs = vcs if vcs else "git"
+        status = status if status else "active"
+
+        repos = self.get_repositories()
+
+        for repo in repos:
+            if name in repo["fields"]["name"]:
+                raise PhabfiveDataException("Name of repository already exist")
+
+        transactions = [
+            {"type": "name", "value": name},
+            {"type": "vcs", "value": vcs},
+            {"type": "status", "value": status},
+        ]
+
+        new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
+
+        return new_repo["object"]["phid"]
+
+    def print_created_repository_url(self, name=None):
+        """Method used by the Phabfive CLI."""
+        created_repo_phid = self.create_repository(name)
+
+        repos = self.get_repositories(attachments={"uris": "--url"})
+
+        for repo in repos:
+            uris = repo["attachments"]["uris"]["uris"]
+            get_repo_phid = uris[0]["fields"]["repositoryPHID"]
+            if get_repo_phid == created_repo_phid:
+                print(
+                    "{0} {1}".format(
+                        VCS_CLONE_MAP[repo["fields"]["vcs"]],
+                        uris[0]["fields"]["uri"]["effective"],
+                    )
+                )
 
     def get_repositories(self, query_key=None, attachments=None, constraints=None):
         """Phabfive wrapper that connects to Phabricator and retrieves information
@@ -36,9 +87,6 @@ class Diffusion(Phabfive):
         )
 
         repositories = response.get("data", {})
-
-        if not repositories:
-            raise PhabfiveDataException("No data or other error.")
 
         return repositories
 
@@ -70,11 +118,13 @@ class Diffusion(Phabfive):
                 )
 
     def print_repositories(self, status=None, url=False):
-        """Method used by the Phabfive CLI.
-        """
+        """Method used by the Phabfive CLI."""
         status = REPO_STATUS_CHOICES if not status else status
 
         repos = self.get_repositories(attachments={"uris": url})
+
+        if not repos:
+            raise PhabfiveDataException("No data or other error.")
 
         # filter based on active or inactive status
         repos = [repo for repo in repos if repo["fields"]["status"] in status]
@@ -100,8 +150,7 @@ class Diffusion(Phabfive):
                 print(repo_name)
 
     def print_branches(self, repo):
-        """Method used by the Phabfive CLI.
-        """
+        """Method used by the Phabfive CLI."""
         if self._validate_identifier(repo):
             repo = repo.replace("R", "")
             branches = self.get_branches(repo_id=repo)
