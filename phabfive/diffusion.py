@@ -12,6 +12,9 @@ from phabfive.exceptions import PhabfiveDataException
 from phabricator import APIError
 
 
+VCS_CLONE_MAP = {"git": "git clone", "hg": "hg clone", "svn": "svn checkout"}
+
+
 class Diffusion(Phabfive):
     def __init__(self):
         super(Diffusion, self).__init__()
@@ -58,7 +61,12 @@ class Diffusion(Phabfive):
             get_repo_phid = uris[0]["fields"]["repositoryPHID"]
 
             if get_repo_phid == created_repo_phid:
-                print("git clone {}".format(uris[0]["fields"]["uri"]["effective"]))
+                print(
+                    "{0} {1}".format(
+                        VCS_CLONE_MAP[uris[0]["fields"]["vcs"]],
+                        uris[0]["fields"]["uri"]["effective"],
+                    )
+                )
 
     def get_repositories(self, query_key=None, attachments=None, constraints=None):
         """Phabfive wrapper that connects to Phabricator and retrieves information
