@@ -19,29 +19,36 @@ class Diffusion(Phabfive):
     def create_repository(self, name=None, vcs=None, status=None):
         """Phabfive wrapper that connects to Phabricator and creates repositories.
 
+        `vcs` defaults to "git".
+        `status` defaults to "active".
+
         :type name: str
+        :type vcs: str
+        :type status: str
 
         :rtype: unicode
         """
-        repos = self.get_repositories()
+        vcs = vcs if vcs else "git"
+        status = status if status else "active"
 
-        transactions = [
-            {"type": "name", "value": name},
-            {"type": "vcs", "value": "git"},
-            {"type": "status", "value": "active"},
-        ]
+        repos = self.get_repositories()
 
         for repo in repos:
             if name in repo["fields"]["name"]:
                 raise PhabfiveDataException("Name of repository already exist")
+
+        transactions = [
+            {"type": "name", "value": name},
+            {"type": "vcs", "value": vcs},
+            {"type": "status", "value": status},
+        ]
 
         new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
 
         return new_repo["object"]["phid"]
 
     def print_created_repository_url(self, name=None):
-        """Method used by the Phabfive CLI.
-        """
+        """Method used by the Phabfive CLI."""
         created_repo_phid = self.create_repository(name)
 
         repos = self.get_repositories(attachments={"uris": "--url"})
@@ -104,8 +111,7 @@ class Diffusion(Phabfive):
                 )
 
     def print_repositories(self, status=None, url=False):
-        """Method used by the Phabfive CLI.
-        """
+        """Method used by the Phabfive CLI."""
         status = REPO_STATUS_CHOICES if not status else status
 
         repos = self.get_repositories(attachments={"uris": url})
@@ -137,8 +143,7 @@ class Diffusion(Phabfive):
                 print(repo_name)
 
     def print_branches(self, repo):
-        """Method used by the Phabfive CLI.
-        """
+        """Method used by the Phabfive CLI."""
         if self._validate_identifier(repo):
             repo = repo.replace("R", "")
             branches = self.get_branches(repo_id=repo)
