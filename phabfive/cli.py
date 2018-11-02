@@ -49,6 +49,7 @@ Options:
 sub_diffusion_args = """
 Usage:
     phabfive diffusion repo list [(active || inactive)] [options]
+    phabfive diffusion repo create <name> [options]
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
@@ -134,17 +135,19 @@ def run(cli_args, sub_args):
         if cli_args["<command>"] == "passphrase":
             p = passphrase.Passphrase()
             p.print_secret(sub_args["<id>"])
-
         elif cli_args["<command>"] == "diffusion":
             d = diffusion.Diffusion()
-            if sub_args["repo"] and sub_args["list"]:
-                if sub_args["active"]:
-                    status = ["active"]
-                elif sub_args["inactive"]:
-                    status = ["inactive"]
-                else:
-                    status = REPO_STATUS_CHOICES
-                d.print_repositories(status=status, url=sub_args["--url"])
+            if sub_args["repo"]:
+                if sub_args["list"]:
+                    if sub_args["active"]:
+                        status = ["active"]
+                    elif sub_args["inactive"]:
+                        status = ["inactive"]
+                    else:
+                        status = REPO_STATUS_CHOICES
+                    d.print_repositories(status=status, url=sub_args["--url"])
+                elif sub_args["create"]:
+                    d.print_created_repository_url(name=sub_args["<name>"])
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
         elif cli_args["<command>"] == "paste":

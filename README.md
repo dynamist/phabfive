@@ -12,9 +12,9 @@ A summary of the currently supported actions, as well as planned features:
   - [ ] Add secret
 - Diffusion
   - [X] List repositories names
-  - [ ] Get branches for specified repository
+  - [X] Get branches for specified repository
   - [ ] Get clone URI:s for specified repository
-  - [ ] Add repository
+  - [X] Add repository
   - [ ] Edit URI
 - Paste
   - [X] List pastes
