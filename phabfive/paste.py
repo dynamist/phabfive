@@ -16,10 +16,9 @@ class Paste(Phabfive):
     def _validate_identifier(self, id_):
         return re.match("^" + MONOGRAMS["paste"] + "$", id_)
 
-    def convert_ids(self, ids):
+    def _convert_ids(self, ids):
         """Method used by print function"""
         ids_list_int = []
-        constraints = {}
 
         for id in ids:
             if not self._validate_identifier(id):
@@ -29,9 +28,7 @@ class Paste(Phabfive):
             id = int(id)
             ids_list_int.append(id)
 
-        constraints.update({"ids": ids_list_int})
-
-        return constraints
+        return ids_list_int
 
     def get_pastes(self, query_key=None, attachments=None, constraints=None):
         """Wrapper that connects to Phabricator and retrieves information about pastes.
@@ -59,7 +56,7 @@ class Paste(Phabfive):
     def print_pastes(self, ids=None):
         """Method used by the Phabfive CLI."""
         if ids:
-            constraints = self.convert_ids(ids=ids)
+            constraints = {"ids": self._convert_ids(ids=ids)}
             pastes = self.get_pastes(constraints=constraints)
         else:
             pastes = self.get_pastes()
@@ -72,6 +69,6 @@ class Paste(Phabfive):
 
         for item in response:
             paste = item["fields"]["title"]
-            paste_id = "P{}".format(item["id"])
+            paste_id = "P{0}".format(item["id"])
 
-            print("{} {}".format(paste_id, paste))
+            print("{0} {1}".format(paste_id, paste))
