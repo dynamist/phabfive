@@ -22,14 +22,15 @@ Usage:
     phabfive [-v ...] [options] <command> [<args> ...]
 
 Available phabfive commands are:
-    passphrase         The passphrase app
-    diffusion          The diffusion app
-    paste              The paste app
+    passphrase          The passphrase app
+    diffusion           The diffusion app
+    paste               The paste app
 
 Shortcuts to Phabricator monograms:
 
-    K[0-9]+            Passphrase object, example K123
-    R[0-9]+            Diffusion repo, example R123
+    K[0-9]+             Passphrase object, example K123
+    R[0-9]+             Diffusion repo, example R123
+    P[0-9]+             Paste object, example P123
 
 Options:
     -h, --help          Show this help message and exit
@@ -63,9 +64,13 @@ Options:
 sub_paste_args = """
 Usage:
     phabfive paste list 
+    phabfive paste show <ids> ... [options]
+
+Arguments:
+    <ids> ...            Paste monogram (P123), example P1 P2 P3
 
 Options:
-    -h, --help          Show this help message and exit
+    -h, --help           Show this help message and exit
 """
 
 
@@ -101,6 +106,8 @@ def parse_cli():
             argv = [app] + argv
         elif app == "diffusion":
             argv = [app, "branch", "list"] + argv
+        elif app == "paste":
+            argv = [app, "show"] + argv
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
         sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)
@@ -147,6 +154,10 @@ def run(cli_args, sub_args):
             p = paste.Paste()
             if sub_args["list"]:
                 p.print_pastes()
+            elif sub_args["show"]:
+                if sub_args["<ids>"]:
+                    p.print_pastes(ids=sub_args["<ids>"])
+
     except (
         PhabfiveConfigException,
         PhabfiveDataException,
