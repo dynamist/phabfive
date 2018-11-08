@@ -1,0 +1,23 @@
+# snap install --devmode phabfive_git_amd64.snap
+
+name: phabfive
+version: git
+summary: Phabfive
+description: >
+  A simple tool to interact with Phabricator.
+
+confinement: devmode
+
+parts:
+  phabfive:
+    plugin: python
+    snap:
+      - -.arc*
+      - -.coverage.*
+      - -.tox
+      - -.venv
+    source: .
+
+apps:
+  phabfive:
+    command: bin/phabfive

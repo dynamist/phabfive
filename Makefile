@@ -40,5 +40,8 @@ test: ## run test suite
 sdist: ## make a source distribution
 	python setup.py sdist
 
+snap: ## make a snap package
+	snapcraft cleanbuild
+
 install: ## install package
 	python setup.py install
