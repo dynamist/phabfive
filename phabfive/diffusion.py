@@ -42,6 +42,7 @@ class Diffusion(Phabfive):
 
         transactions = [
             {"type": "name", "value": name},
+            {"type": "shortName", "value": name},
             {"type": "vcs", "value": vcs},
             {"type": "status", "value": status},
         ]
