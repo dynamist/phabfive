@@ -53,11 +53,14 @@ sub_diffusion_args = """
 Usage:
     phabfive diffusion repo list [(active || inactive || all)] [options]
     phabfive diffusion repo create <name> [options]
+    phabfive diffusion repo edit uri <name>
+    phabfive diffusion repo observe (<credential>) <urls> ... [options]
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
     <repo>              Repository monogram (R123) or shortname, but currently
                         not the callsign
+    (<credential>)      SSH Private Key for read-only observing, stored in Passphrase ex. K123
 
 Options:
     -h, --help          Show this help message and exit
@@ -161,6 +164,8 @@ def run(cli_args, sub_args):
                     else:  # default value
                         status = ["active"]
                     d.print_repositories(status=status, url=sub_args["--url"])
+                elif sub_args["observe"]:
+                    d.print_observed_repositories(credential=sub_args["<credential>"], urls=sub_args["<urls>"])
                 elif sub_args["create"]:
                     d.print_created_repository_url(name=sub_args["<name>"])
             elif sub_args["branch"] and sub_args["list"]:
