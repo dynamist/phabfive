@@ -53,7 +53,6 @@ sub_diffusion_args = """
 Usage:
     phabfive diffusion repo list [(active || inactive || all)] [options]
     phabfive diffusion repo create <name> [options]
-    phabfive diffusion repo edit uri <name>
     phabfive diffusion repo observe (<credential>) <urls> ... [options]
     phabfive diffusion branch list <repo> [options]
 
