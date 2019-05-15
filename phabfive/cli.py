@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 # python std lib
 import re
 import sys
@@ -163,7 +165,7 @@ def run(cli_args, sub_args):
         PhabfiveDataException,
         PhabfiveRemoteException,
     ) as e:
-        print(e)
+        print(e, file=sys.stderr)
         retcode = 1
 
     return retcode
