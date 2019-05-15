@@ -48,7 +48,7 @@ Options:
 
 sub_diffusion_args = """
 Usage:
-    phabfive diffusion repo list [(active || inactive)] [options]
+    phabfive diffusion repo list [(active || inactive || all)] [options]
     phabfive diffusion repo create <name> [options]
     phabfive diffusion branch list <repo> [options]
 
@@ -139,12 +139,12 @@ def run(cli_args, sub_args):
             d = diffusion.Diffusion()
             if sub_args["repo"]:
                 if sub_args["list"]:
-                    if sub_args["active"]:
-                        status = ["active"]
+                    if sub_args["all"]:
+                        status = REPO_STATUS_CHOICES
                     elif sub_args["inactive"]:
                         status = ["inactive"]
-                    else:
-                        status = REPO_STATUS_CHOICES
+                    else:  # default value
+                        status = ["active"]
                     d.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
                     d.print_created_repository_url(name=sub_args["<name>"])
