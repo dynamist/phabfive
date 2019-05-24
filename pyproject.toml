@@ -8,4 +8,4 @@ authors = ["Henrik Holmboe <henrik@dynamist.se>"]
 python = "*"
 
 [tool.poetry.dev-dependencies]
-pytest = "^3.5"
+pytest = "^4.5"
