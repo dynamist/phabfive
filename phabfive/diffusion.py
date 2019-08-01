@@ -20,6 +20,25 @@ class Diffusion(Phabfive):
     def __init__(self):
         super(Diffusion, self).__init__()
 
+    def _validate_identifier(self, repo_id):
+        return re.match("^" + MONOGRAMS["diffusion"] + "$", repo_id)
+
+    def _validate_credential_type(self, credential):
+        for key in credential:
+            if "PHID" in key:
+                credential_phid = key
+                credential_type = credential.get(key).get("type")
+                if credential_type not in (
+                    "ssh-generated-key",
+                    "ssh-key-text",
+                    "token",
+                ):
+                    raise PhabfiveDataException(
+                        "{0} is not type of ssh-generated-key, ssh-key-text or token.".format(
+                            credential
+                        )
+                    )
+
     # TODO: create_repository() should call edit_repository(), they are using the same conduit
     def create_repository(self, name=None, vcs=None, status=None, observe=False):
         """Phabfive wrapper that connects to Phabricator and creates repositories.
@@ -343,9 +362,6 @@ class Diffusion(Phabfive):
 
         for branch_name in branch_names:
             print(branch_name)
-
-    def _validate_identifier(self, repo_id):
-        return re.match("^" + MONOGRAMS["diffusion"] + "$", repo_id)
 
     def _resolve_shortname_to_id(self, shortname):
         repos = self.get_repositories()
