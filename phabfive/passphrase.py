@@ -38,7 +38,7 @@ class Passphrase(Phabfive):
         has_data = response.get("data", {})
 
         if not has_data:
-            raise PhabfiveDataException("K{0} has no data or other error.".format(i))
+            raise PhabfiveDataException("K{0} has no data or other error.".format(ids))
         else:
             # TODO: I am doing the logging wrong, in this module the loglevel
             # is INFO, even if env PHABFIVE_DEBUG=1
