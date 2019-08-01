@@ -79,6 +79,112 @@ class Diffusion(Phabfive):
         # TODO: Choose a suitable return when the function is being implemented in cli.py
         return True
 
+    def create_uri(
+        self, repository_name=None, new_uri=None, io=None, display=None, credential=None
+    ):
+        """Phabfive wrapper that connects to Phabricator and create uri.
+
+        :type repository_name: str
+        :type uri: str
+        :type io: str
+        :type display: str
+        :type credential: str
+
+        :rtype: str
+        """
+        # For use in transaction further down to create new uri
+        repository_phid = ""
+        credential_phid = ""
+        # Assume that repository_name does not yet exist
+        repository_exist = False
+
+        repos = self.get_repositories(attachments={"uris": "--url"})
+
+        if self._validate_identifier(repository_name):
+            repository_id = repository_name.replace("R", "")
+
+            for repo in repos:
+                exisiting_repo_id = repo["id"]
+                if int(repository_id) == exisiting_repo_id:
+                    repository_name = repo["fields"]["shortName"]
+
+        get_credential = passphrase.Passphrase().get_secret(ids=credential)
+
+        self._validate_credential_type(credential=get_credential)
+        #TODO: Validate repos existent - create its own function
+        for repo in repos:
+            name = repo["fields"]["shortName"]
+            # Repo exist. Edit its existing uris, setting I/O - Read Only, Display - Hidden
+            if repository_name == name:
+                repository_exist = True
+                print("'{0}' exist".format(repository_name))
+                # Existing repo PHID. Will be used further down to create new uri
+                repository_phid = repo["phid"]
+                # Amount of uris the repo has
+                uris = repo["attachments"]["uris"]["uris"]
+
+                for i in range(len(uris)):
+                    uri = uris[i]["fields"]["uri"]["display"]
+                    object_identifier = uris[i]["id"]
+
+                    # Changing settings: I/O - Read Only(read), Display - Hidden(never)
+                    self.edit_uri(
+                        uri=uri,
+                        io="read",
+                        display="never",
+                        object_identifier=object_identifier,
+                    )
+
+        # Repo does not exist. Create new repo (inactive), edit its uris, setting I/O - Read Only, Display - Hidden
+        if repository_exist == False:
+            print("'{0}' created".format(repository_name))
+
+            repository_phid = self.create_repository(
+                name=repository_name, status="inactive", observe=True
+            )
+
+            repos = self.get_repositories(attachments={"uris": "--url"})
+
+            for repo in repos:
+                # Amount of uris the repo has
+                uris = repo["attachments"]["uris"]["uris"]
+                get_repo_phid = uris[0]["fields"]["repositoryPHID"]
+
+                if get_repo_phid == repository_phid:
+                    for i in range(len(uris)):
+                        uri = uris[i]["fields"]["uri"]["display"]
+                        object_identifier = uris[i]["id"]
+                        self.edit_uri(
+                            uri=uri,
+                            io="read",
+                            display="never",
+                            object_identifier=object_identifier,
+                        )
+
+            # TODO: change edit_repositoies to edit_repository
+            created_repos_name = []
+            created_repos_name.append(repository_name)
+            # Activate repository
+            self.edit_repositories(names=created_repos_name, status="active")
+        # Create new uri
+        # TODO: The choices of value of display are default, always, never. May be implemented
+        value = "always"
+        io = io if io else "default"
+
+        transactions = [
+            {"type": "repository", "value": repository_phid},
+            {"type": "uri", "value": new_uri},
+            {"type": "io", "value": io},  # observe repository
+            {"type": "display", "value": value},
+            {"type": "credential", "value": credential_phid},
+        ]
+        try:
+            self.phab.diffusion.uri.edit(transactions=transactions)
+        except APIError as e:
+            raise PhabfiveDataException(e.message)
+
+        return new_uri
+
     def edit_uri(self, uri=None, io=None, display=None, object_identifier=None):
         """Phabfive wrapper that connects to Phabricator and edit uri.
 
@@ -94,110 +200,31 @@ class Diffusion(Phabfive):
             {"type": "io", "value": io},
             {"type": "display", "value": display},
         ]
-        # object_identifier is neccessary when editing an exisiting URI but leave blank when creating new URI
-        self.phab.diffusion.uri.edit(
-            transactions=transactions, objectIdentifier=object_identifier
-        )
-        # TODO: Choose a suitable return when the function is being implemented in cli.py
-        return True
-
-    def observe_repositories(self, credential=None, urls=None):
-        """Phabfive wrapper that connects to Phabricator and observes repositories.
-
-        :type credential: str
-        :type urls: list
-
-        :rtype: list
-        """
-        observed_repos_url = []
-        created_repos_name = []
-        credential_phid = ""
-        get_credential = passphrase.Passphrase().get_secret(ids=credential)
-
-        # Validate type of credential
-        for key in get_credential:
-            if "PHID" in key:
-                credential_phid = key  # For use further down to create new uri
-                credential_type = get_credential.get(key).get("type")
-                if credential_type not in (
-                    "ssh-generated-key",
-                    "ssh-key-text",
-                    "token",
-                ):
-                    raise PhabfiveDataException(
-                        "{0} is not type of ssh-generated-key, ssh-key-text or token.".format(
-                            credential
-                        )
-                    )
-
-        for url in urls:
-            split_url = url.split("/")
-            repo_name = split_url[-1].split(".")[0]
-            created_repo_phid = self.create_repository(
-                name=repo_name, status="inactive", observe=True
+        try:
+            # object_identifier is neccessary when editing an exisiting URI but leave blank when creating new URI
+            self.phab.diffusion.uri.edit(
+                transactions=transactions, objectIdentifier=object_identifier
             )
-            if "already exist" in created_repo_phid:
-                observed_repos_url.append(created_repo_phid)
-                continue
+        except APIError:
+            pass
+            # TODO: The APIError raises an I/O error which is not "correct"
+            # due to different setting for uri depending on if it is default uri or observed/mirrored uri
+        return True
+        # TODO: Choose a suitable return when the function is being called in cli.py
 
-            repos = self.get_repositories(attachments={"uris": "--url"})
-
-            for repo in repos:
-                uris = repo["attachments"]["uris"]["uris"]
-                get_repo_phid = uris[0]["fields"]["repositoryPHID"]
-                if get_repo_phid == created_repo_phid:
-                    # Identify one of newly created repository's uri
-                    uri_diffusion = uris[0]["fields"]["uri"]["display"]
-                    object_identifier = uris[0]["id"]
-
-                    self.edit_uri(
-                        uri=uri_diffusion,
-                        io="read",
-                        display="never",
-                        object_identifier=object_identifier,
-                    )
-
-                    uri_source = uris[1]["fields"]["uri"]["display"]
-                    object_identifier = uris[1]["id"]
-
-                    self.edit_uri(
-                        uri=uri_source,
-                        io="read",
-                        display="always",
-                        object_identifier=object_identifier,
-                    )
-
-                    observed_repos_url.append(repo)
-
-            transactions = [
-                {"type": "repository", "value": created_repo_phid},
-                {"type": "uri", "value": url},
-                {"type": "io", "value": "observe"},
-                {"type": "display", "value": "never"},
-                {"type": "credential", "value": credential_phid},
-            ]
-
-            self.phab.diffusion.uri.edit(transactions=transactions)
-
-            created_repos_name.append(repo_name)
-
-        self.edit_repositories(names=created_repos_name, status="active")
-
-        return observed_repos_url
-
-    def print_observed_repositories(self, credential=None, urls=None):
+    def print_uri(
+        self, repository_name=None, new_uri=None, io=None, display=None, credential=None
+    ):
         """Method used by the Phabfive CLI."""
-
-        observed_repositories = self.observe_repositories(
-            credential=credential, urls=urls
+        created_uri = self.create_uri(
+            repository_name=repository_name,
+            new_uri=new_uri,
+            io=io,
+            display=display,
+            credential=credential,
         )
 
-        for repo in observed_repositories:
-            if "already exist" in repo:
-                print(repo)
-            else:
-                created_url = repo["attachments"]["uris"]["uris"][1]["fields"]["uri"]["display"]
-                print("{0}".format(created_url))
+        print("NEW URI: {0}".format(created_uri))
 
     def print_created_repository_url(self, name=None):
         """Method used by the Phabfive CLI."""
