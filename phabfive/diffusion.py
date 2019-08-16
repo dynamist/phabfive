@@ -62,7 +62,9 @@ class Diffusion(Phabfive):
 
         for repo in repos:
             if name in repo["fields"]["name"]:
-                raise PhabfiveDataException("Repository {0} already exists.".format(name))
+                raise PhabfiveDataException(
+                    "Repository {0} already exists.".format(name)
+                )
 
         transactions = [
             {"type": "name", "value": name},
