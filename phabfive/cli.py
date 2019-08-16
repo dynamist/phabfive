@@ -54,6 +54,7 @@ Usage:
     phabfive diffusion repo list [(active || inactive || all)] [options]
     phabfive diffusion repo create <name> [options]
     phabfive diffusion uri create (--observe || --mirror) (<credential>) <repo> <uri> [options]
+    phabfive diffusion uri list <repo> [options]
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
@@ -166,19 +167,22 @@ def run(cli_args, sub_args):
                     d.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
                     d.print_created_repository_url(name=sub_args["<name>"])
-            elif sub_args["uri"] and sub_args["create"]:
-                io = None
-                if sub_args["--mirror"]:
-                    io = "mirror"
-                elif sub_args["--observe"]:
-                    io = "observe"
-                d.print_uri(
-                    repository_name=sub_args["<repo>"],
-                    new_uri=sub_args["<uri>"],
-                    io=io,
-                    display="always",
-                    credential=sub_args["<credential>"],
-                )
+            elif sub_args["uri"]:
+                if sub_args["create"]:
+                    io = None
+                    if sub_args["--mirror"]:
+                        io = "mirror"
+                    elif sub_args["--observe"]:
+                        io = "observe"
+                    d.print_uri(
+                        repository_name=sub_args["<repo>"],
+                        new_uri=sub_args["<uri>"],
+                        io=io,
+                        display="always",
+                        credential=sub_args["<credential>"],
+                    )
+                elif sub_args["list"]:
+                    d.print_uri(repository_name=sub_args["<repo>"], list_uri=True)
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
         elif cli_args["<command>"] == "paste":

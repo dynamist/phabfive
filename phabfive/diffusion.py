@@ -130,7 +130,7 @@ class Diffusion(Phabfive):
         get_credential = passphrase.Passphrase().get_secret(ids=credential)
 
         self._validate_credential_type(credential=get_credential)
-        #TODO: Validate repos existent - create its own function
+        # TODO: Validate repos existent - create its own function
         for repo in repos:
             name = repo["fields"]["shortName"]
             # Repo exist. Edit its existing uris, setting I/O - Read Only, Display - Hidden
@@ -153,38 +153,12 @@ class Diffusion(Phabfive):
                         display="never",
                         object_identifier=object_identifier,
                     )
-
-        # Repo does not exist. Create new repo (inactive), edit its uris, setting I/O - Read Only, Display - Hidden
+        # Repo does not exist. Return exit code 1
         if repository_exist == False:
-            print("'{0}' created".format(repository_name))
 
-            repository_phid = self.create_repository(
-                name=repository_name, status="inactive", observe=True
-            )
+            print("'{0}' does not exist".format(repository_name))
+            return exit(1)
 
-            repos = self.get_repositories(attachments={"uris": "--url"})
-
-            for repo in repos:
-                # Amount of uris the repo has
-                uris = repo["attachments"]["uris"]["uris"]
-                get_repo_phid = uris[0]["fields"]["repositoryPHID"]
-
-                if get_repo_phid == repository_phid:
-                    for i in range(len(uris)):
-                        uri = uris[i]["fields"]["uri"]["display"]
-                        object_identifier = uris[i]["id"]
-                        self.edit_uri(
-                            uri=uri,
-                            io="read",
-                            display="never",
-                            object_identifier=object_identifier,
-                        )
-
-            # TODO: change edit_repositoies to edit_repository
-            created_repos_name = []
-            created_repos_name.append(repository_name)
-            # Activate repository
-            self.edit_repositories(names=created_repos_name, status="active")
         # Create new uri
         # TODO: The choices of value of display are default, always, never. May be implemented
         value = "always"
@@ -231,19 +205,56 @@ class Diffusion(Phabfive):
         return True
         # TODO: Choose a suitable return when the function is being called in cli.py
 
+    def uri_list(self, repository_name=None):
+        """Phabfive wrapper that connects to Phabricator and list uri for specific repository.
+
+        :type repository_name: str
+
+        :rtype: list
+        """
+        repo_uris = []
+        repos = self.get_repositories(attachments={"uris": "--url"})
+
+        for repo in repos:
+            name = repo["fields"]["shortName"]
+
+            if repository_name == name:
+                uris = repo["attachments"]["uris"]["uris"]
+
+                for i in range(len(uris)):
+                    repo_uris.append(uris[i]["fields"]["uri"]["display"])
+
+                return repo_uris
+
     def print_uri(
-        self, repository_name=None, new_uri=None, io=None, display=None, credential=None
+        self,
+        repository_name=None,
+        new_uri=None,
+        io=None,
+        display=None,
+        credential=None,
+        list_uri=False,
     ):
         """Method used by the Phabfive CLI."""
-        created_uri = self.create_uri(
-            repository_name=repository_name,
-            new_uri=new_uri,
-            io=io,
-            display=display,
-            credential=credential,
-        )
+        if list_uri == True:
+            uri_list = self.uri_list(repository_name=repository_name)
 
-        print("NEW URI: {0}".format(created_uri))
+            if uri_list:
+                for uri in uri_list:
+                    from pprint import pprint
+
+                    pprint("{0}".format(uri))
+
+        else:
+            created_uri = self.create_uri(
+                repository_name=repository_name,
+                new_uri=new_uri,
+                io=io,
+                display=display,
+                credential=credential,
+            )
+
+            print("NEW URI: {0}".format(created_uri))
 
     def print_created_repository_url(self, name=None):
         """Method used by the Phabfive CLI."""
