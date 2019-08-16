@@ -8,26 +8,34 @@ REPO_STATUS_CHOICES = ["active", "inactive"]
 MONOGRAMS = {"diffusion": "R[0-9]+", "passphrase": "K[0-9]+", "paste": "P[0-9]+"}
 
 
-class Display(Enum):
-    DEFAULT = "default"  # "Default: Use default behaviour"
-    ALWAYS = "always"    # "Visible: Show as a clone URL"
-    NEVER = "never"      # "Hidden: Do not show as a clone URL"
+class EnumAutoNameLowerCase(Enum):
+    def _generate_next_value_(name, start, count, last_values):
+        return name.lower()
 
-class Io(Enum):
-    DEFAULT = "default"  # "Default: Use default behaviour"
-    NEVER = "never"      # "No I/O: Do not perform any I/O""
+    def __str__(self):
+        return str(self.value)
+
+
+class Display(EnumAutoNameLowerCase):
+    DEFAULT = auto()     # "Default: Use default behaviour"
+    ALWAYS = auto()      # "Visible: Show as a clone URL"
+    NEVER = auto()       # "Hidden: Do not show as a clone URL"
+
+class Io(EnumAutoNameLowerCase):
+    DEFAULT = auto()     # "Default: Use default behaviour"
+    NEVER = auto()       # "No I/O: Do not perform any I/O""
     # Local
-    READ = "read"        # "Read Only: Serve repository in read-only mode"
-    WRITE = "write"      # "Read/Write: Serve repository in read/write mode"
+    READ = auto()        # "Read Only: Serve repository in read-only mode"
+    WRITE = auto()       # "Read/Write: Serve repository in read/write mode"
     # Remote
-    OBSERVE = "observe"  # "Observe: Copy from a remote"
-    MIRROR = "mirror"    # "Mirror: Push a copy to a remote"
+    OBSERVE = auto()     # "Observe: Copy from a remote"
+    MIRROR = auto()      # "Mirror: Push a copy to a remote"
 
-class Vcs(Enum):
-    GIT = "git"
-    SVN = "svn"
-    HG = "hg"
+class Vcs(EnumAutoNameLowerCase):
+    GIT = auto()
+    SVN = auto()
+    HG = auto()
 
-class Status(Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
+class Status(EnumAutoNameLowerCase):
+    ACTIVE = auto()
+    INACTIVE = auto()
