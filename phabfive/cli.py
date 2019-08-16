@@ -8,7 +8,7 @@ import sys
 
 # phabfive imports
 from phabfive import passphrase, diffusion, paste, user
-from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
+from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES, Io
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
@@ -166,23 +166,27 @@ def run(cli_args, sub_args):
                         status = ["active"]
                     d.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
-                    d.print_created_repository_url(name=sub_args["<name>"])
+                    phid = d.create_repository(name=sub_args["<name>"])
+                    # TODO: print_uri should be able to print based on phid
+                    #d.print_uri(phid)
             elif sub_args["uri"]:
                 if sub_args["create"]:
-                    io = None
+                    io = Io.DEFAULT
                     if sub_args["--mirror"]:
-                        io = "mirror"
+                        io = Io.MIRROR
                     elif sub_args["--observe"]:
-                        io = "observe"
-                    d.print_uri(
+                        io = Io.OBSERVE
+
+                    created_uri = d.create_uri(
                         repository_name=sub_args["<repo>"],
                         new_uri=sub_args["<uri>"],
                         io=io,
                         display="always",
                         credential=sub_args["<credential>"],
                     )
+                    print(created_uri)
                 elif sub_args["list"]:
-                    d.print_uri(repository_name=sub_args["<repo>"], list_uri=True)
+                    d.print_uri(repo=sub_args["<repo>"])
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
         elif cli_args["<command>"] == "paste":

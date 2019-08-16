@@ -4,7 +4,7 @@
 import re
 
 # phabfive imports
-from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
+from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES, Display, Io
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException
 from phabfive import passphrase
@@ -40,7 +40,7 @@ class Diffusion(Phabfive):
                     )
 
     # TODO: create_repository() should call edit_repository(), they are using the same conduit
-    def create_repository(self, name=None, vcs=None, status=None, observe=False):
+    def create_repository(self, name=None, vcs=None, status=None):
         """Phabfive wrapper that connects to Phabricator and creates repositories.
 
         `vcs` defaults to "git".
@@ -57,12 +57,12 @@ class Diffusion(Phabfive):
 
         repos = self.get_repositories()
 
+        if not repos:
+            raise PhabfiveDataException("No data or other error.")
+
         for repo in repos:
             if name in repo["fields"]["name"]:
-                if observe == True:
-                    return "{0} already exist".format(name)
-                else:
-                    raise PhabfiveDataException("Name of repository already exist")
+                raise PhabfiveDataException("Repository {0} already exists.".format(name))
 
         transactions = [
             {"type": "name", "value": name},
@@ -117,7 +117,10 @@ class Diffusion(Phabfive):
         # Assume that repository_name does not yet exist
         repository_exist = False
 
-        repos = self.get_repositories(attachments={"uris": "--url"})
+        repos = self.get_repositories(attachments={"uris": True})
+
+        if not repos:
+            raise PhabfiveDataException("No data or other error.")
 
         if self._validate_identifier(repository_name):
             repository_id = repository_name.replace("R", "")
@@ -127,6 +130,7 @@ class Diffusion(Phabfive):
                 if int(repository_id) == exisiting_repo_id:
                     repository_name = repo["fields"]["shortName"]
 
+        # TODO: error handling, catch exception?
         get_credential = passphrase.Passphrase().get_secret(ids=credential)
 
         self._validate_credential_type(credential=get_credential)
@@ -136,6 +140,7 @@ class Diffusion(Phabfive):
             # Repo exist. Edit its existing uris, setting I/O - Read Only, Display - Hidden
             if repository_name == name:
                 repository_exist = True
+                # TODO: never print in lib; if it exists then do nothing
                 print("'{0}' exist".format(repository_name))
                 # Existing repo PHID. Will be used further down to create new uri
                 repository_phid = repo["phid"]
@@ -149,26 +154,25 @@ class Diffusion(Phabfive):
                     # Changing settings: I/O - Read Only(read), Display - Hidden(never)
                     self.edit_uri(
                         uri=uri,
-                        io="read",
-                        display="never",
+                        io=Io.READ,
+                        display=Display.NEVER,
                         object_identifier=object_identifier,
                     )
         # Repo does not exist. Return exit code 1
-        if repository_exist == False:
-
+        if not repository_exist:
             print("'{0}' does not exist".format(repository_name))
             return exit(1)
+            # TODO: raise an exception and let CLI handle print and exit
 
-        # Create new uri
-        # TODO: The choices of value of display are default, always, never. May be implemented
-        value = "always"
-        io = io if io else "default"
+        # TODO: assert that display and io is any of the enum values
+        display = Display.ALWAYS
+        io = io if io else Io.DEFAULT
 
         transactions = [
             {"type": "repository", "value": repository_phid},
             {"type": "uri", "value": new_uri},
-            {"type": "io", "value": io},  # observe repository
-            {"type": "display", "value": value},
+            {"type": "io", "value": io},
+            {"type": "display", "value": display},
             {"type": "credential", "value": credential_phid},
         ]
         try:
@@ -205,73 +209,40 @@ class Diffusion(Phabfive):
         return True
         # TODO: Choose a suitable return when the function is being called in cli.py
 
-    def uri_list(self, repository_name=None):
+    # TODO: add support for repo_shortname, etc, see get_branches()
+    # TODO: add support for handling active vs inactive repos
+    # TODO: add support for handling hidden URIs
+    def get_uris(self, repo_id=None):
         """Phabfive wrapper that connects to Phabricator and list uri for specific repository.
 
-        :type repository_name: str
+        :type repo_id: str
 
-        :rtype: list
+        :rtype: dict
         """
-        repo_uris = []
-        repos = self.get_repositories(attachments={"uris": "--url"})
+        ret = {}
+        repos = self.get_repositories(attachments={"uris": True})
+
+        if not repos:
+            raise PhabfiveDataException("No data or other error.")
 
         for repo in repos:
-            name = repo["fields"]["shortName"]
+            if repo_id == repo["fields"]["shortName"]:
+                ret = repo
 
-            if repository_name == name:
-                uris = repo["attachments"]["uris"]["uris"]
+        return ret["attachments"]["uris"]["uris"]
 
-                for i in range(len(uris)):
-                    repo_uris.append(uris[i]["fields"]["uri"]["display"])
-
-                return repo_uris
-
-    def print_uri(
-        self,
-        repository_name=None,
-        new_uri=None,
-        io=None,
-        display=None,
-        credential=None,
-        list_uri=False,
-    ):
+    # TODO: the URIs should be sorted when printed
+    def print_uri(self, repo):
         """Method used by the Phabfive CLI."""
-        if list_uri == True:
-            uri_list = self.uri_list(repository_name=repository_name)
 
-            if uri_list:
-                for uri in uri_list:
-                    from pprint import pprint
-
-                    pprint("{0}".format(uri))
-
+        if self._validate_identifier(repo):
+            repo = repo.replace("R", "")
+            uris = self.get_uris(repo_id=repo)
         else:
-            created_uri = self.create_uri(
-                repository_name=repository_name,
-                new_uri=new_uri,
-                io=io,
-                display=display,
-                credential=credential,
-            )
+            uris = self.get_uris(repo_id=repo)
 
-            print("NEW URI: {0}".format(created_uri))
-
-    def print_created_repository_url(self, name=None):
-        """Method used by the Phabfive CLI."""
-        created_repo_phid = self.create_repository(name)
-
-        repos = self.get_repositories(attachments={"uris": "--url"})
-
-        for repo in repos:
-            uris = repo["attachments"]["uris"]["uris"]
-            get_repo_phid = uris[0]["fields"]["repositoryPHID"]
-            if get_repo_phid == created_repo_phid:
-                print(
-                    "{0} {1}".format(
-                        VCS_CLONE_MAP[repo["fields"]["vcs"]],
-                        uris[0]["fields"]["uri"]["effective"],
-                    )
-                )
+        for i, item in enumerate(uris):
+            print(uris[i]["fields"]["uri"]["display"])
 
     def get_repositories(self, query_key=None, attachments=None, constraints=None):
         """Phabfive wrapper that connects to Phabricator and retrieves information
