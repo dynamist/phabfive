@@ -41,4 +41,4 @@ class Status(EnumAutoNameLowerCase):
     ACTIVE = auto()
     INACTIVE = auto()
 
-REPO_STATUS_CHOICES = [Status.ACTIVE, Status.INACTIVE]
+REPO_STATUS_CHOICES = [str(Status.ACTIVE), str(Status.INACTIVE)]
