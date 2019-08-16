@@ -4,7 +4,7 @@
 import re
 
 # phabfive imports
-from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES, Display, Io
+from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES, Display, Io, Vcs
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException
 from phabfive import passphrase
@@ -13,7 +13,7 @@ from phabfive import passphrase
 from phabricator import APIError
 
 
-VCS_CLONE_MAP = {"git": "git clone", "hg": "hg clone", "svn": "svn checkout"}
+VCS_CLONE_MAP = {Vcs.GIT: "git clone", Vcs.HG: "hg clone", Vcs.SVN: "svn checkout"}
 
 
 class Diffusion(Phabfive):
@@ -52,8 +52,8 @@ class Diffusion(Phabfive):
 
         :rtype: str
         """
-        vcs = vcs if vcs else "git"
-        status = status if status else "active"
+        vcs = vcs if vcs else Vcs.GIT
+        status = status if status else Status.ACTIVE
 
         repos = self.get_repositories()
 
@@ -317,7 +317,7 @@ class Diffusion(Phabfive):
                 repo_urls = [
                     uri["fields"]["uri"]["effective"]
                     for uri in uris
-                    if uri["fields"]["display"]["effective"] == "always"
+                    if uri["fields"]["display"]["effective"] == Display.ALWAYS
                 ]
 
                 print(", ".join(repo_urls))

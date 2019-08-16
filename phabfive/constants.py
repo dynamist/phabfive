@@ -21,3 +21,12 @@ class Io(Enum):
     # Remote
     OBSERVE = "observe"  # "Observe: Copy from a remote"
     MIRROR = "mirror"    # "Mirror: Push a copy to a remote"
+
+class Vcs(Enum):
+    GIT = "git"
+    SVN = "svn"
+    HG = "hg"
+
+class Status(Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
