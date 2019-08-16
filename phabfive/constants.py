@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from enum import Enum
+from enum import Enum, auto
 
 REPO_STATUS_CHOICES = ["active", "inactive"]
 
