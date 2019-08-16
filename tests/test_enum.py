@@ -15,5 +15,5 @@ def test_status_enum_value():
     """This tests that the __str__() method is returning our value as intended."""
     from phabfive.constants import Status
 
-    assert Status.ACTIVE == "active"
-    assert Status.INACTIVE == "inactive"
+    assert str(Status.ACTIVE) == "active"
+    assert str(Status.INACTIVE) == "inactive"
