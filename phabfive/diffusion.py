@@ -19,6 +19,7 @@ VCS_CLONE_MAP = {Vcs.GIT: "git clone", Vcs.HG: "hg clone", Vcs.SVN: "svn checkou
 class Diffusion(Phabfive):
     def __init__(self):
         super(Diffusion, self).__init__()
+        self.passphrase = passphrase.Passphrase()
 
     def _validate_identifier(self, repo_id):
         return re.match("^" + MONOGRAMS["diffusion"] + "$", repo_id)
@@ -133,7 +134,7 @@ class Diffusion(Phabfive):
                     repository_name = repo["fields"]["shortName"]
 
         # TODO: error handling, catch exception?
-        get_credential = passphrase.Passphrase().get_secret(ids=credential)
+        get_credential = self.passphrase.get_secret(ids=credential)
 
         self._validate_credential_type(credential=get_credential)
         # TODO: Validate repos existent - create its own function
