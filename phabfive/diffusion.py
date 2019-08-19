@@ -157,8 +157,8 @@ class Diffusion(Phabfive):
                     # Changing settings: I/O - Read Only(read), Display - Hidden(never)
                     self.edit_uri(
                         uri=uri,
-                        io=Io.READ,
-                        display=Display.NEVER,
+                        io=str(Io.READ),
+                        display=str(Display.NEVER),
                         object_identifier=object_identifier,
                     )
         # Repo does not exist. Return exit code 1
@@ -168,14 +168,14 @@ class Diffusion(Phabfive):
             # TODO: raise an exception and let CLI handle print and exit
 
         # TODO: assert that display and io is any of the enum values
-        display = Display.ALWAYS
-        io = io if io else Io.DEFAULT
+        display = Display.ALWAYS.value
+        io = io if io else Io.DEFAULT.value
 
         transactions = [
             {"type": "repository", "value": repository_phid},
             {"type": "uri", "value": new_uri},
-            {"type": "io", "value": io},
-            {"type": "display", "value": display},
+            {"type": "io", "value": str(io)},
+            {"type": "display", "value": str(display)},
             {"type": "credential", "value": credential_phid},
         ]
         try:
