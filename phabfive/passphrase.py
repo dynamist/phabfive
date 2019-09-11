@@ -53,5 +53,3 @@ class Passphrase(Phabfive):
             for secret_type, secret_value in value["material"].items():
                 if secret_type == "password":
                     print(secret_value)
-                else:
-                    return ""
