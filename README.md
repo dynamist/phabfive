@@ -20,6 +20,8 @@ A summary of the currently supported actions, as well as planned features:
   - [X] List pastes
   - [X] Get specified paste
   - [ ] Add paste
+- User
+  - [X] Who am I: information about the logged-in user
 
 ## Example usage
 
