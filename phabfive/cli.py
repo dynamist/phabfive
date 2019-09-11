@@ -7,7 +7,7 @@ import re
 import sys
 
 # phabfive imports
-from phabfive import passphrase, diffusion, paste
+from phabfive import passphrase, diffusion, paste, user
 from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -27,6 +27,7 @@ Available phabfive commands are:
     passphrase          The passphrase app
     diffusion           The diffusion app
     paste               The paste app
+    user                Information on users
 
 Shortcuts to Phabricator monograms:
 
@@ -75,6 +76,14 @@ Options:
     -h, --help           Show this help message and exit
 """
 
+sub_user_args = """
+Usage:
+    phabfive user whoami [options]
+
+Options:
+    -h, --help           Show this help message and exit
+"""
+
 
 def parse_cli():
     """
@@ -110,6 +119,8 @@ def parse_cli():
             argv = [app, "branch", "list"] + argv
         elif app == "paste":
             argv = [app, "show"] + argv
+        elif app == "user":
+            argv = [app, "whoami"] + argv
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
         sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)
@@ -119,6 +130,8 @@ def parse_cli():
         sub_args = docopt(sub_diffusion_args, argv=argv)
     elif cli_args["<command>"] == "paste":
         sub_args = docopt(sub_paste_args, argv=argv)
+    elif cli_args["<command>"] == "user":
+        sub_args = docopt(sub_user_args, argv=argv)
     else:
         extras(True, phabfive.__version__, [Option("-h", "--help", 0, True)], base_args)
         sys.exit(1)
@@ -159,6 +172,10 @@ def run(cli_args, sub_args):
             elif sub_args["show"]:
                 if sub_args["<ids>"]:
                     p.print_pastes(ids=sub_args["<ids>"])
+        if cli_args["<command>"] == "user":
+            u = user.User()
+            if sub_args["whoami"]:
+                u.print_whoami()
 
     except (
         PhabfiveConfigException,
