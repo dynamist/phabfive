@@ -38,7 +38,7 @@ Usage:
     phabfive passphrase K123
 
 
-## Installation of a phabfive development environment
+## Installation in a development environment
 
 Install the `virtualenv` and `virtualenvwrapper` software packages.
 
@@ -58,7 +58,7 @@ pip install -e '.[test]'
 Repeat this for Python 3, for example version 3.6.
 
 
-## Build and run a phabfive Docker images
+## Build and run in a Docker image
 
 Build a Docker image:
 ```
