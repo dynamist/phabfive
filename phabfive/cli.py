@@ -66,7 +66,7 @@ Options:
 
 sub_paste_args = """
 Usage:
-    phabfive paste list 
+    phabfive paste list
     phabfive paste show <ids> ... [options]
 
 Arguments:
