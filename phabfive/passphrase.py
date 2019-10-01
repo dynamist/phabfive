@@ -49,7 +49,7 @@ class Passphrase(Phabfive):
     def print_secret(self, ids):
         secret = self.get_secret(ids)
 
-        for key, value in secret.items():
+        for value in secret.values():
             for secret_type, secret_value in value["material"].items():
                 if secret_type == "password":
                     print(secret_value)
