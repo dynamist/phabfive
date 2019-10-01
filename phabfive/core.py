@@ -63,7 +63,7 @@ class Phabfive(object):
                 raise PhabfiveConfigException(error)
 
         # check validity of configurables
-        for k, v in VALIDATORS.items():
+        for k in VALIDATORS.keys():
             if not re.match(VALIDATORS[k], self.conf[k]):
                 error = "{} is malformed".format(k)
                 example = VALID_EXAMPLES.get(k)
