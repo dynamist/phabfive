@@ -182,7 +182,7 @@ def run(cli_args, sub_args):
         PhabfiveDataException,
         PhabfiveRemoteException,
     ) as e:
-        print(e, file=sys.stderr)
+        print(str(e), file=sys.stderr)
         retcode = 1
 
     return retcode

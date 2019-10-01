@@ -105,7 +105,7 @@ class Diffusion(Phabfive):
             try:
                 return self.phab.diffusion.branchquery(repository=repo_id)
             except APIError as e:
-                raise PhabfiveDataException(e.message)
+                raise PhabfiveDataException(e)
         elif repo_callsign:
             # TODO: probably catch APIError here as well
             return self.phab.diffusion.branchquery(callsign=repo_callsign)

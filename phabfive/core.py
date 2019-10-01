@@ -82,7 +82,7 @@ class Phabfive(object):
         try:
             self.phab.user.whoami()
         except APIError as e:
-            raise PhabfiveRemoteException(e.message)
+            raise PhabfiveRemoteException(e)
 
     def load_config(self):
         """
