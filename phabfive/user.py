@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 
 # python std lib
-import json
 import logging
-import re
 
 # phabfive imports
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveDataException, PhabfiveRemoteException
+from phabfive.exceptions import PhabfiveRemoteException
 
 # 3rd party imports
 from phabricator import APIError
