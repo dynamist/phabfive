@@ -1,6 +1,6 @@
 # phabfive
 
-A simple tool to interact with Phabricator.
+A command line tool to interact with Phabricator.
 
 ## Features
 
