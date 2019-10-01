@@ -80,7 +80,7 @@ class Phabfive(object):
         """
         """
         try:
-            result = self.phab.user.whoami()
+            self.phab.user.whoami()
         except APIError as e:
             raise PhabfiveRemoteException(e.message)
 
