@@ -6,13 +6,13 @@ import pytest
 
 def test_import_version():
     try:
-        from phabfive import __version__
+        from phabfive import __version__ # noqa
     except ImportError:
         pytest.fail("Unexpected ImportError")
 
 
 def test_import_phabfive():
     try:
-        from phabfive.core import Phabfive
+        from phabfive.core import Phabfive # noqa
     except ImportError:
         pytest.fail("Unexpected ImportError")
