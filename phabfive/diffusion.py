@@ -7,8 +7,8 @@ import re
 from phabfive.constants import (
     MONOGRAMS,
     REPO_STATUS_CHOICES,
-    IO_NEW_URI_VALUES,
-    DISPLAY_VALUES,
+    IO_NEW_URI_CHOICES,
+    DISPLAY_CHOICES,
     Vcs
 )
 from phabfive.core import Phabfive
@@ -129,14 +129,14 @@ class Diffusion(Phabfive):
         io = io if io else "default"
         display = display if display else "always"
 
-        if io not in IO_NEW_URI_VALUES:
+        if io not in IO_NEW_URI_CHOICES:
             raise PhabfiveConfigException(
                 "'{0}' is not valid. Valid IO values are 'default', 'observe', 'mirror' or 'never'".format(
                     io
                 )
             )
 
-        if display not in DISPLAY_VALUES:
+        if display not in DISPLAY_CHOICES:
             raise PhabfiveConfigException(
                 "'{0}' is not valid. Valid Display values are 'default', 'always' or 'hidden'".format(
                     display
