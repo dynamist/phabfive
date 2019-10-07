@@ -9,7 +9,6 @@ from phabfive.constants import (
     REPO_STATUS_CHOICES,
     IO_NEW_URI_CHOICES,
     DISPLAY_CHOICES,
-    Vcs
 )
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException, PhabfiveConfigException
@@ -17,9 +16,6 @@ from phabfive import passphrase
 
 # 3rd party imports
 from phabricator import APIError
-
-
-VCS_CLONE_MAP = {Vcs.GIT: "git clone", Vcs.HG: "hg clone", Vcs.SVN: "svn checkout"}
 
 
 class Diffusion(Phabfive):
@@ -59,8 +55,8 @@ class Diffusion(Phabfive):
 
         :rtype: str
         """
-        vcs = vcs if vcs else Vcs.GIT
-        status = status if status else Status.ACTIVE
+        vcs = vcs if vcs else "git"
+        status = status if status else "active"
 
         repos = self.get_repositories()
 
@@ -187,8 +183,10 @@ class Diffusion(Phabfive):
                         object_identifier=object_identifier,
                     )
         if not repository_exist:
-            raise PhabfiveDataException("'{0}' does not exist. Please create a new repository.".format(
-                    repository_name)
+            raise PhabfiveDataException(
+                "'{0}' does not exist. Please create a new repository.".format(
+                    repository_name
+                )
             )
             # TODO: raise an exception and let CLI handle print and exit
         transactions = [

@@ -8,7 +8,7 @@ import sys
 
 # phabfive imports
 from phabfive import passphrase, diffusion, paste, user
-from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES, Display, Io, Status
+from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
@@ -158,12 +158,12 @@ def run(cli_args, sub_args):
             d = diffusion.Diffusion()
             if sub_args["repo"]:
                 if sub_args["list"]:
-                    if sub_args["active"]:
-                        status = [Status.ACTIVE]
-                    elif sub_args["inactive"]:
-                        status = [Status.INACTIVE]
-                    else:
+                    if sub_args["all"]:
                         status = REPO_STATUS_CHOICES
+                    elif sub_args["inactive"]:
+                        status = ["inactive"]
+                    else:  # default value
+                        status = ["active"]
                     d.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
                     phid = d.create_repository(name=sub_args["<name>"])
