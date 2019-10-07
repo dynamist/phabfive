@@ -4,9 +4,15 @@
 import re
 
 # phabfive imports
-from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES, Display, Io, Vcs
+from phabfive.constants import (
+    MONOGRAMS,
+    REPO_STATUS_CHOICES,
+    IO_NEW_URI_VALUES,
+    DISPLAY_VALUES,
+    Vcs
+)
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import PhabfiveDataException, PhabfiveConfigException
 from phabfive import passphrase
 
 # 3rd party imports
@@ -120,6 +126,23 @@ class Diffusion(Phabfive):
         # Assume that repository_name does not yet exist
         repository_exist = False
 
+        io = io if io else "default"
+        display = display if display else "always"
+
+        if io not in IO_NEW_URI_VALUES:
+            raise PhabfiveConfigException(
+                "'{0}' is not valid. Valid IO values are 'default', 'observe', 'mirror' or 'never'".format(
+                    io
+                )
+            )
+
+        if display not in DISPLAY_VALUES:
+            raise PhabfiveConfigException(
+                "'{0}' is not valid. Valid Display values are 'default', 'always' or 'hidden'".format(
+                    display
+                )
+            )
+
         repos = self.get_repositories(attachments={"uris": True})
 
         if not repos:
@@ -142,6 +165,9 @@ class Diffusion(Phabfive):
             name = repo["fields"]["shortName"]
             # Repo exist. Edit its existing uris, setting I/O - Read Only, Display - Hidden
             if repository_name == name:
+                # Value of display for existing URIs always have to be "never" when creating new URI
+                display_off = "never"
+                io_read_only = "read"
                 repository_exist = True
                 # TODO: never print in lib; if it exists then do nothing
                 print("'{0}' exist".format(repository_name))
@@ -153,29 +179,23 @@ class Diffusion(Phabfive):
                 for i in range(len(uris)):
                     uri = uris[i]["fields"]["uri"]["display"]
                     object_identifier = uris[i]["id"]
-
                     # Changing settings: I/O - Read Only(read), Display - Hidden(never)
                     self.edit_uri(
                         uri=uri,
-                        io=str(Io.READ),
-                        display=str(Display.NEVER),
+                        io=io_read_only,
+                        display=display_off,
                         object_identifier=object_identifier,
                     )
-        # Repo does not exist. Return exit code 1
         if not repository_exist:
-            print("'{0}' does not exist".format(repository_name))
-            return exit(1)
+            raise PhabfiveDataException("'{0}' does not exist. Please create a new repository.".format(
+                    repository_name)
+            )
             # TODO: raise an exception and let CLI handle print and exit
-
-        # TODO: assert that display and io is any of the enum values
-        display = Display.ALWAYS.value
-        io = io if io else Io.DEFAULT.value
-
         transactions = [
             {"type": "repository", "value": repository_phid},
             {"type": "uri", "value": new_uri},
-            {"type": "io", "value": str(io)},
-            {"type": "display", "value": str(display)},
+            {"type": "io", "value": io},
+            {"type": "display", "value": display},
             {"type": "credential", "value": credential_phid},
         ]
         try:
@@ -320,7 +340,7 @@ class Diffusion(Phabfive):
                 repo_urls = [
                     uri["fields"]["uri"]["effective"]
                     for uri in uris
-                    if uri["fields"]["display"]["effective"] == Display.ALWAYS
+                    if uri["fields"]["display"]["effective"] == "always"
                 ]
 
                 print(", ".join(repo_urls))

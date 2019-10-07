@@ -168,20 +168,20 @@ def run(cli_args, sub_args):
                 elif sub_args["create"]:
                     phid = d.create_repository(name=sub_args["<name>"])
                     # TODO: print_uri should be able to print based on phid
-                    #d.print_uri(phid)
+                    # d.print_uri(phid)
             elif sub_args["uri"]:
                 if sub_args["create"]:
-                    io = Io.DEFAULT
                     if sub_args["--mirror"]:
-                        io = Io.MIRROR
+                        io = "mirror"
+                        display = "always"
                     elif sub_args["--observe"]:
-                        io = Io.OBSERVE
-
+                        io = "observe"
+                        display = "always"
                     created_uri = d.create_uri(
                         repository_name=sub_args["<repo>"],
                         new_uri=sub_args["<uri>"],
                         io=io,
-                        display=Display.ALWAYS,
+                        display=display,
                         credential=sub_args["<credential>"],
                     )
                     print(created_uri)
