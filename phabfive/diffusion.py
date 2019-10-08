@@ -238,9 +238,9 @@ class Diffusion(Phabfive):
 
         :type repo_id: str
 
-        :rtype: dict
+        :rtype: list
         """
-        ret = {}
+        uris = []
         repos = self.get_repositories(attachments={"uris": True})
 
         if not repos:
@@ -248,9 +248,12 @@ class Diffusion(Phabfive):
 
         for repo in repos:
             if repo_id == repo["fields"]["shortName"]:
-                ret = repo
+                no_of_uris = repo["attachments"]["uris"]["uris"]
 
-        return ret["attachments"]["uris"]["uris"]
+                for uri in no_of_uris:
+                    uris.append(uri["fields"]["uri"]["display"])
+
+        return uris
 
     # TODO: the URIs should be sorted when printed
     def print_uri(self, repo):
@@ -262,8 +265,8 @@ class Diffusion(Phabfive):
         else:
             uris = self.get_uris(repo_id=repo)
 
-        for i, item in enumerate(uris):
-            print(uris[i]["fields"]["uri"]["display"])
+        for uri in uris:
+            print(uri)
 
     def get_repositories(self, query_key=None, attachments=None, constraints=None):
         """Phabfive wrapper that connects to Phabricator and retrieves information
