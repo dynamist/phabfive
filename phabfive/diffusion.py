@@ -42,6 +42,8 @@ class Diffusion(Phabfive):
                         )
                     )
 
+        return credential_phid
+
     # TODO: create_repository() should call edit_repository(), they are using the same conduit
     def create_repository(self, name=None, vcs=None, status=None):
         """Phabfive wrapper that connects to Phabricator and creates repositories.
@@ -118,7 +120,6 @@ class Diffusion(Phabfive):
         """
         # For use in transaction further down to create new uri
         repository_phid = ""
-        credential_phid = ""
         # Assume that repository_name does not yet exist
         repository_exist = False
 
@@ -155,7 +156,7 @@ class Diffusion(Phabfive):
         # TODO: error handling, catch exception?
         get_credential = self.passphrase.get_secret(ids=credential)
 
-        self._validate_credential_type(credential=get_credential)
+        credential_phid = self._validate_credential_type(credential=get_credential)
         # TODO: Validate repos existent - create its own function
         for repo in repos:
             name = repo["fields"]["shortName"]
