@@ -53,11 +53,15 @@ sub_diffusion_args = """
 Usage:
     phabfive diffusion repo list [(active || inactive || all)] [options]
     phabfive diffusion repo create <name> [options]
+    phabfive diffusion uri create (--observe || --mirror) (<credential>) <repo> <uri> [options]
+    phabfive diffusion uri list <repo> [options]
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
     <repo>              Repository monogram (R123) or shortname, but currently
                         not the callsign
+    <uri>               ex. git@bitbucket.org:dynamist/webpage.git
+    (<credential>)      SSH Private Key for read-only observing, stored in Passphrase ex. K123
 
 Options:
     -h, --help          Show this help message and exit
@@ -162,7 +166,25 @@ def run(cli_args, sub_args):
                         status = ["active"]
                     d.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
-                    d.print_created_repository_url(name=sub_args["<name>"])
+                    d.create_repository(name=sub_args["<name>"])
+            elif sub_args["uri"]:
+                if sub_args["create"]:
+                    if sub_args["--mirror"]:
+                        io = "mirror"
+                        display = "always"
+                    elif sub_args["--observe"]:
+                        io = "observe"
+                        display = "always"
+                    created_uri = d.create_uri(
+                        repository_name=sub_args["<repo>"],
+                        new_uri=sub_args["<uri>"],
+                        io=io,
+                        display=display,
+                        credential=sub_args["<credential>"],
+                    )
+                    print(created_uri)
+                elif sub_args["list"]:
+                    d.print_uri(repo=sub_args["<repo>"])
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
         elif cli_args["<command>"] == "paste":

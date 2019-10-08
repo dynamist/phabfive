@@ -16,6 +16,7 @@ A summary of the currently supported actions, as well as planned features:
   - [ ] Get clone URI:s for specified repository
   - [X] Add repository
   - [ ] Edit URI
+  - [X] Observe repositories: create uri
 - Paste
   - [X] List pastes
   - [X] Get specified paste
