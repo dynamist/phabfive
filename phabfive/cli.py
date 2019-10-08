@@ -166,9 +166,7 @@ def run(cli_args, sub_args):
                         status = ["active"]
                     d.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
-                    phid = d.create_repository(name=sub_args["<name>"])
-                    # TODO: print_uri should be able to print based on phid
-                    # d.print_uri(phid)
+                    d.create_repository(name=sub_args["<name>"])
             elif sub_args["uri"]:
                 if sub_args["create"]:
                     if sub_args["--mirror"]:
