@@ -4,12 +4,7 @@
 import re
 
 # phabfive imports
-from phabfive.constants import (
-    MONOGRAMS,
-    REPO_STATUS_CHOICES,
-    IO_NEW_URI_CHOICES,
-    DISPLAY_CHOICES,
-)
+from phabfive.constants import DISPLAY_CHOICES, IO_NEW_URI_CHOICES, MONOGRAMS, REPO_STATUS_CHOICES
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException, PhabfiveConfigException
 from phabfive import passphrase
