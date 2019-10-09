@@ -91,9 +91,7 @@ Options:
 
 def parse_cli():
     """
-    Split the functionality into two methos.
-
-    One for parsing the cli and one that runs the application.
+    Parse the CLI arguments and options.
     """
     import phabfive
 
@@ -147,6 +145,7 @@ def parse_cli():
 
 def run(cli_args, sub_args):
     """
+    Execute the CLI.
     """
     retcode = 0
 
