@@ -22,7 +22,9 @@ class Paste(Phabfive):
 
         for id_ in ids:
             if not self._validate_identifier(id_):
-                raise PhabfiveDataException('Identifier "{0}" is not valid.'.format(id_))
+                raise PhabfiveDataException(
+                    'Identifier "{0}" is not valid.'.format(id_)
+                )
             id_ = id_.replace("P", "")
             # constraints takes int
             id_ = int(id_)
