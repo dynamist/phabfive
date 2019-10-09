@@ -20,13 +20,13 @@ class Paste(Phabfive):
         """Method used by print function"""
         ids_list_int = []
 
-        for id in ids:
-            if not self._validate_identifier(id):
-                raise PhabfiveDataException('Identifier "{0}" is not valid.'.format(id))
-            id = id.replace("P", "")
+        for id_ in ids:
+            if not self._validate_identifier(id_):
+                raise PhabfiveDataException('Identifier "{0}" is not valid.'.format(id_))
+            id_ = id_.replace("P", "")
             # constraints takes int
-            id = int(id)
-            ids_list_int.append(id)
+            id_ = int(id_)
+            ids_list_int.append(id_)
 
         return ids_list_int
 
