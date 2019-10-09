@@ -91,10 +91,10 @@ class Phabfive(object):
         Search order, latest has presedence:
 
           1. hard coded defaults
-          2. /etc/phabfive.yaml
-          3. /etc/phabfive.d/*.yaml
-          4. ~/.config/phabfive.yaml
-          5. ~/.config/phabfive.d/*.yaml
+          2. `/etc/phabfive.yaml`
+          3. `/etc/phabfive.d/*.yaml`
+          4. `~/.config/phabfive.yaml`
+          5. `~/.config/phabfive.d/*.yaml`
           6. environment variables
         """
         environ = os.environ.copy()
