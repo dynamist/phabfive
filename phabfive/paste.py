@@ -17,7 +17,7 @@ class Paste(Phabfive):
         return re.match("^" + MONOGRAMS["paste"] + "$", id_)
 
     def _convert_ids(self, ids):
-        """Method used by print function"""
+        """Method used by print function."""
         ids_list_int = []
 
         for id_ in ids:
