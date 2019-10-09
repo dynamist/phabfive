@@ -352,11 +352,9 @@ class Diffusion(Phabfive):
             branches = self.get_branches(repo_shortname=repo)
 
         branch_names = sorted(
-            [
-                branch["shortName"]
-                for branch in branches
-                if branch["refType"] == "branch"
-            ]
+            branch["shortName"]
+            for branch in branches
+            if branch["refType"] == "branch"
         )
 
         for branch_name in branch_names:
