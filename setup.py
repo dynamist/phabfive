@@ -16,7 +16,7 @@ README = "README.md"
 CHANGELOG = "CHANGELOG.md"
 
 install_requires = ["anyconfig", "appdirs", "phabricator", "pyyaml", "docopt"]
-tests_require = ["coverage", "pytest", "tox"]
+tests_require = ["coverage", "flake8", "pytest", "tox"]
 download_url = "{}/tarball/v{}".format(
     "https://github.com/dynamist/phabfive", phabfive.__version__
 )
