@@ -211,7 +211,7 @@ def run(cli_args, sub_args):
 
 def cli_entrypoint():
     """
-    Used by setup.py to create a cli entrypoint script
+    Used by setup.py to create a cli entrypoint script.
     """
     cli_args, sub_args = parse_cli()
 
