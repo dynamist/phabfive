@@ -90,9 +90,7 @@ Options:
 
 
 def parse_cli():
-    """
-    Parse the CLI arguments and options.
-    """
+    """Parse the CLI arguments and options."""
     import phabfive
 
     from docopt import extras, Option, DocoptExit
@@ -144,9 +142,7 @@ def parse_cli():
 
 
 def run(cli_args, sub_args):
-    """
-    Execute the CLI.
-    """
+    """Execute the CLI."""
     retcode = 0
 
     try:
@@ -210,9 +206,7 @@ def run(cli_args, sub_args):
 
 
 def cli_entrypoint():
-    """
-    Used by setup.py to create a cli entrypoint script.
-    """
+    """Used by setup.py to create a cli entrypoint script."""
     cli_args, sub_args = parse_cli()
 
     try:
