@@ -254,7 +254,6 @@ class Diffusion(Phabfive):
     # TODO: the URIs should be sorted when printed
     def print_uri(self, repo):
         """Method used by the Phabfive CLI."""
-
         if self._validate_identifier(repo):
             repo = repo.replace("R", "")
             uris = self.get_uris(repo_id=repo)
