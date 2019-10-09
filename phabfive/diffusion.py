@@ -4,7 +4,12 @@
 import re
 
 # phabfive imports
-from phabfive.constants import DISPLAY_CHOICES, IO_NEW_URI_CHOICES, MONOGRAMS, REPO_STATUS_CHOICES
+from phabfive.constants import (
+    DISPLAY_CHOICES,
+    IO_NEW_URI_CHOICES,
+    MONOGRAMS,
+    REPO_STATUS_CHOICES,
+)
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException, PhabfiveConfigException
 from phabfive import passphrase
@@ -352,9 +357,7 @@ class Diffusion(Phabfive):
             branches = self.get_branches(repo_shortname=repo)
 
         branch_names = sorted(
-            branch["shortName"]
-            for branch in branches
-            if branch["refType"] == "branch"
+            branch["shortName"] for branch in branches if branch["refType"] == "branch"
         )
 
         for branch_name in branch_names:
