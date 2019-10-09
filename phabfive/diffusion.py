@@ -195,7 +195,7 @@ class Diffusion(Phabfive):
         try:
             self.phab.diffusion.uri.edit(transactions=transactions)
         except APIError as e:
-            raise PhabfiveDataException(e.message)
+            raise PhabfiveDataException(str(e))
 
         return new_uri
 
