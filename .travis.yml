@@ -14,8 +14,6 @@ script:
   - pytest
 matrix:
   allow_failures:
-    - python: "2.7"
-    - python: "3.5"
     - python: "nightly"
 notifications:
   slack:
