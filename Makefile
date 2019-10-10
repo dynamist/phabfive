@@ -32,5 +32,8 @@ test: ## run test suite
 sdist: ## make a source distribution
 	python setup.py sdist
 
+bdist: ## build a wheel distribution
+	python setup.py bdist_wheel
+
 install: ## install package
 	python setup.py install
