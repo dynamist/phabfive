@@ -55,7 +55,7 @@ Usage:
     phabfive diffusion repo create <name> [options]
     phabfive diffusion uri create (--observe || --mirror) (<credential>) <repo> <uri> [options]
     phabfive diffusion uri list <repo> [options]
-    phabfive diffusion uri edit <repo> <uri> (--new_uri=<name> || --io=<value> || --display=<value> || --cred=<input>) [options]
+    phabfive diffusion uri edit <repo> <uri> (--new_uri=<name> || --io=<value> || --display=<value> || --cred=<input> || --enable || --disable) [options]
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
@@ -65,10 +65,12 @@ Arguments:
     <credential>        SSH Private Key for read-only observing, stored in Passphrase ex. K123
 
 Options:
-    -n <name>, --new_uri=<name>    Change the repository URI
+    -n <name>, --new_uri=<name>    Change repository URI
     -i <value>, --io=<value>       Adjust I/O behavior. Value: default, read, write, never
     -d <value>, --display=<value>  Change display behavior. Value: default, always, hidden
-    -c <input>, --cred=<input>     Change the credential for this URI. Ex. K2
+    -c <input>, --cred=<input>     Change credential for this URI. Ex. K2
+                --enable           Enable URI
+                --disable          Disable URI
 
     -h, --help          Show this help message and exit
     -u, --url           Show url
@@ -196,11 +198,18 @@ def run(cli_args, sub_args):
                     object_id = d.get_object_identifier(
                         repo_name=sub_args["<repo>"], uri_name=sub_args["<uri>"]
                     )
+                    if sub_args["--enable"]:
+                        disable = False
+                    elif sub_args["--disable"]:
+                        disable = True
+                    else:
+                        disable = None
                     result = d.edit_uri(
                         uri=sub_args["--new_uri"],
                         io=sub_args["--io"],
                         display=sub_args["--display"],
                         credential=sub_args["--cred"],
+                        disable=disable,
                         object_identifier=object_id,
                     )
             elif sub_args["branch"] and sub_args["list"]:

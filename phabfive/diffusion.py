@@ -241,7 +241,13 @@ class Diffusion(Phabfive):
         return new_uri
 
     def edit_uri(
-        self, uri=None, io=None, display=None, credential=None, object_identifier=None
+        self,
+        uri=None,
+        io=None,
+        display=None,
+        credential=None,
+        disable=None,
+        object_identifier=None,
     ):
         """Phabfive wrapper that connects to Phabricator and edit uri.
 
@@ -249,12 +255,11 @@ class Diffusion(Phabfive):
         :type io: str
         :type display: str
         :type credential: str
+        :type credential: bool
         :type object_identifier: str
 
         :rtype: bool
         """
-        # if not self._validate_identifier(credential):
-        #     raise PhabfiveDataException('Identifier "{0}" is not valid.'.format(ids))
         if credential:
             credential = self.passphrase.get_secret(credential)
             # get PHID, phab.diffusion.uri.edit takes PHID in credential
@@ -265,6 +270,7 @@ class Diffusion(Phabfive):
             {"type": "uri", "value": uri},
             {"type": "io", "value": io},
             {"type": "display", "value": display},
+            {"type": "disable", "value": disable},
             {"type": "credential", "value": credential},
         ]
         # Phabricator does not take None as a value, therefor only "type" that has valid value can be sent as an argument
