@@ -55,17 +55,24 @@ Usage:
     phabfive diffusion repo create <name> [options]
     phabfive diffusion uri create (--observe || --mirror) (<credential>) <repo> <uri> [options]
     phabfive diffusion uri list <repo> [options]
+    phabfive diffusion uri edit <repo> <uri> (--new_uri=<name> || --io=<value> || --display=<value> || --cred=<input>) [options]
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
     <repo>              Repository monogram (R123) or shortname, but currently
                         not the callsign
     <uri>               ex. git@bitbucket.org:dynamist/webpage.git
-    (<credential>)      SSH Private Key for read-only observing, stored in Passphrase ex. K123
+    <credential>        SSH Private Key for read-only observing, stored in Passphrase ex. K123
 
 Options:
+    -n <name>, --new_uri=<name>    Change the repository URI
+    -i <value>, --io=<value>       Adjust I/O behavior. Value: default, read, write, never
+    -d <value>, --display=<value>  Change display behavior. Value: default, always, hidden
+    -c <input>, --cred=<input>     Change the credential for this URI. Ex. K2
+
     -h, --help          Show this help message and exit
     -u, --url           Show url
+
 """
 
 sub_paste_args = """
@@ -185,6 +192,17 @@ def run(cli_args, sub_args):
                     print(created_uri)
                 elif sub_args["list"]:
                     d.print_uri(repo=sub_args["<repo>"])
+                elif sub_args["edit"]:
+                    object_id = d.get_object_identifier(
+                        repo_name=sub_args["<repo>"], uri_name=sub_args["<uri>"]
+                    )
+                    result = d.edit_uri(
+                        uri=sub_args["--new_uri"],
+                        io=sub_args["--io"],
+                        display=sub_args["--display"],
+                        credential=sub_args["--cred"],
+                        object_identifier=object_id,
+                    )
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
         elif cli_args["<command>"] == "paste":
