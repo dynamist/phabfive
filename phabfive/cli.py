@@ -201,11 +201,11 @@ def run(cli_args, sub_args):
                         disable = None
 
                     if (
-                        sub_args["--new_uri"] == None
-                        and sub_args["--io"] == None
-                        and sub_args["--display"] == None
-                        and sub_args["--cred"] == None
-                        and disable == None
+                        sub_args["--new_uri"] is None  # noqa: W503
+                        and sub_args["--io"] is None  # noqa: W503
+                        and sub_args["--display"] is None  # noqa: W503
+                        and sub_args["--cred"] is None  # noqa: W503
+                        and disable is None  # noqa: W503
                     ):
                         print("Please input minimum one option")
 
