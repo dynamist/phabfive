@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 # 3rd party imports
-import pytest
 
 
 def test_status_choices():
