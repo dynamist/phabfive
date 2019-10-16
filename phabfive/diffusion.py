@@ -236,7 +236,7 @@ class Diffusion(Phabfive):
         try:
             self.phab.diffusion.uri.edit(transactions=transactions)
         except APIError as e:
-            raise PhabfiveDataException(e.message)
+            raise PhabfiveDataException(str(e))
 
         return new_uri
 
@@ -318,7 +318,6 @@ class Diffusion(Phabfive):
     # TODO: the URIs should be sorted when printed
     def print_uri(self, repo):
         """Method used by the Phabfive CLI."""
-
         if self._validate_identifier(repo):
             repo = repo.replace("R", "")
             uris = self.get_uris(repo_id=repo)
@@ -329,8 +328,7 @@ class Diffusion(Phabfive):
             print(uri)
 
     def get_repositories(self, query_key=None, attachments=None, constraints=None):
-        """Phabfive wrapper that connects to Phabricator and retrieves information
-        about repositories.
+        """Connect to Phabricator and retrieve information about repositories.
 
         `query_key` defaults to "all".
 
@@ -352,8 +350,7 @@ class Diffusion(Phabfive):
         return repositories
 
     def get_branches(self, repo_id=None, repo_callsign=None, repo_shortname=None):
-        """Wrapper that connects to Phabricator and retrieves information about branches
-        for a specified repository.
+        """Connect to Phabricator and retrieve branches for a specified repository.
 
         :type repo_id: str
         :type repo_callsign: str
@@ -419,11 +416,7 @@ class Diffusion(Phabfive):
             branches = self.get_branches(repo_shortname=repo)
 
         branch_names = sorted(
-            [
-                branch["shortName"]
-                for branch in branches
-                if branch["refType"] == "branch"
-            ]
+            branch["shortName"] for branch in branches if branch["refType"] == "branch"
         )
 
         for branch_name in branch_names:
