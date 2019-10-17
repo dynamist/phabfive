@@ -263,7 +263,8 @@ class Diffusion(Phabfive):
         if credential:
             credential = self.passphrase.get_secret(credential)
             # get PHID, phab.diffusion.uri.edit takes PHID in credential
-            credential = next(iter(credential))
+            # credential = next(iter(credential))
+            credential = self._validate_credential_type(credential=credential)
 
         transactions = []
         transactions_values = [

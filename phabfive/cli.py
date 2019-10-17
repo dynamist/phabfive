@@ -55,7 +55,7 @@ Usage:
     phabfive diffusion repo create <name> [options]
     phabfive diffusion uri create (--observe || --mirror) (<credential>) <repo> <uri> [options]
     phabfive diffusion uri list <repo> [options]
-    phabfive diffusion uri edit <repo> <uri> [Uri Options] [options]
+    phabfive diffusion uri edit <repo> <uri> [(--enable || --disable)] [options]
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
@@ -68,13 +68,11 @@ Options:
     -h, --help                     Show this help message and exit
     -u, --url                      Show url
 
-Uri Options:
-    -n <name>, --new_uri=<name>    Change repository URI
-    -i <value>, --io=<value>       Adjust I/O behavior. Value: default, read, write, never
-    -d <value>, --display=<value>  Change display behavior. Value: default, always, hidden
-    -c <input>, --cred=<input>     Change credential for this URI. Ex. K2
-                --enable           Enable URI
-                --disable          Disable URI
+Uri Edit Options:
+    -n, --new_uri=<value>  Change repository URI
+    -i, --io=<value>       Adjust I/O behavior. Value: default, read, write, never
+    -d, --display=<value>  Change display behavior. Value: default, always, hidden
+    -c, --cred=<value>     Change credential for this URI. Ex. K2
 """
 
 sub_paste_args = """
@@ -217,6 +215,7 @@ def run(cli_args, sub_args):
                         disable=disable,
                         object_identifier=object_id,
                     )
+
                     if result:
                         print("OK")
             elif sub_args["branch"] and sub_args["list"]:
