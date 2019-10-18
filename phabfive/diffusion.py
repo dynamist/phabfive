@@ -255,7 +255,7 @@ class Diffusion(Phabfive):
         :type io: str
         :type display: str
         :type credential: str
-        :type credential: bool
+        :type disable: bool
         :type object_identifier: str
 
         :rtype: bool
