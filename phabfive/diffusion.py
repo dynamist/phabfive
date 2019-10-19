@@ -58,27 +58,28 @@ class Diffusion(Phabfive):
 
         for repo in repos:
             name = repo["fields"]["shortName"]
-            if repo_name == name:
+            if repo_name != name:
+                continue
                 # object identifier for uri
-                if repo_name and uri_name:
-                    if uri_name:
-                        uris = repo["attachments"]["uris"]["uris"]
-                        for i in range(len(uris)):
-                            uri = uris[i]["fields"]["uri"]["display"]
-                            if uri_name == uri:
-                                if uris[i]["id"]:
-                                    object_identifier = uris[i]["id"]
-                        if object_identifier == "":
-                            raise (
-                                PhabfiveDataException(
-                                    "Uri does not exist or other error"
-                                )
-                            )
-                    break
-                # object identifier for repository
-                elif repo_name and not uri_name:
-                    object_identifier = repo["id"]
-                    break
+            if repo_name and uri_name:
+                uris = repo["attachments"]["uris"]["uris"]
+
+                for i in range(len(uris)):
+                    uri = uris[i]["fields"]["uri"]["display"]
+                    if uri_name != uri:
+                        continue
+
+                    if uris[i]["id"]:
+                        object_identifier = uris[i]["id"]
+
+                if object_identifier == "":
+                    raise (PhabfiveDataException("Uri does not exist or other error"))
+                break
+            # object identifier for repository
+            elif repo_name and not uri_name:
+                object_identifier = repo["id"]
+                break
+
         return object_identifier
 
     # TODO: create_repository() should call edit_repository(), they are using the same conduit
