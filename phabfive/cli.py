@@ -55,17 +55,24 @@ Usage:
     phabfive diffusion repo create <name> [options]
     phabfive diffusion uri create (--observe || --mirror) (<credential>) <repo> <uri> [options]
     phabfive diffusion uri list <repo> [options]
+    phabfive diffusion uri edit <repo> <uri> [(--enable || --disable)] [options]
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
     <repo>              Repository monogram (R123) or shortname, but currently
                         not the callsign
     <uri>               ex. git@bitbucket.org:dynamist/webpage.git
-    (<credential>)      SSH Private Key for read-only observing, stored in Passphrase ex. K123
+    <credential>        SSH Private Key for read-only observing, stored in Passphrase ex. K123
 
 Options:
-    -h, --help          Show this help message and exit
-    -u, --url           Show url
+    -h, --help                     Show this help message and exit
+    -u, --url                      Show url
+
+Uri Edit Options:
+    -n, --new_uri=<value>  Change repository URI
+    -i, --io=<value>       Adjust I/O behavior. Value: default, read, write, never
+    -d, --display=<value>  Change display behavior. Value: default, always, hidden
+    -c, --cred=<value>     Change credential for this URI. Ex. K2
 """
 
 sub_paste_args = """
@@ -180,6 +187,39 @@ def run(cli_args, sub_args):
                     print(created_uri)
                 elif sub_args["list"]:
                     d.print_uri(repo=sub_args["<repo>"])
+                elif sub_args["edit"]:
+                    object_id = d.get_object_identifier(
+                        repo_name=sub_args["<repo>"], uri_name=sub_args["<uri>"]
+                    )
+                    if sub_args["--enable"]:
+                        disable = False
+                    elif sub_args["--disable"]:
+                        disable = True
+                    else:
+                        disable = None
+                    if all(
+                        a is None
+                        for a in [
+                            sub_args["--new_uri"],
+                            sub_args["--io"],
+                            sub_args["--display"],
+                            sub_args["--cred"],
+                            disable,
+                        ]
+                    ):
+                        print("Please input minimum one option")
+
+                    result = d.edit_uri(
+                        uri=sub_args["--new_uri"],
+                        io=sub_args["--io"],
+                        display=sub_args["--display"],
+                        credential=sub_args["--cred"],
+                        disable=disable,
+                        object_identifier=object_id,
+                    )
+
+                    if result:
+                        print("OK")
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
         elif cli_args["<command>"] == "paste":

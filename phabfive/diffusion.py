@@ -37,12 +37,50 @@ class Diffusion(Phabfive):
                     "token",
                 ):
                     raise PhabfiveDataException(
-                        "{0} is not type of ssh-generated-key, ssh-key-text or token.".format(
-                            credential
+                        "{0} is not type of 'ssh-generated-key', 'ssh-key-text' or 'token' but type '{1}'".format(
+                            credential[credential_phid]["monogram"],
+                            credential[credential_phid]["type"],
                         )
                     )
 
         return credential_phid
+
+    def get_object_identifier(self, repo_name=None, uri_name=None):
+        """Phabfive wrapper that connects to Phabricator and identify repository or uri object_identifier.
+
+        :type repo_name: str
+        :type uri_name: str
+
+        :rtype object_identifier: str
+        """
+        object_identifier = ""
+        repos = self.get_repositories(attachments={"uris": True})
+
+        for repo in repos:
+            name = repo["fields"]["shortName"]
+            if repo_name != name:
+                continue
+                # object identifier for uri
+            if repo_name and uri_name:
+                uris = repo["attachments"]["uris"]["uris"]
+
+                for i in range(len(uris)):
+                    uri = uris[i]["fields"]["uri"]["display"]
+                    if uri_name != uri:
+                        continue
+
+                    if uris[i]["id"]:
+                        object_identifier = uris[i]["id"]
+
+                if object_identifier == "":
+                    raise (PhabfiveDataException("Uri does not exist or other error"))
+                break
+            # object identifier for repository
+            elif repo_name and not uri_name:
+                object_identifier = repo["id"]
+                break
+
+        return object_identifier
 
     # TODO: create_repository() should call edit_repository(), they are using the same conduit
     def create_repository(self, name=None, vcs=None, status=None):
@@ -144,7 +182,7 @@ class Diffusion(Phabfive):
 
         if not repos:
             raise PhabfiveDataException("No data or other error.")
-
+        # Check if input of repository_name is an id
         if self._validate_identifier(repository_name):
             repository_id = repository_name.replace("R", "")
 
@@ -155,7 +193,6 @@ class Diffusion(Phabfive):
 
         # TODO: error handling, catch exception?
         get_credential = self.passphrase.get_secret(ids=credential)
-
         credential_phid = self._validate_credential_type(credential=get_credential)
         # TODO: Validate repos existent - create its own function
         for repo in repos:
@@ -204,28 +241,52 @@ class Diffusion(Phabfive):
 
         return new_uri
 
-    def edit_uri(self, uri=None, io=None, display=None, object_identifier=None):
+    def edit_uri(
+        self,
+        uri=None,
+        io=None,
+        display=None,
+        credential=None,
+        disable=None,
+        object_identifier=None,
+    ):
         """Phabfive wrapper that connects to Phabricator and edit uri.
 
         :type uri: str
         :type io: str
         :type display: str
+        :type credential: str
+        :type disable: bool
         :type object_identifier: str
 
         :rtype: bool
         """
-        transactions = [
+        if credential:
+            credential = self.passphrase.get_secret(credential)
+            # get PHID, phab.diffusion.uri.edit takes PHID in credential
+            # credential = next(iter(credential))
+            credential = self._validate_credential_type(credential=credential)
+
+        transactions = []
+        transactions_values = [
             {"type": "uri", "value": uri},
             {"type": "io", "value": io},
             {"type": "display", "value": display},
+            {"type": "disable", "value": disable},
+            {"type": "credential", "value": credential},
         ]
+        # Phabricator does not take None as a value, therefor only "type" that has valid value can be sent as an argument
+        for item in transactions_values:
+            if None not in item.values():
+                transactions.append(item)
+        # if not transactions:
         try:
             # object_identifier is neccessary when editing an exisiting URI but leave blank when creating new URI
             self.phab.diffusion.uri.edit(
                 transactions=transactions, objectIdentifier=object_identifier
             )
         except APIError:
-            pass
+            raise PhabfiveDataException("No valid input or other error")
             # TODO: The APIError raises an I/O error which is not "correct"
             # due to different setting for uri depending on if it is default uri or observed/mirrored uri
         return True
