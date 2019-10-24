@@ -197,13 +197,15 @@ def run(cli_args, sub_args):
                         disable = True
                     else:
                         disable = None
-
-                    if (
-                        sub_args["--new_uri"] is None  # noqa: W503
-                        and sub_args["--io"] is None  # noqa: W503
-                        and sub_args["--display"] is None  # noqa: W503
-                        and sub_args["--cred"] is None  # noqa: W503
-                        and disable is None  # noqa: W503
+                    if all(
+                        a is None
+                        for a in [
+                            sub_args["--new_uri"],
+                            sub_args["--io"],
+                            sub_args["--display"],
+                            sub_args["--cred"],
+                            disable,
+                        ]
                     ):
                         print("Please input minimum one option")
 
