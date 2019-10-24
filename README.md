@@ -15,7 +15,7 @@ A summary of the currently supported actions, as well as planned features:
   - [X] Get branches for specified repository
   - [ ] Get clone URI:s for specified repository
   - [X] Add repository
-  - [ ] Edit URI
+  - [X] Edit URI
   - [X] Observe repositories: create uri
 - Paste
   - [X] List pastes
