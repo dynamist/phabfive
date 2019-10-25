@@ -44,6 +44,17 @@ class Passphrase(Phabfive):
             # is INFO, even if env PHABFIVE_DEBUG=1
             log.debug(json.dumps(response["data"], indent=2))
 
+        # When Conduit Access is not accepted for Passphrase the "response" will return value "noAPIAccess" in key "material" instead of the secret
+        if (
+            "noAPIAccess"
+            in response["data"].get(next(iter(response["data"])))["material"]
+        ):
+            raise PhabfiveDataException(
+                response["data"]
+                .get(next(iter(response["data"])))["material"]
+                .get("noAPIAccess")
+            )
+
         return response["data"]
 
     def print_secret(self, ids):
