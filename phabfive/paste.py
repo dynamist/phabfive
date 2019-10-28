@@ -36,7 +36,7 @@ class Paste(Phabfive):
         return ids_list_int
 
     def create_paste(
-        self, title=None, file=None, language=None, tags=[], subscribers=[]
+        self, title=None, file=None, language=None, tags=None, subscribers=None
     ):
         """Wrapper that connects to Phabricator and creates paste.
 
@@ -49,6 +49,9 @@ class Paste(Phabfive):
         :rtype: dict
         """
         text = None
+        tags = tags if tags else []
+        subscribers = subscribers if subscribers else []
+
         with open(file, "r") as f:
             text = f.read()
 
