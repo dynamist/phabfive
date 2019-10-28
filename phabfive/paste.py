@@ -32,6 +32,41 @@ class Paste(Phabfive):
 
         return ids_list_int
 
+    def create_paste(self, title=None, file=None, language=None):
+        """Wrapper that connects to Phabricator and retrieves information about pastes.
+
+        :type title: str
+        :type file: str
+        :type language: str
+        :type tags: list
+        :type subscribers: list
+
+        :rtype: str
+        """
+        # Transaction with key "2" has invalid type "tags". This type is not recognized. Valid types are: space, comment, title, language, text, status, view, edit, projects.add, projects.remove, projects.set, subscribers.add, subscribers.remove, subscribers.set.
+        text = None
+
+        with open(file, "r") as f:
+            text = f.read()
+
+        transactions = []
+        transactions_values = [
+            {"type": "title", "value": title},
+            {"type": "text", "value": text},
+            {"type": "language", "value": language},
+        ]
+        # Phabricator does not take None as a value, therefor only "type" that has valid value can be sent as an argument
+        for item in transactions_values:
+            if None not in item.values():
+                transactions.append(item)
+        # if not transactions:
+        try:
+            response = self.phab.paste.edit(transactions=transactions)
+        except APIError:
+            raise PhabfiveDataException("No valid input or other error")
+
+        return response
+
     def get_pastes(self, query_key=None, attachments=None, constraints=None):
         """Wrapper that connects to Phabricator and retrieves information about pastes.
 
