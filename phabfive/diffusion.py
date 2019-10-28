@@ -279,7 +279,6 @@ class Diffusion(Phabfive):
         for item in transactions_values:
             if None not in item.values():
                 transactions.append(item)
-        # if not transactions:
         try:
             # object_identifier is neccessary when editing an exisiting URI but leave blank when creating new URI
             self.phab.diffusion.uri.edit(
