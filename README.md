@@ -2,6 +2,9 @@
 
 A command line tool to interact with Phabricator.
 
+The complete documentation for Phabfive can be found at [Read the Docs](https://phabfive.readthedocs.io/en/latest/)
+
+
 ## Features
 
 A summary of the currently supported actions, as well as planned features:
@@ -23,6 +26,7 @@ A summary of the currently supported actions, as well as planned features:
   - [ ] Add paste
 - User
   - [X] Who am I: information about the logged-in user
+
 
 ## Example usage
 
