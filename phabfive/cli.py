@@ -53,8 +53,8 @@ sub_diffusion_args = """
 Usage:
     phabfive diffusion repo list [(active || inactive || all)] [options]
     phabfive diffusion repo create <name> [options]
-    phabfive diffusion uri create (--observe || --mirror) (<credential>) <repo> <uri> [options]
     phabfive diffusion uri list <repo> [options]
+    phabfive diffusion uri create (--observe || --mirror) (<credential>) <repo> <uri> [options]
     phabfive diffusion uri edit <repo> <uri> [(--enable || --disable)] [options]
     phabfive diffusion branch list <repo> [options]
 
@@ -66,7 +66,12 @@ Arguments:
 
 Options:
     -h, --help                     Show this help message and exit
+
+Repo List Options:
     -u, --url                      Show url
+
+Uri List Options:
+    -c, --clone                    Show clone url(s)
 
 Uri Edit Options:
     -n, --new_uri=<value>  Change repository URI
@@ -186,7 +191,7 @@ def run(cli_args, sub_args):
                     )
                     print(created_uri)
                 elif sub_args["list"]:
-                    d.print_uri(repo=sub_args["<repo>"])
+                    d.print_uri(repo=sub_args["<repo>"], clone=sub_args["--clone"])
                 elif sub_args["edit"]:
                     object_id = d.get_object_identifier(
                         repo_name=sub_args["<repo>"], uri_name=sub_args["<uri>"]

@@ -295,13 +295,15 @@ class Diffusion(Phabfive):
     # TODO: add support for repo_shortname, etc, see get_branches()
     # TODO: add support for handling active vs inactive repos
     # TODO: add support for handling hidden URIs
-    def get_uris(self, repo_id=None):
+    def get_uris(self, repo_id=None, clone=None):
         """Phabfive wrapper that connects to Phabricator and list uri for specific repository.
 
         :type repo_id: str
+        :type clone: bool
 
         :rtype: list
         """
+        clone = clone if clone else False
         uris = []
         repos = self.get_repositories(attachments={"uris": True})
 
@@ -311,20 +313,25 @@ class Diffusion(Phabfive):
         for repo in repos:
             if repo_id == repo["fields"]["shortName"]:
                 no_of_uris = repo["attachments"]["uris"]["uris"]
-
-                for uri in no_of_uris:
-                    uris.append(uri["fields"]["uri"]["display"])
+                if clone:
+                    for uri in no_of_uris:
+                        if "always" not in uri["fields"]["display"]["effective"]:
+                            continue
+                        uris.append(uri["fields"]["uri"]["display"])
+                else:
+                    for uri in no_of_uris:
+                        uris.append(uri["fields"]["uri"]["display"])
 
         return uris
 
     # TODO: the URIs should be sorted when printed
-    def print_uri(self, repo):
+    def print_uri(self, repo, clone):
         """Method used by the Phabfive CLI."""
         if self._validate_identifier(repo):
             repo = repo.replace("R", "")
-            uris = self.get_uris(repo_id=repo)
+            uris = self.get_uris(repo_id=repo, clone=clone)
         else:
-            uris = self.get_uris(repo_id=repo)
+            uris = self.get_uris(repo_id=repo, clone=clone)
 
         for uri in uris:
             print(uri)
