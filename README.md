@@ -45,6 +45,6 @@ Usage:
 
 ## LICENSE
 
-Copyright (c) 2017-2018 Dynamist AB
+Copyright (c) 2017-2019 Dynamist AB
 
 See the LICENSE file provided with the source distribution for full details.
