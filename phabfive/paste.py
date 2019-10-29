@@ -70,10 +70,8 @@ class Paste(Phabfive):
                 transactions.append(item)
         try:
             id_and_phid = self.phab.paste.edit(transactions=transactions)
-        except APIError:
-            raise PhabfiveDataException(
-                "No valid input, maybe unvalid tags/subscribers or other error"
-            )
+        except APIError as a:
+            raise PhabfiveDataException(a)
 
         return id_and_phid["object"]
 

@@ -83,7 +83,7 @@ Uri Edit Options:
 sub_paste_args = """
 Usage:
     phabfive paste list
-    phabfive paste create <title> input <file> [options]
+    phabfive paste create <title> <file> [options]
     phabfive paste show <ids> ... [options]
 
 Arguments:
@@ -95,8 +95,8 @@ Options:
     -h, --help           Show this help message and exit
 
 Paste Create Options:
-    -t, --tags=<args> ...           Project name(s), ex. --tags=projectX,projectY,projectZ
-    -s, --subscribers=<args> ...    Subscribers - user, project, mailing list name. Ex --subscribers=user1,user2,user3
+    -t, --tags=<tags> ...           Project name(s), ex. --tags=projectX,projectY,projectZ
+    -s, --subscribers=<sub> ...     Subscribers - user, project, mailing list name. Ex --subscribers=user1,user2,user3
 """
 
 sub_user_args = """
