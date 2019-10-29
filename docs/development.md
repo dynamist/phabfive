@@ -12,7 +12,7 @@ mkvirtualenv phabfive --python=python3.7
 Install code in editable mode and pull in all test and documentation dependencies:
 ```
 workon phabfive37
-pip install -e '.[test,mkdocs]'
+pip install -e '.[test,docs]'
 ```
 
 
