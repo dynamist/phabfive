@@ -73,3 +73,29 @@ You should now be able to run phabfive against your own local copy of Phabricato
 
 To view logs as they come in: `docker-compose logs -f`
 To shut down containers and remove its data: `docker-compose down -v`
+
+
+
+## Run mkdocs locally for documentation updates
+
+Overall documentation for mkdocs can be found at [Mkdocs homepage](https://www.mkdocs.org/#installation)
+
+Install mkdocs in a virtualenv
+
+```
+pip install mkdocs
+```
+
+From the root of phabfive project folder run
+
+```
+$ mkdocs serve
+
+INFO    -  Building documentation...
+INFO    -  Cleaning site directory
+[I 160402 15:50:43 server:271] Serving on http://127.0.0.1:8000
+[I 160402 15:50:43 handlers:58] Start watching changes
+[I 160402 15:50:43 handlers:60] Start detecting changes
+```
+
+Surf into `http://127.0.0.1:8000` to view the rendered docs.
