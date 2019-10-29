@@ -12,7 +12,7 @@ mkvirtualenv phabfive27 --python=python2.7
 Install code in editable mode and pull in all dependencies:
 ```
 workon phabfive27
-pip install -e '.[test]'
+pip install -e '.[test,mkdocs]'
 ```
 
 Repeat this for Python 3, for example version 3.6.
