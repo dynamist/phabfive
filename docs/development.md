@@ -4,18 +4,16 @@ Install the `virtualenv` and `virtualenvwrapper` software packages.
 
 Ensure to source the correct virtualenvwrapper shell script before installing the development environment, on Ubuntu that would be `source /usr/share/virtualenvwrapper/virtualenvwrapper.sh`.
 
-Create a virtualenv for phabfive running on Python 2.7:
+Create a virtualenv for phabfive running on Python 3.7:
 ```
-mkvirtualenv phabfive27 --python=python2.7
+mkvirtualenv phabfive --python=python3.7
 ```
 
-Install code in editable mode and pull in all dependencies:
+Install code in editable mode and pull in all test and documentation dependencies:
 ```
-workon phabfive27
+workon phabfive37
 pip install -e '.[test,mkdocs]'
 ```
-
-Repeat this for Python 3, for example version 3.6.
 
 
 
@@ -43,10 +41,10 @@ To run the tests locally on your machine for all supported and installed version
 make test
 ```
 
-Or individually for Python 2.7 or Python 3.6:
+Or individually for Python 2.7 or Python 3.7:
 ```
 tox -e py27
-tox -e py36
+tox -e py37
 ```
 
 Old versions of Python are available in the Deadsnakes PPA for Ubuntu or EPEL for Red Hat.
