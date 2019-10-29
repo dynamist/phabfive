@@ -1,0 +1,10 @@
+site_name: Phabfive
+theme: readthedocs
+repo_url: https://github.com/dynamist/phabfive
+
+nav:
+    - Introduction: 'index.md'
+    - Development: 'development.md'
+
+markdown_extensions:
+    - admonition:
