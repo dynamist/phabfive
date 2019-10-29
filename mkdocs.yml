@@ -4,6 +4,7 @@ repo_url: https://github.com/dynamist/phabfive
 
 pages:
     - Introduction: 'index.md'
+    - Development: 'development.md'
 
 markdown_extensions:
     - admonition:
