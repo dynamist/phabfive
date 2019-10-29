@@ -27,6 +27,7 @@ setup(
     version=phabfive.__version__,
     description=phabfive.__doc__,
     long_description=README + "\n\n" + CHANGELOG,
+    long_description_content_type="text/markdown",
     author="Rickard Eriksson",
     author_email="rickard@dynamist.se",
     url=phabfive.__url__,
