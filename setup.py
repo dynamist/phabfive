@@ -34,10 +34,7 @@ setup(
     zip_safe=False,  # Prevent creation of egg
     install_requires=install_requires,
     tests_require=tests_require,
-    extras_require={
-        "test": tests_require,
-        "mkdocs": mkdocs_require,
-    },
+    extras_require={"test": tests_require, "mkdocs": mkdocs_require},
     packages=["phabfive"],
     entry_points={"console_scripts": ["phabfive = phabfive.cli:cli_entrypoint"]},
     classifiers=[
