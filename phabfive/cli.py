@@ -191,7 +191,7 @@ def run(cli_args, sub_args):
                     )
                     print(created_uri)
                 elif sub_args["list"]:
-                    d.print_uri(repo=sub_args["<repo>"], clone=sub_args["--clone"])
+                    d.print_uri(repo=sub_args["<repo>"], clone_uri=sub_args["--clone"])
                 elif sub_args["edit"]:
                     object_id = d.get_object_identifier(
                         repo_name=sub_args["<repo>"], uri_name=sub_args["<uri>"]
