@@ -16,7 +16,7 @@ A summary of the currently supported actions, as well as planned features:
 - Diffusion
   - [X] List repositories names
   - [X] Get branches for specified repository
-  - [ ] Get clone URI:s for specified repository
+  - [X] Get clone URI:s for specified repository
   - [X] Add repository
   - [X] Edit URI
   - [X] Observe repositories: create uri
