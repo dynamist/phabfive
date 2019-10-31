@@ -83,13 +83,20 @@ Uri Edit Options:
 sub_paste_args = """
 Usage:
     phabfive paste list
+    phabfive paste create <title> <file> [options]
     phabfive paste show <ids> ... [options]
 
 Arguments:
     <ids> ...            Paste monogram (P123), example P1 P2 P3
+    <title>              Title for Paste
+    <file>               A file with text content for Paste ex. myfile.txt
 
 Options:
     -h, --help           Show this help message and exit
+
+Paste Create Options:
+    -t, --tags=<tags> ...           Project name(s), ex. --tags=projectX,projectY,projectZ
+    -s, --subscribers=<sub> ...     Subscribers - user, project, mailing list name. Ex --subscribers=user1,user2,user3
 """
 
 sub_user_args = """
@@ -231,6 +238,19 @@ def run(cli_args, sub_args):
             p = paste.Paste()
             if sub_args["list"]:
                 p.print_pastes()
+            elif sub_args["create"]:
+                tags_list = None
+                subscribers_list = None
+                if sub_args["--tags"]:
+                    tags_list = sub_args["--tags"].split(",")
+                if sub_args["--subscribers"]:
+                    subscribers_list = sub_args["--subscribers"].split(",")
+                p.create_paste(
+                    title=sub_args["<title>"],
+                    file=sub_args["<file>"],
+                    tags=tags_list,
+                    subscribers=subscribers_list,
+                )
             elif sub_args["show"]:
                 if sub_args["<ids>"]:
                     p.print_pastes(ids=sub_args["<ids>"])

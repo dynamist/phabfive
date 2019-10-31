@@ -8,6 +8,9 @@ from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException
 from phabfive.constants import MONOGRAMS
 
+# 3rd party imports
+from phabricator import APIError
+
 
 class Paste(Phabfive):
     def __init__(self):
@@ -31,6 +34,47 @@ class Paste(Phabfive):
             ids_list_int.append(id_)
 
         return ids_list_int
+
+    def create_paste(
+        self, title=None, file=None, language=None, tags=None, subscribers=None
+    ):
+        """Wrapper that connects to Phabricator and creates paste.
+
+        :type title: str
+        :type file: str
+        :type language: str
+        :type tags: list
+        :type subscribers: list
+
+        :rtype: dict
+        """
+        text = None
+        tags = tags if tags else []
+        subscribers = subscribers if subscribers else []
+
+        with open(file, "r") as f:
+            text = f.read()
+
+        transactions = []
+        transactions_values = [
+            {"type": "title", "value": title},
+            {"type": "text", "value": text},
+            {"type": "language", "value": language},
+            # TODO: Create a function that vaildates tags' and 'subscribers' existence
+            {"type": "projects.add", "value": tags},
+            {"type": "subscribers.add", "value": subscribers},
+        ]
+        # Phabricator does not take None (empty list is ok for projects/subscribers) as a value, therefor only "type" that has valid value can be sent as an argument
+        transactions = [
+            item for item in transactions_values if None not in item.values()
+        ]
+
+        try:
+            id_and_phid = self.phab.paste.edit(transactions=transactions)
+        except APIError as a:
+            raise PhabfiveDataException(str(a).replace("ERR-CONDUIT-CORE: ", ""))
+
+        return id_and_phid["object"]
 
     def get_pastes(self, query_key=None, attachments=None, constraints=None):
         """Wrapper that connects to Phabricator and retrieves information about pastes.
