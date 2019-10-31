@@ -12,8 +12,11 @@ except ImportError:
 # Allow setup.py to be run from any path
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
-README = "README.md"
-CHANGELOG = "CHANGELOG.md"
+with open('README.md') as f:
+    README = f.read()
+
+with open('CHANGELOG.md') as f:
+    CHANGELOG = f.read()
 
 install_requires = ["anyconfig", "appdirs", "phabricator", "pyyaml", "docopt"]
 tests_require = ["coverage", "flake8", "pytest", "tox"]
