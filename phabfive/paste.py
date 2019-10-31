@@ -71,7 +71,7 @@ class Paste(Phabfive):
         try:
             id_and_phid = self.phab.paste.edit(transactions=transactions)
         except APIError as a:
-            raise PhabfiveDataException(a)
+            raise PhabfiveDataException(str(a).replace('ERR-CONDUIT-CORE: ',''))
 
         return id_and_phid["object"]
 
