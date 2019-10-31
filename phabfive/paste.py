@@ -65,9 +65,8 @@ class Paste(Phabfive):
             {"type": "subscribers.add", "value": subscribers},
         ]
         # Phabricator does not take None (empty list is ok for projects/subscribers) as a value, therefor only "type" that has valid value can be sent as an argument
-        for item in transactions_values:
-            if None not in item.values():
-                transactions.append(item)
+        transactions = [item for item in transactions_values if None not in item.values()]
+
         try:
             id_and_phid = self.phab.paste.edit(transactions=transactions)
         except APIError as a:
