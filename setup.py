@@ -44,8 +44,8 @@ setup(
     python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
     classifiers=[
         # 'Development Status :: 1 - Planning',
-        "Development Status :: 2 - Pre-Alpha",
-        # 'Development Status :: 3 - Alpha',
+        # "Development Status :: 2 - Pre-Alpha",
+        'Development Status :: 3 - Alpha',
         # 'Development Status :: 4 - Beta',
         # 'Development Status :: 5 - Production/Stable',
         # 'Development Status :: 6 - Mature',
