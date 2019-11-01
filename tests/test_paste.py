@@ -3,7 +3,7 @@ import os
 
 # phabfive imports
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveConfigException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.paste import Paste
 
 # 3rd party imports
@@ -42,3 +42,20 @@ def test_validator():
     assert p._validate_identifier('P1') is not None
     assert p._validate_identifier('foobar') is None
 
+
+def test_convert_ids():
+    """
+    """
+    p = Paste()
+
+    # No ID:s to convert so return empty list
+    with pytest.raises(PhabfiveDataException):
+        p._convert_ids(None)
+
+    assert p._convert_ids([]) == []
+
+    # If we pass in a ID that will not validate against the MONOGRAMS
+    with pytest.raises(PhabfiveDataException):
+        p._convert_ids(['foobar'])
+
+    assert p._convert_ids(['P1', 'P11']) == [1, 11]

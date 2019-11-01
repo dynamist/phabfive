@@ -21,6 +21,9 @@ class Paste(Phabfive):
 
     def _convert_ids(self, ids):
         """Method used by print function."""
+        if not isinstance(ids, list):
+            raise PhabfiveDataException("variable ids must be of list type")
+
         ids_list_int = []
 
         for id_ in ids:
