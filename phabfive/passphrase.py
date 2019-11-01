@@ -7,7 +7,7 @@ import re
 
 # phabfive imports
 from phabfive.core import Phabfive
-from phabfive.constants import MONOGRAMS
+from phabfive.constants import *
 from phabfive.exceptions import PhabfiveDataException, PhabfiveRemoteException
 
 # 3rd party imports
