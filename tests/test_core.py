@@ -1,4 +1,3 @@
-import mock
 import os
 
 from phabricator import Phabricator, APIError
@@ -6,6 +5,7 @@ from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
 
 # 3rd party imports
+import mock
 import pytest
 from mock import patch, Mock
 
