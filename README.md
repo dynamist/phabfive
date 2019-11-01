@@ -10,9 +10,7 @@ The complete documentation for Phabfive can be found at [Read the Docs](https://
 A summary of the currently supported actions, as well as planned features:
 
 - Passphrase
-  - [ ] List secrets
   - [X] Get specified secret
-  - [ ] Add secret
 - Diffusion
   - [X] List repositories names
   - [X] Get branches for specified repository
