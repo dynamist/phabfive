@@ -39,7 +39,6 @@ CONFIG_EXAMPLES = {
 
 class Phabfive(object):
     def __init__(self):
-
         # Get super-early debugging by `export PHABFIVE_DEBUG=1`
         if "PHABFIVE_DEBUG" in os.environ:
             log.setLevel(logging.DEBUG)
@@ -70,6 +69,7 @@ class Phabfive(object):
                 if example:
                     error += ", " + example
                 raise PhabfiveConfigException(error)
+
         self.phab = Phabricator(
             host=self.conf.get("PHAB_URL"), token=self.conf.get("PHAB_TOKEN")
         )
