@@ -19,7 +19,7 @@ with open("CHANGELOG.md") as f:
     CHANGELOG = f.read()
 
 install_requires = ["anyconfig", "appdirs", "phabricator", "pyyaml", "docopt"]
-tests_require = ["coverage", "flake8", "pytest", "tox"]
+tests_require = ["coverage", "flake8", "pytest", "tox", "mock"]
 docs_require = ["docs"]
 download_url = "{0}/tarball/v{1}".format(
     "https://github.com/dynamist/phabfive", phabfive.__version__
