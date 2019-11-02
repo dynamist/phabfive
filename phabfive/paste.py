@@ -51,12 +51,14 @@ class Paste(Phabfive):
 
         :rtype: dict
         """
-        text = None
         tags = tags if tags else []
         subscribers = subscribers if subscribers else []
 
-        with open(file, "r") as f:
-            text = f.read()
+        if file:
+            with open(file, "r") as f:
+                text = f.read()
+        else:
+            text = None
 
         transactions = []
         transactions_values = [

@@ -2,6 +2,7 @@
 import os
 
 # phabfive imports
+from phabricator import APIError, Phabricator
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.paste import Paste
@@ -10,6 +11,24 @@ from phabfive.paste import Paste
 import mock
 import pytest
 from mock import patch, Mock
+
+
+class MockEditResource():
+    def __init__(self, wanted_response):
+        self.wanted_response = wanted_response
+
+    def edit(self, *args, **kwargs):
+        self.edit_args = args
+        self.edit_kwargs = kwargs
+
+        return self.wanted_response
+
+
+class MockPhabricator():
+
+    def __init__(self, wanted_response, *args, **kwargs):
+        self.wanted_response = wanted_response
+        self.paste = MockEditResource(self.wanted_response)
 
 
 def test_paste_class():
@@ -59,3 +78,80 @@ def test_convert_ids():
         p._convert_ids(['foobar'])
 
     assert p._convert_ids(['P1', 'P11']) == [1, 11]
+
+
+def test_create_paste_api_error_on_edit():
+    """
+    When inputting valid arguments but the backend sends up APIError we should get a wrapped
+    PhabfiveDataException raised back up to us.
+    """
+    with patch.object(Phabricator, "__call__", autospec=True) as dynamic_phabricator_call:
+        def side_effect(self, *args, **kwargs):
+            print("inside", args, kwargs)
+            raise APIError(1, "foobar")
+
+        dynamic_phabricator_call.side_effect = side_effect
+
+        with pytest.raises(PhabfiveDataException):
+            p = Paste()
+            p.create_paste(
+                title="title_foo",
+                file=None,
+                language="lang_foo",
+                subscribers="subs_foo",
+            )
+
+
+def test_create_paste_invalid_file_error():
+    """
+    If we input a file path that do not compute to a file on disk we should check
+    for the normal FileNotFoundError python exception.
+    """
+    with pytest.raises(FileNotFoundError):
+        p = Paste()
+        p.create_paste(
+            title='title_foo',
+            file='random_foobar_file.txt',
+            language='lang_foo',
+            subscribers='subs_foo',
+        )
+
+
+def test_create_paste_transaction_values():
+    """
+    When inputting all valid data we need to check that transactions values is as expected and
+    built up propelry to all data that we need.
+    """
+    p = Paste()
+    p.phab = MockPhabricator({'object': 'foobar'})
+
+    result = p.create_paste(
+        title="title_foo",
+        file=None,
+        language="lang_foo",
+        subscribers="subs_foo",
+    )
+    assert result == 'foobar'
+    print(p.phab.paste.edit_args)
+    print(p.phab.paste.edit_kwargs)
+
+    expected_transactions = {
+      "transactions": [
+        {
+          "type": "title",
+          "value": "title_foo"
+        },
+        {
+          "type": "language",
+          "value": "lang_foo"
+        },
+        {
+          "type": "projects.add",
+          "value": []
+        },
+        {
+          "type": "subscribers.add",
+          "value": "subs_foo"
+        }
+      ]
+    }
