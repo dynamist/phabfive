@@ -1,5 +1,10 @@
 # phabfive
 
+[![Travis CI](https://travis-ci.com/dynamist/phabfive.svg?branch=master)](https://travis-ci.com/dynamist/phabfive)
+[![Current release](https://img.shields.io/github/v/release/dynamist/phabfive.svg)](https://github.com/dynamist/phabfive/releases)
+[![GitHub issues](https://img.shields.io/github/issues/dynamist/phabfive.svg?maxAge=360)](https://github.com/dynamist/phabfive/issues)
+[![License](https://img.shields.io/github/license/dynamist/phabfive?color=%23fe0000)](https://github.com/dynamist/phabfive/blob/master/LICENSE)
+
 A command line tool to interact with Phabricator.
 
 The complete documentation for Phabfive can be found at [Read the Docs](https://phabfive.readthedocs.io/en/latest/)
