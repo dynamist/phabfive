@@ -37,3 +37,6 @@ bdist: ## build a wheel distribution
 
 install: ## install package
 	python setup.py install
+
+mkdocs-dev:
+	mkdocs serve

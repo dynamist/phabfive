@@ -29,22 +29,6 @@ about: Report a reproducible bug in the current release of Phabfive
 3.
 
 
-### Schema
-
-<!-- Update me -->
-```
-
-```
-
-
-### Data
-
-<!-- Update me -->
-```
-
-```
-
-
 <!-- What did you expect to happen? -->
 ### Expected Behavior
 

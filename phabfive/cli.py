@@ -8,7 +8,7 @@ import sys
 
 # phabfive imports
 from phabfive import passphrase, diffusion, paste, user
-from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
+from phabfive.constants import *
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,

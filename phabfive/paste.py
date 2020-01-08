@@ -6,7 +6,7 @@ import re
 # phabfive imports
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException
-from phabfive.constants import MONOGRAMS
+from phabfive.constants import *
 
 # 3rd party imports
 from phabricator import APIError
@@ -21,6 +21,9 @@ class Paste(Phabfive):
 
     def _convert_ids(self, ids):
         """Method used by print function."""
+        if not isinstance(ids, list):
+            raise PhabfiveDataException("variable ids must be of list type")
+
         ids_list_int = []
 
         for id_ in ids:
@@ -48,12 +51,14 @@ class Paste(Phabfive):
 
         :rtype: dict
         """
-        text = None
         tags = tags if tags else []
         subscribers = subscribers if subscribers else []
 
-        with open(file, "r") as f:
-            text = f.read()
+        if file:
+            with open(file, "r") as f:
+                text = f.read()
+        else:
+            text = None
 
         transactions = []
         transactions_values = [

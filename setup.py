@@ -19,9 +19,9 @@ with open("CHANGELOG.md") as f:
     CHANGELOG = f.read()
 
 install_requires = ["anyconfig", "appdirs", "phabricator", "pyyaml", "docopt"]
-tests_require = ["coverage", "flake8", "pytest", "tox"]
-docs_require = ["docs"]
-download_url = "{}/tarball/v{}".format(
+tests_require = ["coverage", "flake8", "pytest", "tox", "mock"]
+docs_require = ["mkdocs"]
+download_url = "{0}/tarball/v{1}".format(
     "https://github.com/dynamist/phabfive", phabfive.__version__
 )
 
@@ -41,7 +41,7 @@ setup(
     extras_require={"test": tests_require, "docs": docs_require},
     packages=["phabfive"],
     entry_points={"console_scripts": ["phabfive = phabfive.cli:cli_entrypoint"]},
-    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
+    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*",
     classifiers=[
         # 'Development Status :: 1 - Planning',
         # "Development Status :: 2 - Pre-Alpha",
@@ -56,9 +56,9 @@ setup(
         "Environment :: Console",
         "Programming Language :: Python",
         "Programming Language :: Python :: 2.7",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: Apache Software License",
         "Natural Language :: English",
     ],

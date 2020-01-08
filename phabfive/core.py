@@ -39,24 +39,23 @@ CONFIG_EXAMPLES = {
 
 class Phabfive(object):
     def __init__(self):
-
         # Get super-early debugging by `export PHABFIVE_DEBUG=1`
         if "PHABFIVE_DEBUG" in os.environ:
             log.setLevel(logging.DEBUG)
             log.info(
-                "Loglevel is: {}".format(logging.getLevelName(log.getEffectiveLevel()))
+                "Loglevel is: {0}".format(logging.getLevelName(log.getEffectiveLevel()))
             )
 
         self.conf = self.load_config()
 
         maxlen = 8 + len(max(dict(self.conf).keys(), key=len))
         for k, v in dict(self.conf).items():
-            log.debug("{} {} {}".format(k, "." * (maxlen - len(k)), v))
+            log.debug("{0} {1} {2}".format(k, "." * (maxlen - len(k)), v))
 
         # check for required configurables
         for k, v in dict(self.conf).items():
             if k in REQUIRED and not v:
-                error = "{} is not configured".format(k)
+                error = "{0} is not configured".format(k)
                 example = CONFIG_EXAMPLES.get(k)
                 if example:
                     error += ", " + example
@@ -65,11 +64,12 @@ class Phabfive(object):
         # check validity of configurables
         for k in VALIDATORS.keys():
             if not re.match(VALIDATORS[k], self.conf[k]):
-                error = "{} is malformed".format(k)
+                error = "{0} is malformed".format(k)
                 example = VALID_EXAMPLES.get(k)
                 if example:
                     error += ", " + example
                 raise PhabfiveConfigException(error)
+
         self.phab = Phabricator(
             host=self.conf.get("PHAB_URL"), token=self.conf.get("PHAB_TOKEN")
         )
@@ -105,7 +105,7 @@ class Phabfive(object):
         os.environ["XDG_CONFIG_DIRS"] = "/etc"
 
         site_conf_file = os.path.join(appdirs.site_config_dir("phabfive") + ".yaml")
-        log.debug("Loading configuration file: {}".format(site_conf_file))
+        log.debug("Loading configuration file: {0}".format(site_conf_file))
         anyconfig.merge(
             conf,
             {
@@ -120,7 +120,7 @@ class Phabfive(object):
         site_conf_dir = os.path.join(
             appdirs.site_config_dir("phabfive") + ".d", "*.yaml"
         )
-        log.debug("Loading configuration files: {}".format(site_conf_dir))
+        log.debug("Loading configuration files: {0}".format(site_conf_dir))
         anyconfig.merge(
             conf,
             {
@@ -131,7 +131,7 @@ class Phabfive(object):
         )
 
         user_conf_file = os.path.join(appdirs.user_config_dir("phabfive")) + ".yaml"
-        log.debug("Loading configuration file: {}".format(user_conf_file))
+        log.debug("Loading configuration file: {0}".format(user_conf_file))
         anyconfig.merge(
             conf,
             {
@@ -146,7 +146,7 @@ class Phabfive(object):
         user_conf_dir = os.path.join(
             appdirs.user_config_dir("phabfive") + ".d", "*.yaml"
         )
-        log.debug("Loading configuration files: {}".format(user_conf_dir))
+        log.debug("Loading configuration files: {0}".format(user_conf_dir))
         anyconfig.merge(
             conf,
             {
