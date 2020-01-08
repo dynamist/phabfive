@@ -4,6 +4,8 @@
 [![Current release](https://img.shields.io/github/v/release/dynamist/phabfive.svg)](https://github.com/dynamist/phabfive/releases)
 [![GitHub issues](https://img.shields.io/github/issues/dynamist/phabfive.svg?maxAge=360)](https://github.com/dynamist/phabfive/issues)
 [![License](https://img.shields.io/github/license/dynamist/phabfive?color=%23fe0000)](https://github.com/dynamist/phabfive/blob/master/LICENSE)
+[![Python2](https://img.shields.io/badge/python2-2.7-blue.svg)](https://github.com/dynamist/phabfive/)
+[![Python3](https://img.shields.io/badge/python3-3.6,3.7,3.8-blue.svg)](https://github.com/dynamist/phabfive/)
 
 A command line tool to interact with Phabricator.
 
