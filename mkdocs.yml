@@ -5,6 +5,11 @@ repo_url: https://github.com/dynamist/phabfive
 nav:
     - Introduction: 'index.md'
     - Development: 'development.md'
+    - Modules:
+        - Diffusion: 'modules/diffusion.md'
+        - Passphrase: 'modules/passphrase.md'
+        - Paste: 'modules/paste.md'
+        - User: 'modules/user.md'
 
 markdown_extensions:
     - admonition:
