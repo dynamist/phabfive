@@ -12,6 +12,13 @@ import pytest
 from mock import patch, Mock
 
 
+@mock.patch.dict(
+    os.environ,
+    {
+        "PHAB_URL": "http://127.0.0.1/api/",
+        "PHAB_TOKEN": "api-bjmudcq4mjtxprkk7w3s4fkdqz6z",
+    },
+)
 def test_diffusion_class():
     """
     Basic class tests for issues caused when creating the object and that it inherits from 
@@ -32,6 +39,13 @@ def test_empty_url_or_token():
         d = Diffusion()
 
 
+@mock.patch.dict(
+    os.environ,
+    {
+        "PHAB_URL": "http://127.0.0.1/api/",
+        "PHAB_TOKEN": "api-bjmudcq4mjtxprkk7w3s4fkdqz6z",
+    },
+)
 def test_validator():
     """
     We assume that passphrase identifier validator is
