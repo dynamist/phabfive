@@ -31,6 +31,6 @@ More detailed examples can be found on the [Read the Docs](https://phabfive.read
 
 ## LICENSE
 
-Copyright (c) 2017-2019 Dynamist AB
+Copyright (c) 2017-2020 Dynamist AB
 
 See the LICENSE file provided with the source distribution for full details.
