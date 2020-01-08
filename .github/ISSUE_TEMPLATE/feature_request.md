@@ -13,8 +13,11 @@ about: Propose a new Phabfive feature or enhancement
 -->
 
 ### Environment
-* Phabfive version: <!-- Example: 1.7.0 -->
-* Python version: <!-- Example: 3.7.0 -->
+<!-- Example: 1.7.0 -->
+* Phabfive version:
+
+<!-- Example: 3.7.0 -->
+* Python version:
 
 <!--
     Describe in detail the new functionality you are proposing. Include any
@@ -32,7 +35,9 @@ about: Propose a new Phabfive feature or enhancement
 -->
 ### Use Case
 
+ * None
+
 
 ### Other?
 
-None
+ * None
