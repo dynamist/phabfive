@@ -80,6 +80,8 @@ class Phabfive(object):
             host=self.conf.get("PHAB_URL"),
             token=self.conf.get("PHAB_TOKEN"),
         )
+        # This enables extra endpoints that normally is unaccessible
+        self.phab.update_interfaces()
 
         self.verify_connection()
 
