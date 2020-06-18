@@ -5,10 +5,6 @@ import logging
 
 # phabfive imports
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveRemoteException
-
-# 3rd party imports
-from phabricator import APIError
 
 
 log = logging.getLogger(__name__)
