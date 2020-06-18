@@ -38,40 +38,47 @@ CONFIG_EXAMPLES = {
 
 
 class Phabfive(object):
-    def __init__(self):
 
+    def __init__(self):
+        """
+        """
         # Get super-early debugging by `export PHABFIVE_DEBUG=1`
         if "PHABFIVE_DEBUG" in os.environ:
             log.setLevel(logging.DEBUG)
-            log.info(
-                "Loglevel is: {}".format(logging.getLevelName(log.getEffectiveLevel()))
-            )
+            log.info("Loglevel is: {}".format(logging.getLevelName(log.getEffectiveLevel())))
 
         self.conf = self.load_config()
 
         maxlen = 8 + len(max(dict(self.conf).keys(), key=len))
+
         for k, v in dict(self.conf).items():
             log.debug("{} {} {}".format(k, "." * (maxlen - len(k)), v))
 
         # check for required configurables
-        for k, v in dict(self.conf).items():
-            if k in REQUIRED and not v:
-                error = "{} is not configured".format(k)
-                example = CONFIG_EXAMPLES.get(k)
+        for conf_key, conf_value in dict(self.conf).items():
+            if conf_key in REQUIRED and not conf_value:
+                error = "{} is not configured".format(conf_key)
+                example = CONFIG_EXAMPLES.get(conf_key)
+
                 if example:
                     error += ", " + example
+
                 raise PhabfiveConfigException(error)
 
         # check validity of configurables
-        for k in VALIDATORS.keys():
-            if not re.match(VALIDATORS[k], self.conf[k]):
-                error = "{} is malformed".format(k)
-                example = VALID_EXAMPLES.get(k)
+        for validator_key in VALIDATORS.keys():
+            if not re.match(VALIDATORS[validator_key], self.conf[validator_key]):
+                error = "{} is malformed".format(validator_key)
+                example = VALID_EXAMPLES.get(validator_key)
+
                 if example:
                     error += ", " + example
+
                 raise PhabfiveConfigException(error)
+
         self.phab = Phabricator(
-            host=self.conf.get("PHAB_URL"), token=self.conf.get("PHAB_TOKEN")
+            host=self.conf.get("PHAB_URL"),
+            token=self.conf.get("PHAB_TOKEN"),
         )
 
         self.verify_connection()
