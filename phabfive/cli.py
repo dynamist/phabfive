@@ -28,7 +28,7 @@ Available phabfive commands are:
     diffusion           The diffusion app
     maniphest           The maniphest app
     paste               The paste app
-    repl                Enter a REPL where API access is possible
+    repl                Enter a REPL with API access is possible
     user                Information on users
 
 Shortcuts to Phabricator monograms:
@@ -119,8 +119,8 @@ Options:
 
 sub_maniphest_args = """
 Usage:
-    phabfive maniphest add comment <ticket_id> <comment> [options]
-    phabfive maniphest info <ticket_id> [options]
+    phabfive maniphest comment add <ticket_id> <comment> [options]
+    phabfive maniphest show <ticket_id> [options]
 
 Options:
     -h, --help           Show this help message and exit
@@ -302,7 +302,7 @@ def run(cli_args, sub_args):
                     print("Comment successfully added")
                     print("Ticket URI: {0}".format(ticket["uri"]))
 
-            if sub_args["info"]:
+            if sub_args["show"]:
                 _, result = m.info(int(sub_args["<ticket_id>"][1:]))
 
                 from datetime import datetime
