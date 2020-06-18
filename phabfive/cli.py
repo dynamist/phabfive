@@ -7,7 +7,7 @@ import re
 import sys
 
 # phabfive imports
-from phabfive import passphrase, diffusion, paste, user, repl
+from phabfive import passphrase, diffusion, paste, user, repl, maniphest
 from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -26,6 +26,7 @@ Usage:
 Available phabfive commands are:
     passphrase          The passphrase app
     diffusion           The diffusion app
+    maniphest           The maniphest app
     paste               The paste app
     repl                Enter a REPL where API access is possible
     user                Information on users
@@ -116,6 +117,15 @@ Options:
     -h, --help           Show this help message and exit
 """
 
+sub_maniphest_args = """
+Usage:
+    phabfive maniphest add comment <ticket_id> <comment> [options]
+    phabfive maniphest info <ticket_id> [options]
+
+Options:
+    -h, --help           Show this help message and exit
+"""
+
 
 def parse_cli():
     """Parse the CLI arguments and options."""
@@ -162,6 +172,8 @@ def parse_cli():
         sub_args = docopt(sub_user_args, argv=argv)
     elif cli_args["<command>"] == "repl":
         sub_args = docopt(sub_repl_args, argv=argv)
+    elif cli_args["<command>"] == "maniphest":
+        sub_args = docopt(sub_maniphest_args, argv=argv)
     else:
         extras(True, phabfive.__version__, [Option("-h", "--help", 0, True)], base_args)
         sys.exit(1)
@@ -274,6 +286,52 @@ def run(cli_args, sub_args):
         if cli_args["<command>"] == "repl":
             r = repl.Repl()
             r.run()
+
+        if cli_args["<command>"] == "maniphest":
+            m = maniphest.Maniphest()
+            
+            if sub_args["add"] and sub_args["comment"]:
+                result = m.add_comment(
+                    sub_args['<ticket_id>'],
+                    sub_args['<comment>'],
+                )
+                if result[0]:
+                    # Query the ticket to fetch the URI for it
+                    _, ticket = m.info(int(sub_args["<ticket_id>"][1:]))
+
+                    print("Comment successfully added")
+                    print("Ticket URI: {0}".format(ticket["uri"]))
+
+            if sub_args["info"]:
+                _, result = m.info(int(sub_args["<ticket_id>"][1:]))
+
+                from datetime import datetime
+
+                print("Ticket ID:          {0}".format(result["id"]))
+                print("phid:               {0}".format(result["phid"]))
+                print("authorPHID:         {0}".format(result["authorPHID"]))
+                print("ownerPHID:          {0}".format(result["ownerPHID"]))
+                print("ccPHIDs:            {0}".format(result["ccPHIDs"]))
+                print("status:             {0}".format(result["status"]))
+                print("statusName:         {0}".format(result["statusName"]))
+                print("isClosed:           {0}".format(result["isClosed"]))
+                print("priority:           {0}".format(result["priority"]))
+                print("priorityColor:      {0}".format(result["priorityColor"]))
+                print("title:              {0}".format(result["title"]))
+                print("description:        {0}".format(result["description"]))
+                print("projectPHIDs:       {0}".format(result["projectPHIDs"]))
+                print("uri:                {0}".format(result["uri"]))
+                print("auxiliary:          {0}".format(result["auxiliary"]))
+                print("objectName:         {0}".format(result["objectName"]))
+                print("dateCreated:        {0} ({1})".format(
+                    result["dateCreated"],
+                    datetime.fromtimestamp(int(result["dateCreated"])),
+                ))
+                print("dateModified:       {0} ({1})".format(
+                    result["dateModified"],
+                    datetime.fromtimestamp(int(result["dateModified"])),
+                ))
+                print("dependsOnTaskPHIDs: {0}".format(result["dependsOnTaskPHIDs"]))
 
     except (
         PhabfiveConfigException,
