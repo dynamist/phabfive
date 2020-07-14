@@ -28,7 +28,7 @@ Available phabfive commands are:
     diffusion           The diffusion app
     maniphest           The maniphest app
     paste               The paste app
-    repl                Enter a REPL with API access is possible
+    repl                Enter a REPL with API access
     user                Information on users
 
 Shortcuts to Phabricator monograms:
