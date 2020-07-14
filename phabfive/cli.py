@@ -292,7 +292,7 @@ def run(cli_args, sub_args):
         if cli_args["<command>"] == "maniphest":
             m = maniphest.Maniphest()
 
-            if sub_args["add"] and sub_args["comment"]:
+            if sub_args["comment"] and sub_args["add"]:
                 result = m.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)
                 if result[0]:
                     # Query the ticket to fetch the URI for it
