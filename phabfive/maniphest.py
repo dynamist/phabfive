@@ -20,7 +20,7 @@ class Maniphest(Phabfive):
         :type comment_string: str
         """
         result = self.phab.maniphest.edit(
-            transactions=[{"type": "comment", "value": comment_string,}],
+            transactions=[{"type": "comment", "value": comment_string}],
             objectIdentifier=ticket_identifier,
         )
 
