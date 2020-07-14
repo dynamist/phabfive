@@ -38,14 +38,15 @@ CONFIG_EXAMPLES = {
 
 
 class Phabfive(object):
-
     def __init__(self):
         """
         """
         # Get super-early debugging by `export PHABFIVE_DEBUG=1`
         if "PHABFIVE_DEBUG" in os.environ:
             log.setLevel(logging.DEBUG)
-            log.info("Loglevel is: {}".format(logging.getLevelName(log.getEffectiveLevel())))
+            log.info(
+                "Loglevel is: {}".format(logging.getLevelName(log.getEffectiveLevel()))
+            )
 
         self.conf = self.load_config()
 
@@ -77,8 +78,7 @@ class Phabfive(object):
                 raise PhabfiveConfigException(error)
 
         self.phab = Phabricator(
-            host=self.conf.get("PHAB_URL"),
-            token=self.conf.get("PHAB_TOKEN"),
+            host=self.conf.get("PHAB_URL"), token=self.conf.get("PHAB_TOKEN"),
         )
         # This enables extra endpoints that normally is unaccessible
         self.phab.update_interfaces()
