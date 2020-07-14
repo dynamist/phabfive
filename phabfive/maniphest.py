@@ -11,7 +11,6 @@ log = logging.getLogger(__name__)
 
 
 class Maniphest(Phabfive):
-
     def __init__(self):
         super(Maniphest, self).__init__()
 
@@ -21,10 +20,7 @@ class Maniphest(Phabfive):
         :type comment_string: str
         """
         result = self.phab.maniphest.edit(
-            transactions=[{
-                "type": "comment",
-                "value": comment_string,
-            }],
+            transactions=[{"type": "comment", "value": comment_string,}],
             objectIdentifier=ticket_identifier,
         )
 
@@ -35,8 +31,6 @@ class Maniphest(Phabfive):
         :type task_id: int
         """
         # FIXME: Add validation and extraction of the int part of the task_id
-        result = self.phab.maniphest.info(
-            task_id=task_id,
-        )
+        result = self.phab.maniphest.info(task_id=task_id,)
 
         return (True, result)
