@@ -291,7 +291,7 @@ def run(cli_args, sub_args):
 
         if cli_args["<command>"] == "maniphest":
             m = maniphest.Maniphest()
-            
+
             if sub_args["add"] and sub_args["comment"]:
                 result = m.add_comment(
                     sub_args['<ticket_id>'],
@@ -309,7 +309,7 @@ def run(cli_args, sub_args):
 
                 from datetime import datetime
 
-                ## FIXME: All commented fields should be implemented as some kind of --verbose/--long 
+                # FIXME: All commented fields should be implemented as some kind of --verbose/--long
 
                 # print("Ticket ID:          {0}".format(result["id"]))
                 # print("phid:               {0}".format(result["phid"]))
