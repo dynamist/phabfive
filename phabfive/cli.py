@@ -159,6 +159,8 @@ def parse_cli():
             argv = [app, "show"] + argv
         elif app == "user":
             argv = [app, "whoami"] + argv
+        elif app == "maniphest":
+            argv = [app, "show"] + argv
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
         sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)
@@ -307,31 +309,27 @@ def run(cli_args, sub_args):
 
                 from datetime import datetime
 
-                print("Ticket ID:          {0}".format(result["id"]))
-                print("phid:               {0}".format(result["phid"]))
-                print("authorPHID:         {0}".format(result["authorPHID"]))
-                print("ownerPHID:          {0}".format(result["ownerPHID"]))
-                print("ccPHIDs:            {0}".format(result["ccPHIDs"]))
-                print("status:             {0}".format(result["status"]))
-                print("statusName:         {0}".format(result["statusName"]))
-                print("isClosed:           {0}".format(result["isClosed"]))
-                print("priority:           {0}".format(result["priority"]))
-                print("priorityColor:      {0}".format(result["priorityColor"]))
-                print("title:              {0}".format(result["title"]))
-                print("description:        {0}".format(result["description"]))
-                print("projectPHIDs:       {0}".format(result["projectPHIDs"]))
-                print("uri:                {0}".format(result["uri"]))
-                print("auxiliary:          {0}".format(result["auxiliary"]))
-                print("objectName:         {0}".format(result["objectName"]))
-                print("dateCreated:        {0} ({1})".format(
-                    result["dateCreated"],
-                    datetime.fromtimestamp(int(result["dateCreated"])),
-                ))
-                print("dateModified:       {0} ({1})".format(
-                    result["dateModified"],
-                    datetime.fromtimestamp(int(result["dateModified"])),
-                ))
-                print("dependsOnTaskPHIDs: {0}".format(result["dependsOnTaskPHIDs"]))
+                ## FIXME: All commented fields should be implemented as some kind of --verbose/--long 
+
+                # print("Ticket ID:          {0}".format(result["id"]))
+                # print("phid:               {0}".format(result["phid"]))
+                # print("authorPHID:         {0}".format(result["authorPHID"]))
+                # print("ownerPHID:          {0}".format(result["ownerPHID"]))
+                # print("ccPHIDs:            {0}".format(result["ccPHIDs"]))
+                print("status:        {0}".format(result["status"]))
+                # print("statusName:         {0}".format(result["statusName"]))
+                # print("isClosed:           {0}".format(result["isClosed"]))
+                print("priority:      {0}".format(result["priority"]))
+                # print("priorityColor:      {0}".format(result["priorityColor"]))
+                print("title:         {0}".format(result["title"]))
+                # print("description:        {0}".format(result["description"]))
+                # print("projectPHIDs:       {0}".format(result["projectPHIDs"]))
+                print("uri:           {0}".format(result["uri"]))
+                # print("auxiliary:          {0}".format(result["auxiliary"]))
+                # print("objectName:         {0}".format(result["objectName"]))
+                print("dateCreated:   {0}".format(datetime.fromtimestamp(int(result["dateCreated"]))))
+                print("dateModified:  {0}".format(datetime.fromtimestamp(int(result["dateModified"]))))
+                # print("dependsOnTaskPHIDs: {0}".format(result["dependsOnTaskPHIDs"]))
 
     except (
         PhabfiveConfigException,
