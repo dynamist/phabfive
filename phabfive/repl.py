@@ -21,7 +21,7 @@ class Repl(Phabfive):
         print("use pp() to prettyprint the API response back from self.phab.* calls")
         print("*************")
 
-        from pprint import pprint as pp
+        from pprint import pprint as pp  # NOQA F01
 
         import pdb
         pdb.set_trace()
