@@ -293,10 +293,7 @@ def run(cli_args, sub_args):
             m = maniphest.Maniphest()
 
             if sub_args["add"] and sub_args["comment"]:
-                result = m.add_comment(
-                    sub_args['<ticket_id>'],
-                    sub_args['<comment>'],
-                )
+                result = m.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)
                 if result[0]:
                     # Query the ticket to fetch the URI for it
                     _, ticket = m.info(int(sub_args["<ticket_id>"][1:]))
@@ -327,8 +324,16 @@ def run(cli_args, sub_args):
                 print("uri:           {0}".format(result["uri"]))
                 # print("auxiliary:          {0}".format(result["auxiliary"]))
                 # print("objectName:         {0}".format(result["objectName"]))
-                print("dateCreated:   {0}".format(datetime.fromtimestamp(int(result["dateCreated"]))))
-                print("dateModified:  {0}".format(datetime.fromtimestamp(int(result["dateModified"]))))
+                print(
+                    "dateCreated:   {0}".format(
+                        datetime.fromtimestamp(int(result["dateCreated"]))
+                    )
+                )
+                print(
+                    "dateModified:  {0}".format(
+                        datetime.fromtimestamp(int(result["dateModified"]))
+                    )
+                )
                 # print("dependsOnTaskPHIDs: {0}".format(result["dependsOnTaskPHIDs"]))
 
     except (
