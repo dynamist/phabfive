@@ -22,11 +22,6 @@ install_requires = ["anyconfig", "appdirs", "phabricator", "pyyaml", "docopt"]
 tests_require = [
     "coverage",
     "flake8",
-    "flake8-assertive",
-    "flake8-black",
-    "flake8-bugbear",
-    "flake8-comprehensions",
-    "flake8-rst-docstrings",
     "pytest",
     "tox",
 ]
