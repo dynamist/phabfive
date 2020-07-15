@@ -7,7 +7,7 @@ import re
 import sys
 
 # phabfive imports
-from phabfive import passphrase, diffusion, paste, user
+from phabfive import passphrase, diffusion, paste, user, repl, maniphest
 from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -26,7 +26,9 @@ Usage:
 Available phabfive commands are:
     passphrase          The passphrase app
     diffusion           The diffusion app
+    maniphest           The maniphest app
     paste               The paste app
+    repl                Enter a REPL with API access
     user                Information on users
 
 Shortcuts to Phabricator monograms:
@@ -107,6 +109,23 @@ Options:
     -h, --help           Show this help message and exit
 """
 
+sub_repl_args = """
+Usage:
+    phabfive repl [options]
+
+Options:
+    -h, --help           Show this help message and exit
+"""
+
+sub_maniphest_args = """
+Usage:
+    phabfive maniphest comment add <ticket_id> <comment> [options]
+    phabfive maniphest show <ticket_id> [options]
+
+Options:
+    -h, --help           Show this help message and exit
+"""
+
 
 def parse_cli():
     """Parse the CLI arguments and options."""
@@ -140,6 +159,8 @@ def parse_cli():
             argv = [app, "show"] + argv
         elif app == "user":
             argv = [app, "whoami"] + argv
+        elif app == "maniphest":
+            argv = [app, "show"] + argv
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
         sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)
@@ -151,11 +172,16 @@ def parse_cli():
         sub_args = docopt(sub_paste_args, argv=argv)
     elif cli_args["<command>"] == "user":
         sub_args = docopt(sub_user_args, argv=argv)
+    elif cli_args["<command>"] == "repl":
+        sub_args = docopt(sub_repl_args, argv=argv)
+    elif cli_args["<command>"] == "maniphest":
+        sub_args = docopt(sub_maniphest_args, argv=argv)
     else:
         extras(True, phabfive.__version__, [Option("-h", "--help", 0, True)], base_args)
         sys.exit(1)
 
-    sub_args["<sub_command>"] = cli_args["<args>"][0]
+    if len(cli_args["<args>"]) > 0:
+        sub_args["<sub_command>"] = cli_args["<args>"][0]
 
     return (cli_args, sub_args)
 
@@ -258,6 +284,57 @@ def run(cli_args, sub_args):
             u = user.User()
             if sub_args["whoami"]:
                 u.print_whoami()
+
+        if cli_args["<command>"] == "repl":
+            r = repl.Repl()
+            r.run()
+
+        if cli_args["<command>"] == "maniphest":
+            m = maniphest.Maniphest()
+
+            if sub_args["comment"] and sub_args["add"]:
+                result = m.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)
+                if result[0]:
+                    # Query the ticket to fetch the URI for it
+                    _, ticket = m.info(int(sub_args["<ticket_id>"][1:]))
+
+                    print("Comment successfully added")
+                    print("Ticket URI: {0}".format(ticket["uri"]))
+
+            if sub_args["show"]:
+                _, result = m.info(int(sub_args["<ticket_id>"][1:]))
+
+                from datetime import datetime
+
+                # FIXME: All commented fields should be implemented as some kind of --verbose/--long
+
+                # print("Ticket ID:          {0}".format(result["id"]))
+                # print("phid:               {0}".format(result["phid"]))
+                # print("authorPHID:         {0}".format(result["authorPHID"]))
+                # print("ownerPHID:          {0}".format(result["ownerPHID"]))
+                # print("ccPHIDs:            {0}".format(result["ccPHIDs"]))
+                print("status:        {0}".format(result["status"]))
+                # print("statusName:         {0}".format(result["statusName"]))
+                # print("isClosed:           {0}".format(result["isClosed"]))
+                print("priority:      {0}".format(result["priority"]))
+                # print("priorityColor:      {0}".format(result["priorityColor"]))
+                print("title:         {0}".format(result["title"]))
+                # print("description:        {0}".format(result["description"]))
+                # print("projectPHIDs:       {0}".format(result["projectPHIDs"]))
+                print("uri:           {0}".format(result["uri"]))
+                # print("auxiliary:          {0}".format(result["auxiliary"]))
+                # print("objectName:         {0}".format(result["objectName"]))
+                print(
+                    "dateCreated:   {0}".format(
+                        datetime.fromtimestamp(int(result["dateCreated"]))
+                    )
+                )
+                print(
+                    "dateModified:  {0}".format(
+                        datetime.fromtimestamp(int(result["dateModified"]))
+                    )
+                )
+                # print("dependsOnTaskPHIDs: {0}".format(result["dependsOnTaskPHIDs"]))
 
     except (
         PhabfiveConfigException,

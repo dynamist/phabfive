@@ -61,7 +61,7 @@ cd tests
 docker-compose up -d
 ```
 
-Now Phabricator is accessible on localhost. Go to http://127.0.0.1/ and log in with user `user` and password `bitnami1`, then head over to http://127.0.0.1/settings/user/user/page/apitokens/ to create your Conduit API token. Add those to `~/.config/phabfive.yaml`, here is an example:
+Now Phabricator is accessible on localhost. Go to https://127.0.0.1/ and log in with user `user` and password `bitnami1`, then head over to https://127.0.0.1/settings/user/user/page/apitokens/ to create your Conduit API token. Add those to `~/.config/phabfive.yaml`, here is an example:
 ```
 PHAB_URL: http://127.0.0.1/api/
 PHAB_TOKEN: api-2hwi... (your token)
