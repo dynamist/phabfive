@@ -36,15 +36,15 @@ docker run --rm phabfive passphrase --help
 
 This repo uses `pytest` module as the test runner and `tox` to orchestrate tests for various Python versions.
 
-To run the tests locally on your machine for all supported and installed versions of Python 2 and 3:
+To run the tests locally on your machine for all supported and installed versions of Python 3:
 ```
 make test
 ```
 
-Or individually for Python 2.7 or Python 3.7:
+Or individually for Python 3.7 and Python 3.8:
 ```
-tox -e py27
 tox -e py37
+tox -e py38
 ```
 
 Old versions of Python are available in the Deadsnakes PPA for Ubuntu or EPEL for Red Hat.
