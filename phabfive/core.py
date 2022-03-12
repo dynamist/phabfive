@@ -77,8 +77,7 @@ class Phabfive(object):
         self.verify_connection()
 
     def verify_connection(self):
-        """
-        """
+        """ """
         try:
             self.phab.user.whoami()
         except APIError as e:
