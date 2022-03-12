@@ -111,7 +111,7 @@ class Phabfive(object):
             {
                 k: v
                 for k, v in dict(
-                    anyconfig.load(site_conf_file, ignore_missing=True)
+                    anyconfig.load(site_conf_file, ac_ignore_missing=True)
                 ).items()
                 if k in CONFIGURABLES
             },
@@ -125,7 +125,7 @@ class Phabfive(object):
             conf,
             {
                 k: v
-                for k, v in dict(anyconfig.load(site_conf_dir)).items()
+                for k, v in dict(anyconfig.multi_load(site_conf_dir)).items()
                 if k in CONFIGURABLES
             },
         )
@@ -137,7 +137,7 @@ class Phabfive(object):
             {
                 k: v
                 for k, v in dict(
-                    anyconfig.load(user_conf_file, ignore_missing=True)
+                    anyconfig.load(user_conf_file, ac_ignore_missing=True)
                 ).items()
                 if k in CONFIGURABLES
             },
@@ -151,7 +151,7 @@ class Phabfive(object):
             conf,
             {
                 k: v
-                for k, v in dict(anyconfig.load(user_conf_dir)).items()
+                for k, v in dict(anyconfig.multi_load(user_conf_dir)).items()
                 if k in CONFIGURABLES
             },
         )
