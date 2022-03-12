@@ -18,7 +18,7 @@ with open("README.md") as f:
 with open("CHANGELOG.md") as f:
     CHANGELOG = f.read()
 
-install_requires = ["anyconfig", "appdirs", "phabricator", "pyyaml", "docopt"]
+install_requires = ["anyconfig>=0.10.0", "appdirs", "phabricator", "pyyaml", "docopt"]
 tests_require = ["coverage", "flake8", "pytest", "tox"]
 docs_require = ["docs"]
 download_url = "{}/tarball/v{}".format(
