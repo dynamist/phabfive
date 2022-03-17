@@ -7,28 +7,28 @@ The complete documentation for Phabfive can be found at [Read the Docs](https://
 
 ## Features
 
-A summary of the currently supported actions, as well as planned features:
+A summary of the currently supported features:
 
 - Passphrase
-  - [X] Get specified secret
+  - Get specified secret
 - Diffusion
-  - [X] List repositories names
-  - [X] Get branches for specified repository
-  - [X] Get clone URI:s for specified repository
-  - [X] Add repository
-  - [X] Edit URI
-  - [X] Observe repositories: create uri
+  - List repositories
+  - Get branches for specified repository
+  - Get clone URI for specified repository
+  - Add repository
+  - Edit URI
+  - Create URI (observe repository)
 - Paste
-  - [X] List pastes
-  - [X] Get specified paste
-  - [X] Add paste
+  - List pastes
+  - Get specified paste
+  - Add paste
 - User
-  - [X] Who am I: information about the logged-in user
+  - Who am I: information about the logged-in user
 
 
 ## Example usage
 
-Grab a Phabricator token at https://<yourserver.com>/settings/panel/apitokens/
+Grab a Phabricator token at `https://<yourserver.com>/settings/panel/apitokens/`
 
 Configure:
 
