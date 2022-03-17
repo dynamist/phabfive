@@ -2,7 +2,7 @@
 
 ## Prelude
 
-Update to accomodate new Python versions and updated dependencies.
+Update to accommodate new Python versions and updated dependencies.
 
 ## Upgrade Notes
 
