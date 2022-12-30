@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 # python std lib
 import re
 import sys
+from datetime import datetime
+from pprint import pprint as pp
 
 # phabfive imports
 from phabfive import passphrase, diffusion, paste, user, repl, maniphest
@@ -16,7 +16,7 @@ from phabfive.exceptions import (
 )
 
 # 3rd party imports
-from docopt import docopt
+from docopt import docopt, extras, Option, DocoptExit
 
 
 base_args = """
@@ -120,10 +120,11 @@ Options:
 sub_maniphest_args = """
 Usage:
     phabfive maniphest comment add <ticket_id> <comment> [options]
-    phabfive maniphest show <ticket_id> [options]
+    phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
 
 Options:
-    -h, --help           Show this help message and exit
+    --all        Show all fields for a ticket
+    -h, --help   Show this help message and exit
 """
 
 
@@ -131,14 +132,20 @@ def parse_cli():
     """Parse the CLI arguments and options."""
     import phabfive
 
-    from docopt import extras, Option, DocoptExit
-
     try:
         cli_args = docopt(
-            base_args, options_first=True, version=phabfive.__version__, help=True
+            base_args,
+            options_first=True,
+            version=phabfive.__version__,
+            help=True,
         )
     except DocoptExit:
-        extras(True, phabfive.__version__, [Option("-h", "--help", 0, True)], base_args)
+        extras(
+            True,
+            phabfive.__version__,
+            [Option("-h", "--help", 0, True)],
+            base_args,
+        )
 
     argv = [cli_args["<command>"]] + cli_args["<args>"]
 
@@ -161,6 +168,7 @@ def parse_cli():
             argv = [app, "whoami"] + argv
         elif app == "maniphest":
             argv = [app, "show"] + argv
+
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
         sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)
@@ -177,7 +185,12 @@ def parse_cli():
     elif cli_args["<command>"] == "maniphest":
         sub_args = docopt(sub_maniphest_args, argv=argv)
     else:
-        extras(True, phabfive.__version__, [Option("-h", "--help", 0, True)], base_args)
+        extras(
+            True,
+            phabfive.__version__,
+            [Option("-h", "--help", 0, True)],
+            base_args,
+        )
         sys.exit(1)
 
     if len(cli_args["<args>"]) > 0:
@@ -187,15 +200,17 @@ def parse_cli():
 
 
 def run(cli_args, sub_args):
-    """Execute the CLI."""
+    """Execute the CLI"""
     retcode = 0
 
     try:
         if cli_args["<command>"] == "passphrase":
             p = passphrase.Passphrase()
             p.print_secret(sub_args["<id>"])
-        elif cli_args["<command>"] == "diffusion":
+
+        if cli_args["<command>"] == "diffusion":
             d = diffusion.Diffusion()
+
             if sub_args["repo"]:
                 if sub_args["list"]:
                     if sub_args["all"]:
@@ -204,6 +219,7 @@ def run(cli_args, sub_args):
                         status = ["inactive"]
                     else:  # default value
                         status = ["active"]
+
                     d.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
                     d.create_repository(name=sub_args["<name>"])
@@ -215,6 +231,7 @@ def run(cli_args, sub_args):
                     elif sub_args["--observe"]:
                         io = "observe"
                         display = "always"
+
                     created_uri = d.create_uri(
                         repository_name=sub_args["<repo>"],
                         new_uri=sub_args["<uri>"],
@@ -224,27 +241,32 @@ def run(cli_args, sub_args):
                     )
                     print(created_uri)
                 elif sub_args["list"]:
-                    d.print_uri(repo=sub_args["<repo>"], clone_uri=sub_args["--clone"])
+                    d.print_uri(
+                        repo=sub_args["<repo>"],
+                        clone_uri=sub_args["--clone"],
+                    )
                 elif sub_args["edit"]:
                     object_id = d.get_object_identifier(
-                        repo_name=sub_args["<repo>"], uri_name=sub_args["<uri>"]
+                        repo_name=sub_args["<repo>"],
+                        uri_name=sub_args["<uri>"],
                     )
+
                     if sub_args["--enable"]:
                         disable = False
                     elif sub_args["--disable"]:
                         disable = True
                     else:
                         disable = None
-                    if all(
-                        a is None
-                        for a in [
-                            sub_args["--new_uri"],
-                            sub_args["--io"],
-                            sub_args["--display"],
-                            sub_args["--cred"],
-                            disable,
-                        ]
-                    ):
+
+                    _data = [
+                        sub_args["--new_uri"],
+                        sub_args["--io"],
+                        sub_args["--display"],
+                        sub_args["--cred"],
+                        disable,
+                    ]
+
+                    if all(a is None for a in _data):
                         print("Please input minimum one option")
 
                     result = d.edit_uri(
@@ -260,17 +282,22 @@ def run(cli_args, sub_args):
                         print("OK")
             elif sub_args["branch"] and sub_args["list"]:
                 d.print_branches(repo=sub_args["<repo>"])
-        elif cli_args["<command>"] == "paste":
+
+        if cli_args["<command>"] == "paste":
             p = paste.Paste()
+
             if sub_args["list"]:
                 p.print_pastes()
             elif sub_args["create"]:
                 tags_list = None
                 subscribers_list = None
+
                 if sub_args["--tags"]:
                     tags_list = sub_args["--tags"].split(",")
+
                 if sub_args["--subscribers"]:
                     subscribers_list = sub_args["--subscribers"].split(",")
+
                 p.create_paste(
                     title=sub_args["<title>"],
                     file=sub_args["<file>"],
@@ -280,8 +307,10 @@ def run(cli_args, sub_args):
             elif sub_args["show"]:
                 if sub_args["<ids>"]:
                     p.print_pastes(ids=sub_args["<ids>"])
+
         if cli_args["<command>"] == "user":
             u = user.User()
+
             if sub_args["whoami"]:
                 u.print_whoami()
 
@@ -294,6 +323,7 @@ def run(cli_args, sub_args):
 
             if sub_args["comment"] and sub_args["add"]:
                 result = m.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)
+
                 if result[0]:
                     # Query the ticket to fetch the URI for it
                     _, ticket = m.info(int(sub_args["<ticket_id>"][1:]))
@@ -304,38 +334,45 @@ def run(cli_args, sub_args):
             if sub_args["show"]:
                 _, result = m.info(int(sub_args["<ticket_id>"][1:]))
 
-                from datetime import datetime
+                if sub_args["--pp"]:
+                    pp({key: value for key, value in result.items()})
+                elif sub_args["--all"]:
+                    print(f"Ticket ID:      {result['id']}")
+                    print(f"phid:           {result['phid']}")
+                    print(f"authorPHID:     {result['authorPHID']}")
+                    print(f"ownerPHID:      {result['ownerPHID']}")
+                    print(f"ccPHIDs:        {result['ccPHIDs']}")
+                    print(f"status:         {result['status']}")
+                    print(f"statusName:     {result['statusName']}")
+                    print(f"isClosed:       {result['isClosed']}")
+                    print(f"priority:       {result['priority']}")
+                    print(f"priorityColor:  {result['priorityColor']}")
+                    print(f"title:          {result['title']}")
+                    print(f"description:    {result['description']}")
+                    print(f"projectPHIDs:   {result['projectPHIDs']}")
+                    print(f"uri:            {result['uri']}")
+                    print(f"auxiliary:      {result['auxiliary']}")
+                    print(f"objectName:     {result['objectName']}")
 
-                # FIXME: All commented fields should be implemented as some kind of --verbose/--long
+                    date_created = datetime.fromtimestamp(int(result['dateCreated']))
+                    print(f"dateCreated:    {date_created}")
 
-                # print("Ticket ID:          {0}".format(result["id"]))
-                # print("phid:               {0}".format(result["phid"]))
-                # print("authorPHID:         {0}".format(result["authorPHID"]))
-                # print("ownerPHID:          {0}".format(result["ownerPHID"]))
-                # print("ccPHIDs:            {0}".format(result["ccPHIDs"]))
-                print("status:        {0}".format(result["status"]))
-                # print("statusName:         {0}".format(result["statusName"]))
-                # print("isClosed:           {0}".format(result["isClosed"]))
-                print("priority:      {0}".format(result["priority"]))
-                # print("priorityColor:      {0}".format(result["priorityColor"]))
-                print("title:         {0}".format(result["title"]))
-                # print("description:        {0}".format(result["description"]))
-                # print("projectPHIDs:       {0}".format(result["projectPHIDs"]))
-                print("uri:           {0}".format(result["uri"]))
-                # print("auxiliary:          {0}".format(result["auxiliary"]))
-                # print("objectName:         {0}".format(result["objectName"]))
-                print(
-                    "dateCreated:   {0}".format(
-                        datetime.fromtimestamp(int(result["dateCreated"]))
-                    )
-                )
-                print(
-                    "dateModified:  {0}".format(
-                        datetime.fromtimestamp(int(result["dateModified"]))
-                    )
-                )
-                # print("dependsOnTaskPHIDs: {0}".format(result["dependsOnTaskPHIDs"]))
+                    date_modified = datetime.fromtimestamp(int(result['dateModified']))
+                    print(f"dateModified:   {date_modified}")
 
+                    print(f"dependsOnTaskPHIDs: {result['dependsOnTaskPHIDs']}")
+                else:
+                    print(f"Ticket ID:     {result['id']}")
+                    print(f"phid:          {result['phid']}")
+                    print(f"status:        {result['status']}")
+                    print(f"priority:      {result['priority']}")
+                    print(f"title:         {result['title']}")
+                    print(f"uri:           {result['uri']}")
+                    date_created = datetime.fromtimestamp(int(result['dateCreated']))
+                    print(f"dateCreated:   {date_created}")
+
+                    date_modified = datetime.fromtimestamp(int(result['dateModified']))
+                    print(f"dateModified:  {date_modified}")
     except (
         PhabfiveConfigException,
         PhabfiveDataException,
