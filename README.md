@@ -45,6 +45,24 @@ Usage:
     phabfive passphrase K123
 
 
+## Run local development phabricator instance
+
+First add the following `127.0.0.1       phabricator.domain.tld` to your `/etc/hosts` file
+
+Next start the mysql instance separate from the phabricator instance with
+
+`docker compose -f docker-compose-phabricator.yml up mysql`
+
+Then after the database is up and running yo ucan start the webserver with
+
+`docker compose -f docker-compose-phabricator.yml up phabricator`
+
+This startup will take some time to setup the demo instance. Once completed you can access your instance in your browser at `http://phabricator.domain.tld/`. On first use you need to setup your admin account. Most development for phabfive requires an API token, create one here `http://phabricator.domain.tld/settings/user/<username>/page/apitokens/`
+
+Note there is no persistance disks so if the container is shutdown any data will be lost and you have to restart
+
+
+
 ## LICENSE
 
 Copyright (c) 2017-2023 Dynamist AB
