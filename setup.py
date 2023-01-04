@@ -3,20 +3,16 @@
 
 import os
 import phabfive
-
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+from setuptools import setup
 
 # Allow setup.py to be run from any path
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 with open("README.md") as f:
-    README = f.read()
+    readme = f.read()
 
 with open("CHANGELOG.md") as f:
-    CHANGELOG = f.read()
+    changelog = f.read()
 
 install_requires = [
     "anyconfig>=0.10.0",
@@ -41,7 +37,7 @@ setup(
     name=phabfive.__name__,
     version=phabfive.__version__,
     description=phabfive.__doc__,
-    long_description=README + "\n\n" + CHANGELOG,
+    long_description=readme + "\n\n" + changelog,
     long_description_content_type="text/markdown",
     author="Rickard Eriksson",
     author_email="rickard@dynamist.se",
@@ -50,10 +46,17 @@ setup(
     zip_safe=False,  # Prevent creation of egg
     install_requires=install_requires,
     tests_require=tests_require,
-    extras_require={"test": tests_require, "docs": docs_require},
+    extras_require={
+        "test": tests_require,
+        "docs": docs_require,
+    },
     packages=["phabfive"],
-    entry_points={"console_scripts": ["phabfive = phabfive.cli:cli_entrypoint"]},
-    python_requires=">=3.8.*",
+    entry_points={
+        "console_scripts": [
+            "phabfive = phabfive.cli:cli_entrypoint",
+        ],
+    },
+    python_requires=">=3.9.*",
     classifiers=[
         # "Development Status :: 1 - Planning",
         # "Development Status :: 2 - Pre-Alpha",
@@ -67,9 +70,9 @@ setup(
         "Operating System :: OS Independent",
         "Environment :: Console",
         "Programming Language :: Python",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "License :: OSI Approved :: Apache Software License",
         "Natural Language :: English",
     ],
