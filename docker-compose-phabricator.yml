@@ -12,6 +12,6 @@ services:
       - PHABRICATOR_ALT_FILE_DOMAIN="files-for-phabricator.anotherdomain.tld"
       - MYSQL_ENV_MYSQL_ROOT_PASSWORD=somerootpassword
     ports:
-      - '81:80'
+      - '80:80'
     depends_on:
       - mysql
