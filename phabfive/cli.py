@@ -3,17 +3,10 @@
 # python std lib
 import re
 import sys
+import logging
+import logging.config
 from datetime import datetime
 from pprint import pprint as pp
-
-# phabfive imports
-from phabfive import passphrase, diffusion, paste, user, repl, maniphest
-from phabfive.constants import MONOGRAMS, REPO_STATUS_CHOICES
-from phabfive.exceptions import (
-    PhabfiveConfigException,
-    PhabfiveDataException,
-    PhabfiveRemoteException,
-)
 
 # 3rd party imports
 from docopt import docopt, extras, Option, DocoptExit
@@ -21,25 +14,26 @@ from docopt import docopt, extras, Option, DocoptExit
 
 base_args = """
 Usage:
-    phabfive [-v ...] [options] <command> [<args> ...]
+    phabfive [options] <command> [<args> ...]
 
 Available phabfive commands are:
-    passphrase          The passphrase app
-    diffusion           The diffusion app
-    maniphest           The maniphest app
-    paste               The paste app
-    repl                Enter a REPL with API access
-    user                Information on users
+    passphrase   The passphrase app
+    diffusion    The diffusion app
+    maniphest    The maniphest app
+    paste        The paste app
+    repl         Enter a REPL with API access
+    user         Information on users
 
 Shortcuts to Phabricator monograms:
 
-    K[0-9]+             Passphrase object, example K123
-    R[0-9]+             Diffusion repo, example R123
-    P[0-9]+             Paste object, example P123
+    K[0-9]+   Passphrase object, example K123
+    R[0-9]+   Diffusion repo, example R123
+    P[0-9]+   Paste object, example P123
 
 Options:
-    -h, --help          Show this help message and exit
-    -V, --version       Display the version number and exit
+    --log-level=<level>   Set loglevel [default: INFO]
+    -h, --help            Show this help message and exit
+    -V, --version         Display the version number and exit
 """
 
 sub_passphrase_args = """
@@ -47,7 +41,7 @@ Usage:
     phabfive passphrase <id> [options]
 
 Options:
-    -h, --help          Show this help message and exit
+    -h, --help   Show this help message and exit
 
 """
 
@@ -61,19 +55,18 @@ Usage:
     phabfive diffusion branch list <repo> [options]
 
 Arguments:
-    <repo>              Repository monogram (R123) or shortname, but currently
-                        not the callsign
-    <uri>               ex. git@bitbucket.org:dynamist/webpage.git
-    <credential>        SSH Private Key for read-only observing, stored in Passphrase ex. K123
+    <repo>         Repository monogram (R123) or shortname, but currently not the callsign
+    <uri>          ex. git@bitbucket.org:dynamist/webpage.git
+    <credential>   SSH Private Key for read-only observing, stored in Passphrase ex. K123
 
 Options:
-    -h, --help                     Show this help message and exit
+    -h, --help   Show this help message and exit
 
 Repo List Options:
-    -u, --url                      Show url
+    -u, --url   Show url
 
 Uri List Options:
-    -c, --clone                    Show clone url(s)
+    -c, --clone   Show clone url(s)
 
 Uri Edit Options:
     -n, --new_uri=<value>  Change repository URI
@@ -89,16 +82,16 @@ Usage:
     phabfive paste show <ids> ... [options]
 
 Arguments:
-    <ids> ...            Paste monogram (P123), example P1 P2 P3
-    <title>              Title for Paste
-    <file>               A file with text content for Paste ex. myfile.txt
+    <ids> ...   Paste monogram (P123), example P1 P2 P3
+    <title>     Title for Paste
+    <file>      A file with text content for Paste ex. myfile.txt
 
 Options:
-    -h, --help           Show this help message and exit
+    -h, --help  Show this help message and exit
 
 Paste Create Options:
-    -t, --tags=<tags> ...           Project name(s), ex. --tags=projectX,projectY,projectZ
-    -s, --subscribers=<sub> ...     Subscribers - user, project, mailing list name. Ex --subscribers=user1,user2,user3
+    -t, --tags=<tags> ...         Project name(s), ex. --tags=projectX,projectY,projectZ
+    -s, --subscribers=<sub> ...   Subscribers - user, project, mailing list name. Ex --subscribers=user1,user2,user3
 """
 
 sub_user_args = """
@@ -106,7 +99,7 @@ Usage:
     phabfive user whoami [options]
 
 Options:
-    -h, --help           Show this help message and exit
+    -h, --help   Show this help message and exit
 """
 
 sub_repl_args = """
@@ -114,16 +107,19 @@ Usage:
     phabfive repl [options]
 
 Options:
-    -h, --help           Show this help message and exit
+    -h, --help  Show this help message and exit
 """
 
 sub_maniphest_args = """
 Usage:
     phabfive maniphest comment add <ticket_id> <comment> [options]
     phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
+    phabfive maniphest create <config-file> [--dry-run] [options]
 
 Options:
     --all        Show all fields for a ticket
+    --dry-run    Does everything except commiting the tickets
+    --pp         Show all fields rendering with pretty print
     -h, --help   Show this help message and exit
 """
 
@@ -147,7 +143,12 @@ def parse_cli():
             base_args,
         )
 
+    phabfive.init_logging(cli_args["--log-level"])
+    log = logging.getLogger(__name__)
+
     argv = [cli_args["<command>"]] + cli_args["<args>"]
+
+    from phabfive.constants import MONOGRAMS
 
     patterns = re.compile("^(?:" + "|".join(MONOGRAMS.values()) + ")")
 
@@ -201,6 +202,15 @@ def parse_cli():
 
 def run(cli_args, sub_args):
     """Execute the CLI"""
+    # Local imports required due to logging limitation
+    from phabfive import passphrase, diffusion, paste, user, repl, maniphest
+    from phabfive.constants import REPO_STATUS_CHOICES 
+    from phabfive.exceptions import (
+        PhabfiveConfigException,
+        PhabfiveDataException,
+        PhabfiveRemoteException,
+    )
+
     retcode = 0
 
     try:
@@ -320,6 +330,13 @@ def run(cli_args, sub_args):
 
         if cli_args["<command>"] == "maniphest":
             m = maniphest.Maniphest()
+
+            if sub_args["create"]:
+                # This part is responsible for bulk creating several tickets at once
+                m.create_from_config(
+                    sub_args["<config-file>"],
+                    dry_run = sub_args["--dry-run"],
+                )
 
             if sub_args["comment"] and sub_args["add"]:
                 result = m.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)

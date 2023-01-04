@@ -1,6 +1,6 @@
 # phabfive
 
-A command line tool to interact with Phabricator.
+A command line tool to interact with Phabricator
 
 The complete documentation for Phabfive can be found at [Read the Docs](https://phabfive.readthedocs.io/en/latest/)
 
@@ -24,6 +24,10 @@ A summary of the currently supported features:
   - Add paste
 - User
   - Who am I: information about the logged-in user
+- Maniphest
+  - Add comment to task
+  - Show task summary or full details
+  - Create multiple tasks via template config file
 
 
 ## Example usage
@@ -43,6 +47,6 @@ Usage:
 
 ## LICENSE
 
-Copyright (c) 2017-2019 Dynamist AB
+Copyright (c) 2017-2023 Dynamist AB
 
 See the LICENSE file provided with the source distribution for full details.

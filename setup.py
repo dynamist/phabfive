@@ -18,7 +18,14 @@ with open("README.md") as f:
 with open("CHANGELOG.md") as f:
     CHANGELOG = f.read()
 
-install_requires = ["anyconfig>=0.10.0", "appdirs", "phabricator", "pyyaml", "docopt"]
+install_requires = [
+    "anyconfig>=0.10.0",
+    "appdirs",
+    "docopt",
+    "jinja2",
+    "phabricator",
+    "pyyaml",
+]
 tests_require = [
     "coverage",
     "flake8",

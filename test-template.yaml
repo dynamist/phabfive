@@ -1,0 +1,28 @@
+variables:
+  foo: 123
+  bar: 456
+  asd: 789
+tickets:
+  - title: Ticket numero uno {{ foo }}
+    description: |
+      This is the description of my ticket...
+      It is many lines of text that we want to include and work with
+      Jinja2 rendering of variable {{ foo }}
+    projects:
+      - Dynamist-Admin
+  - title: Ticket numero two {{ bar }}
+    description: |
+      This is ticket number two
+      It is many lines of text that we want to include and work with
+      Jinja2 rendering of variable {{ bar }}
+    projects:
+      - Felix
+  - title: Ticket numero three {{ asd }}
+    description: |
+      This is ticket number three
+      It is many lines of text that we want to include and work with
+      Jinja2 rendering of variable {{ asd }}
+    projects:
+      - Dynamist-Admin
+      - Felix
+      - IA-Linux
