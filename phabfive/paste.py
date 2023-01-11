@@ -4,9 +4,9 @@
 import re
 
 # phabfive imports
+from phabfive.constants import MONOGRAMS
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException
-from phabfive.constants import MONOGRAMS
 
 # 3rd party imports
 from phabricator import APIError
@@ -17,17 +17,18 @@ class Paste(Phabfive):
         super(Paste, self).__init__()
 
     def _validate_identifier(self, id_):
-        return re.match("^" + MONOGRAMS["paste"] + "$", id_)
+        return re.match(f"^{MONOGRAMS['paste']}$", id_)
 
     def _convert_ids(self, ids):
-        """Method used by print function."""
+        """
+        Method used by print function
+        """
         ids_list_int = []
 
         for id_ in ids:
             if not self._validate_identifier(id_):
-                raise PhabfiveDataException(
-                    'Identifier "{0}" is not valid.'.format(id_)
-                )
+                raise PhabfiveDataException(f"Identifier '{id_}' is not valid")
+
             id_ = id_.replace("P", "")
             # constraints takes int
             id_ = int(id_)
@@ -35,10 +36,9 @@ class Paste(Phabfive):
 
         return ids_list_int
 
-    def create_paste(
-        self, title=None, file=None, language=None, tags=None, subscribers=None
-    ):
-        """Wrapper that connects to Phabricator and creates paste.
+    def create_paste(self, title=None, file=None, language=None, tags=None, subscribers=None):
+        """
+        Wrapper that connects to Phabricator and creates paste.
 
         :type title: str
         :type file: str
@@ -55,6 +55,7 @@ class Paste(Phabfive):
         with open(file, "r") as f:
             text = f.read()
 
+        # FIXME: convert to use self.to_transactions({...}) instead
         transactions = []
         transactions_values = [
             {"type": "title", "value": title},
@@ -64,9 +65,12 @@ class Paste(Phabfive):
             {"type": "projects.add", "value": tags},
             {"type": "subscribers.add", "value": subscribers},
         ]
+
         # Phabricator does not take None (empty list is ok for projects/subscribers) as a value, therefor only "type" that has valid value can be sent as an argument
         transactions = [
-            item for item in transactions_values if None not in item.values()
+            item
+            for item in transactions_values
+            if None not in item.values()
         ]
 
         try:
@@ -87,12 +91,14 @@ class Paste(Phabfive):
 
         :rtype: dict
         """
-        query_key = "all" if not query_key else query_key
-        attachments = {} if not attachments else attachments
-        constraints = {} if not constraints else constraints
+        query_key = query_key or "all"
+        attachments = attachments or {}
+        constraints = constraints or {}
 
         response = self.phab.paste.search(
-            queryKey=query_key, attachments=attachments, constraints=constraints
+            queryKey=query_key,
+            attachments=attachments,
+            constraints=constraints,
         )
 
         pastes = response.get("data", {})
@@ -100,7 +106,9 @@ class Paste(Phabfive):
         return pastes
 
     def print_pastes(self, ids=None):
-        """Method used by the Phabfive CLI."""
+        """
+        Method used by the Phabfive CLI
+        """
         if ids:
             constraints = {"ids": self._convert_ids(ids=ids)}
             pastes = self.get_pastes(constraints=constraints)
@@ -108,13 +116,16 @@ class Paste(Phabfive):
             pastes = self.get_pastes()
 
         if not pastes:
-            raise PhabfiveDataException("No data or other error.")
+            raise PhabfiveDataException("No data or other error")
 
         # sort based on title
-        response = sorted(pastes, key=lambda key: key["fields"]["title"])
+        response = sorted(
+            pastes,
+            key=lambda key: key["fields"]["title"]
+        )
 
         for item in response:
             paste = item["fields"]["title"]
-            paste_id = "P{0}".format(item["id"])
+            paste_id = f"P{item['id']}"
 
-            print("{0} {1}".format(paste_id, paste))
+            print(f"{paste_id} {paste}")

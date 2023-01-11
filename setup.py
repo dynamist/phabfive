@@ -29,15 +29,13 @@ tests_require = [
     "tox",
 ]
 docs_require = ["docs"]
-download_url = "{}/tarball/v{}".format(
-    "https://github.com/dynamist/phabfive", phabfive.__version__
-)
+download_url = f"https://github.com/dynamist/phabfive/tarball/v{phabfive.__version__}"
 
 setup(
     name=phabfive.__name__,
     version=phabfive.__version__,
     description=phabfive.__doc__,
-    long_description=readme + "\n\n" + changelog,
+    long_description=f"{readme}\n\n{changelog}",
     long_description_content_type="text/markdown",
     author="Rickard Eriksson",
     author_email="rickard@dynamist.se",

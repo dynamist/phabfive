@@ -6,8 +6,8 @@ import logging
 import re
 
 # phabfive imports
-from phabfive.core import Phabfive
 from phabfive.constants import MONOGRAMS
+from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException, PhabfiveRemoteException
 
 # 3rd party imports
@@ -22,36 +22,39 @@ class Passphrase(Phabfive):
         super(Passphrase, self).__init__()
 
     def _validate_identifier(self, id_):
-        return re.match("^" + MONOGRAMS["passphrase"] + "$", id_)
+        return re.match(f"^{MONOGRAMS['passphrase']}$", id_)
 
     def get_secret(self, ids):
         if not self._validate_identifier(ids):
-            raise PhabfiveDataException('Identifier "{0}" is not valid.'.format(ids))
+            raise PhabfiveDataException(f"Identifier '{ids}' is not valid")
 
         ids = ids.replace("K", "")
 
         try:
-            response = self.phab.passphrase.query(ids=[ids], needSecrets=1)
+            response = self.phab.passphrase.query(
+                ids=[ids],
+                needSecrets=1,
+            )
         except APIError as e:
             raise PhabfiveRemoteException(e)
 
         has_data = response.get("data", {})
 
         if not has_data:
-            raise PhabfiveDataException("K{0} has no data or other error.".format(ids))
-        else:
-            # TODO: I am doing the logging wrong, in this module the loglevel
-            # is INFO, even if env PHABFIVE_DEBUG=1
-            log.debug(json.dumps(response["data"], indent=2))
+            raise PhabfiveDataException(f"K{ids} has no data or other error")
+
+        # TODO: I am doing the logging wrong, in this module the loglevel
+        # is INFO, even if env PHABFIVE_DEBUG=1
+        log.debug(json.dumps(response["data"], indent=2))
 
         # When Conduit Access is not accepted for Passphrase the "response" will return value "noAPIAccess" in key "material" instead of the secret
-        api_access_value = response["data"].get(next(iter(response["data"])))[
-            "material"
-        ]
+        api_access_value = response["data"].get(next(iter(response["data"])))["material"]
         no_api_access = "noAPIAccess" in api_access_value
 
         if no_api_access:
-            raise PhabfiveDataException(api_access_value.get("noAPIAccess"))
+            raise PhabfiveDataException(
+                api_access_value.get("noAPIAccess"),
+            )
 
         return response["data"]
 

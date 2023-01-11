@@ -6,6 +6,7 @@ import os
 
 # phabfive imports
 from phabfive.core import Phabfive
+from phabfive.constants import *
 
 # 3rd party imports
 import yaml
@@ -13,14 +14,6 @@ from jinja2 import Template
 
 
 log = logging.getLogger(__name__)
-
-
-TICKET_PRIORITY_UNBREAK = "unbreak"
-TICKET_PRIORITY_TRIAGE = "triage"
-TICKET_PRIORITY_HIGH = "high"
-TICKET_PRIORITY_NORMAL = "normal"
-TICKET_PRIORITY_LOW = "low"
-TICKET_PRIORITY_WISH = "wish"
 
 
 class Maniphest(Phabfive):
@@ -33,7 +26,7 @@ class Maniphest(Phabfive):
         :type comment_string: str
         """
         result = self.phab.maniphest.edit(
-            transactions=[{"type": "comment", "value": comment_string}],
+            transactions=self.to_transactions({"comment": comment_string}),
             objectIdentifier=ticket_identifier,
         )
 
@@ -44,7 +37,7 @@ class Maniphest(Phabfive):
         :type task_id: int
         """
         # FIXME: Add validation and extraction of the int part of the task_id
-        result = self.phab.maniphest.info(task_id=task_id,)
+        result = self.phab.maniphest.info(task_id=task_id)
 
         return (True, result)
 

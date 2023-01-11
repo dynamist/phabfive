@@ -125,7 +125,9 @@ Options:
 
 
 def parse_cli():
-    """Parse the CLI arguments and options."""
+    """
+    Parse the CLI arguments and options
+    """
     import phabfive
 
     try:
@@ -201,7 +203,9 @@ def parse_cli():
 
 
 def run(cli_args, sub_args):
-    """Execute the CLI"""
+    """
+    Execute the CLI
+    """
     # Local imports required due to logging limitation
     from phabfive import passphrase, diffusion, paste, user, repl, maniphest
     from phabfive.constants import REPO_STATUS_CHOICES 
@@ -215,11 +219,11 @@ def run(cli_args, sub_args):
 
     try:
         if cli_args["<command>"] == "passphrase":
-            p = passphrase.Passphrase()
-            p.print_secret(sub_args["<id>"])
+            passphrase_app = passphrase.Passphrase()
+            passphrase_app.print_secret(sub_args["<id>"])
 
         if cli_args["<command>"] == "diffusion":
-            d = diffusion.Diffusion()
+            diffusion_app = diffusion.Diffusion()
 
             if sub_args["repo"]:
                 if sub_args["list"]:
@@ -230,9 +234,9 @@ def run(cli_args, sub_args):
                     else:  # default value
                         status = ["active"]
 
-                    d.print_repositories(status=status, url=sub_args["--url"])
+                    diffusion_app.print_repositories(status=status, url=sub_args["--url"])
                 elif sub_args["create"]:
-                    d.create_repository(name=sub_args["<name>"])
+                    diffusion_app.create_repository(name=sub_args["<name>"])
             elif sub_args["uri"]:
                 if sub_args["create"]:
                     if sub_args["--mirror"]:
@@ -242,7 +246,7 @@ def run(cli_args, sub_args):
                         io = "observe"
                         display = "always"
 
-                    created_uri = d.create_uri(
+                    created_uri = diffusion_app.create_uri(
                         repository_name=sub_args["<repo>"],
                         new_uri=sub_args["<uri>"],
                         io=io,
@@ -251,12 +255,12 @@ def run(cli_args, sub_args):
                     )
                     print(created_uri)
                 elif sub_args["list"]:
-                    d.print_uri(
+                    diffusion_app.print_uri(
                         repo=sub_args["<repo>"],
                         clone_uri=sub_args["--clone"],
                     )
                 elif sub_args["edit"]:
-                    object_id = d.get_object_identifier(
+                    object_id = diffusion_app.get_object_identifier(
                         repo_name=sub_args["<repo>"],
                         uri_name=sub_args["<uri>"],
                     )
@@ -276,10 +280,10 @@ def run(cli_args, sub_args):
                         disable,
                     ]
 
-                    if all(a is None for a in _data):
+                    if all(arg is None for arg in _data):
                         print("Please input minimum one option")
 
-                    result = d.edit_uri(
+                    result = diffusion_app.edit_uri(
                         uri=sub_args["--new_uri"],
                         io=sub_args["--io"],
                         display=sub_args["--display"],
@@ -291,13 +295,13 @@ def run(cli_args, sub_args):
                     if result:
                         print("OK")
             elif sub_args["branch"] and sub_args["list"]:
-                d.print_branches(repo=sub_args["<repo>"])
+                diffusion_app.print_branches(repo=sub_args["<repo>"])
 
         if cli_args["<command>"] == "paste":
-            p = paste.Paste()
+            paste_app = paste.Paste()
 
             if sub_args["list"]:
-                p.print_pastes()
+                paste_app.print_pastes()
             elif sub_args["create"]:
                 tags_list = None
                 subscribers_list = None
@@ -308,7 +312,7 @@ def run(cli_args, sub_args):
                 if sub_args["--subscribers"]:
                     subscribers_list = sub_args["--subscribers"].split(",")
 
-                p.create_paste(
+                paste_app.create_paste(
                     title=sub_args["<title>"],
                     file=sub_args["<file>"],
                     tags=tags_list,
@@ -316,40 +320,40 @@ def run(cli_args, sub_args):
                 )
             elif sub_args["show"]:
                 if sub_args["<ids>"]:
-                    p.print_pastes(ids=sub_args["<ids>"])
+                    paste_app.print_pastes(ids=sub_args["<ids>"])
 
         if cli_args["<command>"] == "user":
-            u = user.User()
+            user_app = user.User()
 
             if sub_args["whoami"]:
-                u.print_whoami()
+                user_app.print_whoami()
 
         if cli_args["<command>"] == "repl":
-            r = repl.Repl()
-            r.run()
+            repl_app = repl.Repl()
+            repl_app.run()
 
         if cli_args["<command>"] == "maniphest":
-            m = maniphest.Maniphest()
+            maniphest_app = maniphest.Maniphest()
 
             if sub_args["create"]:
                 # This part is responsible for bulk creating several tickets at once
-                m.create_from_config(
+                maniphest_app.create_from_config(
                     sub_args["<config-file>"],
                     dry_run = sub_args["--dry-run"],
                 )
 
             if sub_args["comment"] and sub_args["add"]:
-                result = m.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)
+                result = maniphest_app.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)
 
                 if result[0]:
                     # Query the ticket to fetch the URI for it
-                    _, ticket = m.info(int(sub_args["<ticket_id>"][1:]))
+                    _, ticket = maniphest_app.info(int(sub_args["<ticket_id>"][1:]))
 
                     print("Comment successfully added")
                     print("Ticket URI: {0}".format(ticket["uri"]))
 
             if sub_args["show"]:
-                _, result = m.info(int(sub_args["<ticket_id>"][1:]))
+                _, result = maniphest_app.info(int(sub_args["<ticket_id>"][1:]))
 
                 if sub_args["--pp"]:
                     pp({key: value for key, value in result.items()})

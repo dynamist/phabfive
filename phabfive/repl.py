@@ -2,6 +2,8 @@
 
 # python std lib
 import logging
+import pdb
+from pprint import pprint as pp
 
 # phabfive imports
 from phabfive.core import Phabfive
@@ -20,9 +22,5 @@ class Repl(Phabfive):
         print("use self.conf to access current client configuration")
         print("use pp() to prettyprint the API response back from self.phab.* calls")
         print("*************")
-
-        from pprint import pprint as pp  # NOQA F01
-
-        import pdb
 
         pdb.set_trace()
