@@ -1,3 +1,27 @@
+# 0.3.0 (2023-01-13)
+
+## Prelude
+
+Maintenance release where we focus more on updating the current code and less on new features
+
+The main new features to look for is the updated docker-compose.yml solution
+
+Second major feature is the new maniphest app where we can query, add comment and create a batch of tasks from config file
+
+
+## Upgrade notes
+
+* Python support bumped up to minimum version of python 3.9
+
+
+## New features
+
+* Add in dependabot support to check for new python packages
+* [#51](https://github.com/dynamist/phabfive/pull/51) - Add support for rendering a batch of tickets and bulk create tickets at one time
+* Update support and logging feature to be more modern and better configurable from CLI
+* Added new dependency jinja2
+
+
 # 0.2.0 (2022-03-17)
 
 ## Prelude
