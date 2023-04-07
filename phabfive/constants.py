@@ -31,6 +31,7 @@ TICKET_PRIORITY_NORMAL = "normal"
 TICKET_PRIORITY_LOW = "low"
 TICKET_PRIORITY_WISH = "wish"
 
+#dict for all default(?) priority type
 TICKET_PRIORITIES = [
     TICKET_PRIORITY_UNBREAK,
     TICKET_PRIORITY_TRIAGE, 

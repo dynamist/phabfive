@@ -55,10 +55,6 @@ class Maniphest(Phabfive):
         # STEP: Data structure validation, check title + description, projects existance
 
         ### Validate all projects is correct data types and exists in Phabricator instance
-
-        #projects_query = self.phab.project.search(constraints={"name": ""})
-        #Upgrade to handle phab instances with more than 100 project/tags
-
         #create a new construct to consolidate all project/tags
         projects_query = {}
         projects_query["data"] = []
@@ -68,6 +64,7 @@ class Maniphest(Phabfive):
         a = r['cursor']['after']
         projects_query["data"].extend(r.data)
 
+        #Added for loop to handle phab instances with more than 100 project/tags
         while (length >= 100 and a is not None):
             r = self.phab.project.search(constraints={"name": ""},after=a)
             length = len(r.data)
@@ -104,6 +101,7 @@ class Maniphest(Phabfive):
                 log.error(list(user_name_to_id_mapping.keys()))
                 return (False, None)
 
+        ### Validate owner and all subscribers (=users) is correct data types and exists in Phabricator instance
         #create a new construct to consolidate all users for owner and subscriber
         users_query = {}
         users_query["data"] = []
@@ -128,17 +126,9 @@ class Maniphest(Phabfive):
         log.debug("All Phabricator user names")
         log.debug(user_name_to_id_mapping)
 
-
-        '''NEED TO HANDLE Subscriber, Owner'''
         for index, ticket_data in enumerate(data["tickets"]):
             if ("owner" not in ticket_data):
                 break
-
-        ####?????
-        #    if not isinstance(ticket_data["owner"], list):
-        #        log.error(f"data key 'owner' must be of list type")
-        #        return (False, None)
-        #        print(f"data key 'owner' must be of list type")
 
             has_errors = False
 
@@ -176,7 +166,8 @@ class Maniphest(Phabfive):
                 log.error(list(user_name_to_id_mapping.keys()))
                 return (False, None)
 
-        ##### PRIORITY
+
+        ### Validate priority is consistent with Phabricator instance, default = TICKET_PRIORITY_NORMAL
         for index, ticket_data in enumerate(data["tickets"]):
             if ("priority" not in ticket_data):
                 break
@@ -203,7 +194,6 @@ class Maniphest(Phabfive):
             rendered_data.append({
                 "title": Template(ticket_data["title"]).render(variables),
                 "description": Template(ticket_data["description"]).render(variables),
-
             })
 
             r = len(rendered_data)
