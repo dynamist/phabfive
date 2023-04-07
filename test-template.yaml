@@ -8,8 +8,13 @@ tickets:
       This is the description of my ticket...
       It is many lines of text that we want to include and work with
       Jinja2 rendering of variable {{ foo }}
+    owner: Ninja
     projects:
       - Dynamist-Admin
+    subscribers:
+      - koga
+      - iga
+    priority: high
   - title: Ticket numero two {{ bar }}
     description: |
       This is ticket number two
@@ -17,6 +22,7 @@ tickets:
       Jinja2 rendering of variable {{ bar }}
     projects:
       - Felix
+    priority: low
   - title: Ticket numero three {{ asd }}
     description: |
       This is ticket number three
@@ -26,3 +32,5 @@ tickets:
       - Dynamist-Admin
       - Felix
       - IA-Linux
+    subscribers:
+      - iga
