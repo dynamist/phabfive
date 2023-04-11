@@ -247,7 +247,7 @@ class Maniphest(Phabfive):
                     ],
                 })
 
-            if ticket_data.get("subscriber"):
+            if ticket_data.get("subscribers"):
                 transactions.append({
                     "type": "subscribers.add",
                     "value": [
@@ -275,6 +275,9 @@ class Maniphest(Phabfive):
 
                 log.debug("ticket create result")
                 log.debug(result)
+
+            else:
+                log.info("self.phab.maniphest.edit(%s" % transactions)
 
             log.info("Created ticket")
 
