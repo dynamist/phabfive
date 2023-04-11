@@ -54,7 +54,7 @@ setup(
             "phabfive = phabfive.cli:cli_entrypoint",
         ],
     },
-    python_requires=">=3.9.*",
+    python_requires=">=3.9",
     classifiers=[
         # "Development Status :: 1 - Planning",
         # "Development Status :: 2 - Pre-Alpha",
