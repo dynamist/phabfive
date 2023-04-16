@@ -3,6 +3,7 @@
 # python std lib
 import logging
 import os
+import re
 
 # phabfive imports
 from phabfive.core import Phabfive
@@ -52,7 +53,7 @@ class Maniphest(Phabfive):
             data = yaml.load(stream, Loader=yaml.Loader)
 
         #####
-        # STEP: Data structure validation, check title + description, projects existance
+        # STEP: Data structure validation, check title + description, projects, owner, subscribers existance
 
         ### Validate all projects is correct data types and exists in Phabricator instance
         #create a new construct to consolidate all project/tags
@@ -148,7 +149,7 @@ class Maniphest(Phabfive):
                 break
 
             if not isinstance(ticket_data["subscribers"], list):
-                log.error(f"data key '{subscriber}' must be of list type")
+                log.error(f"data key 'subscribers' must be of list type")
                 return (False, None)
 
             has_errors = False
@@ -166,7 +167,6 @@ class Maniphest(Phabfive):
                 log.error(list(user_name_to_id_mapping.keys()))
                 return (False, None)
 
-
         ### Validate priority is consistent with Phabricator instance, default = TICKET_PRIORITY_NORMAL
         for index, ticket_data in enumerate(data["tickets"]):
             if ("priority" not in ticket_data):
@@ -181,6 +181,66 @@ class Maniphest(Phabfive):
                 log.error(f"All available users names")
                 log.error(list(user_name_to_id_mapping.keys()))
                 return (False, None)
+        
+        task_id_to_phid_mapping = {}
+
+        ###FIXME: Add parent task
+        for index, ticket_data in enumerate(data["tickets"]):
+            if ("parents" not in ticket_data):
+                break
+
+            if not isinstance(ticket_data["parents"], list):
+                log.error(f"data key 'parents' must be of list type")
+                return (False, None)
+
+            has_errors = False
+
+            constraints = {}
+            constraints["ids"] = []
+            
+            for parent in ticket_data["parents"]:
+                if not re.match(r'^(T).*\d$$', parent):
+                    log.error(f"Task 'id' must start with T")
+                    return (False, None)
+                else:
+                    try:
+                        parentTask = int(parent[1:])
+                    except:
+                        log.error(f"Task 'id' must start with T")
+                        return (False, None)
+                    else:
+                        constraints["ids"].append(parentTask)
+            
+            if len(constraints["ids"]) < 0:
+                    break
+            else:
+            #list of parents should not exceed 100 in a perfect world?
+                try:
+                    r = self.phab.maniphest.search(constraints=constraints)
+                except:
+                    log.error(f"Parent tasks '{ticket_data['parents']}' not found in Phabricator instance")
+                    has_errors = True
+
+            if len(constraints["ids"]) == len(r.data):
+                for p in r.data:
+                    taskid = "T"+str(p["id"])
+                    task_id_to_phid_mapping[taskid] = p["phid"]
+                    print("adding",parent," ", p["phid"])
+            else:
+                log.error(f"One or more '{ticket_data['parents']} not found in Phabricaotr instance")
+                has_errors = True
+                return (False, None)
+
+            if has_errors:
+                log.error(f"Could not find one or more specified tasks, users, projects in phabricator instance. All available project names")
+                log.error(list(project_name_to_id_mapping.keys()))
+                log.error(f"All available users names")
+                log.error(list(user_name_to_id_mapping.keys()))
+
+                return (False, None)
+        ###FIXME: Add column of a project
+        ###FIXME: Change subtype under TASK (likely won't do as not conduit API calls to get list of subtypes including those customized ones)
+
         #####
         # STEP: Render
         log.debug(data)
@@ -205,6 +265,8 @@ class Maniphest(Phabfive):
                 rendered_data[r-1]["projects"] = ticket_data["projects"]
             if ("subscribers" in ticket_data):
                 rendered_data[r-1]["subscribers"] = ticket_data["subscribers"]
+            if ("parents" in ticket_data):
+                rendered_data[r-1]["parents"] = ticket_data["parents"]
 
         log.debug(rendered_data)
 
@@ -263,6 +325,15 @@ class Maniphest(Phabfive):
                         user_name_to_id_mapping[ticket_data["owner"]],
                 })
 
+            if ticket_data.get("parents"):
+                transactions.append({
+                    "type": "parents.add",
+                    "value": [
+                        task_id_to_phid_mapping[parent]
+                        for parent in ticket_data["parents"]
+                    ],
+                })
+
             log.debug("transactions for ticket")
             log.debug(transactions)
 
@@ -277,7 +348,9 @@ class Maniphest(Phabfive):
                 log.debug(result)
 
             else:
+                log.info("[--dry-run] phabricator Maniphest API call generated")
                 log.info("self.phab.maniphest.edit(%s" % transactions)
+                log.info("[--dry-run] end of API call")
 
             log.info("Created ticket")
 
