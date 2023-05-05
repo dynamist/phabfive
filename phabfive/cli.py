@@ -135,7 +135,6 @@ def parse_cli():
             base_args,
             options_first=True,
             version=phabfive.__version__,
-            help=True,
         )
     except DocoptExit:
         extras(
