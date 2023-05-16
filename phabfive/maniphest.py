@@ -98,8 +98,6 @@ class Maniphest(Phabfive):
             if has_errors:
                 log.error(f"Could not find one or more specified users, projects in phabricator instance. All available project names")
                 log.error(list(project_name_to_id_mapping.keys()))
-                log.error(f"All available users names")
-                log.error(list(user_name_to_id_mapping.keys()))
                 return (False, None)
 
         ### Validate owner and all subscribers (=users) is correct data types and exists in Phabricator instance
