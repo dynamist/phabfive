@@ -60,7 +60,7 @@ class Maniphest(Phabfive):
         projects_query = {}
         projects_query["data"] = []
 
-        r = self.phab.project.search(constraints={"name": ""})
+        r = self.phab.project.search(constraints = {"name": ""})
         length = len(r.data)
         a = r['cursor']['after']
         projects_query["data"].extend(r.data)
