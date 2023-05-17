@@ -221,7 +221,7 @@ class Maniphest(Phabfive):
 
             if len(constraints["ids"]) == len(r.data):
                 for p in r.data:
-                    taskid = "T"+str(p["id"])
+                    taskid = "T" + str(p["id"])
                     task_id_to_phid_mapping[taskid] = p["phid"]
                     print("adding",parent," ", p["phid"])
             else:
