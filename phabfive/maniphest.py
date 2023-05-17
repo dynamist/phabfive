@@ -212,7 +212,7 @@ class Maniphest(Phabfive):
             if len(constraints["ids"]) < 0:
                     break
             else:
-            #list of parents should not exceed 100 in a perfect world?
+                # list of parents should not exceed 100 in a perfect world?
                 try:
                     r = self.phab.maniphest.search(constraints=constraints)
                 except:
