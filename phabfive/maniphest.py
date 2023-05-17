@@ -167,7 +167,7 @@ class Maniphest(Phabfive):
 
         ### Validate priority is consistent with Phabricator instance, default = TICKET_PRIORITY_NORMAL
         for index, ticket_data in enumerate(data["tickets"]):
-            if ("priority" not in ticket_data):
+            if "priority" not in ticket_data:
                 break
             if ticket_data["priority"] not in TICKET_PRIORITIES:
                 log.error(f"Priority '{ticket_data['priority']}' not found in Phabricator instance")
