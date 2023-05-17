@@ -319,8 +319,7 @@ class Maniphest(Phabfive):
             if ticket_data.get("owner"):
                 transactions.append({
                     "type": "owner",
-                    "value": 
-                        user_name_to_id_mapping[ticket_data["owner"]],
+                    "value": user_name_to_id_mapping[ticket_data["owner"]],
                 })
 
             if ticket_data.get("parents"):
