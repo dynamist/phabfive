@@ -65,7 +65,7 @@ class Maniphest(Phabfive):
         a = r['cursor']['after']
         projects_query["data"].extend(r.data)
 
-        #Added for loop to handle phab instances with more than 100 project/tags
+        # Added for loop to handle phab instances with more than 100 project/tags
         while (length >= 100 and a is not None):
             r = self.phab.project.search(constraints = {"name": ""}, after=a)
             length = len(r.data)
