@@ -143,7 +143,7 @@ class Maniphest(Phabfive):
                 return (False, None)
 
         for index, ticket_data in enumerate(data["tickets"]):
-            if ("subscribers" not in ticket_data):
+            if "subscribers" not in ticket_data:
                 break
 
             if not isinstance(ticket_data["subscribers"], list):
