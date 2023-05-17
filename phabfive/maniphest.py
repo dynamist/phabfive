@@ -126,7 +126,7 @@ class Maniphest(Phabfive):
         log.debug(user_name_to_id_mapping)
 
         for index, ticket_data in enumerate(data["tickets"]):
-            if ("owner" not in ticket_data):
+            if "owner" not in ticket_data:
                 break
 
             has_errors = False
