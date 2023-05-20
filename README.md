@@ -4,7 +4,6 @@ A command line tool to interact with Phabricator
 
 The complete documentation for Phabfive can be found at [Read the Docs](https://phabfive.readthedocs.io/en/latest/)
 
-
 ## Features
 
 A summary of the currently supported features:
@@ -29,7 +28,6 @@ A summary of the currently supported features:
   - Show task summary or full details
   - Create multiple tasks via template config file
 
-
 ## Example usage
 
 Grab a Phabricator token at `https://<yourserver.com>/settings/panel/apitokens/`
@@ -41,23 +39,24 @@ Configure in Linux:
      echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
 
 Configure in Windows:
-    Phabfive looks for configuration in the following sequence in Windows environment:
-      %ALLUSERSPROFILE%\phabfive\phabfive.yaml
-      %ALLUSERSPROFILE%\phabfive\phabfive.d\*.yaml
-      %LOCALAPPDATA%\phabfive\phabfive.yaml
-      %LOCALAPPDATA%\phabfive\phabfive.d\*.yaml
+    Phabfive looks for configuration in the following sequence in Windows environment  
+
+     %ALLUSERSPROFILE%\phabfive\phabfive.yaml
+     %ALLUSERSPROFILE%\phabfive\phabfive.d\*.yaml
+     %LOCALAPPDATA%\phabfive\phabfive.yaml
+     %LOCALAPPDATA%\phabfive\phabfive.d\*.yaml
 
     Make sure there is a minimum phabfive.yaml store in one of the location
     e.g. echo "PHAB_TOKEN: cli-ABC123" > %LOCALAPPDATA%\phabfive\phabfive.yaml
 
     Additionally, due to connection to Phabricator server on HTTPS requires certificate verification, it is also recommended to install [pip_system_certs](https://pypi.org/project/pip-system-certs/) to ensure system store are linked to python.
 
-      pip install pip_system_certs
+     pip install pip_system_certs
 
 Usage:
 
-    phabfive passphrase K123
-    phabfive --log-level=DEBUG user whoami
+   phabfive passphrase K123
+   phabfive --log-level=DEBUG user whoami
 
 ## Run local development phabricator instance
 
