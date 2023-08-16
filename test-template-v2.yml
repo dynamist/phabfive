@@ -1,0 +1,89 @@
+# Requirements to run this example file is that you create the following things in
+# your test phabricator instance before this file will go through
+#
+# - A user named: hholm
+# - A user named: grok
+# - One ticket with ticket id T1
+# - One ticket with ticket id T2
+# - One ticket with ticket id T3
+# - Project named Client
+# - Project named Admin
+# - Project named IA
+#
+# After they exists, this file can be run with the command during development
+# phabfive --log-level=DEBUG --dry-run maniphest create test-template-v2.yml
+# Where you remove --dry-run when you want to commit the changes
+---
+variables:
+  foo: 123
+  bar: 456
+  asd: 789
+  workgroup: &WORKGROUP
+    - "hholm"
+    - "grok"
+tasks:
+  - title: "[EPIC] This is an EPIC {{ foo }}"
+    description: |
+      This is the description of my ticket...
+      It is many lines of text that we want to include and work with
+      Jinja2 rendering of variable {{ foo }}
+    projects:
+      - "Admin"
+    priority: "high"
+  - title: "[EPIC] Epic numero two {{ bar }}"
+    description: |
+      This is ticket number two
+      It is many lines of text that we want to include and work with
+      Jinja2 rendering of variable {{ bar }}
+    projects:
+      - "Client"
+    priority: "unbreak"
+    tasks:
+      - title: "First subtask"
+        description: |
+          First subtask description with explicit project association
+          Expanding variables here too {{ bar }}
+        projects:
+          - "Client"
+        priority: "low"
+      - title: "Second subtask"
+        description: |
+          Second subtask with implicit project inheritance
+          Expanding variables here too {{ asd }}
+        priority: "wish"
+  - title: "Ticket numero three {{ asd }}"
+    description: |
+      This is ticket number three
+      It is many lines of text that we want to include and work with
+      Jinja2 rendering of variable {{ asd }}
+    projects:
+      - "Admin"
+      - "Client"
+      - "IA"
+  - title: "Ticket with assignment"
+    description: |
+      Ticket with assignment to an individual
+    projects:
+      - "Client"
+    assignment: "hholm"
+  - title: "Ticket with parent task"
+    description: |
+      Ticket with a specified (already present) parent task
+    projects:
+      - "Client"
+    parents:
+      - "1"
+  - title: "Ticket with subtasks"
+    description: |
+      Ticket with specified (already present) subtasks
+    projects:
+      - "Client"
+    subtasks:
+      - "2"
+      - "3"
+  - title: "Ticket with subscribers"
+    description: |
+      Ticket with a list of subscribers
+    projects:
+      - "Client"
+    subscribers: *WORKGROUP
