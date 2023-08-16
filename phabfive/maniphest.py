@@ -78,16 +78,17 @@ class Maniphest(Phabfive):
             if data:
                 data_block[variable_name] = Template(data).render(variables)
 
-        def pre_process_tasks(config_block):
+        def pre_process_tasks(task_config):
             """
             This is the main parser that can be run recurse in order to sort out an individual ticket and recurse down
             to pre process each task and to query all internal ID:s and update the datastructure
             """
-            log.debug("Processing")
-            log.debug(config_block)
-            output = config_block.copy()
+            log.debug("Pre processing config")
+            log.debug(task_config)
 
-            # Render
+            output = task_config.copy()
+
+            # Render strings that should be possible to render with Jinja
             r(output, "title", variables)
             r(output, "description", variables)
 
@@ -107,7 +108,6 @@ class Maniphest(Phabfive):
 
             # Validate and translate all subscriber users to PHID:s
             processed_users = []
-            # has_errors = False
             for subscriber_name in output.get("subscribers", []):
                 log.debug(f"processing user {subscriber_name}")
                 mapped_username_id = username_to_id_mapping.get(subscriber_name, None)
@@ -126,7 +126,7 @@ class Maniphest(Phabfive):
             # Recurse down and process all child tasks
             processed_tasks = []
 
-            child_tasks = config_block.get("tasks", None)
+            child_tasks = task_config.get("tasks", None)
             if child_tasks:
                 for task in child_tasks:
                     processed_tasks.append(
@@ -139,6 +139,144 @@ class Maniphest(Phabfive):
 
             return output
 
+        def recurse_build_transactions(task_config):
+            """
+            This block recurses over all tasks and builds the transaction set for this ticket and stores it
+            in the data structure.
+            """
+            log.debug("Building transactions for task_config")
+            log.debug(task_config)
+
+            # In order to not cause issues with injecting data in a recurse traversal, copy the input,
+            # modify the data and return data that is later used to build a new full data structure
+            output = task_config.copy()
+
+            # Helper lambda to slim down transaction handling
+            add_transaction = lambda t, transaction_type, value : t.append({"type": transaction_type, "value": value})
+
+            transactions = []
+
+            if "title" in task_config and "description" in task_config:
+                add_transaction(transactions, "title", task_config["title"])
+                add_transaction(transactions, "description", task_config["description"])
+                add_transaction(transactions, "priority", task_config.get("priority", TICKET_PRIORITY_NORMAL))
+
+                projects = task_config.get("projects", [])
+
+                if projects:
+                    add_transaction(transactions, "projects.set", projects)
+
+                subscribers = task_config.get("subscribers", [])
+
+                if subscribers:
+                    add_transaction(transactions, "subscribers.set", subscribers)
+
+                # Prepare all parent and subtasks, and check if we have a parent task from the config file
+                subtasks = task_config.get("subtasks", [])
+
+                if subtasks:
+                    subtasks_phids = []
+
+                    for ticket_id in subtasks:
+                        search_result = self.phab.maniphest.search(
+                            constraints={"ids": [int(ticket_id)]},
+                        )
+
+                        if len(search_result["data"]) != 1:
+                            log.critical(f"Unable to find subtasks ticket with ID={ticket_id}")
+                            sys.exit(1)
+
+                        subtasks_phids.append(search_result["data"][0]["phid"])
+
+                    add_transaction(transactions, "subtasks.set", subtasks_phids)
+
+                parents = task_config.get("parents", [])
+
+                if parents:
+                    parent_phids = []
+
+                    for ticket_id in parents:
+                        search_result = self.phab.maniphest.search(
+                            constraints={"ids": [int(ticket_id)]},
+                        )
+
+                        if len(search_result["data"]) != 1:
+                            log.critical(f"Unable to find parent ticket with ID={ticket_id}")
+                            sys.exit(1)
+
+                        parent_phids.append(search_result["data"][0]["phid"])
+
+                    add_transaction(transactions, "parents.set", parent_phids)
+            else:
+                log.warning("Required fields 'title' and 'description' is not present in this data block, skipping ticket creation")
+
+            output["transactions"] = transactions
+
+            processed_child_tasks = []
+            child_tasks = task_config.get("tasks", None)
+
+            if child_tasks:
+                # If there is child tasks to create, recurse down to all of them one by one
+                for task in child_tasks:
+                    processed_child_tasks.append(
+                        recurse_build_transactions(task)
+                    )
+            else:
+                processed_child_tasks = None
+
+            output["tasks"] = processed_child_tasks
+
+            return output
+
+        def recurse_commit_transactions(task_config, parent_task_config):
+            """
+            This recurse functions purpose is to iterate over all tickets, commit them to phabricator
+            and link them to eachother via the ticket hiearchy or explicit parent/subtask links.
+
+            task_config is the current task to create and the parent_task_config is if we have a tree
+            of tickets defined in our config file.
+            """
+            log.debug("\n -- Commiting task")
+            log.debug(json.dumps(task_config,indent=2))
+            log.debug(" ** parent block")
+            log.debug(json.dumps(parent_task_config, indent=2))
+
+            transactions_to_commit = task_config.get("transactions", [])
+
+            if dry_run:
+                log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
+            else:
+                if transactions_to_commit:
+                    # Parent ticket based on the task hiearchy defined in the config file we parsed is different
+                    # from the explicit "ticket parent" that can be defined 
+                    if parent_task_config and "phid" in parent_task_config:
+                        transactions_to_commit.append({
+                            "type": "parents.add",
+                            "value": [parent_task_config["phid"]],
+                        })
+
+                    log.debug(" -- transactions to commit")
+                    log.debug(transactions_to_commit)
+
+                    if dry_run:
+                        log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
+                    else:
+                        result = self.phab.maniphest.edit(
+                            transactions=transactions_to_commit,
+                        )
+
+                    # Store the newly created ticket ID in the data structure so child tickets can look it up
+                    task_config["phid"] = str(result["object"]["phid"])
+                else:
+                    # log.warning(f"No transactions found for ")
+                    log.warning("No transactions to commit here, either a bug or root object that can't be transacted")
+
+            child_tasks = task_config.get("tasks", None)
+            if child_tasks:
+                for child_task in child_tasks:
+                    recurse_commit_transactions(child_task, task_config)
+
+        # Main task recursion logic
         if "tasks" not in root_data:
             log.critical(f"Config file must contain keyword tasks in the root")
             return 1
@@ -148,162 +286,12 @@ class Maniphest(Phabfive):
         log.debug(json.dumps(pre_process_output, indent=2))
         log.debug("\n----------------\n")
 
-        def recurse_build_transactions(config_block):
-            """
-            This block recurses over all tasks and builds the transaction set for this ticket and stores it
-            in the data structure.
-            """
-            log.debug("Building transactions for", config_block)
-            output = config_block.copy()
-
-            built_transactions = []
-
-            if "title" in config_block and "description" in config_block:
-                transaction = []
-
-                transaction.append(
-                    {"type": "title", "value": config_block["title"]}
-                )
-                transaction.append(
-                    {"type": "description", "value": config_block["description"]}
-                )
-
-                if "priority" in config_block:
-                    transaction.append(
-                        {"type": "priority", "value": config_block.get("priority", TICKET_PRIORITY_NORMAL)}
-                    )
-
-                projects = config_block.get("projects", [])
-                if projects:
-                    transaction.append({
-                        "type": "projects.set",
-                        "value": config_block["projects"],
-                    })
-
-                subs = config_block.get("subscribers", [])
-                if subs:
-                    transaction.append({
-                        "type": "subscribers.set",
-                        "value": config_block["subscribers"],
-                    })
-
-                # built_transactions.append(transaction)
-                built_transactions = transaction
-            else:
-                log.warning("Required fields 'title' and 'description' is not present in this data block, skipping ticket creation")
-
-            output["transactions"] = built_transactions
-
-            processed_child_tasks = []
-            child_tasks = config_block.get("tasks", None)
-            if child_tasks:
-                for task in child_tasks:
-                    processed_child_tasks.append(
-                        recurse_build_transactions(task)
-                    )
-
-                output["tasks"] = processed_child_tasks
-            else:
-                output["tasks"] = None
-
-            return output
-
         parsed_root_data = recurse_build_transactions(pre_process_output)
         log.debug(" -- Final built transactions")
         log.debug(json.dumps(parsed_root_data, indent=2))
         log.debug(" -- transactions for all tickets")
         log.debug(parsed_root_data)
         log.debug("\n")
-
-        def recurse_commit_transactions(config_block, parent_config_block):
-            """
-            This recurse functions purpose is to iterate over all tickets, commit them to phabricator
-            and link them to eachother via the ticket hiearchy or explicit parent/subtask links
-            """
-            log.debug("\n -- Commiting task")
-            log.debug(json.dumps(config_block,indent=2))
-            log.debug(" ** parent block")
-            log.debug(json.dumps(parent_config_block, indent=2))
-            transactions_to_commit = config_block.get("transactions", [])
-
-            if transactions_to_commit:
-                pass
-            else:
-                log.warning("No transactions to commit here, either a bug or root object that can't be transacted")
-
-            if dry_run:
-                log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
-            else:
-                if transactions_to_commit:
-                    # Prepare all parent and subtasks, and check if we have a parent task from the config file
-                    subtasks = config_block.get("subtasks", [])
-                    if subtasks:
-                        subtasks_phids = []
-
-                        for ticket_id in subtasks:
-                            search_result = self.phab.maniphest.search(
-                                constraints={"ids": [int(ticket_id)]},
-                            )
-
-                            if len(search_result["data"]) != 1:
-                                log.critical(f"Unable to find subtasks ticket with ID={ticket_id}")
-                                sys.exit(1)
-
-                            subtasks_phids.append(
-                                search_result["data"][0]["phid"],
-                            )
-
-                        transactions_to_commit.append({
-                            "type": "subtasks.set",
-                            "value": subtasks_phids,
-                        })
-
-                    parents = config_block.get("parents", [])
-                    if parents:
-                        parent_phids = []
-
-                        for ticket_id in parents:
-                            search_result = self.phab.maniphest.search(
-                                constraints={"ids": [int(ticket_id)]},
-                            )
-
-                            if len(search_result["data"]) != 1:
-                                log.critical(f"Unable to find parent ticket with ID={ticket_id}")
-                                sys.exit(1)
-
-                            parent_phids.append(
-                                search_result["data"][0]["phid"],
-                            )
-
-                        transactions_to_commit.append({
-                            "type": "parents.set",
-                            "value": parent_phids,
-                        })
-
-                    if parent_config_block and "phabid" in parent_config_block:
-                        transactions_to_commit.append({
-                            "type": "parents.add",
-                            "value": [parent_config_block["phabid"]],
-                        })
-
-                    log.debug(" -- transactions")
-                    log.debug(transactions_to_commit)
-                    if dry_run:
-                        log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
-                    else:
-                        result = self.phab.maniphest.edit(
-                            transactions=transactions_to_commit,
-                        )
-
-                    # Store the newly created ticket ID in the data structure so child tickets can look it up
-                    config_block["phabid"] = str(result["object"]["phid"])
-                else:
-                    log.warning(f"No transactions found for ")
-
-            child_tasks = config_block.get("tasks", None)
-            if child_tasks:
-                for child_task in child_tasks:
-                    recurse_commit_transactions(child_task, config_block)
 
         # Always start with a blank parent
         recurse_commit_transactions(parsed_root_data, None)
