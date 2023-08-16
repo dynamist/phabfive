@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
 # python std lib
+import json
 import logging
 import os
+import sys
 
 # phabfive imports
 from phabfive.core import Phabfive
@@ -49,115 +51,259 @@ class Maniphest(Phabfive):
             log.error(f"Specified config file '{config_file}' do not exists")
 
         with open(config_file) as stream:
-            data = yaml.load(stream, Loader=yaml.Loader)
+            root_data = yaml.load(stream, Loader=yaml.Loader)
 
-        #####
-        # STEP: Data structure validation, check title + description, projects existance
+        # Prefetch all users in phabricator, used by subscribers mapping later
+        users_query = self.phab.user.search()
+        username_to_id_mapping = {
+            user["fields"]["username"]: user["phid"]
+            for user in users_query["data"]
+        }
+        log.debug(username_to_id_mapping)
 
-        ### Validate all projects is correct data types and exists in Phabricator instance
+        # Pre-fetch all projects in phabricator, used to map ticket -> projects later
         projects_query = self.phab.project.search(constraints={"name": ""})
-
         project_name_to_id_mapping = {
             project["fields"]["name"]: project["phid"]
             for project in projects_query["data"]
         }
 
-        log.debug("All Phabricator project names")
         log.debug(project_name_to_id_mapping)
 
-        for index, ticket_data in enumerate(data["tickets"]):
-            if "projects" not in ticket_data:
-                break
+        variables = root_data["variables"]
+        del root_data["variables"]
 
-            if not isinstance(ticket_data["projects"], list):
-                log.error(f"data key 'projects' must be of list type")
-                return (False, None)
+        def r(data_block, variable_name, variables):
+            data = data_block.get(variable_name, None)
+            if data:
+                data_block[variable_name] = Template(data).render(variables)
+
+        def pre_process_tasks(config_block):
+            """
+            This is the main parser that can be run recurse in order to sort out an individual ticket and recurse down
+            to pre process each task and to query all internal ID:s and update the datastructure
+            """
+            log.debug("Processing")
+            log.debug(config_block)
+            output = config_block.copy()
+
+            # Render
+            r(output, "title", variables)
+            r(output, "description", variables)
 
             has_errors = False
 
-            for project in ticket_data["projects"]:
-                if project not in project_name_to_id_mapping:
-                    log.error(f"Project name '{project}' not found in Phabricator instance")
+            # Validate and translate project names to internal project PHID:s
+            processed_projects = []
+            for project_name in output.get("projects", []):
+                mapped_name_id = project_name_to_id_mapping.get(project_name, None)
+                if mapped_name_id:
+                    processed_projects.append(mapped_name_id)
+                else:
+                    log.critical(f"Specified project '{project_name}' is not found on the phabricator server")
                     has_errors = True
 
+            output["projects"] = processed_projects
+
+            # Validate and translate all subscriber users to PHID:s
+            processed_users = []
+            # has_errors = False
+            for subscriber_name in output.get("subscribers", []):
+                log.debug(f"processing user {subscriber_name}")
+                mapped_username_id = username_to_id_mapping.get(subscriber_name, None)
+                if mapped_username_id:
+                    processed_users.append(mapped_username_id)
+                else:
+                    log.critical(f"Specified subscriber '{subscriber_name}' not found as a user on the phabricator server")
+                    has_errors = True
+
+            output["subscribers"] = processed_users
+
             if has_errors:
-                log.error(f"Could not find one or more specified projects in phabricator instance. All available project names")
-                log.error(list(project_name_to_id_mapping.keys()))
-                return (False, None)
+                log.critical(f"Hard errors found during pre-processing step. Please update config or phabricator server and try again. Nothing has been commited yet.")
+                sys.exit(1)
 
-        #####
-        # STEP: Render
-        log.debug(data)
+            # Recurse down and process all child tasks
+            processed_tasks = []
 
-        # Define the variables to be used in the template
-        variables = data["variables"]
+            child_tasks = config_block.get("tasks", None)
+            if child_tasks:
+                for task in child_tasks:
+                    processed_tasks.append(
+                        pre_process_tasks(task)
+                    )
 
-        rendered_data = []
+                output["tasks"] = processed_tasks
+            else:
+                output["tasks"] = None
 
-        for ticket_data in data["tickets"]:
-            rendered_data.append({
-                "title": Template(ticket_data["title"]).render(variables),
-                "description": Template(ticket_data["description"]).render(variables),
-                "projects": ticket_data["projects"],
-            })
+            return output
 
-        log.debug(rendered_data)
+        if "tasks" not in root_data:
+            log.critical(f"Config file must contain keyword tasks in the root")
+            return 1
 
-        #####
-        # STEP: Post render data validation
-        for ticket_data in rendered_data:
-            if not isinstance(ticket_data["title"], str):
-                log.error("Ticket title must be a string")
+        pre_process_output = pre_process_tasks(root_data)
+        log.debug("Final pre_process_output")
+        log.debug(json.dumps(pre_process_output, indent=2))
+        log.debug("\n----------------\n")
 
-            if not isinstance(ticket_data["description"], str):
-                log.error("Ticket description must be a string")
+        def recurse_build_transactions(config_block):
+            """
+            This block recurses over all tasks and builds the transaction set for this ticket and stores it
+            in the data structure.
+            """
+            log.debug("Building transactions for", config_block)
+            output = config_block.copy()
 
-        #####
-        # STEP: Run
-        if dry_run:
-            log.critical("Running with --dry-run, tickets will NOT be commited to phabricator")
+            built_transactions = []
 
-        result_ids = []
+            if "title" in config_block and "description" in config_block:
+                transaction = []
 
-        for ticket_data in rendered_data:
-            # Prepare the data to submit for each ticket
-            transactions = [
-                {"type": "title", "value": ticket_data["title"]},
-                {"type": "description", "value": ticket_data["description"]},
-                {"type": "priority", "value": ticket_data.get("priority", TICKET_PRIORITY_NORMAL)},
-            ]
-
-            if ticket_data.get("projects"):
-                transactions.append({
-                    "type": "projects.set",
-                    "value": [
-                        project_name_to_id_mapping[project_name]
-                        for project_name in ticket_data["projects"]
-                    ],
-                })
-
-            log.debug("transactions for ticket")
-            log.debug(transactions)
-
-            if not dry_run:
-                result = self.phab.maniphest.edit(
-                    transactions=transactions,
+                transaction.append(
+                    {"type": "title", "value": config_block["title"]}
+                )
+                transaction.append(
+                    {"type": "description", "value": config_block["description"]}
                 )
 
-                result_ids.append(result["object"]["id"])
+                if "priority" in config_block:
+                    transaction.append(
+                        {"type": "priority", "value": config_block.get("priority", TICKET_PRIORITY_NORMAL)}
+                    )
 
-                log.debug("ticket create result")
-                log.debug(result)
+                projects = config_block.get("projects", [])
+                if projects:
+                    transaction.append({
+                        "type": "projects.set",
+                        "value": config_block["projects"],
+                    })
 
-            log.info("Created ticket")
+                subs = config_block.get("subscribers", [])
+                if subs:
+                    transaction.append({
+                        "type": "subscribers.set",
+                        "value": config_block["subscribers"],
+                    })
 
-        #####
-        # STEP: Report
-        if dry_run:
-            log.critical("Running with --dry-run, no ticket details will be reported as nothing was created")
-            return (True, None)
+                # built_transactions.append(transaction)
+                built_transactions = transaction
+            else:
+                log.warning("Required fields 'title' and 'description' is not present in this data block, skipping ticket creation")
 
-        log.info("Report of all created tickets")
-        for result_id in result_ids:
-            _, ticket_info = self.info(int(result_id))
-            log.info(f"Title: {ticket_info['title']} | ID: {ticket_info['id']} | URI: {ticket_info['uri']}")
+            output["transactions"] = built_transactions
+
+            processed_child_tasks = []
+            child_tasks = config_block.get("tasks", None)
+            if child_tasks:
+                for task in child_tasks:
+                    processed_child_tasks.append(
+                        recurse_build_transactions(task)
+                    )
+
+                output["tasks"] = processed_child_tasks
+            else:
+                output["tasks"] = None
+
+            return output
+
+        parsed_root_data = recurse_build_transactions(pre_process_output)
+        log.debug(" -- Final built transactions")
+        log.debug(json.dumps(parsed_root_data, indent=2))
+        log.debug(" -- transactions for all tickets")
+        log.debug(parsed_root_data)
+        log.debug("\n")
+
+        def recurse_commit_transactions(config_block, parent_config_block):
+            """
+            This recurse functions purpose is to iterate over all tickets, commit them to phabricator
+            and link them to eachother via the ticket hiearchy or explicit parent/subtask links
+            """
+            log.debug("\n -- Commiting task")
+            log.debug(json.dumps(config_block,indent=2))
+            log.debug(" ** parent block")
+            log.debug(json.dumps(parent_config_block, indent=2))
+            transactions_to_commit = config_block.get("transactions", [])
+
+            if transactions_to_commit:
+                pass
+            else:
+                log.warning("No transactions to commit here, either a bug or root object that can't be transacted")
+
+            if dry_run:
+                log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
+            else:
+                if transactions_to_commit:
+                    # Prepare all parent and subtasks, and check if we have a parent task from the config file
+                    subtasks = config_block.get("subtasks", [])
+                    if subtasks:
+                        subtasks_phids = []
+
+                        for ticket_id in subtasks:
+                            search_result = self.phab.maniphest.search(
+                                constraints={"ids": [int(ticket_id)]},
+                            )
+
+                            if len(search_result["data"]) != 1:
+                                log.critical(f"Unable to find subtasks ticket with ID={ticket_id}")
+                                sys.exit(1)
+
+                            subtasks_phids.append(
+                                search_result["data"][0]["phid"],
+                            )
+
+                        transactions_to_commit.append({
+                            "type": "subtasks.set",
+                            "value": subtasks_phids,
+                        })
+
+                    parents = config_block.get("parents", [])
+                    if parents:
+                        parent_phids = []
+
+                        for ticket_id in parents:
+                            search_result = self.phab.maniphest.search(
+                                constraints={"ids": [int(ticket_id)]},
+                            )
+
+                            if len(search_result["data"]) != 1:
+                                log.critical(f"Unable to find parent ticket with ID={ticket_id}")
+                                sys.exit(1)
+
+                            parent_phids.append(
+                                search_result["data"][0]["phid"],
+                            )
+
+                        transactions_to_commit.append({
+                            "type": "parents.set",
+                            "value": parent_phids,
+                        })
+
+                    if parent_config_block and "phabid" in parent_config_block:
+                        transactions_to_commit.append({
+                            "type": "parents.add",
+                            "value": [parent_config_block["phabid"]],
+                        })
+
+                    log.debug(" -- transactions")
+                    log.debug(transactions_to_commit)
+                    if dry_run:
+                        log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
+                    else:
+                        result = self.phab.maniphest.edit(
+                            transactions=transactions_to_commit,
+                        )
+
+                    # Store the newly created ticket ID in the data structure so child tickets can look it up
+                    config_block["phabid"] = str(result["object"]["phid"])
+                else:
+                    log.warning(f"No transactions found for ")
+
+            child_tasks = config_block.get("tasks", None)
+            if child_tasks:
+                for child_task in child_tasks:
+                    recurse_commit_transactions(child_task, config_block)
+
+        # Always start with a blank parent
+        recurse_commit_transactions(parsed_root_data, None)
