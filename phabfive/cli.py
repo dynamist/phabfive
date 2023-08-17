@@ -208,12 +208,8 @@ def run(cli_args, sub_args):
     """
     # Local imports required due to logging limitation
     from phabfive import passphrase, diffusion, paste, user, repl, maniphest
-    from phabfive.constants import REPO_STATUS_CHOICES 
-    from phabfive.exceptions import (
-        PhabfiveConfigException,
-        PhabfiveDataException,
-        PhabfiveRemoteException,
-    )
+    from phabfive.constants import REPO_STATUS_CHOICES
+    from phabfive.exceptions import PhabfiveException
 
     retcode = 0
 
@@ -394,12 +390,9 @@ def run(cli_args, sub_args):
 
                     date_modified = datetime.fromtimestamp(int(result['dateModified']))
                     print(f"dateModified:  {date_modified}")
-    except (
-        PhabfiveConfigException,
-        PhabfiveDataException,
-        PhabfiveRemoteException,
-    ) as e:
-        print(str(e), file=sys.stderr)
+    except PhabfiveException as e:
+        # Catch all types of phabricator base exceptions
+        print(f"CRITICAL :: {str(e)}", file=sys.stderr)
         retcode = 1
 
     return retcode
