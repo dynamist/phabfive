@@ -3,12 +3,12 @@
 # python std lib
 import json
 import logging
-import os
-import sys
+from pathlib import Path
 
 # phabfive imports
 from phabfive.core import Phabfive
 from phabfive.constants import *
+from phabfive.exceptions import *
 
 # 3rd party imports
 import yaml
@@ -45,36 +45,47 @@ class Maniphest(Phabfive):
 
     def create_from_config(self, config_file, dry_run=False):
         if not config_file:
-            log.error(f"No config file specified")
+            raise PhabfiveException(f"Must specify a config file path")
 
-        if not os.path.exists(config_file):
-            log.error(f"Specified config file '{config_file}' do not exists")
+        if Path(config_file).is_file():
+            log.error(f"Config file '{config_file}' do not exists")
 
         with open(config_file) as stream:
             root_data = yaml.load(stream, Loader=yaml.Loader)
 
-        # Prefetch all users in phabricator, used by subscribers mapping later
+        # Fetch all users in phabricator, used by subscribers mapping later
         users_query = self.phab.user.search()
         username_to_id_mapping = {
             user["fields"]["username"]: user["phid"]
             for user in users_query["data"]
         }
+
         log.debug(username_to_id_mapping)
 
-        # Pre-fetch all projects in phabricator, used to map ticket -> projects later
+        # Fetch all projects in phabricator, used to map ticket -> projects later
         projects_query = self.phab.project.search(constraints={"name": ""})
-        project_name_to_id_mapping = {
+        project_name_to_id_map = {
             project["fields"]["name"]: project["phid"]
             for project in projects_query["data"]
         }
 
-        log.debug(project_name_to_id_mapping)
+        log.debug(project_name_to_id_map)
 
+        # Gather and remove variables to avoid using it or polluting the data later on
         variables = root_data["variables"]
         del root_data["variables"]
 
+        # Helper lambda to slim down transaction handling
+        add_transaction = lambda t, transaction_type, value : t.append(
+            {"type": transaction_type, "value": value},
+        )
+
         def r(data_block, variable_name, variables):
+            """
+            Helper method to simplify Jinja2 rendering of a given value to a set of variables
+            """
             data = data_block.get(variable_name, None)
+
             if data:
                 data_block[variable_name] = Template(data).render(variables)
 
@@ -83,59 +94,53 @@ class Maniphest(Phabfive):
             This is the main parser that can be run recurse in order to sort out an individual ticket and recurse down
             to pre process each task and to query all internal ID:s and update the datastructure
             """
-            log.debug("Pre processing config")
+            log.debug("Pre processing tasks")
             log.debug(task_config)
 
             output = task_config.copy()
 
-            # Render strings that should be possible to render with Jinja
+            # Render strings that should be possible to render with Jinja2
             r(output, "title", variables)
             r(output, "description", variables)
 
-            has_errors = False
-
             # Validate and translate project names to internal project PHID:s
-            processed_projects = []
-            for project_name in output.get("projects", []):
-                mapped_name_id = project_name_to_id_mapping.get(project_name, None)
-                if mapped_name_id:
-                    processed_projects.append(mapped_name_id)
-                else:
-                    log.critical(f"Specified project '{project_name}' is not found on the phabricator server")
-                    has_errors = True
+            project_phids = []
 
-            output["projects"] = processed_projects
+            for project_name in output.get("projects", []):
+                project_phid = project_name_to_id_map.get(project_name, None)
+
+                if not project_phid:
+                    raise PhabfiveRemoteException(f"Project '{project_name}' is not found on the phabricator server")
+
+                project_phids.append(project_phid)
+
+            output["projects"] = project_phids
 
             # Validate and translate all subscriber users to PHID:s
-            processed_users = []
+            user_phids = []
+
             for subscriber_name in output.get("subscribers", []):
                 log.debug(f"processing user {subscriber_name}")
-                mapped_username_id = username_to_id_mapping.get(subscriber_name, None)
-                if mapped_username_id:
-                    processed_users.append(mapped_username_id)
-                else:
-                    log.critical(f"Specified subscriber '{subscriber_name}' not found as a user on the phabricator server")
-                    has_errors = True
+                user_phid = username_to_id_mapping.get(subscriber_name, None)
 
-            output["subscribers"] = processed_users
+                if not user_phid:
+                    raise PhabfiveRemoteException(f"Subscriber '{subscriber_name}' not found as a user on the phabricator server")
 
-            if has_errors:
-                log.critical(f"Hard errors found during pre-processing step. Please update config or phabricator server and try again. Nothing has been commited yet.")
-                sys.exit(1)
+                user_phids.append(user_phid)
+
+            output["subscribers"] = user_phids
 
             # Recurse down and process all child tasks
-            processed_tasks = []
-
+            processed_child_tasks = []
             child_tasks = task_config.get("tasks", None)
-            if child_tasks:
-                for task in child_tasks:
-                    processed_tasks.append(
-                        pre_process_tasks(task)
-                    )
 
-                output["tasks"] = processed_tasks
-            else:
-                output["tasks"] = None
+            if child_tasks:
+                processed_child_tasks = [
+                    pre_process_tasks(task)
+                    for task in child_tasks
+                ]
+
+            output["tasks"] = processed_child_tasks
 
             return output
 
@@ -144,15 +149,17 @@ class Maniphest(Phabfive):
             This block recurses over all tasks and builds the transaction set for this ticket and stores it
             in the data structure.
             """
-            log.debug("Building transactions for task_config")
+            log.debug(f"Building transactions for task_config")
             log.debug(task_config)
 
             # In order to not cause issues with injecting data in a recurse traversal, copy the input,
             # modify the data and return data that is later used to build a new full data structure
             output = task_config.copy()
 
-            # Helper lambda to slim down transaction handling
-            add_transaction = lambda t, transaction_type, value : t.append({"type": transaction_type, "value": value})
+            # # Helper lambda to slim down transaction handling
+            # add_transaction = lambda t, transaction_type, value : t.append(
+            #     {"type": transaction_type, "value": value},
+            # )
 
             transactions = []
 
@@ -179,12 +186,11 @@ class Maniphest(Phabfive):
 
                     for ticket_id in subtasks:
                         search_result = self.phab.maniphest.search(
-                            constraints={"ids": [int(ticket_id)]},
+                            constraints={"ids": [int(ticket_id[1:])]},
                         )
 
                         if len(search_result["data"]) != 1:
-                            log.critical(f"Unable to find subtasks ticket with ID={ticket_id}")
-                            sys.exit(1)
+                            raise PhabfiveRemoteException(f"Unable to find subtask ticket in phabricator instance with ID={ticket_id}")
 
                         subtasks_phids.append(search_result["data"][0]["phid"])
 
@@ -197,12 +203,11 @@ class Maniphest(Phabfive):
 
                     for ticket_id in parents:
                         search_result = self.phab.maniphest.search(
-                            constraints={"ids": [int(ticket_id)]},
+                            constraints={"ids": [int(ticket_id[1:])]},
                         )
 
                         if len(search_result["data"]) != 1:
-                            log.critical(f"Unable to find parent ticket with ID={ticket_id}")
-                            sys.exit(1)
+                            raise PhabfiveRemoteException(f"Unable to find parent ticket in phabricator instance with ID={ticket_id}")
 
                         parent_phids.append(search_result["data"][0]["phid"])
 
@@ -217,12 +222,12 @@ class Maniphest(Phabfive):
 
             if child_tasks:
                 # If there is child tasks to create, recurse down to all of them one by one
-                for task in child_tasks:
-                    processed_child_tasks.append(
-                        recurse_build_transactions(task)
-                    )
+                processed_child_tasks = [
+                    recurse_build_transactions(task)
+                    for task in child_tasks
+                ]
             else:
-                processed_child_tasks = None
+                processed_child_tasks = []
 
             output["tasks"] = processed_child_tasks
 
@@ -243,43 +248,36 @@ class Maniphest(Phabfive):
 
             transactions_to_commit = task_config.get("transactions", [])
 
-            if dry_run:
-                log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
-            else:
-                if transactions_to_commit:
-                    # Parent ticket based on the task hiearchy defined in the config file we parsed is different
-                    # from the explicit "ticket parent" that can be defined 
-                    if parent_task_config and "phid" in parent_task_config:
-                        transactions_to_commit.append({
-                            "type": "parents.add",
-                            "value": [parent_task_config["phid"]],
-                        })
+            if transactions_to_commit:
+                # Parent ticket based on the task hiearchy defined in the config file we parsed is different
+                # from the explicit "ticket parent" that can be defined 
+                if parent_task_config and "phid" in parent_task_config:
+                    add_transaction(transactions_to_commit, "parents.add", [parent_task_config["phid"]])
 
-                    log.debug(" -- transactions to commit")
-                    log.debug(transactions_to_commit)
+                log.debug(" -- transactions to commit")
+                log.debug(transactions_to_commit)
 
-                    if dry_run:
-                        log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
-                    else:
-                        result = self.phab.maniphest.edit(
-                            transactions=transactions_to_commit,
-                        )
+                if dry_run:
+                    log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
+                else:
+                    result = self.phab.maniphest.edit(
+                        transactions=transactions_to_commit,
+                    )
 
                     # Store the newly created ticket ID in the data structure so child tickets can look it up
                     task_config["phid"] = str(result["object"]["phid"])
-                else:
-                    # log.warning(f"No transactions found for ")
-                    log.warning("No transactions to commit here, either a bug or root object that can't be transacted")
+            else:
+                log.warning("No transactions to commit here, either a bug or root object that can't be transacted")
 
             child_tasks = task_config.get("tasks", None)
+
             if child_tasks:
                 for child_task in child_tasks:
                     recurse_commit_transactions(child_task, task_config)
 
         # Main task recursion logic
         if "tasks" not in root_data:
-            log.critical(f"Config file must contain keyword tasks in the root")
-            return 1
+            raise PhabfiveDataException(f"Config file must contain keyword tasks in the root")
 
         pre_process_output = pre_process_tasks(root_data)
         log.debug("Final pre_process_output")

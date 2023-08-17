@@ -72,15 +72,15 @@ tasks:
     projects:
       - "Client"
     parents:
-      - "1"
+      - "T1"
   - title: "Ticket with subtasks"
     description: |
       Ticket with specified (already present) subtasks
     projects:
       - "Client"
     subtasks:
-      - "2"
-      - "3"
+      - "T2"
+      - "T3"
   - title: "Ticket with subscribers"
     description: |
       Ticket with a list of subscribers
