@@ -30,6 +30,7 @@ tasks:
     projects:
       - "Admin"
     priority: "high"
+    owner: "grok"
   - title: "[EPIC] Epic numero two {{ bar }}"
     description: |
       This is ticket number two

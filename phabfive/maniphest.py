@@ -17,6 +17,32 @@ from jinja2 import Template
 
 log = logging.getLogger(__name__)
 
+def search_phab(phab_module, *args, **kwargs):
+    """
+    Helper method that wraps around your search query/endpoint and
+    helps you to handle any cursors redirections to gather up all items
+    in that search so you do not get stuck on only having access to the first
+    page of items.
+    """
+    results = {"data": []}
+    limit = kwargs.get("limit", 100)
+
+    def fetch_results(cursor=None):
+        query_params = kwargs.copy()
+
+        if cursor:
+            query_params["after"] = cursor
+
+        result = phab_module.search(*args, **query_params)
+        results["data"].extend(result.data)
+
+        if len(result.data) >= limit and result["cursor"]["after"] is not None:
+            fetch_results(result["cursor"]["after"])
+
+    fetch_results()
+
+    return results["data"]
+
 
 class Maniphest(Phabfive):
     def __init__(self):
@@ -47,26 +73,26 @@ class Maniphest(Phabfive):
         if not config_file:
             raise PhabfiveException(f"Must specify a config file path")
 
-        if Path(config_file).is_file():
+        if not Path(config_file).is_file():
             log.error(f"Config file '{config_file}' do not exists")
 
         with open(config_file) as stream:
             root_data = yaml.load(stream, Loader=yaml.Loader)
 
         # Fetch all users in phabricator, used by subscribers mapping later
-        users_query = self.phab.user.search()
+        users_query = search_phab(self.phab.user)
         username_to_id_mapping = {
             user["fields"]["username"]: user["phid"]
-            for user in users_query["data"]
+            for user in users_query
         }
 
         log.debug(username_to_id_mapping)
 
         # Fetch all projects in phabricator, used to map ticket -> projects later
-        projects_query = self.phab.project.search(constraints={"name": ""})
+        projects_query = search_phab(self.phab.project, constraints={"name": ""})
         project_name_to_id_map = {
             project["fields"]["name"]: project["phid"]
-            for project in projects_query["data"]
+            for project in projects_query
         }
 
         log.debug(project_name_to_id_map)
@@ -80,7 +106,7 @@ class Maniphest(Phabfive):
             {"type": transaction_type, "value": value},
         )
 
-        def r(data_block, variable_name, variables):
+        def jinja_render(data_block, variable_name, variables):
             """
             Helper method to simplify Jinja2 rendering of a given value to a set of variables
             """
@@ -100,8 +126,9 @@ class Maniphest(Phabfive):
             output = task_config.copy()
 
             # Render strings that should be possible to render with Jinja2
-            r(output, "title", variables)
-            r(output, "description", variables)
+            jinja_render(output, "title", variables)
+            jinja_render(output, "description", variables)
+            jinja_render(output, "owner", variables)
 
             # Validate and translate project names to internal project PHID:s
             project_phids = []
@@ -128,7 +155,12 @@ class Maniphest(Phabfive):
 
                 user_phids.append(user_phid)
 
-            output["subscribers"] = user_phids
+            # Remap owner name to valid PHID
+            owner = output.get("owner", None)
+            owner_phid = username_to_id_mapping.get(owner, None)
+
+            if owner:
+                output["owner"] = owner_phid
 
             # Recurse down and process all child tasks
             processed_child_tasks = []
@@ -156,17 +188,16 @@ class Maniphest(Phabfive):
             # modify the data and return data that is later used to build a new full data structure
             output = task_config.copy()
 
-            # # Helper lambda to slim down transaction handling
-            # add_transaction = lambda t, transaction_type, value : t.append(
-            #     {"type": transaction_type, "value": value},
-            # )
-
             transactions = []
 
             if "title" in task_config and "description" in task_config:
                 add_transaction(transactions, "title", task_config["title"])
                 add_transaction(transactions, "description", task_config["description"])
                 add_transaction(transactions, "priority", task_config.get("priority", TICKET_PRIORITY_NORMAL))
+
+                owner = task_config.get("owner", None)
+                if owner:
+                    add_transaction(transactions, "owner", owner)
 
                 projects = task_config.get("projects", [])
 
@@ -265,6 +296,7 @@ class Maniphest(Phabfive):
                     )
 
                     # Store the newly created ticket ID in the data structure so child tickets can look it up
+                    task_config["id"] = str(result["object"]["id"])
                     task_config["phid"] = str(result["object"]["phid"])
             else:
                 log.warning("No transactions to commit here, either a bug or root object that can't be transacted")
@@ -274,6 +306,30 @@ class Maniphest(Phabfive):
             if child_tasks:
                 for child_task in child_tasks:
                     recurse_commit_transactions(child_task, task_config)
+
+        def recurse_ticket_report(task_config):
+            """
+            Recursive method that walks through the entire processed task tree
+            and prints a user-friendly report back to the user about what tasks was
+            created in the phabricator server
+            """
+            ticket_id = task_config.get("id")
+
+            # If we are at the root level, the ID won't be set, but we have
+            # child tasks to parse through
+            if ticket_id:
+                _, ticket_info = self.info(int(ticket_id))
+                title = ticket_info['title']
+                tid = ticket_info['id']
+                uri = ticket_info['uri']
+
+                print("{:<8} {:<30} {:<12}".format(tid, title[:30], uri))
+
+            child_tasks = task_config.get("tasks", None)
+
+            if child_tasks:
+                for child_task in child_tasks:
+                    recurse_ticket_report(child_task)
 
         # Main task recursion logic
         if "tasks" not in root_data:
@@ -293,3 +349,11 @@ class Maniphest(Phabfive):
 
         # Always start with a blank parent
         recurse_commit_transactions(parsed_root_data, None)
+
+        if dry_run:
+            log.warning(f"Dry run mode, no tickets created so nothing to report")
+        else:
+            print("\nList of created tickets")
+            print("----------------------")
+            print("{:<8} {:<30} {:<12}".format("ID", "Title", "URI"))
+            recurse_ticket_report(parsed_root_data)

@@ -22,8 +22,20 @@ install_requires = [
     "phabricator",
     "pyyaml",
 ]
-tests_require = ["coverage", "flake8", "pytest", "tox", "tox-gh-actions"]
-docs_require = ["mkdocs"]
+
+tests_require = [
+    "coverage",
+    "flake8",
+    "pytest",
+    "tox",
+    "tox-gh-actions",
+]
+
+extras_require = {
+    "test": tests_require,
+    "docs": ["docs"],
+}
+
 download_url = f"https://github.com/dynamist/phabfive/tarball/v{phabfive.__version__}"
 
 setup(
@@ -39,10 +51,7 @@ setup(
     zip_safe=False,  # Prevent creation of egg
     install_requires=install_requires,
     tests_require=tests_require,
-    extras_require={
-        "test": tests_require,
-        "docs": docs_require,
-    },
+    extras_require=extras_require,
     packages=["phabfive"],
     entry_points={
         "console_scripts": [
