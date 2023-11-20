@@ -62,6 +62,14 @@ This startup will take some time to setup the demo instance. Once completed you 
 Note there is no persistance disks so if the container is shutdown any data will be lost and you have to restart
 
 
+## Building a release
+
+For version schema we follow basic SemVer versioning schema system with the extensions that is defined by python in this PEP440 https://peps.python.org/pep-0440/ It allows for some post and dev releases if we need to, but in general we should only publish stable regular semver releases.
+
+Instructions how to build a release and upload it to PyPi can be found here in the official build tools documentation site https://packaging.python.org/en/latest/tutorials/packaging-projects/
+
+In order to be allowed to upload a new release for phabfive, you need to be a Owner or maintainer for this project inside PyPi. Currently only Johan and Henrik is owners. Ask them for assistance if you need upload permissions for a new release.
+
 
 ## LICENSE
 
