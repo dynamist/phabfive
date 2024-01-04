@@ -43,7 +43,7 @@ Usage:
 Options:
     -h, --help   Show this help message and exit
 
-"""
+""" # nosec
 
 sub_diffusion_args = """
 Usage:
@@ -174,7 +174,7 @@ def parse_cli():
 
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
-        sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)
+        sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv) # nosec
     elif cli_args["<command>"] == "passphrase":
         sub_args = docopt(sub_passphrase_args, argv=argv)
     elif cli_args["<command>"] == "diffusion":

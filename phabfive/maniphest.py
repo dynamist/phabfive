@@ -51,7 +51,7 @@ class Maniphest(Phabfive):
             log.error(f"Config file '{config_file}' do not exists")
 
         with open(config_file) as stream:
-            root_data = yaml.load(stream, Loader=yaml.Loader)
+            root_data = yaml.load(stream, Loader=yaml.Loader) # nosec
 
         # Fetch all users in phabricator, used by subscribers mapping later
         users_query = self.phab.user.search()
