@@ -29,15 +29,7 @@ about: Report a reproducible bug in the current release of Phabfive
 3.
 
 
-### Schema
-
-<!-- Update me -->
-```
-
-```
-
-
-### Data
+### Config
 
 <!-- Update me -->
 ```
