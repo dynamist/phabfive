@@ -55,7 +55,7 @@ class Diffusion(Phabfive):
 
             if repo_name != name:
                 continue
-                
+
             # object identifier for uri
             if repo_name and uri_name:
                 uris = repo["attachments"]["uris"]["uris"]

@@ -1,5 +1,5 @@
-# Requirements to run this example file is that you create the following things in
-# your test phabricator instance before this file will go through
+# Requirements to run this example file is that you create the following things
+# in your test Phabricator instance before this file will go through
 #
 # - A user named: hholm
 # - A user named: grok

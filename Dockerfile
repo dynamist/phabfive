@@ -11,4 +11,3 @@ RUN pip3 install -e .
 
 ENTRYPOINT ["/usr/bin/phabfive"]
 CMD ["$1"]
-

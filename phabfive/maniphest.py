@@ -250,7 +250,7 @@ class Maniphest(Phabfive):
 
             if transactions_to_commit:
                 # Parent ticket based on the task hiearchy defined in the config file we parsed is different
-                # from the explicit "ticket parent" that can be defined 
+                # from the explicit "ticket parent" that can be defined
                 if parent_task_config and "phid" in parent_task_config:
                     add_transaction(transactions_to_commit, "parents.add", [parent_task_config["phid"]])
 

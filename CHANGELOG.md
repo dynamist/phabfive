@@ -72,6 +72,6 @@ Supported Phabricator app endpoints:
 * [#24](https://github.com/dynamist/phabfive/pull/24) - Enable RTD build and docs updates
 * [#18](https://github.com/dynamist/phabfive/pull/18) - Add code coverage to tox
 * [#17](https://github.com/dynamist/phabfive/pull/17) - Proper flake8 with Black
-* [#4](https://github.com/dynamist/phabfive/pull/4) - Add encrypted notification config to .travis.yml 
+* [#4](https://github.com/dynamist/phabfive/pull/4) - Add encrypted notification config to .travis.yml
 * [#2](https://github.com/dynamist/phabfive/pull/2) - Black-linting
-* [#1](https://github.com/dynamist/phabfive/pull/1) - Added travis 
+* [#1](https://github.com/dynamist/phabfive/pull/1) - Added travis
