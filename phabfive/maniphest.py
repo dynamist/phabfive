@@ -28,9 +28,9 @@ class Maniphest(Phabfive):
         super(Maniphest, self).__init__()
 
     def alex_search(self, created_after=None, updated_after=None, project=None):
-        print(f"{created_after=} days.")
-        print(f"{updated_after=} days.")
-        print(f"{project=}.\n")
+        print(f"{created_after=} days ago.")
+        print(f"{updated_after=} days ago.")
+        print(f"{project=}\n")
 
         if created_after is not None:
             seconds = int(created_after) * 24 * 3600
@@ -67,7 +67,7 @@ class Maniphest(Phabfive):
         print(f"Retrieving data for the project '{project}':\n")
 
         for item in js_object["data"]:
-            print(f"Link: {HOST}T{item["id"]}\nID: {item["id"]}")
+            print(f"Task Link: {HOST}T{item["id"]}\nTask ID: {item["id"]}")
             
             fields = item["fields"]
             for key, value in fields.items():
@@ -76,27 +76,24 @@ class Maniphest(Phabfive):
                         if value != "NULL":
                             dt = datetime.datetime.fromtimestamp(value)
                             formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
-                            print(f"{key}: {formatted_time}")
+                            print(f"Task Date {key[4:]}: {formatted_time}")
                         else:
-                            print(f"{key}: Not closed.")
+                            print(f"Task Date {key[4:]}: Not closed.")
                     else:
-                        print(f"{key}: {value}")
+                        if key == "name":
+                            print(f"Task Name: {value}")
 
-            description_raw = fields["description"]["raw"]
-            if description_raw == "":
-                print("Description: No description.")
-            else:
-                print(f"Description: {description_raw}")
+            
             
             status = fields["status"]
             for key, value in status.items():
                 if key in ["name"]:
-                    print(f"Status: {value}")
+                    print(f"Task Status: {value}")
 
             priority = fields["priority"]
             for key, value in priority.items():
                 if key in ["name"]:
-                    print(f"Priority: {value}")
+                    print(f"Task Priority: {value}")
             
             attachments = item["attachments"]
             for key, value in attachments.items():
@@ -108,6 +105,14 @@ class Maniphest(Phabfive):
                             column_name = column.get("name")
                             if column_name:
                                 print(f"Column Name: {column_name}")
+            
+
+            description_raw = fields["description"]["raw"]
+            if description_raw == "":
+                print("Task Description: No description.")
+            else:
+                print(f"""Task Description Below:
+'{description_raw}'""")
             print("\n")
             
             #timestamp = 1733136254
