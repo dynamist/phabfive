@@ -14,13 +14,119 @@ from phabfive.exceptions import *
 import yaml
 from jinja2 import Template
 
+# alex added imports
+import time
+import datetime
+#from rich import print
 
 log = logging.getLogger(__name__)
 
+HOST = "http://phorge.localhost/"
 
 class Maniphest(Phabfive):
     def __init__(self):
         super(Maniphest, self).__init__()
+
+    def alex_search(self, created_after=None, updated_after=None, project=None):
+        print(f"{created_after=} days.")
+        print(f"{updated_after=} days.")
+        print(f"{project=}.\n")
+
+        if created_after is not None:
+            seconds = int(created_after) * 24 * 3600
+            created_after = int(time.time()) - seconds
+        
+        if updated_after is not None:
+            seconds = int(updated_after) * 24 * 3600
+            updated_after = int(time.time()) - seconds
+
+        constraints = {}
+        if created_after:
+            constraints["createdStart"] = int(created_after)
+        if updated_after:
+            constraints["modifiedStart"] = int(updated_after)
+        if project:
+            constraints["projects"] = [f"{project}"]
+        
+        attachments = {
+            "columns": True
+        }
+
+        result = self.phab.maniphest.search(constraints=constraints, attachments=attachments)
+        result = str(result)
+        result = result[9:-1]
+        result = result.replace("'", '"')
+        result = result.replace("None", '"NULL"')
+        result = result.replace("False", '"FALSE"')
+        result = result.replace("True", '"TRUE"')
+        js_object = json.loads(result)
+        
+        # If you're developing this app: uncomment below.
+        #print(f"\nFull json data from maniphest.search {type(js_object)}\n\n{json.dumps(js_object, indent=4)}\n")
+
+        print(f"Retrieving data for the project '{project}':\n")
+
+        for item in js_object["data"]:
+            print(f"Link: {HOST}T{item["id"]}\nID: {item["id"]}")
+            
+            fields = item["fields"]
+            for key, value in fields.items():
+                if key in ["name", "dateCreated", "dateModified", "dateClosed"]:
+                    if key in ["dateCreated", "dateModified", "dateClosed"]:
+                        if value != "NULL":
+                            dt = datetime.datetime.fromtimestamp(value)
+                            formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
+                            print(f"{key}: {formatted_time}")
+                        else:
+                            print(f"{key}: Not closed.")
+                    else:
+                        print(f"{key}: {value}")
+
+            description_raw = fields["description"]["raw"]
+            if description_raw == "":
+                print("Description: No description.")
+            else:
+                print(f"Description: {description_raw}")
+            
+            status = fields["status"]
+            for key, value in status.items():
+                if key in ["name"]:
+                    print(f"Status: {value}")
+
+            priority = fields["priority"]
+            for key, value in priority.items():
+                if key in ["name"]:
+                    print(f"Priority: {value}")
+            
+            attachments = item["attachments"]
+            for key, value in attachments.items():
+                if key == "columns":
+                    boards = value.get("boards", {})
+                    for board_phid, board_data in boards.items():
+                        columns = board_data.get("columns", [])
+                        for column in columns:
+                            column_name = column.get("name")
+                            if column_name:
+                                print(f"Column Name: {column_name}")
+            print("\n")
+            
+            #timestamp = 1733136254
+            #readable_date = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            #print(readable_date)
+
+        #column_result = self.phab.project.column.search()
+        #print(column_result)
+        
+        #result = str(column_result)
+        #result = result[9:-1]
+        #result = result.replace("'", '"')
+        #result = result.replace("None", '"NULL"')
+        #result = result.replace("False", '"FALSE"')
+        #result = result.replace("True", '"TRUE"')
+        #js_object = json.loads(result)
+        
+        #print(f"\nFull json data from maniphest.search {type(js_object)}\n\n{json.dumps(js_object, indent=4)}\n")
+            
 
     def add_comment(self, ticket_identifier, comment_string):
         """
@@ -293,3 +399,5 @@ class Maniphest(Phabfive):
 
         # Always start with a blank parent
         recurse_commit_transactions(parsed_root_data, None)
+
+#if __name__ != "__main__":
