@@ -115,6 +115,21 @@ Usage:
     phabfive maniphest comment add <ticket_id> <comment> [options]
     phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
     phabfive maniphest create <config-file> [--dry-run] [options]
+    phabfive maniphest list workboard <board_id> [options]
+    phabfive maniphest list user <user_id> [options]
+    phabfive maniphest search [options]
+
+List workboard options:
+    --column            Task created within the last N days
+    --include-resolved  Include resolved tasks
+
+List user options:
+    --include-resolved  Include resolved tasks
+
+Search options:
+    --created-after Task created within the last N days
+    --updated-after Task updated within the last N days
+    --project Task within the board
 
 Options:
     --all        Show all fields for a ticket
@@ -330,6 +345,17 @@ def run(cli_args, sub_args):
 
         if cli_args["<command>"] == "maniphest":
             maniphest_app = maniphest.Maniphest()
+            if sub_args["list"]:
+                maniphest_app.alex_list(
+                    sub_args["<board_id>"],
+                )
+
+            if sub_args["search"]:
+                maniphest_app.alex_search(
+                    created_after=sub_args["--created-after"],
+                    updated_after=sub_args["--updated-after"],
+                    project=sub_args["--project"]
+                )
 
             if sub_args["create"]:
                 # This part is responsible for bulk creating several tickets at once
