@@ -20,6 +20,7 @@ class Repl(Phabfive):
         print("*************")
         print("use self.phab to access the phacility API")
         print("use self.conf to access current client configuration")
+        print("use self.url to get server address")
         print("use pp() to prettyprint the API response back from self.phab.* calls")
         print("*************")
 
