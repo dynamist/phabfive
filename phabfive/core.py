@@ -5,6 +5,7 @@ import copy
 import logging
 import os
 import re
+from urllib.parse import urlparse
 
 # phabfive imports
 from phabfive.constants import *
@@ -61,6 +62,9 @@ class Phabfive():
         )
         # This enables extra endpoints that normally is unaccessible
         self.phab.update_interfaces()
+
+        url = urlparse(self.conf['PHAB_URL'])
+        self.url = f"{url.scheme}://{url.netloc}"
 
         self.verify_connection()
 

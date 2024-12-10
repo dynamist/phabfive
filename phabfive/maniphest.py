@@ -21,8 +21,6 @@ import datetime
 
 log = logging.getLogger(__name__)
 
-HOST = "http://phorge.localhost/"
-
 class Maniphest(Phabfive):
     def __init__(self):
         super(Maniphest, self).__init__()
@@ -47,7 +45,7 @@ class Maniphest(Phabfive):
             constraints["modifiedStart"] = int(updated_after)
         if project:
             constraints["projects"] = [f"{project}"]
-        
+
         attachments = {
             "columns": True
         }
@@ -64,12 +62,11 @@ class Maniphest(Phabfive):
         # If you're developing this app: uncomment below.
         #print(f"\nFull json data from maniphest.search {type(js_object)}\n\n{json.dumps(js_object, indent=4)}\n")
 
-        print(f"Retrieving data for the project '{project}':\n")
+        for item in result.response["data"]:
+            print(f"Link: {self.url}/T{item["id"]}")
 
-        for item in js_object["data"]:
-            print(f"Task Link: {HOST}T{item["id"]}\nTask ID: {item["id"]}")
-            
             fields = item["fields"]
+
             for key, value in fields.items():
                 if key in ["name", "dateCreated", "dateModified", "dateClosed"]:
                     if key in ["dateCreated", "dateModified", "dateClosed"]:
@@ -83,8 +80,6 @@ class Maniphest(Phabfive):
                         if key == "name":
                             print(f"Task Name: {value}")
 
-            
-            
             status = fields["status"]
             for key, value in status.items():
                 if key in ["name"]:
@@ -114,14 +109,14 @@ class Maniphest(Phabfive):
                 print(f"""Task Description Below:
 '{description_raw}'""")
             print("\n")
-            
+
             #timestamp = 1733136254
             #readable_date = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
             #print(readable_date)
 
         #column_result = self.phab.project.column.search()
         #print(column_result)
-        
+
         #result = str(column_result)
         #result = result[9:-1]
         #result = result.replace("'", '"')
@@ -129,9 +124,9 @@ class Maniphest(Phabfive):
         #result = result.replace("False", '"FALSE"')
         #result = result.replace("True", '"TRUE"')
         #js_object = json.loads(result)
-        
+
         #print(f"\nFull json data from maniphest.search {type(js_object)}\n\n{json.dumps(js_object, indent=4)}\n")
-            
+
 
     def add_comment(self, ticket_identifier, comment_string):
         """
