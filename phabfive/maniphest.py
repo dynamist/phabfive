@@ -4,6 +4,9 @@
 import json
 import logging
 from pathlib import Path
+import time
+import datetime
+from shlex import quote
 
 # phabfive imports
 from phabfive.core import Phabfive
@@ -14,11 +17,6 @@ from phabfive.exceptions import *
 import yaml
 from jinja2 import Template
 
-# alex added imports
-import time
-import datetime
-#from rich import print
-
 log = logging.getLogger(__name__)
 
 class Maniphest(Phabfive):
@@ -26,17 +24,18 @@ class Maniphest(Phabfive):
         super(Maniphest, self).__init__()
 
     def alex_search(self, created_after=None, updated_after=None, project=None):
-        print(f"{created_after=} days ago.")
-        print(f"{updated_after=} days ago.")
-        print(f"{project=}\n")
+        """
+        Search for Phabricator Maniphest tasks with given parameters.
 
-        if created_after is not None:
-            seconds = int(created_after) * 24 * 3600
-            created_after = int(time.time()) - seconds
-        
-        if updated_after is not None:
-            seconds = int(updated_after) * 24 * 3600
-            updated_after = int(time.time()) - seconds
+        Parameters
+        ----------
+        created_after (int, optional): Number of days ago the task was created.
+        updated_after (int, optional): Number of days ago the task was updated.
+        project (str, optional): Project name.
+        """
+
+        created_after = days_to_unix(created_after)
+        updated_after = days_to_unix(updated_after)
 
         constraints = {}
         if created_after:
@@ -44,89 +43,56 @@ class Maniphest(Phabfive):
         if updated_after:
             constraints["modifiedStart"] = int(updated_after)
         if project:
-            constraints["projects"] = [f"{project}"]
+            constraints["projects"] = [str(project)]
 
         attachments = {
             "columns": True
         }
 
+        log.debug(f"JSON constraints: \n{json.dumps(constraints, indent=2)}\n")
+        log.debug(f"JSON attachments: \n{json.dumps(attachments, indent=2)}\n")
+
         result = self.phab.maniphest.search(constraints=constraints, attachments=attachments)
-        result = str(result)
-        result = result[9:-1]
-        result = result.replace("'", '"')
-        result = result.replace("None", '"NULL"')
-        result = result.replace("False", '"FALSE"')
-        result = result.replace("True", '"TRUE"')
-        js_object = json.loads(result)
-        
-        # If you're developing this app: uncomment below.
-        #print(f"\nFull json data from maniphest.search {type(js_object)}\n\n{json.dumps(js_object, indent=4)}\n")
+
+        log.debug(f"JSON result.response: \n{json.dumps(result.response, indent=2)}\n")
 
         for item in result.response["data"]:
-            print(f"Link: {self.url}/T{item["id"]}")
-
-            fields = item["fields"]
+            print(f"Link: {self.url}/T{item['id']}")
+            fields = item.get("fields", {})
+            date_closed = ""
 
             for key, value in fields.items():
-                if key in ["name", "dateCreated", "dateModified", "dateClosed"]:
-                    if key in ["dateCreated", "dateModified", "dateClosed"]:
-                        if value != "NULL":
-                            dt = datetime.datetime.fromtimestamp(value)
-                            formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
-                            print(f"Task Date {key[4:]}: {formatted_time}")
-                        else:
-                            print(f"Task Date {key[4:]}: Not closed.")
-                    else:
-                        if key == "name":
-                            print(f"Task Name: {value}")
+                if key in ["dateCreated", "dateModified"]:
+                    formatted_time = format_timestamp(value)
+                    print(f"{key[4:]}: {formatted_time}")
+                elif key == "dateClosed":
+                    date_closed = format_timestamp(value)
+                elif key == "name":
+                    print(f"Name: '{value}'" if "[" in value else f"Name: {value}")
 
-            status = fields["status"]
-            for key, value in status.items():
-                if key in ["name"]:
-                    print(f"Task Status: {value}")
+            status_name = fields.get("status", {}).get("name", "Unknown")
+            print(f"Status: {status_name} {date_closed}")
 
-            priority = fields["priority"]
-            for key, value in priority.items():
-                if key in ["name"]:
-                    print(f"Task Priority: {value}")
-            
-            attachments = item["attachments"]
-            for key, value in attachments.items():
-                if key == "columns":
-                    boards = value.get("boards", {})
-                    for board_phid, board_data in boards.items():
-                        columns = board_data.get("columns", [])
-                        for column in columns:
-                            column_name = column.get("name")
-                            if column_name:
-                                print(f"Column Name: {column_name}")
-            
+            priority_name = fields.get("priority", {}).get("name", "Unknown")
+            print(f"Priority: {priority_name}")
 
-            description_raw = fields["description"]["raw"]
-            if description_raw == "":
-                print("Task Description: No description.")
+            boards = item.get("attachments", {}).get("columns", {}).get("boards", {})
+
+            for board_data in boards.values():
+                columns = board_data.get("columns", [])
+                for column in columns:
+                    column_name = column.get("name")
+                    columns_no = len(columns)
+                    if column_name:
+                        print(f"Column: {column_name} {columns_no}")
+
+            description_raw = fields.get("description", {}).get("raw", "")
+            if description_raw:
+                print(f"Description: |")
+                print("  >", "  > ".join(description_raw.splitlines(True)), end="")
             else:
-                print(f"""Task Description Below:
-'{description_raw}'""")
+                print(f"Description: ''", end="")
             print("\n")
-
-            #timestamp = 1733136254
-            #readable_date = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-            #print(readable_date)
-
-        #column_result = self.phab.project.column.search()
-        #print(column_result)
-
-        #result = str(column_result)
-        #result = result[9:-1]
-        #result = result.replace("'", '"')
-        #result = result.replace("None", '"NULL"')
-        #result = result.replace("False", '"FALSE"')
-        #result = result.replace("True", '"TRUE"')
-        #js_object = json.loads(result)
-
-        #print(f"\nFull json data from maniphest.search {type(js_object)}\n\n{json.dumps(js_object, indent=4)}\n")
-
 
     def add_comment(self, ticket_identifier, comment_string):
         """
@@ -400,4 +366,20 @@ class Maniphest(Phabfive):
         # Always start with a blank parent
         recurse_commit_transactions(parsed_root_data, None)
 
-#if __name__ != "__main__":
+def days_to_unix(days):
+    """
+    Convert days into a UNIX timestamp.
+    """
+    if days:
+        seconds = int(days) * 24 * 3600
+        return int(time.time()) - seconds
+    return None
+
+def format_timestamp(timestamp):
+    """
+    Convert UNIX timestamp to ISO 8601 string (readable time format).
+    """
+    if timestamp:
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+    return ""
