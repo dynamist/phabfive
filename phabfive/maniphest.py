@@ -23,7 +23,7 @@ class Maniphest(Phabfive):
     def __init__(self):
         super(Maniphest, self).__init__()
 
-    def alex_search(self, created_after=None, updated_after=None, project=None):
+    def task_search(self, created_after=None, updated_after=None, project=None):
         """
         Search for Phabricator Maniphest tasks with given parameters.
 
@@ -31,8 +31,14 @@ class Maniphest(Phabfive):
         ----------
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
-        project (str, optional): Project name.
+        project (str, required): Project name.
         """
+
+        if not project:
+            raise ValueError(
+                "\nProject parameter not provided.\n"
+                "Example usage: phabfive maniphest search --project=your_project_name"
+                )
 
         created_after = days_to_unix(created_after)
         updated_after = days_to_unix(updated_after)
@@ -63,10 +69,13 @@ class Maniphest(Phabfive):
 
             for key, value in fields.items():
                 if key in ["dateCreated", "dateModified"]:
-                    formatted_time = format_timestamp(value)
-                    print(f"{key[4:]}: {formatted_time}")
+                    if value:
+                        formatted_time = format_timestamp(value)
+                        print(f"{key[4:]}: {formatted_time}")
                 elif key == "dateClosed":
-                    date_closed = format_timestamp(value)
+                    if value:
+                        date_closed = format_timestamp(value)
+                        print(f"Closed: {date_closed}")
                 elif key == "name":
                     print(f"Name: '{value}'" if "[" in value else f"Name: {value}")
 
@@ -373,13 +382,10 @@ def days_to_unix(days):
     if days:
         seconds = int(days) * 24 * 3600
         return int(time.time()) - seconds
-    return None
 
 def format_timestamp(timestamp):
     """
     Convert UNIX timestamp to ISO 8601 string (readable time format).
     """
-    if timestamp:
-        dt = datetime.datetime.fromtimestamp(timestamp)
-        return dt.strftime('%Y-%m-%dT%H:%M:%S')
-    return ""
+    dt = datetime.datetime.fromtimestamp(timestamp)
+    return dt.strftime('%Y-%m-%dT%H:%M:%S')
