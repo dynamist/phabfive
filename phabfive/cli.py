@@ -24,11 +24,12 @@ Available phabfive commands are:
     repl         Enter a REPL with API access
     user         Information on users
 
-Shortcuts to Phabricator monograms:
+Shortcuts to view Phabricator monograms (example: phabfive T123):
 
-    K[0-9]+   Passphrase object, example K123
-    R[0-9]+   Diffusion repo, example R123
-    P[0-9]+   Paste object, example P123
+    K[0-9]+   Passphrase secret
+    P[0-9]+   Paste text
+    R[0-9]+   Diffusion repo
+    T[0-9]+   Maniphest task
 
 Options:
     --log-level=<level>   Set loglevel [default: INFO]
