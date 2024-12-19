@@ -116,25 +116,20 @@ Usage:
     phabfive maniphest comment add <ticket_id> <comment> [options]
     phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
     phabfive maniphest create <config-file> [--dry-run] [options]
-    phabfive maniphest search [options]
+    phabfive maniphest search <project_name> [options]
 
-List workboard options:
-    --column            Task created within the last N days
-    --include-resolved  Include resolved tasks
+Search Arguments:
+    <project_name>       The name of the project
 
-List user options:
-    --include-resolved  Include resolved tasks
-
-Search options:
-    --created-after Task created within the last N days
-    --updated-after Task updated within the last N days
-    --project Display all tasks from a project's workboard
+Search Options:
+    --created-after=N    Tasks created within the last N days
+    --updated-after=N    Tasks updated within the last N days
 
 Options:
-    --all        Show all fields for a ticket
-    --dry-run    Does everything except commiting the tickets
-    --pp         Show all fields rendering with pretty print
-    -h, --help   Show this help message and exit
+    --all                Show all fields for a ticket
+    --dry-run            Does everything except commiting the tickets
+    --pp                 Show all fields rendering with pretty print
+    -h, --help           Show this help message and exit
 """
 
 
@@ -346,10 +341,11 @@ def run(cli_args, sub_args):
             maniphest_app = maniphest.Maniphest()
 
             if sub_args["search"]:
+
                 maniphest_app.task_search(
+                    sub_args["<project_name>"],
                     created_after=sub_args["--created-after"],
                     updated_after=sub_args["--updated-after"],
-                    project=sub_args["--project"]
                 )
 
             if sub_args["create"]:
