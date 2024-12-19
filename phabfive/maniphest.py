@@ -23,33 +23,29 @@ class Maniphest(Phabfive):
     def __init__(self):
         super(Maniphest, self).__init__()
 
-    def task_search(self, created_after=None, updated_after=None, project=None):
+    def task_search(self, project, created_after=None, updated_after=None):
         """
         Search for Phabricator Maniphest tasks with given parameters.
 
         Parameters
         ----------
+        project       (str, required): Project name.
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
-        project (str, required): Project name.
         """
 
-        if not project:
-            raise ValueError(
-                "\nProject parameter not provided.\n"
-                "Example usage: phabfive maniphest search --project=your_project_name"
-                )
-
-        created_after = days_to_unix(created_after)
-        updated_after = days_to_unix(updated_after)
+        if created_after:
+            created_after = days_to_unix(created_after)
+        if updated_after:
+            updated_after = days_to_unix(updated_after)
 
         constraints = {}
+        if project:
+            constraints["projects"] = [str(project)]
         if created_after:
             constraints["createdStart"] = int(created_after)
         if updated_after:
             constraints["modifiedStart"] = int(updated_after)
-        if project:
-            constraints["projects"] = [str(project)]
 
         attachments = {
             "columns": True
@@ -379,9 +375,8 @@ def days_to_unix(days):
     """
     Convert days into a UNIX timestamp.
     """
-    if days:
-        seconds = int(days) * 24 * 3600
-        return int(time.time()) - seconds
+    seconds = int(days) * 24 * 3600
+    return int(time.time()) - seconds
 
 def format_timestamp(timestamp):
     """
