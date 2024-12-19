@@ -3,6 +3,7 @@
 # python std lib
 import logging
 import pdb
+import rlcompleter
 from pprint import pprint as pp
 
 # phabfive imports
@@ -23,4 +24,5 @@ class Repl(Phabfive):
         print("use pp() to prettyprint the API response back from self.phab.* calls")
         print("*************")
 
+        pdb.Pdb.complete=rlcompleter.Completer(locals()).complete
         pdb.set_trace()
