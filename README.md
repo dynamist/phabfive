@@ -36,7 +36,7 @@ A summary of the currently supported features:
 
 Grab a Phabricator token at `https://<yourserver.com>/settings/panel/apitokens/`
 
-Configure:
+Configure in Linux:
 
 ```bash
 export PHAB_TOKEN=cli-ABC123
@@ -44,10 +44,34 @@ export PHAB_TOKEN=cli-ABC123
 echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
 ```
 
+Configure in Windows:
+
+Phabfive looks for configuration in the following sequence in Windows environment:
+
+```Commnad prompt
+%ALLUSERSPROFILE%\phabfive\phabfive.yaml
+%ALLUSERSPROFILE%\phabfive\phabfive.d\*.yaml
+%LOCALAPPDATA%\phabfive\phabfive.yaml
+%LOCALAPPDATA%\phabfive\phabfive.d\*.yaml
+```
+
+Make sure there is a minimum phabfive.yaml store in one of the location
+e.g. 
+```Commnad prompt
+echo "PHAB_TOKEN: cli-ABC123" > %LOCALAPPDATA%\phabfive\phabfive.yaml
+```
+
+Additionally, due to connection to Phabricator server on HTTPS requires certificate verification, it is also recommended to install [pip_system_certs](https://pypi.org/project/pip-system-certs/) to ensure system store are linked to python.
+
+```Commnad prompt
+pip install pip_system_certs
+```
+
 Usage:
 
 ```bash
 phabfive passphrase K123
+phabfive --log-level=DEBUG user whoami
 ```
 
 ## Run local development phabricator instance
