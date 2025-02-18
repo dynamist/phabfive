@@ -140,7 +140,12 @@ class Maniphest(Phabfive):
         log.debug(username_to_id_mapping)
 
         # Fetch all projects in phabricator, used to map ticket -> projects later
-        projects_query = self.phab.project.search(constraints={"name": ""})
+        project_query = raw_data = self.phab.project.search(constraints={"name": ""})
+
+        while (len(raw_data.data) >= 100 and not raw_data.cursor["after"] is None):
+            raw_data = self.phab.project.search(constraints={"name": ""},after=raw_data.cursor["after"])
+            project_query.extend(raw_data.data)
+        
         project_name_to_id_map = {
             project["fields"]["name"]: project["phid"]
             for project in projects_query["data"]
