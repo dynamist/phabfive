@@ -117,6 +117,8 @@ Usage:
     phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
     phabfive maniphest create <config-file> [--dry-run] [options]
     phabfive maniphest search <project_name> [options]
+    phabfive maniphest search <project_name> --column=<column_name> [options]
+    phabfive maniphest columns <project_name> [options]
 
 Search Arguments:
     <project_name>       The name of the project
@@ -124,6 +126,10 @@ Search Arguments:
 Search Options:
     --created-after=N    Tasks created within the last N days
     --updated-after=N    Tasks updated within the last N days
+    --column=<name>      Filter tasks by workboard column name
+
+Column Arguments:
+    <project_name>       The name of the project to list columns for
 
 Options:
     --all                Show all fields for a ticket
@@ -341,12 +347,28 @@ def run(cli_args, sub_args):
             maniphest_app = maniphest.Maniphest()
 
             if sub_args["search"]:
+                if sub_args["--column"]:
+                    maniphest_app.task_search_by_column(
+                        sub_args["<project_name>"],
+                        sub_args["--column"],
+                        created_after=sub_args["--created-after"],
+                        updated_after=sub_args["--updated-after"],
+                    )
+                else:
+                    maniphest_app.task_search(
+                        sub_args["<project_name>"],
+                        created_after=sub_args["--created-after"],
+                        updated_after=sub_args["--updated-after"],
+                    )
 
-                maniphest_app.task_search(
-                    sub_args["<project_name>"],
-                    created_after=sub_args["--created-after"],
-                    updated_after=sub_args["--updated-after"],
-                )
+            if sub_args["columns"]:
+                columns = maniphest_app.search_columns(sub_args["<project_name>"])
+                print(f"Workboard columns for project '{sub_args['<project_name>']}':\n")
+                for column in columns:
+                    column_name = column["fields"]["name"]
+                    column_phid = column["phid"]
+                    print(f"  • {column_name} (PHID: {column_phid})")
+                print("")
 
             if sub_args["create"]:
                 # This part is responsible for bulk creating several tickets at once

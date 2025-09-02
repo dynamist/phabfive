@@ -31,6 +31,9 @@ A summary of the currently supported features:
   - Add comment to task
   - Show task summary or full details
   - Create multiple tasks via template config file
+  - Search tasks by project
+  - Search tasks by workboard column
+  - List workboard columns for a project
 
 ## Example usage
 
@@ -47,7 +50,17 @@ echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
 Usage:
 
 ```bash
+# Get a passphrase
 phabfive passphrase K123
+
+# Search tasks in a project
+phabfive maniphest search "My Project"
+
+# List workboard columns for a project
+phabfive maniphest columns "My Project"
+
+# Search tasks in a specific column
+phabfive maniphest search "My Project" --column="In Progress"
 ```
 
 ## Run local development phabricator instance

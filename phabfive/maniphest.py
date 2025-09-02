@@ -99,6 +99,138 @@ class Maniphest(Phabfive):
                 print(f"Description: ''", end="")
             print("\n")
 
+    def search_columns(self, project):
+        """
+        Search for workboard columns for a given project.
+
+        Parameters
+        ----------
+        project (str, required): Project name or PHID.
+        """
+        project_phid = None
+
+        # If project looks like a PHID, use it directly
+        if project.startswith("PHID-PROJ-"):
+            project_phid = project
+        else:
+            # Search for project by name to get its PHID
+            projects_query = self.phab.project.search(constraints={"name": project})
+            if projects_query["data"]:
+                project_phid = projects_query["data"][0]["phid"]
+            else:
+                raise PhabfiveRemoteException(f"Project '{project}' not found")
+
+        # Search for columns in this project
+        try:
+            columns_result = self.phab.project.column.search(
+                constraints={"projects": [project_phid]}
+            )
+            return columns_result["data"]
+        except Exception as e:
+            raise PhabfiveRemoteException(
+                f"Failed to fetch columns for project '{project}': {str(e)}"
+            )
+
+    def task_search_by_column(
+        self, project, column_name, created_after=None, updated_after=None
+    ):
+        """
+        Search for Phabricator Maniphest tasks in a specific column.
+
+        Parameters
+        ----------
+        project       (str, required): Project name.
+        column_name   (str, required): Column name to search within.
+        created_after (int, optional): Number of days ago the task was created.
+        updated_after (int, optional): Number of days ago the task was updated.
+        """
+        # Get all columns for the project
+        columns = self.search_columns(project)
+
+        # Find the column PHID by name
+        column_phid = None
+        for column in columns:
+            if column["fields"]["name"] == column_name:
+                column_phid = column["phid"]
+                break
+
+        if not column_phid:
+            available_columns = [col["fields"]["name"] for col in columns]
+            raise PhabfiveRemoteException(
+                f"Column '{column_name}' not found in project '{project}'. "
+                f"Available columns: {', '.join(available_columns)}"
+            )
+
+        if created_after:
+            created_after = days_to_unix(created_after)
+        if updated_after:
+            updated_after = days_to_unix(updated_after)
+
+        constraints = {}
+        if project:
+            constraints["projects"] = [str(project)]
+        if created_after:
+            constraints["createdStart"] = int(created_after)
+        if updated_after:
+            constraints["modifiedStart"] = int(updated_after)
+
+        # Add column constraint
+        constraints["columnPHIDs"] = [column_phid]
+
+        attachments = {
+            "columns": True
+        }
+
+        log.debug(f"JSON constraints: \n{json.dumps(constraints, indent=2)}\n")
+        log.debug(f"JSON attachments: \n{json.dumps(attachments, indent=2)}\n")
+
+        result = self.phab.maniphest.search(constraints=constraints, attachments=attachments)
+
+        log.debug(f"JSON result.response: \n{json.dumps(result.response, indent=2)}\n")
+
+        print(f"Tasks in column '{column_name}' of project '{project}':\n")
+
+        for item in result.response["data"]:
+            print(f"Link: {self.url}/T{item['id']}")
+            fields = item.get("fields", {})
+            date_closed = ""
+
+            for key, value in fields.items():
+                if key in ["dateCreated", "dateModified"]:
+                    if value:
+                        formatted_time = format_timestamp(value)
+                        print(f"{key[4:]}: {formatted_time}")
+                elif key == "dateClosed":
+                    if value:
+                        date_closed = format_timestamp(value)
+                        print(f"Closed: {date_closed}")
+                elif key == "name":
+                    print(f"Name: '{value}'" if "[" in value else f"Name: {value}")
+
+            status_name = fields.get("status", {}).get("name", "Unknown")
+            print(f"Status: {status_name} {date_closed}")
+
+            priority_name = fields.get("priority", {}).get("name", "Unknown")
+            print(f"Priority: {priority_name}")
+
+            boards = item.get("attachments", {}).get("columns", {}).get("boards", {})
+
+            for board_data in boards.values():
+                columns = board_data.get("columns", [])
+                for column in columns:
+                    column_name_display = column.get("name")
+                    columns_no = len(columns)
+                    if column_name_display:
+                        print(f"Column: {column_name_display} {columns_no}")
+
+            description_raw = fields.get("description", {}).get("raw", "")
+            if description_raw:
+                print(f"Description: |")
+                print("  >", "  > ".join(description_raw.splitlines(True)), end="")
+            else:
+                print(f"Description: ''", end="")
+            print("\n")
+
     def add_comment(self, ticket_identifier, comment_string):
         """
         :type ticket_identifier: str
