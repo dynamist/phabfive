@@ -1,0 +1,29 @@
+services:
+  mariadb:
+    image: 'mariadb:12'
+    environment:
+      - MYSQL_ROOT_PASSWORD=somerootpassword
+    ports:
+      - '3306:3306'
+    command:
+      - --max-allowed-packet=67108864
+      - --innodb-buffer-pool-size=256M
+      - --sql-mode=STRICT_ALL_TABLES
+      - --local-infile=0
+  phabricator:
+    image: 'dynamist/phorge'
+    build:
+      context: .
+      dockerfile: ./Dockerfile.phorge
+    environment:
+      - PHABRICATOR_URL=http://phorge.domain.tld
+      - PHABRICATOR_ALT_FILE_DOMAIN=http://phorge-files.domain.tld
+      - PHABRICATOR_TITLE=Acme
+      - MYSQL_HOST=mariadb
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASS=somerootpassword
+    ports:
+      - '80:80'
+    depends_on:
+      - mariadb

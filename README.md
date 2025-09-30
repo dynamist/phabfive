@@ -74,6 +74,38 @@ This startup will take some time to setup the demo instance. Once completed you 
 
 Note there is no persistence disks so if the container is shutdown any data will be lost and you have to restart.
 
+
+## Run local development phorge instance
+
+First add the following to your `/etc/hosts` file:
+
+```text
+127.0.0.1       phorge.domain.tld
+127.0.0.1       phorge-files.domain.tld
+```
+
+Start the services(mariadb and phorge)
+
+```bash
+# Docker users
+docker compose -f docker-compose-phorge.yml up --build -d # Detached mode
+```
+```bash
+# Podman users
+podman compose -f docker-compose-phorge.yml up --build -d # Detached mode
+```
+
+This startup will take some time to setup the demo instance. Once completed you can access your instance in your browser at `http://phorge.domain.tld/`. On first use you need to setup your admin account. Most development for phabfive requires an API token, create one here `http://phorge.domain.tld/settings/user/<username>/page/apitokens/`.
+
+Note
+By default the instance won't persist any data so if the container is shutdown any data will be lost and you have to restart.
+
+To change this behavior you can create a `.env` file with the following content:
+
+```
+MARIADB_STORAGE_MODE=mariadb_data:/var/lib/mysql
+```
+
 ## Building a release
 
 For version schema we follow basic [SemVer](https://semver.org/) versioning schema system with the extensions that is defined by python in this [PEP 440](https://peps.python.org/pep-0440/). It allows for some post and dev releases if we need to, but in general we should only publish stable regular semver releases.
