@@ -1,0 +1,671 @@
+---
+# Mega Test File - 2024 Project Simulation
+# Simulates one year of realistic project work across multiple teams and workboards
+# ~75 tasks with varied priorities, statuses, assignments, and cross-project tags
+#
+# Usage: phabfive maniphest create test-files/mega-2024-simulation.yml
+
+variables:
+  year: 2024
+  q1: "Q1 2024"
+  q2: "Q2 2024"
+  q3: "Q3 2024"
+  q4: "Q4 2024"
+
+  # Common team groups
+  dev_team: &DEV_TEAM
+    - "admin"
+    - "hholm"
+
+  full_team: &FULL_TEAM
+    - "admin"
+    - "hholm"
+    - "grok"
+    - "tester"
+
+  qa_team: &QA_TEAM
+    - "tester"
+    - "grok"
+
+tasks:
+  # ========================================
+  # Q1 2024 - Infrastructure & Planning
+  # ========================================
+
+  - title: "[EPIC] Website Redesign {{ q1 }}"
+    description: |
+      Complete redesign of company website with modern tech stack.
+
+      Goals:
+      - Improve mobile responsiveness
+      - Modernize UI/UX
+      - Improve SEO
+      - Migrate to new CMS
+    projects:
+      - "Client"
+      - "Development"
+    priority: "high"
+    subscribers: *FULL_TEAM
+    tasks:
+      - title: "Design mockups and wireframes"
+        description: |
+          Create design system and initial mockups for key pages
+        projects:
+          - "Client"
+        priority: "high"
+        assignment: "hholm"
+
+      - title: "Set up new CMS infrastructure"
+        description: |
+          Evaluate and set up headless CMS (Strapi/Contentful)
+        projects:
+          - "Development"
+        priority: "high"
+        assignment: "admin"
+
+      - title: "Implement responsive navigation"
+        description: |
+          Mobile-first navigation with hamburger menu
+        projects:
+          - "Client"
+          - "Development"
+        priority: "normal"
+
+      - title: "SEO audit and improvements"
+        description: |
+          Run SEO audit, implement meta tags, structured data
+        projects:
+          - "Client"
+        priority: "normal"
+        assignment: "grok"
+
+  - title: "[EPIC] Database Migration to PostgreSQL {{ q1 }}"
+    description: |
+      Migrate legacy MySQL databases to PostgreSQL for better performance.
+
+      Critical path for {{ q2 }} features.
+    projects:
+      - "Development"
+      - "Staging"
+    priority: "unbreak"
+    subscribers: *DEV_TEAM
+    tasks:
+      - title: "Audit current database schema"
+        description: "Document all tables, relationships, and constraints"
+        projects:
+          - "Development"
+        priority: "high"
+        assignment: "admin"
+
+      - title: "Set up PostgreSQL on staging"
+        description: "Install and configure PostgreSQL 15 on staging environment"
+        projects:
+          - "Staging"
+        priority: "high"
+
+      - title: "Create migration scripts"
+        description: "Write and test data migration scripts with rollback plan"
+        projects:
+          - "Development"
+        priority: "high"
+        assignment: "hholm"
+
+      - title: "Update ORM configurations"
+        description: "Update all database connection strings and ORM configs"
+        projects:
+          - "Development"
+        priority: "normal"
+
+  - title: "[BUG] Login page shows 500 error on Safari"
+    description: |
+      Users reporting login failures on Safari browsers.
+      Error appears to be session-related.
+    projects:
+      - "Client"
+      - "Development"
+    priority: "high"
+    assignment: "grok"
+
+  - title: "Set up CI/CD pipeline for staging deployments"
+    description: |
+      Automate staging deployments using GitHub Actions
+      - Set up workflow files
+      - Configure secrets
+      - Test automated deployments
+    projects:
+      - "Staging"
+      - "Development"
+    priority: "normal"
+    assignment: "admin"
+    subscribers: *DEV_TEAM
+
+  - title: "Create Q1 analytics dashboard"
+    description: "Set up Grafana dashboard for Q1 metrics tracking"
+    projects:
+      - "Admin"
+    priority: "low"
+
+  # ========================================
+  # Q2 2024 - Feature Development
+  # ========================================
+
+  - title: "[EPIC] Multi-tenant Architecture {{ q2 }}"
+    description: |
+      Implement multi-tenant support to allow multiple clients per instance.
+
+      Key deliverable for client onboarding in Q3.
+    projects:
+      - "Development"
+      - "Client"
+    priority: "unbreak"
+    subscribers: *FULL_TEAM
+    tasks:
+      - title: "Design tenant isolation strategy"
+        description: |
+          Design database schema for tenant separation.
+          Evaluate: separate schemas vs row-level security
+        projects:
+          - "Development"
+        priority: "high"
+        assignment: "admin"
+
+      - title: "Implement tenant middleware"
+        description: "Create middleware to identify and scope tenant context"
+        projects:
+          - "Development"
+        priority: "high"
+        assignment: "hholm"
+
+      - title: "Add tenant admin panel"
+        description: "UI for managing tenants and their configurations"
+        projects:
+          - "Client"
+        priority: "normal"
+
+      - title: "Write tenant migration guide"
+        description: "Documentation for onboarding new tenants"
+        projects:
+          - "Admin"
+        priority: "low"
+
+  - title: "[FEATURE] Advanced search with filters"
+    description: |
+      Add advanced search capabilities with:
+      - Date range filters
+      - Category filtering
+      - Sorting options
+      - Saved searches
+    projects:
+      - "Client"
+      - "Development"
+    priority: "high"
+    assignment: "grok"
+    subscribers: *FULL_TEAM
+
+  - title: "[FEATURE] Email notification system"
+    description: |
+      Implement transactional email system using SendGrid
+      - Welcome emails
+      - Password resets
+      - Activity notifications
+    projects:
+      - "Development"
+    priority: "normal"
+    assignment: "hholm"
+
+  - title: "[BUG] File uploads failing for files >10MB"
+    description: |
+      Users cannot upload files larger than 10MB.
+      Appears to be nginx configuration issue.
+    projects:
+      - "Development"
+      - "Staging"
+    priority: "high"
+    assignment: "admin"
+
+  - title: "Update dependencies to latest versions"
+    description: |
+      Security audit showed outdated packages.
+      Update all dependencies and test compatibility.
+    projects:
+      - "Development"
+    priority: "normal"
+    subscribers: *DEV_TEAM
+
+  - title: "Create client onboarding documentation"
+    description: "Step-by-step guide for new client setup and configuration"
+    projects:
+      - "Client"
+      - "Admin"
+    priority: "normal"
+    assignment: "grok"
+
+  - title: "[BUG] Dashboard widgets not loading on mobile"
+    description: "Dashboard widgets show loading spinner indefinitely on mobile devices"
+    projects:
+      - "Client"
+    priority: "normal"
+
+  - title: "Set up automated database backups"
+    description: |
+      Configure daily backups with 30-day retention
+      - Backup to S3
+      - Test restore process
+      - Document recovery procedures
+    projects:
+      - "Production"
+      - "Staging"
+    priority: "high"
+    assignment: "admin"
+
+  - title: "Performance optimization - reduce page load time"
+    description: |
+      Current homepage takes 4.5s to load. Target: <2s
+      - Optimize images
+      - Lazy loading
+      - Code splitting
+      - CDN setup
+    projects:
+      - "Development"
+      - "Client"
+    priority: "high"
+    assignment: "hholm"
+
+  # ========================================
+  # Q3 2024 - Testing & Quality
+  # ========================================
+
+  - title: "[EPIC] Automated Testing Suite {{ q3 }}"
+    description: |
+      Implement comprehensive automated testing to reduce bugs.
+
+      Target: 80% code coverage
+    projects:
+      - "Development"
+      - "Tester"
+    priority: "high"
+    subscribers: *QA_TEAM
+    tasks:
+      - title: "Set up Jest for unit tests"
+        description: "Configure Jest and write initial unit tests for core modules"
+        projects:
+          - "Development"
+        priority: "high"
+        assignment: "tester"
+
+      - title: "Implement E2E tests with Playwright"
+        description: "Create E2E test suite for critical user journeys"
+        projects:
+          - "Tester"
+        priority: "high"
+        assignment: "tester"
+
+      - title: "Add integration tests for API"
+        description: "Test all API endpoints with various scenarios"
+        projects:
+          - "Development"
+        priority: "normal"
+
+      - title: "Set up test coverage reporting"
+        description: "Integrate Codecov for coverage tracking"
+        projects:
+          - "Development"
+        priority: "normal"
+
+  - title: "[FEATURE] User roles and permissions"
+    description: |
+      Implement RBAC (Role-Based Access Control)
+      Roles: Admin, Editor, Viewer, Guest
+    projects:
+      - "Development"
+      - "Client"
+    priority: "high"
+    assignment: "admin"
+    subscribers: *FULL_TEAM
+
+  - title: "[BUG] Memory leak in background worker"
+    description: |
+      Background job worker consuming increasing memory over time.
+      Crashes after ~24 hours of operation.
+    projects:
+      - "Development"
+      - "Staging"
+    priority: "unbreak"
+    assignment: "hholm"
+
+  - title: "Security audit and penetration testing"
+    description: |
+      Third-party security audit scheduled for August.
+      Prepare and fix any findings.
+    projects:
+      - "Development"
+      - "Admin"
+    priority: "high"
+    assignment: "admin"
+
+  - title: "[BUG] Timezone handling incorrect for international users"
+    description: "Dates showing in UTC instead of user's local timezone"
+    projects:
+      - "Client"
+      - "Development"
+    priority: "normal"
+    assignment: "grok"
+
+  - title: "Implement API rate limiting"
+    description: |
+      Add rate limiting to prevent API abuse
+      - 100 requests/minute per user
+      - 1000 requests/hour per IP
+    projects:
+      - "Development"
+      - "Production"
+    priority: "high"
+    assignment: "admin"
+
+  - title: "Create staging environment smoke tests"
+    description: "Automated smoke tests to run after each staging deployment"
+    projects:
+      - "Staging"
+      - "Tester"
+    priority: "normal"
+    assignment: "tester"
+
+  - title: "Database query optimization"
+    description: |
+      Slow query log shows several queries taking >2s
+      - Add indexes
+      - Optimize N+1 queries
+      - Cache frequently accessed data
+    projects:
+      - "Development"
+    priority: "normal"
+    assignment: "hholm"
+
+  - title: "[FEATURE] Dark mode support"
+    description: |
+      Add dark mode theme option
+      - Respect system preference
+      - User toggle in settings
+      - Persist preference
+    projects:
+      - "Client"
+      - "Development"
+    priority: "low"
+    assignment: "grok"
+
+  - title: "Update SSL certificates"
+    description: "Renew SSL certificates for production and staging (expiring Sept 15)"
+    projects:
+      - "Production"
+      - "Staging"
+    priority: "high"
+
+  # ========================================
+  # Q4 2024 - Production & Polish
+  # ========================================
+
+  - title: "[EPIC] Production Readiness {{ q4 }}"
+    description: |
+      Final preparations for production launch
+      - Performance tuning
+      - Monitoring setup
+      - Documentation
+      - Launch checklist
+    projects:
+      - "Production"
+      - "Development"
+    priority: "unbreak"
+    subscribers: *FULL_TEAM
+    tasks:
+      - title: "Set up production monitoring"
+        description: |
+          Configure monitoring and alerting:
+          - Uptime monitoring
+          - Performance metrics
+          - Error tracking (Sentry)
+          - Log aggregation
+        projects:
+          - "Production"
+        priority: "high"
+        assignment: "admin"
+
+      - title: "Load testing and capacity planning"
+        description: "Run load tests to determine max concurrent users"
+        projects:
+          - "Production"
+          - "Staging"
+        priority: "high"
+        assignment: "hholm"
+
+      - title: "Create incident response playbook"
+        description: "Document procedures for common production incidents"
+        projects:
+          - "Production"
+          - "Admin"
+        priority: "normal"
+        assignment: "admin"
+
+      - title: "Production deployment checklist"
+        description: "Final pre-launch checklist and rollback procedures"
+        projects:
+          - "Production"
+        priority: "high"
+
+  - title: "[FEATURE] Export data to CSV/Excel"
+    description: |
+      Allow users to export their data
+      - CSV format
+      - Excel format
+      - PDF reports
+    projects:
+      - "Client"
+      - "Development"
+    priority: "normal"
+    assignment: "grok"
+
+  - title: "Implement CDN for static assets"
+    description: |
+      Set up CloudFront CDN for images, CSS, JS
+      Expected 40% performance improvement
+    projects:
+      - "Production"
+      - "Development"
+    priority: "high"
+    assignment: "admin"
+
+  - title: "[BUG] Race condition in concurrent updates"
+    description: |
+      When two users edit the same record simultaneously,
+      last write wins without conflict detection
+    projects:
+      - "Development"
+    priority: "high"
+    assignment: "hholm"
+
+  - title: "GDPR compliance review"
+    description: |
+      Ensure GDPR compliance:
+      - Data retention policies
+      - Right to erasure
+      - Cookie consent
+      - Privacy policy
+    projects:
+      - "Admin"
+      - "Client"
+    priority: "high"
+    assignment: "admin"
+
+  - title: "[FEATURE] Activity audit log"
+    description: |
+      Track all user actions for compliance
+      - Who did what, when
+      - Searchable/filterable
+      - Export capability
+    projects:
+      - "Development"
+      - "Client"
+    priority: "normal"
+    assignment: "hholm"
+
+  - title: "Mobile app beta testing"
+    description: |
+      Recruit and manage beta testers for mobile app
+      - 50 testers target
+      - Feedback collection
+      - Bug tracking
+    projects:
+      - "Client"
+      - "Tester"
+    priority: "normal"
+    assignment: "tester"
+    subscribers: *QA_TEAM
+
+  - title: "Year-end documentation update"
+    description: |
+      Update all project documentation:
+      - API docs
+      - User guides
+      - Admin manual
+      - Architecture diagrams
+    projects:
+      - "Admin"
+    priority: "low"
+    assignment: "grok"
+
+  - title: "Production launch - Black Friday preparation"
+    description: |
+      Scale infrastructure for expected traffic spike
+      - Auto-scaling setup
+      - Cache warming
+      - DDoS protection
+    projects:
+      - "Production"
+    priority: "unbreak"
+    assignment: "admin"
+    subscribers: *FULL_TEAM
+
+  - title: "[BUG] Email notifications delayed by hours"
+    description: "Email queue processing too slowly, users receiving delayed notifications"
+    projects:
+      - "Production"
+      - "Development"
+    priority: "high"
+    assignment: "hholm"
+
+  - title: "Christmas holiday on-call schedule"
+    description: "Set up on-call rotation for holiday period (Dec 20 - Jan 5)"
+    projects:
+      - "Admin"
+      - "Production"
+    priority: "normal"
+
+  # ========================================
+  # Ongoing / Year-round Tasks
+  # ========================================
+
+  - title: "Monthly dependency updates"
+    description: "Regular security updates and dependency maintenance"
+    projects:
+      - "Development"
+    priority: "normal"
+    assignment: "admin"
+
+  - title: "Weekly staging deployments"
+    description: "Deploy latest changes to staging every Monday"
+    projects:
+      - "Staging"
+    priority: "normal"
+
+  - title: "Bi-weekly team retrospectives"
+    description: "Team retro meetings to discuss improvements"
+    projects:
+      - "Admin"
+    priority: "low"
+
+  - title: "[FEATURE] Improved error messages"
+    description: |
+      Make error messages more user-friendly and actionable
+      Reduce support ticket volume
+    projects:
+      - "Client"
+      - "Development"
+    priority: "normal"
+    assignment: "grok"
+
+  - title: "Customer feedback collection"
+    description: |
+      Set up in-app feedback widget
+      - NPS surveys
+      - Feature requests
+      - Bug reports
+    projects:
+      - "Client"
+      - "Admin"
+    priority: "low"
+
+  - title: "[BUG] Session timeout too aggressive"
+    description: "Users being logged out after 15 minutes of inactivity (should be 60 min)"
+    projects:
+      - "Client"
+      - "Development"
+    priority: "normal"
+
+  - title: "Infrastructure cost optimization"
+    description: |
+      Review and optimize cloud costs
+      - Identify unused resources
+      - Rightsize instances
+      - Reserved instance planning
+    projects:
+      - "Production"
+      - "Admin"
+    priority: "normal"
+    assignment: "admin"
+
+  - title: "Social media integration"
+    description: |
+      Allow users to share content to social media
+      - Facebook
+      - Twitter/X
+      - LinkedIn
+    projects:
+      - "Client"
+      - "Development"
+    priority: "wish"
+
+  - title: "[FEATURE] Keyboard shortcuts"
+    description: |
+      Add keyboard shortcuts for power users
+      - Navigation shortcuts
+      - Action shortcuts
+      - Help overlay (?)
+    projects:
+      - "Client"
+    priority: "wish"
+    assignment: "grok"
+
+  - title: "Accessibility audit (WCAG 2.1 AA)"
+    description: |
+      Ensure website meets WCAG 2.1 Level AA
+      - Screen reader testing
+      - Keyboard navigation
+      - Color contrast
+      - Alt text
+    projects:
+      - "Client"
+      - "IA"
+    priority: "high"
+    assignment: "hholm"
+
+  - title: "End of year system maintenance"
+    description: |
+      Scheduled maintenance window: Dec 31, 23:00-01:00
+      - Database optimization
+      - Log rotation
+      - Cache clearing
+      - System updates
+    projects:
+      - "Production"
+      - "Staging"
+    priority: "normal"
+    assignment: "admin"
