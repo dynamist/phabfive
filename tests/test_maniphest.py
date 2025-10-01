@@ -1,0 +1,341 @@
+# -*- coding: utf-8 -*-
+
+# 3rd party imports
+import pytest
+
+# phabfive imports
+from phabfive.maniphest import (
+    _extract_variable_dependencies,
+    _build_dependency_graph,
+    _detect_circular_dependencies,
+    _topological_sort,
+    _render_variables_with_dependency_resolution,
+)
+from phabfive.exceptions import PhabfiveDataException
+
+
+class TestExtractVariableDependencies:
+    def test_simple_variable_reference(self):
+        result = _extract_variable_dependencies("{{ foo }}")
+        assert result == {"foo"}
+
+    def test_multiple_variables(self):
+        result = _extract_variable_dependencies("{{ foo }} and {{ bar }}")
+        assert result == {"foo", "bar"}
+
+    def test_variable_with_filter(self):
+        result = _extract_variable_dependencies("{{ foo | upper }}")
+        assert result == {"foo"}
+
+    def test_variable_with_expression(self):
+        result = _extract_variable_dependencies("{{ foo + bar }}")
+        assert result == {"foo", "bar"}
+
+    def test_no_variables(self):
+        result = _extract_variable_dependencies("plain text")
+        assert result == set()
+
+    def test_invalid_template(self):
+        # Invalid syntax should return empty set with warning
+        result = _extract_variable_dependencies("{{ unclosed")
+        assert result == set()
+
+
+class TestBuildDependencyGraph:
+    def test_simple_dependency_chain(self):
+        variables = {
+            "a": "value_a",
+            "b": "{{ a }}",
+            "c": "{{ b }}",
+        }
+        graph = _build_dependency_graph(variables)
+        assert graph == {
+            "a": set(),
+            "b": {"a"},
+            "c": {"b"},
+        }
+
+    def test_multiple_dependencies(self):
+        variables = {
+            "a": "value_a",
+            "b": "value_b",
+            "c": "{{ a }} and {{ b }}",
+        }
+        graph = _build_dependency_graph(variables)
+        assert graph == {
+            "a": set(),
+            "b": set(),
+            "c": {"a", "b"},
+        }
+
+    def test_non_string_values(self):
+        variables = {
+            "a": 123,
+            "b": ["list"],
+            "c": "{{ a }}",
+        }
+        graph = _build_dependency_graph(variables)
+        assert graph == {
+            "a": set(),
+            "b": set(),
+            "c": set(),  # Reference to non-existent string variable filtered out
+        }
+
+    def test_reference_to_nonexistent_variable(self):
+        variables = {
+            "a": "{{ nonexistent }}",
+        }
+        graph = _build_dependency_graph(variables)
+        assert graph == {
+            "a": set(),  # nonexistent is filtered out
+        }
+
+    def test_empty_variables(self):
+        variables = {}
+        graph = _build_dependency_graph(variables)
+        assert graph == {}
+
+
+class TestDetectCircularDependencies:
+    def test_no_cycle_linear(self):
+        graph = {
+            "a": set(),
+            "b": {"a"},
+            "c": {"b"},
+        }
+        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        assert has_cycle is False
+        assert cycle_path == []
+
+    def test_simple_two_node_cycle(self):
+        graph = {
+            "a": {"b"},
+            "b": {"a"},
+        }
+        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        assert has_cycle is True
+        assert len(cycle_path) > 0
+        # Cycle should contain both nodes
+        assert "a" in cycle_path
+        assert "b" in cycle_path
+
+    def test_self_reference_cycle(self):
+        graph = {
+            "a": {"a"},
+        }
+        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        assert has_cycle is True
+        assert "a" in cycle_path
+
+    def test_three_node_cycle(self):
+        graph = {
+            "a": {"b"},
+            "b": {"c"},
+            "c": {"a"},
+        }
+        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        assert has_cycle is True
+        assert len(cycle_path) > 0
+        # All three nodes should be in the cycle
+        assert "a" in cycle_path
+        assert "b" in cycle_path
+        assert "c" in cycle_path
+
+    def test_four_node_cycle(self):
+        graph = {
+            "a": {"b"},
+            "b": {"c"},
+            "c": {"d"},
+            "d": {"a"},
+        }
+        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        assert has_cycle is True
+        assert len(cycle_path) >= 4
+
+    def test_independent_subgraphs_no_cycle(self):
+        graph = {
+            "a": set(),
+            "b": {"a"},
+            "c": set(),
+            "d": {"c"},
+        }
+        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        assert has_cycle is False
+        assert cycle_path == []
+
+    def test_cycle_in_one_branch(self):
+        graph = {
+            "a": set(),
+            "b": {"a"},
+            "c": {"d"},
+            "d": {"c"},
+        }
+        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        assert has_cycle is True
+        # Cycle should contain c and d
+        assert "c" in cycle_path
+        assert "d" in cycle_path
+
+
+class TestTopologicalSort:
+    def test_no_dependencies(self):
+        graph = {
+            "a": set(),
+            "b": set(),
+            "c": set(),
+        }
+        result = _topological_sort(graph)
+        # All variables should be present
+        assert set(result) == {"a", "b", "c"}
+
+    def test_linear_chain(self):
+        graph = {
+            "a": set(),
+            "b": {"a"},
+            "c": {"b"},
+        }
+        result = _topological_sort(graph)
+        # a must come before b, b must come before c
+        assert result.index("a") < result.index("b")
+        assert result.index("b") < result.index("c")
+
+    def test_diamond_pattern(self):
+        graph = {
+            "a": set(),
+            "b": {"a"},
+            "c": {"a"},
+            "d": {"b", "c"},
+        }
+        result = _topological_sort(graph)
+        # a must come before b, c, and d
+        assert result.index("a") < result.index("b")
+        assert result.index("a") < result.index("c")
+        assert result.index("a") < result.index("d")
+        # b and c must come before d
+        assert result.index("b") < result.index("d")
+        assert result.index("c") < result.index("d")
+
+    def test_multiple_independent_chains(self):
+        graph = {
+            "a": set(),
+            "b": {"a"},
+            "c": set(),
+            "d": {"c"},
+        }
+        result = _topological_sort(graph)
+        # Within each chain, order must be preserved
+        assert result.index("a") < result.index("b")
+        assert result.index("c") < result.index("d")
+
+    def test_complex_tree(self):
+        graph = {
+            "root": set(),
+            "branch1": {"root"},
+            "branch2": {"root"},
+            "leaf1": {"branch1"},
+            "leaf2": {"branch1", "branch2"},
+        }
+        result = _topological_sort(graph)
+        # root must come first
+        assert result.index("root") < result.index("branch1")
+        assert result.index("root") < result.index("branch2")
+        # branches before leaves
+        assert result.index("branch1") < result.index("leaf1")
+        assert result.index("branch1") < result.index("leaf2")
+        assert result.index("branch2") < result.index("leaf2")
+
+
+class TestRenderVariablesWithDependencyResolution:
+    def test_simple_substitution(self):
+        variables = {
+            "name": "John",
+            "greeting": "Hello {{ name }}",
+        }
+        result = _render_variables_with_dependency_resolution(variables)
+        assert result["name"] == "John"
+        assert result["greeting"] == "Hello John"
+
+    def test_multilevel_nesting(self):
+        variables = {
+            "base": "world",
+            "level1": "Hello {{ base }}",
+            "level2": "{{ level1 }}!",
+            "level3": "Message: {{ level2 }}",
+        }
+        result = _render_variables_with_dependency_resolution(variables)
+        assert result["base"] == "world"
+        assert result["level1"] == "Hello world"
+        assert result["level2"] == "Hello world!"
+        assert result["level3"] == "Message: Hello world!"
+
+    def test_order_independent_definitions(self):
+        # Variables defined in reverse dependency order
+        variables = {
+            "z_greeting": "Hello {{ a_name }}",
+            "a_name": "Alice",
+        }
+        result = _render_variables_with_dependency_resolution(variables)
+        assert result["a_name"] == "Alice"
+        assert result["z_greeting"] == "Hello Alice"
+
+    def test_non_string_values_unchanged(self):
+        variables = {
+            "num": 42,
+            "list": [1, 2, 3],
+            "text": "plain",
+        }
+        result = _render_variables_with_dependency_resolution(variables)
+        assert result["num"] == 42
+        assert result["list"] == [1, 2, 3]
+        assert result["text"] == "plain"
+
+    def test_circular_dependency_raises_exception(self):
+        variables = {
+            "a": "{{ b }}",
+            "b": "{{ a }}",
+        }
+        with pytest.raises(PhabfiveDataException) as exc_info:
+            _render_variables_with_dependency_resolution(variables)
+        assert "Circular reference" in str(exc_info.value)
+
+    def test_self_reference_raises_exception(self):
+        variables = {
+            "a": "{{ a }}",
+        }
+        with pytest.raises(PhabfiveDataException) as exc_info:
+            _render_variables_with_dependency_resolution(variables)
+        assert "Circular reference" in str(exc_info.value)
+
+    def test_indirect_circular_reference_raises_exception(self):
+        variables = {
+            "a": "{{ b }}",
+            "b": "{{ c }}",
+            "c": "{{ a }}",
+        }
+        with pytest.raises(PhabfiveDataException) as exc_info:
+            _render_variables_with_dependency_resolution(variables)
+        assert "Circular reference" in str(exc_info.value)
+        # Error message should show the cycle path
+        error_msg = str(exc_info.value)
+        assert "a" in error_msg or "b" in error_msg or "c" in error_msg
+
+    def test_complex_real_world_scenario(self):
+        variables = {
+            "env": "production",
+            "domain": "example.com",
+            "protocol": "https",
+            "base_url": "{{ protocol }}://{{ domain }}",
+            "api_endpoint": "{{ base_url }}/api/v1",
+            "webhook_url": "{{ api_endpoint }}/webhooks",
+            "port": 443,
+            "full_address": "{{ base_url }}:{{ port }}",
+        }
+        result = _render_variables_with_dependency_resolution(variables)
+        assert result["env"] == "production"
+        assert result["domain"] == "example.com"
+        assert result["protocol"] == "https"
+        assert result["base_url"] == "https://example.com"
+        assert result["api_endpoint"] == "https://example.com/api/v1"
+        assert result["webhook_url"] == "https://example.com/api/v1/webhooks"
+        assert result["port"] == 443
+        assert result["full_address"] == "https://example.com:443"

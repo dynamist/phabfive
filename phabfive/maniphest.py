@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
 # python std lib
+from collections.abc import Mapping
 import json
 import logging
 from pathlib import Path
 import time
 import datetime
 from shlex import quote
+from typing import Optional
 
 # phabfive imports
 from phabfive.core import Phabfive
@@ -15,9 +17,10 @@ from phabfive.exceptions import *
 
 # 3rd party imports
 import yaml
-from jinja2 import Template
+from jinja2 import Template, Environment, meta
 
 log = logging.getLogger(__name__)
+
 
 class Maniphest(Phabfive):
     def __init__(self):
@@ -47,14 +50,14 @@ class Maniphest(Phabfive):
         if updated_after:
             constraints["modifiedStart"] = int(updated_after)
 
-        attachments = {
-            "columns": True
-        }
+        attachments = {"columns": True}
 
         log.debug(f"JSON constraints: \n{json.dumps(constraints, indent=2)}\n")
         log.debug(f"JSON attachments: \n{json.dumps(attachments, indent=2)}\n")
 
-        result = self.phab.maniphest.search(constraints=constraints, attachments=attachments)
+        result = self.phab.maniphest.search(
+            constraints=constraints, attachments=attachments
+        )
 
         log.debug(f"JSON result.response: \n{json.dumps(result.response, indent=2)}\n")
 
@@ -124,17 +127,17 @@ class Maniphest(Phabfive):
         if not config_file:
             raise PhabfiveException(f"Must specify a config file path")
 
-        if Path(config_file).is_file():
+        if not Path(config_file).is_file():
             log.error(f"Config file '{config_file}' do not exists")
+            return
 
         with open(config_file) as stream:
-            root_data = yaml.load(stream, Loader=yaml.Loader) # nosec-B506
+            root_data = yaml.load(stream, Loader=yaml.Loader)  # nosec-B506
 
         # Fetch all users in phabricator, used by subscribers mapping later
         users_query = self.phab.user.search()
         username_to_id_mapping = {
-            user["fields"]["username"]: user["phid"]
-            for user in users_query["data"]
+            user["fields"]["username"]: user["phid"] for user in users_query["data"]
         }
 
         log.debug(username_to_id_mapping)
@@ -152,8 +155,11 @@ class Maniphest(Phabfive):
         variables = root_data["variables"]
         del root_data["variables"]
 
+        # Render variables that reference other variables using dependency resolution
+        variables = _render_variables_with_dependency_resolution(variables)
+
         # Helper lambda to slim down transaction handling
-        add_transaction = lambda t, transaction_type, value : t.append(
+        add_transaction = lambda t, transaction_type, value: t.append(
             {"type": transaction_type, "value": value},
         )
 
@@ -187,7 +193,9 @@ class Maniphest(Phabfive):
                 project_phid = project_name_to_id_map.get(project_name, None)
 
                 if not project_phid:
-                    raise PhabfiveRemoteException(f"Project '{project_name}' is not found on the phabricator server")
+                    raise PhabfiveRemoteException(
+                        f"Project '{project_name}' is not found on the phabricator server"
+                    )
 
                 project_phids.append(project_phid)
 
@@ -201,7 +209,9 @@ class Maniphest(Phabfive):
                 user_phid = username_to_id_mapping.get(subscriber_name, None)
 
                 if not user_phid:
-                    raise PhabfiveRemoteException(f"Subscriber '{subscriber_name}' not found as a user on the phabricator server")
+                    raise PhabfiveRemoteException(
+                        f"Subscriber '{subscriber_name}' not found as a user on the phabricator server"
+                    )
 
                 user_phids.append(user_phid)
 
@@ -213,8 +223,7 @@ class Maniphest(Phabfive):
 
             if child_tasks:
                 processed_child_tasks = [
-                    pre_process_tasks(task)
-                    for task in child_tasks
+                    pre_process_tasks(task) for task in child_tasks
                 ]
 
             output["tasks"] = processed_child_tasks
@@ -243,7 +252,11 @@ class Maniphest(Phabfive):
             if "title" in task_config and "description" in task_config:
                 add_transaction(transactions, "title", task_config["title"])
                 add_transaction(transactions, "description", task_config["description"])
-                add_transaction(transactions, "priority", task_config.get("priority", TICKET_PRIORITY_NORMAL))
+                add_transaction(
+                    transactions,
+                    "priority",
+                    task_config.get("priority", TICKET_PRIORITY_NORMAL),
+                )
 
                 projects = task_config.get("projects", [])
 
@@ -267,7 +280,9 @@ class Maniphest(Phabfive):
                         )
 
                         if len(search_result["data"]) != 1:
-                            raise PhabfiveRemoteException(f"Unable to find subtask ticket in phabricator instance with ID={ticket_id}")
+                            raise PhabfiveRemoteException(
+                                f"Unable to find subtask ticket in phabricator instance with ID={ticket_id}"
+                            )
 
                         subtasks_phids.append(search_result["data"][0]["phid"])
 
@@ -284,13 +299,17 @@ class Maniphest(Phabfive):
                         )
 
                         if len(search_result["data"]) != 1:
-                            raise PhabfiveRemoteException(f"Unable to find parent ticket in phabricator instance with ID={ticket_id}")
+                            raise PhabfiveRemoteException(
+                                f"Unable to find parent ticket in phabricator instance with ID={ticket_id}"
+                            )
 
                         parent_phids.append(search_result["data"][0]["phid"])
 
                     add_transaction(transactions, "parents.set", parent_phids)
             else:
-                log.warning("Required fields 'title' and 'description' is not present in this data block, skipping ticket creation")
+                log.warning(
+                    "Required fields 'title' and 'description' is not present in this data block, skipping ticket creation"
+                )
 
             output["transactions"] = transactions
 
@@ -300,8 +319,7 @@ class Maniphest(Phabfive):
             if child_tasks:
                 # If there is child tasks to create, recurse down to all of them one by one
                 processed_child_tasks = [
-                    recurse_build_transactions(task)
-                    for task in child_tasks
+                    recurse_build_transactions(task) for task in child_tasks
                 ]
             else:
                 processed_child_tasks = []
@@ -319,7 +337,7 @@ class Maniphest(Phabfive):
             of tickets defined in our config file.
             """
             log.debug("\n -- Commiting task")
-            log.debug(json.dumps(task_config,indent=2))
+            log.debug(json.dumps(task_config, indent=2))
             log.debug(" ** parent block")
             log.debug(json.dumps(parent_task_config, indent=2))
 
@@ -329,13 +347,19 @@ class Maniphest(Phabfive):
                 # Parent ticket based on the task hiearchy defined in the config file we parsed is different
                 # from the explicit "ticket parent" that can be defined
                 if parent_task_config and "phid" in parent_task_config:
-                    add_transaction(transactions_to_commit, "parents.add", [parent_task_config["phid"]])
+                    add_transaction(
+                        transactions_to_commit,
+                        "parents.add",
+                        [parent_task_config["phid"]],
+                    )
 
                 log.debug(" -- transactions to commit")
                 log.debug(transactions_to_commit)
 
                 if dry_run:
-                    log.critical("Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator")
+                    log.critical(
+                        "Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator"
+                    )
                 else:
                     result = self.phab.maniphest.edit(
                         transactions=transactions_to_commit,
@@ -344,7 +368,9 @@ class Maniphest(Phabfive):
                     # Store the newly created ticket ID in the data structure so child tickets can look it up
                     task_config["phid"] = str(result["object"]["phid"])
             else:
-                log.warning("No transactions to commit here, either a bug or root object that can't be transacted")
+                log.warning(
+                    "No transactions to commit here, either a bug or root object that can't be transacted"
+                )
 
             child_tasks = task_config.get("tasks", None)
 
@@ -354,7 +380,9 @@ class Maniphest(Phabfive):
 
         # Main task recursion logic
         if "tasks" not in root_data:
-            raise PhabfiveDataException(f"Config file must contain keyword tasks in the root")
+            raise PhabfiveDataException(
+                f"Config file must contain keyword tasks in the root"
+            )
 
         pre_process_output = pre_process_tasks(root_data)
         log.debug("Final pre_process_output")
@@ -371,6 +399,7 @@ class Maniphest(Phabfive):
         # Always start with a blank parent
         recurse_commit_transactions(parsed_root_data, None)
 
+
 def days_to_unix(days):
     """
     Convert days into a UNIX timestamp.
@@ -378,9 +407,154 @@ def days_to_unix(days):
     seconds = int(days) * 24 * 3600
     return int(time.time()) - seconds
 
+
 def format_timestamp(timestamp):
     """
     Convert UNIX timestamp to ISO 8601 string (readable time format).
     """
     dt = datetime.datetime.fromtimestamp(timestamp)
-    return dt.strftime('%Y-%m-%dT%H:%M:%S')
+    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _extract_variable_dependencies(template_str: str) -> set[str]:
+    """
+    Extract variable names referenced in a Jinja2 template string.
+    """
+    try:
+        env = Environment()
+        ast = env.parse(template_str)
+        return meta.find_undeclared_variables(ast)
+    except Exception as e:
+        log.warning(f"Failed to parse template '{template_str}': {e}")
+        return set()
+
+
+def _build_dependency_graph(variables: Mapping[str, object]) -> dict[str, set[str]]:
+    """
+    Build a dependency graph mapping each variable to its dependencies.
+    """
+    graph: dict[str, set[str]] = {}
+
+    for var_name, var_value in variables.items():
+        if isinstance(var_value, str):
+            # Extract dependencies and filter to only include string variables
+            # (non-strings don't need rendering, so no ordering constraint)
+            dependencies = _extract_variable_dependencies(var_value)
+            graph[var_name] = {
+                dep
+                for dep in dependencies
+                if dep in variables and isinstance(variables[dep], str)
+            }
+        else:
+            # Non-string values have no dependencies
+            graph[var_name] = set()
+
+    return graph
+
+
+def _detect_circular_dependencies(graph: dict[str, set[str]]) -> tuple[bool, list[str]]:
+    """
+    Detect circular dependencies using depth-first search.
+    Returns (has_cycle, cycle_path) tuple.
+    """
+    visited: set[str] = set()
+    recursion_stack: set[str] = set()
+    path: list[str] = []
+
+    def dfs(node: str) -> Optional[list[str]]:
+        visited.add(node)
+        recursion_stack.add(node)
+        path.append(node)
+
+        for dependency in graph.get(node, set()):
+            if dependency not in visited:
+                cycle = dfs(dependency)
+                if cycle is not None:
+                    return cycle
+            elif dependency in recursion_stack:
+                # Found a cycle - build the cycle path
+                cycle_start_idx = path.index(dependency)
+                cycle_path = path[cycle_start_idx:] + [dependency]
+                return cycle_path
+
+        _ = path.pop()
+        recursion_stack.remove(node)
+        return None
+
+    for node in graph:
+        if node not in visited:
+            result = dfs(node)
+            if result is not None:
+                return (True, result)
+
+    return (False, [])
+
+
+def _topological_sort(graph: dict[str, set[str]]) -> list[str]:
+    """
+    Perform topological sort using DFS.
+    Returns variables in dependency order (dependencies before dependents).
+    """
+    visited: set[str] = set()
+    result: list[str] = []
+
+    def dfs(node: str) -> None:
+        visited.add(node)
+
+        # Visit all dependencies first
+        for dependency in graph.get(node, set()):
+            if dependency not in visited:
+                dfs(dependency)
+
+        # Add current node after all dependencies
+        result.append(node)
+
+    for node in graph:
+        if node not in visited:
+            dfs(node)
+
+    return result
+
+
+def _render_variables_with_dependency_resolution(
+    variables: Mapping[str, object],
+) -> dict[str, object]:
+    """
+    Render Jinja2 template variables with proper dependency resolution.
+
+    Analyzes variable dependencies, detects circular references, performs topological
+    sorting, and renders variables in the correct order so all dependencies are
+    resolved before being referenced.
+
+    Raises
+    ------
+    PhabfiveDataException
+        If circular dependencies are detected in the variable definitions.
+    """
+    log.debug("Building dependency graph for variables")
+    graph = _build_dependency_graph(variables)
+    log.debug(
+        f"Dependency graph: {json.dumps({k: list(v) for k, v in graph.items()}, indent=2)}"
+    )
+
+    # Detect circular dependencies
+    has_cycle, cycle_path = _detect_circular_dependencies(graph)
+    if has_cycle:
+        cycle_str = " → ".join(cycle_path)
+        raise PhabfiveDataException(
+            f"Circular reference detected in variables: {cycle_str}"
+        )
+
+    # Sort variables in dependency order
+    sorted_vars = _topological_sort(graph)
+    log.debug(f"Topologically sorted variables: {sorted_vars}")
+
+    # Render variables in order
+    rendered = variables.copy()
+    for var_name in sorted_vars:
+        var_value = rendered[var_name]
+        if isinstance(var_value, str):
+            rendered[var_name] = Template(var_value).render(rendered)
+            log.debug(f"Rendered variable '{var_name}': {rendered[var_name]}")
+
+    return rendered
