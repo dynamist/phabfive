@@ -10,11 +10,11 @@ services:
       - --innodb-buffer-pool-size=256M
       - --sql-mode=STRICT_ALL_TABLES
       - --local-infile=0
-  phabricator:
+  phorge:
     image: 'dynamist/phorge'
     build:
       context: .
-      dockerfile: ./Dockerfile.phorge
+      dockerfile: ./Containerfile.phorge
     environment:
       - PHABRICATOR_URL=http://phorge.domain.tld
       - PHABRICATOR_ALT_FILE_DOMAIN=http://phorge-files.domain.tld

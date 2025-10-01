@@ -32,6 +32,10 @@ COPY phorge/phorge.conf /etc/apache2/conf-enabled/phorge.conf
 COPY phorge/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# Copy initialization script
+COPY phorge/init-phorge.sh /usr/local/bin/init-phorge.sh
+RUN chmod +x /usr/local/bin/init-phorge.sh
+
 # Create configuration directory and storage directories
 RUN mkdir -p /app/phorge/conf/local /app/repo /app/files && \
     chown -R www-data:www-data /app/phorge /app/repo /app/files
