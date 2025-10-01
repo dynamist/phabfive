@@ -11,22 +11,27 @@ export ADMIN_EMAIL="admin@example.com"
 export ADMIN_REALNAME="Administrator"
 export API_TOKEN="api-supersecr3tapikeyfordevelop1"
 
-# Additional fake users for testing (inspired by test templates)
+# Additional fake users for testing (RMI GUNNAR team members)
 export FAKE_USERS=(
-  "hholm:hholm@example.com:Henrik Holm"
-  "grok:grok@example.com:Grok User"
-  "tester:tester@example.com:Test User"
+  "mikael.wallin:mikael.wallin@air.rmi.se:Mikael Wallin"
+  "ove.pettersson:ove.pettersson@air.rmi.se:Ove Pettersson"
+  "viola.larsson:viola.larsson@air.rmi.se:Viola Larsson"
+  "daniel.lindgren:daniel.lindgren@air.rmi.se:Daniel Lindgren"
+  "sonja.bergstrom:sonja.bergstrom@air.rmi.se:Sonja Bergström"
+  "gabriel.blomqvist:gabriel.blomqvist@air.rmi.se:Gabriel Blomqvist"
+  "sebastian.soderberg:sebastian.soderberg@air.rmi.se:Sebastian Söderberg"
+  "tommy.svensson:tommy.svensson@air.rmi.se:Tommy Svensson"
 )
 
-# Default projects/workboards (inspired by test templates)
+# Default projects/workboards (RMI GUNNAR system projects)
 export DEFAULT_PROJECTS=(
-  "Admin:Administrative tasks and operations"
-  "Client:Client-related work and deliverables"
-  "IA:Information Architecture"
-  "Tester:Testing and QA"
-  "Development:Development environment tasks"
-  "Staging:Staging environment tasks"
-  "Production:Production environment tasks"
+  "GUNNAR-Core:Main chip blueprint development and secure design"
+  "Architecture:System architecture and design specifications"
+  "Infrastructure:Servers, virtualization, and network management"
+  "Development:Development tools and environment setup"
+  "QA:Testing, quality assurance, and compliance validation"
+  "SharePoint:Windows SharePoint integration and document management"
+  "Security:Security compliance, hardening, and vulnerability assessment"
 )
 
 # Function to generate a PHID
