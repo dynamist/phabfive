@@ -66,6 +66,12 @@ echo "Initializing Phorge storage..."
 
 echo "Phorge initialization complete!"
 
+# Run custom initialization script
+if [ -f /usr/local/bin/init-phorge.sh ]; then
+  echo "Running custom initialization script..."
+  bash /usr/local/bin/init-phorge.sh
+fi
+
 # Start daemons in background
 echo "Starting Phorge daemons..."
 ./bin/phd start

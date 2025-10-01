@@ -1,4 +1,4 @@
-.PHONY: help clean cleanpy cleanall cleantox cleanvenv test install phorgedown phorgeup phorgereset phorgelogs phorgeshell
+.PHONY: help clean cleanpy cleanall cleantox cleanvenv test install phorge-down phorge-up phorge-reset phorge-logs phorge-shell
 
 # Detect container runtime (prefer podman)
 CONTAINER_RUNTIME := $(shell command -v podman 2> /dev/null)
@@ -49,10 +49,10 @@ bdist: ## build a wheel distribution
 install: ## install package
 	python setup.py install
 
-phorgedown: ## stop and remove phorge containers
+phorge-down: ## stop and remove phorge containers
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) down
 
-phorgeup: ## start phorge (mariadb detached, phorge in foreground)
+phorge-up: ## start phorge (mariadb detached, phorge in foreground)
 	@echo "Starting mariadb in background..."
 	@$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) up -d mariadb
 	@echo "Waiting for mariadb to be ready..."
@@ -60,7 +60,7 @@ phorgeup: ## start phorge (mariadb detached, phorge in foreground)
 	@echo "Starting phorge in foreground (logs will be visible)..."
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) up --build phorge
 
-phorgereset: ## stop, remove, rebuild and start phorge
+phorge-reset: ## stop, remove, rebuild and start phorge
 	@echo "Stopping and removing containers..."
 	@$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) down
 	@echo "Starting mariadb in background..."
@@ -70,8 +70,8 @@ phorgereset: ## stop, remove, rebuild and start phorge
 	@echo "Starting phorge in foreground (logs will be visible)..."
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) up --build phorge
 
-phorgelogs: ## view logs from phorge containers
+phorge-logs: ## view logs from phorge containers
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) logs -f
 
-phorgeshell: ## open shell in phorge container
+phorge-shell: ## open shell in phorge container
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) exec phorge /bin/bash
