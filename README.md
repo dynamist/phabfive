@@ -34,15 +34,33 @@ A summary of the currently supported features:
 
 ## Example usage
 
-Grab a Phabricator token at `https://<yourserver.com>/settings/panel/apitokens/`
+Grab a Phabricator/Phorge token at `https://<yourserver.com>/settings/panel/apitokens/`
 
-Configure:
+Configure via environment variables:
 
 ```bash
 export PHAB_TOKEN=cli-ABC123
-# --OR--
-echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
+export PHAB_URL=https://yourserver.com/api/
 ```
+
+Or via configuration file:
+
+```bash
+# Linux/XDG
+echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
+echo "PHAB_URL: https://yourserver.com/api/" >> ~/.config/phabfive.yaml
+
+# macOS
+cat > ~/Library/Application\ Support/phabfive.yaml << EOF
+PHAB_TOKEN: cli-ABC123
+PHAB_URL: https://yourserver.com/api/
+EOF
+
+# Windows
+# Create file at: %LOCALAPPDATA%\phabfive\phabfive.yaml
+```
+
+**Note:** On macOS, you can use `~/.config` by setting `export XDG_CONFIG_HOME=~/.config`
 
 Usage:
 
@@ -84,27 +102,68 @@ First add the following to your `/etc/hosts` file:
 127.0.0.1       phorge-files.domain.tld
 ```
 
-Start the services(mariadb and phorge)
+Start the services (mariadb and phorge):
 
 ```bash
-# Docker users
-docker compose -f docker-compose-phorge.yml up --build -d # Detached mode
+# This uses podman or docker automatically (Prefers podman)
+make phorge-up
 ```
+
+The Makefile automatically detects whether you have podman or docker installed (preferring podman). It will start mariadb in the background and phorge in the foreground, so you can see the logs and the password recovery link.
+
+To stop: Press `Ctrl+C`, then run `make phorge-down`
+
+This startup will take some time to setup the demo instance. Once completed you can access your instance in your browser at `http://phorge.domain.tld/`.
+
+### Automated Admin Setup
+
+The Phorge instance includes **automated setup** perfect for development containers. On first startup, the following are automatically created:
+
+**Admin Account:**
+- **Username:** `admin`
+- **Email:** `admin@example.com`
+- **API Token:** `api-supersecr3tapikeyfordevelop1`
+- **Password Setup Link:** Generated in container logs
+
+**Test Users:**
+- `hholm`, `grok`, `tester` (for testing phabfive templates)
+
+**Default Projects with Workboards:**
+- `Admin`, `Client`, `IA`, `Tester`
+- `Development`, `Staging`, `Production`
+
+Each project has 5 columns: Backlog → Up Next → In Progress → In Review → Done
+
+The password recovery link will be displayed in the logs when phorge starts. If you miss it, you can view logs with:
+
 ```bash
-# Podman users
-podman compose -f docker-compose-phorge.yml up --build -d # Detached mode
+# Makefile (recommended)
+make phorge-logs
 ```
 
-This startup will take some time to setup the demo instance. Once completed you can access your instance in your browser at `http://phorge.domain.tld/`. On first use you need to setup your admin account. Most development for phabfive requires an API token, create one here `http://phorge.domain.tld/settings/user/<username>/page/apitokens/`.
-
-Note
-By default the instance won't persist any data so if the container is shutdown any data will be lost and you have to restart.
-
-To change this behavior you can create a `.env` file with the following content:
-
+Or manually with:
+```bash
+# Podman
+podman logs <container-name> | grep "one-time link"
+# Docker
+docker logs <container-name> | grep "one-time link"
 ```
-MARIADB_STORAGE_MODE=mariadb_data:/var/lib/mysql
+
+Visit the link to set your password, then log in at `http://phorge.domain.tld/`.
+
+You can immediately use the API token for development:
+
+```bash
+export PHAB_TOKEN=api-supersecr3tapikeyfordevelop1
+export PHAB_URL=http://phorge.domain.tld/api/
 ```
+Or you can configure it in your configuration file mentioned in [Example usage](#example-usage)
+
+For customizing the setup, see [phorge/AUTOMATED_SETUP.md](phorge/AUTOMATED_SETUP.md).
+
+### Data Persistence
+
+Note: By default the instance won't persist any data so if the container is shutdown any data will be lost and you have to restart.
 
 ## Building a release
 
@@ -116,6 +175,6 @@ In order to be allowed to upload a new release for phabfive, you need to be a *o
 
 ## LICENSE
 
-Copyright (c) 2017-2024 Dynamist AB
+Copyright (c) 2017-2025 Dynamist AB
 
 See the LICENSE file provided with the source distribution for full details.
