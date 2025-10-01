@@ -125,12 +125,19 @@ The Phorge instance includes **automated setup** perfect for development contain
 - **API Token:** `api-supersecr3tapikeyfordevelop1`
 - **Password Setup Link:** Generated in container logs
 
-**Test Users:**
-- `hholm`, `grok`, `tester` (for testing phabfive templates)
+**Test Users (RMI GUNNAR Team):**
+- `mikael.wallin` (Team Lead/Scrum Master)
+- `ove.pettersson` (System Architect)
+- `viola.larsson` (System Administrator)
+- `daniel.lindgren` (DevOps Engineer)
+- `sonja.bergstrom` (Windows SharePoint Developer)
+- `gabriel.blomqvist` (Windows C# Developer)
+- `sebastian.soderberg` (Windows C# Developer)
+- `tommy.svensson` (QA Engineer)
 
 **Default Projects with Workboards:**
-- `Admin`, `Client`, `IA`, `Tester`
-- `Development`, `Staging`, `Production`
+- `GUNNAR-Core`, `Architecture`, `Infrastructure`, `Development`
+- `QA`, `SharePoint`, `Security`
 
 Each project has 5 columns: Backlog → Up Next → In Progress → In Review → Done
 

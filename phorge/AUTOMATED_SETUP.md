@@ -14,20 +14,25 @@ The `init-phorge.sh` script automatically creates:
 - **Password Recovery Link** - One-time link to set your password
 
 ### Test Users
-Three additional users for testing (inspired by phabfive test templates):
-- **hholm** - Henrik Holm (hholm@example.com)
-- **grok** - Grok User (grok@example.com)
-- **tester** - Test User (tester@example.com)
+Eight RMI GUNNAR team members for testing:
+- **mikael.wallin** - Mikael Wallin, Team Lead/Scrum Master (mikael.wallin@air.rmi.se)
+- **ove.pettersson** - Ove Pettersson, System Architect (ove.pettersson@air.rmi.se)
+- **viola.larsson** - Viola Larsson, System Administrator (viola.larsson@air.rmi.se)
+- **daniel.lindgren** - Daniel Lindgren, DevOps Engineer (daniel.lindgren@air.rmi.se)
+- **sonja.bergstrom** - Sonja Bergström, Windows SharePoint Developer (sonja.bergstrom@air.rmi.se)
+- **gabriel.blomqvist** - Gabriel Blomqvist, Windows C# Developer (gabriel.blomqvist@air.rmi.se)
+- **sebastian.soderberg** - Sebastian Söderberg, Windows C# Developer (sebastian.soderberg@air.rmi.se)
+- **tommy.svensson** - Tommy Svensson, QA Engineer (tommy.svensson@air.rmi.se)
 
 ### Default Projects with Workboards
 Seven projects with 5-column workboards (Backlog → Up Next → In Progress → In Review → Done):
-- **Admin** - Administrative tasks and operations
-- **Client** - Client-related work and deliverables
-- **IA** - Information Architecture
-- **Tester** - Testing and QA
-- **Development** - Development environment tasks
-- **Staging** - Staging environment tasks
-- **Production** - Production environment tasks
+- **GUNNAR-Core** - Main chip blueprint development and secure design
+- **Architecture** - System architecture and design specifications
+- **Infrastructure** - Servers, virtualization, and network management
+- **Development** - Development tools and environment setup
+- **QA** - Testing, quality assurance, and compliance validation
+- **SharePoint** - Windows SharePoint integration and document management
+- **Security** - Security compliance, hardening, and vulnerability assessment
 
 The admin user is automatically joined to all projects.
 
