@@ -24,17 +24,22 @@ jobs:
 
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
 
-      - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: |
-          python3 -m pip install --upgrade pip wheel setuptools
-          python3 -m pip install '.[test]'
+        run: uv sync --group dev
 
-      - name: Test with tox
-        run: tox run --quiet
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Run linting (Python 3.13 only)
+        if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+        run: uv run flake8 phabfive/ tests/
