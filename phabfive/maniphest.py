@@ -26,6 +26,69 @@ class Maniphest(Phabfive):
     def __init__(self):
         super(Maniphest, self).__init__()
 
+    def _lookup_project_phid(self, project_name):
+        """Look up a project's PHID by name."""
+        if not project_name:
+            return None
+
+        projects_query = self.phab.project.search(constraints={"name": project_name})
+        if projects_query["data"]:
+            project_phid = projects_query["data"][0]["phid"]
+            log.debug(f"Found project PHID: {project_phid} for project: {project_name}")
+            return project_phid
+        else:
+            log.warning(f"Project '{project_name}' not found")
+            return None
+
+    def _fetch_project_names_for_boards(self, tasks_data):
+        """Fetch project names for all boards in the task data."""
+        all_board_phids = set()
+        for item in tasks_data:
+            boards = item.get("attachments", {}).get("columns", {}).get("boards", {})
+            all_board_phids.update(boards.keys())
+
+        if not all_board_phids:
+            return {}
+
+        projects_lookup = self.phab.project.search(constraints={"phids": list(all_board_phids)})
+        return {
+            proj["phid"]: proj["fields"]["name"]
+            for proj in projects_lookup["data"]
+        }
+
+    def _print_task_columns(self, boards, project_phid, project_phid_to_name):
+        """Print column information for a task."""
+        if project_phid:
+            # Specific project filter: show only that project's columns
+            self._print_single_project_columns(boards, project_phid)
+        else:
+            # No filter: show all projects' columns with project names
+            self._print_all_projects_columns(boards, project_phid_to_name)
+
+    def _print_single_project_columns(self, boards, project_phid):
+        """Print columns for a specific project only."""
+        if project_phid not in boards:
+            return
+
+        board_data = boards[project_phid]
+        columns = board_data.get("columns", [])
+        for column in columns:
+            column_name = column.get("name")
+            if column_name:
+                columns_no = len(columns)
+                print(f"Column: {column_name} {columns_no}")
+
+    def _print_all_projects_columns(self, boards, project_phid_to_name):
+        """Print columns for all projects with project name labels."""
+        for board_phid, board_data in boards.items():
+            project_name = project_phid_to_name.get(board_phid, "Unknown")
+            columns = board_data.get("columns", [])
+            for column in columns:
+                column_name = column.get("name")
+                if column_name:
+                    columns_no = len(columns)
+                    print(f"Column ({project_name}): {column_name} {columns_no}")
+
     def task_search(self, project, created_after=None, updated_after=None):
         """
         Search for Phabricator Maniphest tasks with given parameters.
@@ -36,12 +99,16 @@ class Maniphest(Phabfive):
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
         """
-
+        # Convert date filters to Unix timestamps
         if created_after:
             created_after = days_to_unix(created_after)
         if updated_after:
             updated_after = days_to_unix(updated_after)
 
+        # Look up project PHID if filtering by project
+        project_phid = self._lookup_project_phid(project)
+
+        # Build search constraints
         constraints = {}
         if project:
             constraints["projects"] = [str(project)]
@@ -55,12 +122,19 @@ class Maniphest(Phabfive):
         log.debug(f"JSON constraints: \n{json.dumps(constraints, indent=2)}\n")
         log.debug(f"JSON attachments: \n{json.dumps(attachments, indent=2)}\n")
 
+        # Execute search
         result = self.phab.maniphest.search(
             constraints=constraints, attachments=attachments
         )
 
         log.debug(f"JSON result.response: \n{json.dumps(result.response, indent=2)}\n")
 
+        # Fetch project names if showing all projects
+        project_phid_to_name = {}
+        if not project_phid:
+            project_phid_to_name = self._fetch_project_names_for_boards(result.response["data"])
+
+        # Display each task
         for item in result.response["data"]:
             print(f"Link: {self.url}/T{item['id']}")
             fields = item.get("fields", {})
@@ -84,15 +158,9 @@ class Maniphest(Phabfive):
             priority_name = fields.get("priority", {}).get("name", "Unknown")
             print(f"Priority: {priority_name}")
 
+            # Display column information
             boards = item.get("attachments", {}).get("columns", {}).get("boards", {})
-
-            for board_data in boards.values():
-                columns = board_data.get("columns", [])
-                for column in columns:
-                    column_name = column.get("name")
-                    columns_no = len(columns)
-                    if column_name:
-                        print(f"Column: {column_name} {columns_no}")
+            self._print_task_columns(boards, project_phid, project_phid_to_name)
 
             description_raw = fields.get("description", {}).get("raw", "")
             if description_raw:
