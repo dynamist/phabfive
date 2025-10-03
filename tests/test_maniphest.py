@@ -2,9 +2,11 @@
 
 # 3rd party imports
 import pytest
+from unittest.mock import MagicMock, patch
 
 # phabfive imports
 from phabfive.maniphest import (
+    Maniphest,
     _extract_variable_dependencies,
     _build_dependency_graph,
     _detect_circular_dependencies,
@@ -339,3 +341,96 @@ class TestRenderVariablesWithDependencyResolution:
         assert result["webhook_url"] == "https://example.com/api/v1/webhooks"
         assert result["port"] == 443
         assert result["full_address"] == "https://example.com:443"
+
+
+class TestLookupProjectPhid:
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_successful_project_lookup(self, mock_init):
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.phab.project.search.return_value = {
+            "data": [{"phid": "PHID-PROJ-123", "fields": {"name": "TestProject"}}]
+        }
+
+        result = maniphest._lookup_project_phid("TestProject")
+        assert result == "PHID-PROJ-123"
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_project_not_found(self, mock_init):
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.phab.project.search.return_value = {"data": []}
+
+        result = maniphest._lookup_project_phid("NonExistent")
+        assert result is None
+
+
+class TestFetchProjectNamesForBoards:
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_fetch_project_names(self, mock_init):
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+
+        tasks_data = [
+            {
+                "attachments": {
+                    "columns": {
+                        "boards": {
+                            "PHID-PROJ-123": {"columns": []},
+                            "PHID-PROJ-456": {"columns": []}
+                        }
+                    }
+                }
+            }
+        ]
+
+        maniphest.phab.project.search.return_value = {
+            "data": [
+                {"phid": "PHID-PROJ-123", "fields": {"name": "Project A"}},
+                {"phid": "PHID-PROJ-456", "fields": {"name": "Project B"}}
+            ]
+        }
+
+        result = maniphest._fetch_project_names_for_boards(tasks_data)
+        assert result == {
+            "PHID-PROJ-123": "Project A",
+            "PHID-PROJ-456": "Project B"
+        }
+
+
+class TestPrintTaskColumns:
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("builtins.print")
+    def test_print_with_project_filter(self, mock_print, mock_init):
+        mock_init.return_value = None
+        maniphest = Maniphest()
+
+        boards = {
+            "PHID-PROJ-123": {
+                "columns": [{"name": "Backlog"}, {"name": "Done"}]
+            }
+        }
+
+        maniphest._print_task_columns(boards, "PHID-PROJ-123", {})
+        assert mock_print.call_count == 2
+        mock_print.assert_any_call("Column: Backlog 2")
+        mock_print.assert_any_call("Column: Done 2")
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("builtins.print")
+    def test_print_without_project_filter(self, mock_print, mock_init):
+        mock_init.return_value = None
+        maniphest = Maniphest()
+
+        boards = {
+            "PHID-PROJ-123": {
+                "columns": [{"name": "Backlog"}]
+            }
+        }
+        project_names = {"PHID-PROJ-123": "Project A"}
+
+        maniphest._print_task_columns(boards, None, project_names)
+        mock_print.assert_called_once_with("Column (Project A): Backlog 1")
