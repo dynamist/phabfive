@@ -2,12 +2,13 @@
 
 # python std lib
 from collections.abc import Mapping
+import difflib
+import fnmatch
 import json
 import logging
 from pathlib import Path
 import time
 import datetime
-from shlex import quote
 from typing import Optional
 
 # phabfive imports
@@ -26,16 +27,102 @@ class Maniphest(Phabfive):
     def __init__(self):
         super(Maniphest, self).__init__()
 
+    def _resolve_project_phids(self, project: str) -> list[str]:
+        """
+        Resolve project name or wildcard pattern to list of project PHIDs.
+
+        Parameters
+        ----------
+        project (str): Project name or wildcard pattern.
+                      Supports: "*" (all), "prefix*", "*suffix", "*contains*"
+
+        Returns
+        -------
+        list: List of project PHIDs matching the pattern. Empty list if no matches.
+        """
+        # Validate project parameter
+        if not project or project == "":
+            log.error("No project name provided. Use '*' to search all projects.")
+            return []
+
+        # Fetch all projects from Phabricator regardless of exact match or not to be able to suggest project names
+        log.debug("Fetching all projects from Phabricator")
+        projects_query = self.phab.project.search(constraints={"name": ""})
+        all_projects = {p["fields"]["name"]: p["phid"] for p in projects_query["data"]}
+
+        # Create case-insensitive lookup mappings
+        lower_to_phid = {name.lower(): phid for name, phid in all_projects.items()}
+        lower_to_original = {name.lower(): name for name in all_projects.keys()}
+
+        # Check if wildcard search is needed
+        has_wildcard = "*" in project
+
+        if has_wildcard:
+            if project == "*":
+                # Search all projects
+                log.info(f"Wildcard '*' matched all {len(all_projects)} projects")
+                return list(all_projects.values())
+            else:
+                # Filter projects by wildcard pattern (case-insensitive)
+                matching_projects: list[str] = [
+                    lower_to_original[name_lower]
+                    for name_lower in lower_to_phid.keys()
+                    if fnmatch.fnmatch(name_lower, project.lower())
+                ]
+
+                if not matching_projects:
+                    log.warning(f"Wildcard pattern '{project}' matched no projects")
+                    return []
+
+                log.info(
+                    f"Wildcard pattern '{project}' matched {len(matching_projects)} "
+                    + f"project(s): {', '.join(matching_projects)}"
+                )
+                return [all_projects[name] for name in matching_projects]
+        # Exact match - validate project exists (case-insensitive)
+        log.debug(f"Exact match mode, validating project '{project}'")
+
+        project_lower = project.lower()
+        if project_lower in lower_to_phid:
+            original_name = lower_to_original[project_lower]
+            log.debug(
+                f"Found case-insensitive match for project '{project}' -> '{original_name}'"
+            )
+            return [lower_to_phid[project_lower]]
+        else:
+            # Project not found - suggest similar names (case-insensitive)
+            cutoff = 0.6 if len(project_lower) > 3 else 0.4
+            similar = difflib.get_close_matches(
+                project_lower, lower_to_phid.keys(), n=3, cutoff=cutoff
+            )
+            if similar:
+                # Map back to original names for display
+                original_similar = [lower_to_original[s] for s in similar]
+                log.error(
+                    f"Project '{project}' not found. Did you mean: {', '.join(original_similar)}?"
+                )
+            else:
+                log.error(f"Project '{project}' not found")
+            return []
+
     def task_search(self, project, created_after=None, updated_after=None):
         """
         Search for Phabricator Maniphest tasks with given parameters.
 
         Parameters
         ----------
-        project       (str, required): Project name.
+        project       (str, required): Project name or wildcard pattern.
+                      Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
+                      Empty string returns no results.
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
         """
+
+        # Resolve project name/pattern to PHIDs
+        project_phids = self._resolve_project_phids(project)
+        if not project_phids:
+            # Error already logged in _resolve_project_phids
+            return
 
         if created_after:
             created_after = days_to_unix(created_after)
@@ -43,8 +130,7 @@ class Maniphest(Phabfive):
             updated_after = days_to_unix(updated_after)
 
         constraints = {}
-        if project:
-            constraints["projects"] = [str(project)]
+        constraints["projects"] = project_phids
         if created_after:
             constraints["createdStart"] = int(created_after)
         if updated_after:
@@ -96,10 +182,10 @@ class Maniphest(Phabfive):
 
             description_raw = fields.get("description", {}).get("raw", "")
             if description_raw:
-                print(f"Description: |")
+                print("Description: |")
                 print("  >", "  > ".join(description_raw.splitlines(True)), end="")
             else:
-                print(f"Description: ''", end="")
+                print("Description: ''", end="")
             print("\n")
 
     def add_comment(self, ticket_identifier, comment_string):
@@ -125,7 +211,7 @@ class Maniphest(Phabfive):
 
     def create_from_config(self, config_file, dry_run=False):
         if not config_file:
-            raise PhabfiveException(f"Must specify a config file path")
+            raise PhabfiveException("Must specify a config file path")
 
         if not Path(config_file).is_file():
             log.error(f"Config file '{config_file}' do not exists")
@@ -235,7 +321,7 @@ class Maniphest(Phabfive):
             This block recurses over all tasks and builds the transaction set for this ticket and stores it
             in the data structure.
             """
-            log.debug(f"Building transactions for task_config")
+            log.debug("Building transactions for task_config")
             log.debug(task_config)
 
             # In order to not cause issues with injecting data in a recurse traversal, copy the input,
@@ -381,7 +467,7 @@ class Maniphest(Phabfive):
         # Main task recursion logic
         if "tasks" not in root_data:
             raise PhabfiveDataException(
-                f"Config file must contain keyword tasks in the root"
+                "Config file must contain keyword tasks in the root"
             )
 
         pre_process_output = pre_process_tasks(root_data)
