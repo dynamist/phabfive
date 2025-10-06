@@ -119,7 +119,10 @@ Usage:
     phabfive maniphest search <project_name> [options]
 
 Search Arguments:
-    <project_name>       The name of the project
+    <project_name>       Project name or wildcard pattern.
+                         Supports: "*" (all projects), "prefix*" (starts with),
+                         "*suffix" (ends with), "*contains*" (contains text).
+                         Empty string "" returns no results.
 
 Search Options:
     --created-after=N    Tasks created within the last N days
