@@ -33,7 +33,7 @@ help:
 install: ## install package and dev dependencies
 	uv sync --group dev
 
-test: ## run test suite
+test: install ## run test suite
 	uv run tox --skip-missing-interpreters
 
 docs: ## build and serve documentation
@@ -64,10 +64,10 @@ cleanvenv: ## remove files created by virtualenv
 
 ##@ Build
 
-sdist: ## make a source distribution
+sdist: clean ## make a source distribution
 	uv build --sdist
 
-bdist: ## build a wheel distribution
+bdist: clean ## build a wheel distribution
 	uv build --wheel
 
 ##@ Phorge Testing
@@ -94,13 +94,13 @@ phorge-shell: ## open shell in phorge container
 phabfive-build: ## build phabfive docker image
 	$(CONTAINER_RUNTIME) build -f Dockerfile -t phabfive .
 
-phabfive-run: ## run phabfive in docker container with ARGS="your args here"
+phabfive-run: phabfive-build ## run phabfive in docker container with ARGS="your args here"
 	$(CONTAINER_RUNTIME) run --rm \
 		--env PHAB_TOKEN --env PHAB_URL \
 		$(PHABFIVE_CONFIG_MOUNT) \
 		phabfive $(ARGS)
 
-phabfive-run-dev: ## run phabfive connected to local phorge instance with ARGS="your args here"
+phabfive-run-dev: phabfive-build ## run phabfive connected to local phorge instance with ARGS="your args here"
 	$(CONTAINER_RUNTIME) run --rm \
 		--env PHAB_TOKEN --env PHAB_URL \
 		--add-host=phorge.domain.tld:host-gateway \
