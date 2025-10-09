@@ -16,8 +16,6 @@ For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/
 
 ## Installation
 
-### Using uv (recommended)
-
 [uv](https://github.com/astral-sh/uv) is a fast Python package installer (10-100x faster than pip):
 
 ```bash
@@ -30,12 +28,6 @@ uv tool install phabfive
 # Or install in a virtual environment
 uv venv
 uv pip install phabfive
-```
-
-### Using pip
-
-```bash
-pip install phabfive
 ```
 
 ## Quick Start
@@ -74,23 +66,6 @@ phabfive passphrase K123
 phabfive paste list
 phabfive maniphest search myproject
 ```
-
-## Using Docker/Podman
-
-You can run phabfive in a container without installing Python locally:
-
-```bash
-# Build the image
-make phabfive-build
-
-# Run commands
-make phabfive-run ARGS="paste list"
-make phabfive-run ARGS="maniphest search qa"
-```
-
-The Makefile automatically handles credentials via environment variables or config file mounting.
-
-For more details, see [docs/development.md](docs/development.md#build-and-run-in-a-dockerpodman-image).
 
 ## Documentation
 
