@@ -1,4 +1,4 @@
-.PHONY: help clean cleanpy cleanall cleantox cleanvenv test install phorge-down phorge-up phorge-reset phorge-logs phorge-shell
+.PHONY: help clean cleanpy cleanall cleantox cleanvenv test install phorge-down phorge-up phorge-reset phorge-logs phorge-shell phabfive-build phabfive-run phabfive-run-dev
 
 # Detect container runtime (prefer podman)
 CONTAINER_RUNTIME := $(shell command -v podman 2> /dev/null)
@@ -10,6 +10,17 @@ ifndef CONTAINER_RUNTIME
 endif
 
 COMPOSE_FILE := compose-phorge.yml
+
+# Detect host's phabfive config file (OS-specific via appdirs)
+PHABFIVE_HOST_CONFIG := $(shell \
+	if [ -f "$(HOME)/Library/Application Support/phabfive.yaml" ]; then \
+		echo "$(HOME)/Library/Application Support/phabfive.yaml"; \
+	elif [ -f "$(HOME)/.config/phabfive.yaml" ]; then \
+		echo "$(HOME)/.config/phabfive.yaml"; \
+	fi)
+
+# Build mount flag if config file exists
+PHABFIVE_CONFIG_MOUNT := $(if $(PHABFIVE_HOST_CONFIG),-v "$(PHABFIVE_HOST_CONFIG):/root/.config/phabfive.yaml:ro",)
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
@@ -38,16 +49,16 @@ cleanvenv: ## remove files created by virtualenv
 	-rm -rf .venv/
 
 test: ## run test suite
-	tox --skip-missing-interpreters
+	uv run tox --skip-missing-interpreters
 
 sdist: ## make a source distribution
-	python setup.py sdist
+	uv build --sdist
 
 bdist: ## build a wheel distribution
-	python setup.py bdist_wheel
+	uv build --wheel
 
 install: ## install package
-	python setup.py install
+	uv pip install -e .
 
 phorge-down: ## stop and remove phorge containers
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) down
@@ -75,3 +86,20 @@ phorge-logs: ## view logs from phorge containers
 
 phorge-shell: ## open shell in phorge container
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) exec phorge /bin/bash
+
+phabfive-build: ## build phabfive docker image
+	$(CONTAINER_RUNTIME) build -f Dockerfile -t phabfive .
+
+phabfive-run: ## run phabfive in docker container with ARGS="your args here"
+	$(CONTAINER_RUNTIME) run --rm \
+		--env PHAB_TOKEN --env PHAB_URL \
+		$(PHABFIVE_CONFIG_MOUNT) \
+		phabfive $(ARGS)
+
+phabfive-run-dev: ## run phabfive connected to local phorge instance with ARGS="your args here"
+	$(CONTAINER_RUNTIME) run --rm \
+		--env PHAB_TOKEN --env PHAB_URL \
+		--add-host=phorge.domain.tld:host-gateway \
+		--add-host=phorge-files.domain.tld:host-gateway \
+		$(PHABFIVE_CONFIG_MOUNT) \
+		phabfive $(ARGS)

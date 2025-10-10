@@ -3,8 +3,6 @@
 # python std lib
 import re
 import sys
-import logging
-import logging.config
 from datetime import datetime
 from pprint import pprint as pp
 
@@ -44,7 +42,7 @@ Usage:
 Options:
     -h, --help   Show this help message and exit
 
-""" # nosec-B105
+"""  # nosec-B105
 
 sub_diffusion_args = """
 Usage:
@@ -147,7 +145,7 @@ def parse_cli():
             base_args,
             options_first=True,
             version=phabfive.__version__,
-            help=True,
+            default_help=True,
         )
     except DocoptExit:
         extras(
@@ -158,7 +156,6 @@ def parse_cli():
         )
 
     phabfive.init_logging(cli_args["--log-level"])
-    log = logging.getLogger(__name__)
 
     argv = [cli_args["<command>"]] + cli_args["<args>"]
 
@@ -186,7 +183,7 @@ def parse_cli():
 
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
-        sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv) # nosec-B307
+        sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)  # nosec-B307
     elif cli_args["<command>"] == "passphrase":
         sub_args = docopt(sub_passphrase_args, argv=argv)
     elif cli_args["<command>"] == "diffusion":
@@ -355,7 +352,7 @@ def run(cli_args, sub_args):
                 # This part is responsible for bulk creating several tickets at once
                 maniphest_app.create_from_config(
                     sub_args["<config-file>"],
-                    dry_run = sub_args["--dry-run"],
+                    dry_run=sub_args["--dry-run"],
                 )
 
             if sub_args["comment"] and sub_args["add"]:

@@ -32,6 +32,30 @@ A summary of the currently supported features:
   - Show task summary or full details
   - Create multiple tasks via template config file
 
+## Installation
+
+### Using uv (recommended)
+
+[uv](https://github.com/astral-sh/uv) is a fast Python package installer (10-100x faster than pip):
+
+```bash
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install phabfive
+uv tool install phabfive
+
+# Or install in a virtual environment
+uv venv
+uv pip install phabfive
+```
+
+### Using pip
+
+```bash
+pip install phabfive
+```
+
 ## Example usage
 
 Grab a Phabricator/Phorge token at `https://<yourserver.com>/settings/panel/apitokens/`
@@ -67,6 +91,49 @@ Usage:
 ```bash
 phabfive passphrase K123
 ```
+
+## Using Docker/Podman
+
+You can run phabfive in a container without installing Python or dependencies on your host machine.
+
+### Build the image
+
+```bash
+make phabfive-build
+```
+
+This builds an optimized Alpine-based image using uv with cache mounts for fast rebuilds.
+
+### Run phabfive
+
+```bash
+make phabfive-run ARGS="paste list"
+make phabfive-run ARGS="maniphest search qa"
+make phabfive-run ARGS="passphrase K123"
+```
+
+**Configuration:** The Makefile automatically handles your credentials:
+
+- **Environment variables:** `PHAB_TOKEN` and `PHAB_URL` are passed through if set
+- **Config file:** Automatically detected and mounted from OS-specific locations:
+  - macOS: `~/Library/Application Support/phabfive.yaml`
+  - Linux: `~/.config/phabfive.yaml`
+
+You can use either method or both - the container will use whichever is available.
+
+### Development with local Phorge instance
+
+To test against a local Phorge instance (see "Run local development phorge instance" below):
+
+```bash
+# Build the image (same as production)
+make phabfive-build
+
+# Run against local Phorge
+make phabfive-run-dev ARGS="paste list"
+```
+
+The dev run target adds `--add-host` flags to connect to `phorge.domain.tld` running on your host machine.
 
 ## Run local development phabricator instance
 
@@ -171,6 +238,54 @@ For customizing the setup, see [phorge/AUTOMATED_SETUP.md](phorge/AUTOMATED_SETU
 ### Data Persistence
 
 Note: By default the instance won't persist any data so if the container is shutdown any data will be lost and you have to restart.
+
+## Development
+
+### Setup with uv (recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/dynamist/phabfive.git
+cd phabfive
+
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create a virtual environment and install dependencies
+uv sync --group dev
+
+# Run tests
+uv run pytest
+
+# Run linting
+uv run flake8 phabfive/ tests/
+
+# Run the CLI during development
+uv run phabfive --help
+```
+
+### Testing across Python versions with tox
+
+For comprehensive testing across all supported Python versions locally (requires Python 3.10-3.13 installed):
+
+```bash
+# Install with dev dependencies (includes tox and tox-uv)
+uv sync --group dev
+
+# Run tests across all Python versions (uses uv via tox-uv)
+uv run tox
+
+# Run specific environment
+uv run tox -e py313
+
+# Run linting
+uv run tox -e flake8
+
+# Run coverage report
+uv run tox -e coverage
+```
+
+With `tox-uv`, tox automatically uses uv for dependency resolution, giving you fast, isolated testing environments.
 
 ## Building a release
 

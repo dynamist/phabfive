@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "phabfive"
+version = "0.4.0"
+description = "A command line tool to interact with Phabricator"
+readme = "README.md"
+license = {text = "Apache License 2.0"}
+authors = [
+    {name = "Rickard Eriksson", email = "rickard@dynamist.se"}
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+]
+dependencies = [
+    "anyconfig>=0.10.0",
+    "appdirs",
+    "docopt-ng",
+    "jinja2",
+    "mkdocs>=1.6.1",
+    "phabricator",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+docs = [
+    "mkdocs",
+]
+
+[dependency-groups]
+dev = [
+    "coverage",
+    "flake8",
+    "pytest",
+    "pytest-cov",
+    "tox>=4.0",
+    "tox-uv",
+]
+
+[project.scripts]
+phabfive = "phabfive.cli:cli_entrypoint"
+
+[project.urls]
+Homepage = "https://github.com/dynamist/phabfive"
+Download = "https://github.com/dynamist/phabfive/releases"
+
+[tool.hatch.build.targets.wheel]
+packages = ["phabfive"]
