@@ -8,7 +8,14 @@ import re
 from urllib.parse import urlparse
 
 # phabfive imports
-from phabfive.constants import *
+from phabfive.constants import (
+    REQUIRED,
+    CONFIG_EXAMPLES,
+    VALIDATORS,
+    VALID_EXAMPLES,
+    DEFAULTS,
+    CONFIGURABLES,
+)
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
 
 # 3rd party imports

@@ -13,8 +13,12 @@ from typing import Optional
 
 # phabfive imports
 from phabfive.core import Phabfive
-from phabfive.constants import *
-from phabfive.exceptions import *
+from phabfive.constants import TICKET_PRIORITY_NORMAL
+from phabfive.exceptions import (
+    PhabfiveException,
+    PhabfiveRemoteException,
+    PhabfiveDataException,
+)
 
 # 3rd party imports
 import yaml
@@ -356,10 +360,9 @@ class Maniphest(Phabfive):
         # Render variables that reference other variables using dependency resolution
         variables = _render_variables_with_dependency_resolution(variables)
 
-        # Helper lambda to slim down transaction handling
-        add_transaction = lambda t, transaction_type, value: t.append(
-            {"type": transaction_type, "value": value},
-        )
+        # Helper function to slim down transaction handling
+        def add_transaction(t, transaction_type, value):
+            t.append({"type": transaction_type, "value": value})
 
         def r(data_block, variable_name, variables):
             """

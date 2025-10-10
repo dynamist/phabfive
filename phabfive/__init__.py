@@ -2,7 +2,7 @@
 
 # python stdlib
 import logging
-import os
+import logging.config
 import sys
 
 __author__ = "Rickard Eriksson"
