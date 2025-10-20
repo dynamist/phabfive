@@ -123,8 +123,21 @@ Search Arguments:
                          Empty string "" returns no results.
 
 Search Options:
-    --created-after=N    Tasks created within the last N days
-    --updated-after=N    Tasks updated within the last N days
+    --created-after=N      Tasks created within the last N days
+    --updated-after=N      Tasks updated within the last N days
+    --transitions=PATTERNS Filter by column transitions (comma=OR, plus=AND):
+                             from:COLUMN[:direction]  - Moved from COLUMN
+                             to:COLUMN                - Moved to COLUMN
+                             in:COLUMN                - Currently in COLUMN
+                             been:COLUMN              - Was in COLUMN at any point
+                             never:COLUMN             - Never was in COLUMN
+                             backward                 - Any backward movement
+                             forward                  - Any forward movement
+                           Examples:
+                             from:In Progress:forward
+                             to:Done,in:Blocked
+                             from:Up Next:forward+in:Done
+    --show-transitions     Display transition history for each task
 
 Options:
     --all                Show all fields for a ticket
@@ -217,6 +230,7 @@ def run(cli_args, sub_args):
     """
     # Local imports required due to logging limitation
     from phabfive import passphrase, diffusion, paste, user, repl, maniphest
+    from phabfive.maniphest_transitions import parse_transition_patterns
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.exceptions import PhabfiveException
 
@@ -341,11 +355,24 @@ def run(cli_args, sub_args):
             maniphest_app = maniphest.Maniphest()
 
             if sub_args["search"]:
+                # Parse transition patterns if provided
+                transition_patterns = None
+                if sub_args.get("--transitions"):
+                    try:
+                        transition_patterns = parse_transition_patterns(
+                            sub_args["--transitions"]
+                        )
+                    except Exception as e:
+                        print(f"ERROR: Invalid transition pattern: {e}", file=sys.stderr)
+                        retcode = 1
+                        return retcode
 
                 maniphest_app.task_search(
                     sub_args["<project_name>"],
                     created_after=sub_args["--created-after"],
                     updated_after=sub_args["--updated-after"],
+                    transition_patterns=transition_patterns,
+                    show_transitions=sub_args.get("--show-transitions", False)
                 )
 
             if sub_args["create"]:
@@ -395,6 +422,11 @@ def run(cli_args, sub_args):
                     print(f"dateModified:   {date_modified}")
 
                     print(f"dependsOnTaskPHIDs: {result['dependsOnTaskPHIDs']}")
+
+                    # Display workboard transition history
+                    task_phid = result.get('phid')
+                    if task_phid:
+                        maniphest_app._display_task_transitions(task_phid)
                 else:
                     print(f"Ticket ID:     {result['id']}")
                     print(f"phid:          {result['phid']}")
