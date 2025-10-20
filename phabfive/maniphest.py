@@ -4,6 +4,7 @@
 from collections.abc import Mapping
 import difflib
 import fnmatch
+from functools import lru_cache
 import json
 import logging
 from pathlib import Path
@@ -23,6 +24,8 @@ from phabfive.exceptions import (
 # 3rd party imports
 import yaml
 from jinja2 import Template, Environment, meta
+
+# phabfive transition imports - imported in cli.py where patterns are parsed
 
 log = logging.getLogger(__name__)
 
@@ -132,57 +135,373 @@ class Maniphest(Phabfive):
             proj["phid"]: proj["fields"]["name"] for proj in projects_lookup["data"]
         }
 
-    def _print_task_columns(self, boards, project_phid, project_phid_to_name):
-        """Print column information for a task."""
-        if project_phid:
-            # Specific project filter: show only that project's columns
-            self._print_single_project_columns(boards, project_phid)
-        else:
-            # No filter: show all projects' columns with project names
-            self._print_all_projects_columns(boards, project_phid_to_name)
+    def _fetch_task_transactions(self, task_phid):
+        """
+        Fetch transaction history for a task, filtered to column changes.
 
-    def _print_single_project_columns(self, boards, project_phid):
-        """Print columns for a specific project only."""
-        if isinstance(boards, list):
-            log.debug(f"Boards is a list (likely empty): {boards}")
-            return
+        Uses the deprecated but functional maniphest.gettasktransactions API
+        because the modern transaction.search API doesn't properly expose
+        column transitions.
+
+        Parameters
+        ----------
+        task_phid : str
+            Task PHID (e.g., "PHID-TASK-...")
+
+        Returns
+        -------
+        list
+            List of column change transactions, each with keys:
+            - oldValue: [boardPHID, columnPHID] or None
+            - newValue: [boardPHID, columnPHID]
+            - dateCreated: timestamp (int)
+        """
+        try:
+            # Extract task ID from PHID
+            # We need to query maniphest.search to get the ID from the PHID
+            search_result = self.phab.maniphest.search(
+                constraints={"phids": [task_phid]}
+            )
+
+            if not search_result.get("data"):
+                log.warning(f"No task found for PHID {task_phid}")
+                return []
+
+            task_id = search_result["data"][0]["id"]
+
+            # Use deprecated API that actually returns column transitions
+            result = self.phab.maniphest.gettasktransactions(ids=[task_id])
+
+            # Result is a dict keyed by task ID (as string)
+            transactions = result.get(str(task_id), [])
+
+            # Filter to only column transactions and transform data structure
+            column_transactions = []
+            for trans in transactions:
+                if trans.get("transactionType") != "core:columns":
+                    continue
+
+                # Transform from old API format to expected format
+                # Old: newValue[0].{boardPHID, columnPHID, fromColumnPHIDs}
+                # New: {oldValue: [boardPHID, oldColumnPHID], newValue: [boardPHID, newColumnPHID]}
+
+                new_value_data = trans.get("newValue")
+                if (
+                    not new_value_data
+                    or not isinstance(new_value_data, list)
+                    or len(new_value_data) == 0
+                ):
+                    continue
+
+                move_data = new_value_data[0]
+                board_phid = move_data.get("boardPHID")
+                new_column_phid = move_data.get("columnPHID")
+                from_columns = move_data.get("fromColumnPHIDs", {})
+
+                # Extract old column PHID (it's a dict with column PHIDs as both keys and values)
+                old_column_phid = None
+                if from_columns:
+                    # Get the first column PHID from the dict
+                    old_column_phid = next(iter(from_columns.keys()), None)
+
+                # Build transformed transaction
+                transformed = {
+                    "oldValue": [board_phid, old_column_phid]
+                    if old_column_phid
+                    else None,
+                    "newValue": [board_phid, new_column_phid],
+                    "dateCreated": int(trans.get("dateCreated", 0)),
+                }
+
+                column_transactions.append(transformed)
+
+            log.debug(
+                f"Found {len(column_transactions)} column transactions for {task_phid} (T{task_id})"
+            )
+
+            return column_transactions
+        except AttributeError as e:
+            # API structure changed or unexpected response format
+            log.warning(
+                f"Unexpected API response structure for {task_phid}: {e}. "
+                "The Phabricator API format may have changed."
+            )
+            return []
+        except KeyError as e:
+            # Missing expected keys in response
+            log.warning(f"Missing expected data in API response for {task_phid}: {e}")
+            return []
+        except Exception as e:
+            # Network errors, authentication issues, or other unexpected problems
+            log.warning(
+                f"Failed to fetch transactions for {task_phid}: {type(e).__name__}: {e}"
+            )
+            return []
+
+    def _get_column_info(self, board_phid):
+        """
+        Get column information for a workboard.
+
+        Uses LRU cache (max 100 boards) to avoid repeated API calls while
+        preventing unbounded memory growth in long-running sessions.
+
+        Parameters
+        ----------
+        board_phid : str
+            Project/board PHID
+
+        Returns
+        -------
+        dict
+            Mapping of column PHID to {"name": str, "sequence": int}
+            Empty dict if board has no workboard or columns
+        """
+        return self._fetch_column_info_cached(board_phid)
+
+    @lru_cache(maxsize=100)
+    def _fetch_column_info_cached(self, board_phid):
+        """
+        Cached implementation of column info fetching.
+
+        This is a separate method to enable LRU caching on an instance method.
+        The cache stores up to 100 boards to balance performance and memory usage.
+        """
+        column_info = {}
+
+        try:
+            # Use project.column.search to get all columns for the board
+            result = self.phab.project.column.search(
+                constraints={"projects": [board_phid]}
+            )
+
+            if not result.get("data"):
+                log.debug(f"No columns found for board {board_phid}")
+                return column_info
+
+            # Build column info mapping
+            for col in result["data"]:
+                column_phid = col.get("phid")
+                if column_phid:
+                    column_info[column_phid] = {
+                        "name": col["fields"].get("name", "Unknown"),
+                        "sequence": col["fields"].get(
+                            "sequence", 0
+                        ),  # Sequence determines order
+                    }
+
+            log.debug(f"Loaded {len(column_info)} columns for board {board_phid}")
+
+        except Exception as e:
+            log.warning(f"Failed to fetch column info for board {board_phid}: {e}")
+
+        return column_info
+
+    def _get_current_column(self, task, board_phid):
+        """
+        Get the current column name for a task on a specific board.
+
+        Parameters
+        ----------
+        task : dict
+            Task data from maniphest.search
+        board_phid : str
+            Board PHID to check
+
+        Returns
+        -------
+        str or None
+            Current column name, or None if task not on board
+        """
+        boards = task.get("attachments", {}).get("columns", {}).get("boards", {})
 
         if not isinstance(boards, dict):
-            log.warning(f"Unexpected boards type: {type(boards)}")
-            return
+            return None
 
-        if project_phid not in boards:
-            return
+        board_data = boards.get(board_phid)
+        if not board_data:
+            return None
 
-        board_data = boards[project_phid]
         columns = board_data.get("columns", [])
-        for column in columns:
-            column_name = column.get("name")
-            if column_name:
-                columns_no = len(columns)
-                print(f"Column: {column_name} {columns_no}")
+        if not columns:
+            return None
 
-    def _print_all_projects_columns(self, boards, project_phid_to_name):
-        """Print columns for all projects with project name labels."""
+        # Get the first column (tasks are typically in one column per board)
+        column_phid = columns[0].get("phid") if columns else None
+        if not column_phid:
+            return None
+
+        # Get column info to resolve PHID to name
+        column_info = self._get_column_info(board_phid)
+        col_data = column_info.get(column_phid)
+
+        return col_data["name"] if col_data else None
+
+    def _task_matches_any_pattern(self, task, task_phid, patterns, board_phids):
+        """
+        Check if a task matches any of the given transition patterns.
+
+        Parameters
+        ----------
+        task : dict
+            Task data from maniphest.search
+        task_phid : str
+            Task PHID
+        patterns : list
+            List of TransitionPattern objects
+        board_phids : list
+            List of board PHIDs to check (typically the project being searched)
+
+        Returns
+        -------
+        tuple
+            (matches: bool, matched_transitions: list)
+            matched_transitions contains transaction details if matches
+        """
+        if not patterns:
+            return (True, [])  # No filtering needed
+
+        # Fetch transaction history
+        transactions = self._fetch_task_transactions(task_phid)
+
+        if not transactions and not any(
+            any(cond.get("type") == "in" for cond in p.conditions) for p in patterns
+        ):
+            # No transactions and no in-only patterns
+            return (False, [])
+
+        # Check each board the task is on
+        for board_phid in board_phids:
+            column_info = self._get_column_info(board_phid)
+            current_column = self._get_current_column(task, board_phid)
+
+            # Filter transactions to this board
+            board_transactions = [
+                t
+                for t in transactions
+                if t.get("newValue")
+                and len(t["newValue"]) > 0
+                and t["newValue"][0] == board_phid
+            ]
+
+            # Check if any pattern matches
+            for pattern in patterns:
+                if pattern.matches(board_transactions, current_column, column_info):
+                    return (True, board_transactions)
+
+        return (False, [])
+
+    def _print_transitions(self, transactions, column_info, indent="      "):
+        """
+        Print transition history for a task.
+
+        Parameters
+        ----------
+        transitions : list
+            List of column change transactions
+        column_info : dict
+            Mapping of column PHID to column info
+        indent : str
+            Indentation string for each transition line
+        """
+        if not transactions:
+            return
+        for trans in transactions:
+            old_value = trans.get("oldValue")
+            new_value = trans.get("newValue")
+            date_created = trans.get("dateCreated")
+
+            # Format timestamp
+            timestamp_str = (
+                format_timestamp(date_created) if date_created else "Unknown"
+            )
+
+            # Resolve column names
+            if old_value and len(old_value) > 1:
+                old_col_phid = old_value[1]
+                old_col_info = column_info.get(old_col_phid, {})
+                old_col_name = old_col_info.get("name", old_col_phid)
+            else:
+                old_col_name = "(new)"
+
+            if new_value and len(new_value) > 1:
+                new_col_phid = new_value[1]
+                new_col_info = column_info.get(new_col_phid, {})
+                new_col_name = new_col_info.get("name", new_col_phid)
+            else:
+                new_col_name = "Unknown"
+
+            # Determine if forward or backward
+            direction = "[•]"
+            if old_value and new_value and len(old_value) > 1 and len(new_value) > 1:
+                old_seq = column_info.get(old_value[1], {}).get("sequence", 0)
+                new_seq = column_info.get(new_value[1], {}).get("sequence", 0)
+                if new_seq > old_seq:
+                    direction = "[→]"
+                elif new_seq < old_seq:
+                    direction = "[←]"
+
+            print(f'{indent}- "{timestamp_str} {direction} {old_col_name} → {new_col_name}"')
+
+    def _print_task_boards(self, boards, project_phid_to_name, task_transitions_map, task_id):
+        """
+        Print board information including columns and transitions in nested YAML format.
+
+        Parameters
+        ----------
+        boards : dict
+            Board data from task attachments
+        project_phid_to_name : dict
+            Mapping of board PHID to project name
+        task_transitions_map : dict
+            Mapping of task ID to transitions
+        task_id : int
+            Current task ID
+        """
         if isinstance(boards, list):
             log.debug(f"Boards is a list (likely empty): {boards}")
-            # Lists from API usually mean no workboard columns configured
             return
 
-        if not isinstance(boards, dict):
-            log.warning(f"Unexpected boards type: {type(boards)}")
+        if not isinstance(boards, dict) or not boards:
             return
 
+        # Group transitions by board if available
+        transitions_by_board = {}
+        if task_id in task_transitions_map:
+            all_transitions = task_transitions_map[task_id]
+            for trans in all_transitions:
+                if trans.get("newValue") and len(trans["newValue"]) > 0:
+                    board_phid = trans["newValue"][0]
+                    if board_phid not in transitions_by_board:
+                        transitions_by_board[board_phid] = []
+                    transitions_by_board[board_phid].append(trans)
+
+        print("Boards:")
         for board_phid, board_data in boards.items():
             project_name = project_phid_to_name.get(board_phid, "Unknown")
-            columns = board_data.get("columns", [])
-            for column in columns:
-                column_name = column.get("name")
-                if column_name:
-                    columns_no = len(columns)
-                    print(f"Column ({project_name}): {column_name} {columns_no}")
+            print(f"  {project_name}:")
 
-    def task_search(self, project, created_after=None, updated_after=None):
+            # Print column
+            columns = board_data.get("columns", [])
+            if columns:
+                column_name = columns[0].get("name", "Unknown")
+                print(f"    Column: {column_name}")
+
+            # Print transitions for this board if available
+            if board_phid in transitions_by_board:
+                board_transitions = transitions_by_board[board_phid]
+                if board_transitions:
+                    print("    Transitions:")
+                    column_info = self._get_column_info(board_phid)
+                    self._print_transitions(board_transitions, column_info, indent="      ")
+
+    def task_search(
+        self,
+        project,
+        created_after=None,
+        updated_after=None,
+        transition_patterns=None,
+        show_transitions=False,
+    ):
         """
         Search for Phabricator Maniphest tasks with given parameters.
 
@@ -193,6 +512,8 @@ class Maniphest(Phabfive):
                       Empty string returns no results.
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
+        transition_patterns (list, optional): List of TransitionPattern objects to filter by.
+        show_transitions (bool, optional): If True, display transition history for each task.
         """
         # Convert date filters to Unix timestamps
         if created_after:
@@ -213,16 +534,12 @@ class Maniphest(Phabfive):
                 constraints=constraints, attachments={"columns": True}
             )
             result_data = result.response["data"]
-            project_phid = None  # Multiple projects, show all
         else:
             # Resolve project name/pattern to PHIDs
             project_phids = self._resolve_project_phids(project)
             if not project_phids:
                 # Error already logged in _resolve_project_phids
                 return
-
-            # Determine if we're showing a single project (for column display)
-            project_phid = project_phids[0] if len(project_phids) == 1 else None
 
             # Handle multiple projects with OR logic (make separate calls and merge)
             if len(project_phids) > 1:
@@ -260,10 +577,68 @@ class Maniphest(Phabfive):
                 )
                 result_data = result.response["data"]
 
-        # Fetch project names for column display when showing multiple projects
-        project_phid_to_name = {}
-        if not project_phid:
-            project_phid_to_name = self._fetch_project_names_for_boards(result_data)
+        # Initialize task_transitions_map for storing transitions (used by both filtering and display)
+        task_transitions_map = {}
+
+        # Apply transition filtering if patterns specified
+        if transition_patterns:
+            log.info(f"Filtering {len(result_data)} tasks by transition patterns")
+
+            # Add performance warning for large datasets
+            if len(result_data) > 50:
+                log.warning(
+                    f"Filtering {len(result_data)} tasks may take a while as each task "
+                    "requires fetching transition history from the API"
+                )
+
+            filtered_tasks = []
+
+            # Get board PHIDs for filtering (these are the project boards we're searching)
+            search_board_phids = project_phids if project != "*" else []
+
+            for item in result_data:
+                task_phid = item.get("phid")
+                if not task_phid:
+                    continue
+
+                # Determine which boards this specific task is on
+                current_task_boards = search_board_phids
+
+                # If searching all projects, extract boards from task's column attachments
+                if not current_task_boards:
+                    boards = (
+                        item.get("attachments", {}).get("columns", {}).get("boards", {})
+                    )
+                    if isinstance(boards, dict):
+                        current_task_boards = list(boards.keys())
+                    else:
+                        current_task_boards = []
+
+                matches, matched_transitions = self._task_matches_any_pattern(
+                    item, task_phid, transition_patterns, current_task_boards
+                )
+
+                if matches:
+                    filtered_tasks.append(item)
+                    if show_transitions:
+                        task_transitions_map[item["id"]] = matched_transitions
+
+            log.info(
+                f"Filtered down to {len(filtered_tasks)} tasks matching transition patterns"
+            )
+            result_data = filtered_tasks
+        elif show_transitions:
+            # Fetch transitions for all tasks when --show-transitions is used without filtering
+            log.info(f"Fetching transition history for {len(result_data)} tasks")
+            for item in result_data:
+                task_phid = item.get("phid")
+                if task_phid:
+                    transactions = self._fetch_task_transactions(task_phid)
+                    if transactions:
+                        task_transitions_map[item["id"]] = transactions
+
+        # Fetch project names for board display (always needed for nested format)
+        project_phid_to_name = self._fetch_project_names_for_boards(result_data)
 
         # Display each task
         for item in result_data:
@@ -289,12 +664,12 @@ class Maniphest(Phabfive):
             priority_name = fields.get("priority", {}).get("name", "Unknown")
             print(f"Priority: {priority_name}")
 
-            # Display column information
+            # Display board information (columns and transitions)
             columns_data = item.get("attachments", {}).get("columns", {})
             log.debug(f"Full columns data structure: {columns_data}")
             boards = columns_data.get("boards", {})
             log.debug(f"Boards type: {type(boards)}, value: {boards}")
-            self._print_task_columns(boards, project_phid, project_phid_to_name)
+            self._print_task_boards(boards, project_phid_to_name, task_transitions_map if show_transitions else {}, item["id"])
 
             description_raw = fields.get("description", {}).get("raw", "")
             if description_raw:
@@ -302,7 +677,65 @@ class Maniphest(Phabfive):
                 print("  >", "  > ".join(description_raw.splitlines(True)), end="")
             else:
                 print("Description: ''", end="")
+
             print("\n")
+
+    def _display_task_transitions(self, task_phid):
+        """
+        Fetch and display transition history for a single task.
+
+        Parameters
+        ----------
+        task_phid : str
+            Task PHID (e.g., "PHID-TASK-...")
+        """
+        # Fetch transitions
+        transactions = self._fetch_task_transactions(task_phid)
+
+        if not transactions:
+            print("\nNo workboard transitions found.")
+            return
+
+        # Extract board PHIDs from transactions
+        board_phids = set()
+        for trans in transactions:
+            if trans.get("newValue") and len(trans["newValue"]) > 0:
+                board_phids.add(trans["newValue"][0])
+
+        # Display transitions for each board
+        print("\nBoards:")
+        for board_phid in board_phids:
+            # Filter transactions to this board
+            board_transactions = [
+                t
+                for t in transactions
+                if t.get("newValue")
+                and len(t["newValue"]) > 0
+                and t["newValue"][0] == board_phid
+            ]
+
+            if board_transactions:
+                # Get column info for this board
+                column_info = self._get_column_info(board_phid)
+
+                # Get board name if possible
+                try:
+                    project_info = self.phab.project.search(
+                        constraints={"phids": [board_phid]}
+                    )
+                    if project_info.get("data"):
+                        board_name = project_info["data"][0]["fields"].get(
+                            "name", "Unknown"
+                        )
+                        print(f"  {board_name}:")
+                        print("    Transitions:")
+                except Exception as e:
+                    log.debug(f"Could not fetch board name: {e}")
+                    print("  Unknown:")
+                    print("    Transitions:")
+
+                # Print the transitions
+                self._print_transitions(board_transitions, column_info, indent="      ")  # noqa: F821
 
     def add_comment(self, ticket_identifier, comment_string):
         """

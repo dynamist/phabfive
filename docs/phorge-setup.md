@@ -133,7 +133,7 @@ make phorge-shell   # Open shell in phorge container
 
 ### Customization
 
-For advanced setup customization (changing admin credentials, test users, projects, etc.), see [phorge/AUTOMATED_SETUP.md](../phorge/AUTOMATED_SETUP.md).
+For advanced setup customization (changing admin credentials, test users, projects, etc.), see `phorge/AUTOMATED_SETUP.md` in the repository root.
 
 ## Set Up a Local Phabricator Instance (Legacy)
 
