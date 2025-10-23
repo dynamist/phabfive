@@ -54,9 +54,31 @@ class Maniphest(Phabfive):
 
         # Fetch all projects from Phabricator regardless of exact match or not to be able to suggest project names
         log.debug("Fetching all projects from Phabricator")
-        projects_query = self.phab.project.search(constraints={"name": ""})
-        all_projects = {p["fields"]["name"]: p["phid"] for p in projects_query["data"]}
 
+        # Use pagination to fetch all projects (API returns max 100 per page)
+        all_projects = {}
+        after = None
+
+        while True:
+            # Use queryKey="all" to get all projects, with cursor-based pagination
+            if after:
+                projects_query = self.phab.project.search(queryKey="all", after=after)
+            else:
+                projects_query = self.phab.project.search(queryKey="all")
+
+            # Merge results from this page
+            for p in projects_query["data"]:
+                all_projects[p["fields"]["name"]] = p["phid"]
+
+            # Check if there are more pages
+            cursor = projects_query.get("cursor", {})
+            after = cursor.get("after")
+
+            if after is None:
+                # No more pages
+                break
+
+        log.debug(f"Fetched {len(all_projects)} total projects from Phabricator")
         # Create case-insensitive lookup mappings
         lower_to_phid = {name.lower(): phid for name, phid in all_projects.items()}
         lower_to_original = {name.lower(): name for name in all_projects.keys()}
@@ -405,7 +427,13 @@ class Maniphest(Phabfive):
         """
         if not transactions:
             return
-        for trans in transactions:
+
+        # Sort transitions chronologically (oldest first) for better readability
+        sorted_transactions = sorted(
+            transactions, key=lambda t: t.get("dateCreated", 0)
+        )
+
+        for trans in sorted_transactions:
             old_value = trans.get("oldValue")
             new_value = trans.get("newValue")
             date_created = trans.get("dateCreated")
@@ -440,9 +468,13 @@ class Maniphest(Phabfive):
                 elif new_seq < old_seq:
                     direction = "[←]"
 
-            print(f'{indent}- "{timestamp_str} {direction} {old_col_name} → {new_col_name}"')
+            print(
+                f'{indent}- "{timestamp_str} {direction} {old_col_name} → {new_col_name}"'
+            )
 
-    def _print_task_boards(self, boards, project_phid_to_name, task_transitions_map, task_id):
+    def _print_task_boards(
+        self, boards, project_phid_to_name, task_transitions_map, task_id
+    ):
         """
         Print board information including columns and transitions in nested YAML format.
 
@@ -492,7 +524,9 @@ class Maniphest(Phabfive):
                 if board_transitions:
                     print("    Transitions:")
                     column_info = self._get_column_info(board_phid)
-                    self._print_transitions(board_transitions, column_info, indent="      ")
+                    self._print_transitions(
+                        board_transitions, column_info, indent="      "
+                    )
 
     def task_search(
         self,
@@ -669,7 +703,12 @@ class Maniphest(Phabfive):
             log.debug(f"Full columns data structure: {columns_data}")
             boards = columns_data.get("boards", {})
             log.debug(f"Boards type: {type(boards)}, value: {boards}")
-            self._print_task_boards(boards, project_phid_to_name, task_transitions_map if show_transitions else {}, item["id"])
+            self._print_task_boards(
+                boards,
+                project_phid_to_name,
+                task_transitions_map if show_transitions else {},
+                item["id"],
+            )
 
             description_raw = fields.get("description", {}).get("raw", "")
             if description_raw:
