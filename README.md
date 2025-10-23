@@ -30,6 +30,12 @@ uv venv
 uv pip install phabfive
 ```
 
+**Install the latest development version:**
+```bash
+# Install from git to get unreleased features and fixes
+uv tool install git+https://github.com/dynamist/phabfive@master
+```
+
 ## Quick Start
 
 ### 1. Get an API token
