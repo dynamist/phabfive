@@ -125,7 +125,8 @@ Search Arguments:
 Search Options:
     --created-after=N      Tasks created within the last N days
     --updated-after=N      Tasks updated within the last N days
-    --transitions=PATTERNS Filter by column transitions (comma=OR, plus=AND):
+    --column=PATTERNS      Filter tasks by column transitions (comma=OR, plus=AND).
+                           Automatically displays transition history.
                              from:COLUMN[:direction]  - Moved from COLUMN
                              to:COLUMN                - Moved to COLUMN
                              in:COLUMN                - Currently in COLUMN
@@ -253,7 +254,9 @@ def run(cli_args, sub_args):
                     else:  # default value
                         status = ["active"]
 
-                    diffusion_app.print_repositories(status=status, url=sub_args["--url"])
+                    diffusion_app.print_repositories(
+                        status=status, url=sub_args["--url"]
+                    )
                 elif sub_args["create"]:
                     diffusion_app.create_repository(name=sub_args["<name>"])
             elif sub_args["uri"]:
@@ -355,24 +358,29 @@ def run(cli_args, sub_args):
             maniphest_app = maniphest.Maniphest()
 
             if sub_args["search"]:
-                # Parse transition patterns if provided
+                # Parse filter patterns if provided
                 transition_patterns = None
-                if sub_args.get("--transitions"):
+                if sub_args.get("--column"):
                     try:
                         transition_patterns = parse_transition_patterns(
-                            sub_args["--transitions"]
+                            sub_args["--column"]
                         )
                     except Exception as e:
-                        print(f"ERROR: Invalid transition pattern: {e}", file=sys.stderr)
+                        print(f"ERROR: Invalid filter pattern: {e}", file=sys.stderr)
                         retcode = 1
                         return retcode
+
+                # Auto-enable show_transitions when filtering is used
+                show_transitions = sub_args.get("--show-transitions", False) or bool(
+                    transition_patterns
+                )
 
                 maniphest_app.task_search(
                     sub_args["<project_name>"],
                     created_after=sub_args["--created-after"],
                     updated_after=sub_args["--updated-after"],
                     transition_patterns=transition_patterns,
-                    show_transitions=sub_args.get("--show-transitions", False)
+                    show_transitions=show_transitions,
                 )
 
             if sub_args["create"]:
@@ -383,7 +391,10 @@ def run(cli_args, sub_args):
                 )
 
             if sub_args["comment"] and sub_args["add"]:
-                result = maniphest_app.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)
+                result = maniphest_app.add_comment(
+                    sub_args["<ticket_id>"],
+                    sub_args["<comment>"],
+                )
 
                 if result[0]:
                     # Query the ticket to fetch the URI for it
@@ -415,16 +426,16 @@ def run(cli_args, sub_args):
                     print(f"auxiliary:      {result['auxiliary']}")
                     print(f"objectName:     {result['objectName']}")
 
-                    date_created = datetime.fromtimestamp(int(result['dateCreated']))
+                    date_created = datetime.fromtimestamp(int(result["dateCreated"]))
                     print(f"dateCreated:    {date_created}")
 
-                    date_modified = datetime.fromtimestamp(int(result['dateModified']))
+                    date_modified = datetime.fromtimestamp(int(result["dateModified"]))
                     print(f"dateModified:   {date_modified}")
 
                     print(f"dependsOnTaskPHIDs: {result['dependsOnTaskPHIDs']}")
 
                     # Display workboard transition history
-                    task_phid = result.get('phid')
+                    task_phid = result.get("phid")
                     if task_phid:
                         maniphest_app._display_task_transitions(task_phid)
                 else:
@@ -434,10 +445,10 @@ def run(cli_args, sub_args):
                     print(f"priority:      {result['priority']}")
                     print(f"title:         {result['title']}")
                     print(f"uri:           {result['uri']}")
-                    date_created = datetime.fromtimestamp(int(result['dateCreated']))
+                    date_created = datetime.fromtimestamp(int(result["dateCreated"]))
                     print(f"dateCreated:   {date_created}")
 
-                    date_modified = datetime.fromtimestamp(int(result['dateModified']))
+                    date_modified = datetime.fromtimestamp(int(result["dateModified"]))
                     print(f"dateModified:  {date_modified}")
     except PhabfiveException as e:
         # Catch all types of phabricator base exceptions
