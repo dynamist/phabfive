@@ -138,7 +138,21 @@ Search Options:
                              from:In Progress:forward
                              to:Done,in:Blocked
                              from:Up Next:forward+in:Done
-    --show-transitions     Display transition history for each task
+    --priority=PATTERNS    Filter tasks by priority transitions (comma=OR, plus=AND).
+                           Automatically displays priority history.
+                             from:PRIORITY[:direction]  - Changed from PRIORITY
+                             to:PRIORITY                - Changed to PRIORITY
+                             in:PRIORITY                - Currently at PRIORITY
+                             been:PRIORITY              - Was at PRIORITY at any point
+                             never:PRIORITY             - Never was at PRIORITY
+                             raised                     - Any priority increase
+                             lowered                    - Any priority decrease
+                           Examples:
+                             been:Unbreak Now!
+                             from:Normal:raised
+                             in:High,been:Unbreak Now!
+    --show-history         Display column and priority transition history for each task
+    --show-metadata        Display filter match metadata (which boards/priority matched)
 
 Options:
     --all                Show all fields for a ticket
@@ -232,6 +246,7 @@ def run(cli_args, sub_args):
     # Local imports required due to logging limitation
     from phabfive import passphrase, diffusion, paste, user, repl, maniphest
     from phabfive.maniphest_transitions import parse_transition_patterns
+    from phabfive.priority_transitions import parse_priority_patterns
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.exceptions import PhabfiveException
 
@@ -366,21 +381,34 @@ def run(cli_args, sub_args):
                             sub_args["--column"]
                         )
                     except Exception as e:
-                        print(f"ERROR: Invalid filter pattern: {e}", file=sys.stderr)
+                        print(f"ERROR: Invalid column filter pattern: {e}", file=sys.stderr)
                         retcode = 1
                         return retcode
 
-                # Auto-enable show_transitions when filtering is used
-                show_transitions = sub_args.get("--show-transitions", False) or bool(
-                    transition_patterns
-                )
+                priority_patterns = None
+                if sub_args.get("--priority"):
+                    try:
+                        priority_patterns = parse_priority_patterns(
+                            sub_args["--priority"]
+                        )
+                    except Exception as e:
+                        print(f"ERROR: Invalid priority filter pattern: {e}", file=sys.stderr)
+                        retcode = 1
+                        return retcode
+
+                # Only show history if explicitly requested
+                show_history = sub_args.get("--show-history", False)
+
+                show_metadata = sub_args.get("--show-metadata", False)
 
                 maniphest_app.task_search(
                     sub_args["<project_name>"],
                     created_after=sub_args["--created-after"],
                     updated_after=sub_args["--updated-after"],
                     transition_patterns=transition_patterns,
-                    show_transitions=show_transitions,
+                    priority_patterns=priority_patterns,
+                    show_history=show_history,
+                    show_metadata=show_metadata,
                 )
 
             if sub_args["create"]:

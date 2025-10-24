@@ -409,7 +409,7 @@ class TestPrintTaskColumns:
 
         boards = {"PHID-PROJ-123": {"columns": [{"name": "Backlog"}, {"name": "Done"}]}}
 
-        maniphest._print_task_boards(boards, {}, {}, None)
+        maniphest._print_task_boards(boards, {})
         # Updated expectations for new board format which shows nested structure
         assert mock_print.called
 
@@ -422,7 +422,7 @@ class TestPrintTaskColumns:
         boards = {"PHID-PROJ-123": {"columns": [{"name": "Backlog"}]}}
         project_names = {"PHID-PROJ-123": "Project A"}
 
-        maniphest._print_task_boards(boards, project_names, {}, None)
+        maniphest._print_task_boards(boards, project_names)
         # New board display format shows nested structure with project name
         assert mock_print.called
 
@@ -436,7 +436,7 @@ class TestPrintTaskColumns:
         boards = []  # List format
 
         # Should not crash, just return without printing
-        maniphest._print_task_boards(boards, {}, {}, None)
+        maniphest._print_task_boards(boards, {})
         mock_print.assert_not_called()
 
     @patch("phabfive.maniphest.Phabfive.__init__")
@@ -449,7 +449,7 @@ class TestPrintTaskColumns:
         boards = []  # List format
 
         # Should not crash, just return without printing
-        maniphest._print_task_boards(boards, {}, {}, None)
+        maniphest._print_task_boards(boards, {})
         mock_print.assert_not_called()
 
 
@@ -857,10 +857,10 @@ class TestTransitionFilteringIntegration:
             {"data": [{"id": 2}]}
         ]
 
-        matches1, _ = maniphest._task_matches_any_pattern(
+        matches1, _, _ = maniphest._task_matches_any_pattern(
             task1, "PHID-TASK-1", patterns, ["PHID-PROJ-123"]
         )
-        matches2, _ = maniphest._task_matches_any_pattern(
+        matches2, _, _ = maniphest._task_matches_any_pattern(
             task2, "PHID-TASK-2", patterns, ["PHID-PROJ-123"]
         )
 

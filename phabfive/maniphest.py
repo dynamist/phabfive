@@ -260,6 +260,138 @@ class Maniphest(Phabfive):
             )
             return []
 
+    @lru_cache(maxsize=1)
+    def _get_api_priority_map(self):
+        """
+        Get mapping from Phabricator API numeric values to human-readable priority names.
+
+        The Phabricator API returns numeric values (100, 90, 80, 50, 25, 0) which must
+        be converted to display names ("Unbreak Now!", "Triage", "High", etc.).
+
+        This is separate from PRIORITY_ORDER in priority_transitions.py, which is used
+        for comparison/sorting (to determine if priority was raised or lowered).
+
+        Uses LRU cache (size=1) since priority mappings are global and rarely change.
+
+        Returns
+        -------
+        dict
+            Mapping of priority value (int/str) to priority name (str)
+            Example: {100: "Unbreak Now!", 90: "Triage", 80: "High", ...}
+        """
+        # Standard Phabricator/Phorge API numeric priority values
+        # Store both string and int versions for flexibility
+        return {
+            100: "Unbreak Now!",
+            "100": "Unbreak Now!",
+            90: "Triage",
+            "90": "Triage",
+            80: "High",
+            "80": "High",
+            50: "Normal",
+            "50": "Normal",
+            25: "Low",
+            "25": "Low",
+            0: "Wishlist",
+            "0": "Wishlist",
+        }
+
+    def _fetch_priority_transactions(self, task_phid):
+        """
+        Fetch priority change transaction history for a task.
+
+        Uses the deprecated but functional maniphest.gettasktransactions API.
+
+        Parameters
+        ----------
+        task_phid : str
+            Task PHID (e.g., "PHID-TASK-...")
+
+        Returns
+        -------
+        list
+            List of priority change transactions, each with keys:
+            - oldValue: old priority name (str) or None
+            - newValue: new priority name (str)
+            - dateCreated: timestamp (int)
+        """
+        try:
+            # Extract task ID from PHID
+            search_result = self.phab.maniphest.search(
+                constraints={"phids": [task_phid]}
+            )
+
+            if not search_result.get("data"):
+                log.warning(f"No task found for PHID {task_phid}")
+                return []
+
+            task_id = search_result["data"][0]["id"]
+
+            # Use deprecated API that returns transaction history
+            result = self.phab.maniphest.gettasktransactions(ids=[task_id])
+
+            # Result is a dict keyed by task ID (as string)
+            transactions = result.get(str(task_id), [])
+
+            # Filter to only priority transactions
+            priority_transactions = []
+            priority_map = self._get_api_priority_map()
+
+            for trans in transactions:
+                trans_type = trans.get("transactionType")
+
+                # Priority changes can be in different transaction types
+                if trans_type not in ["priority", "core:priority"]:
+                    continue
+
+                old_value = trans.get("oldValue")
+                new_value = trans.get("newValue")
+
+                # Resolve numeric priority values to human-readable names
+                # Values can be int, str, or already a name
+                old_value_resolved = None
+                if old_value is not None:
+                    # Try to resolve as numeric value first
+                    old_value_resolved = priority_map.get(old_value)
+                    # If not found in map, assume it's already a name
+                    if old_value_resolved is None:
+                        old_value_resolved = old_value
+
+                new_value_resolved = None
+                if new_value is not None:
+                    new_value_resolved = priority_map.get(new_value)
+                    if new_value_resolved is None:
+                        new_value_resolved = new_value
+
+                # Build transaction record with resolved names
+                transformed = {
+                    "oldValue": old_value_resolved,
+                    "newValue": new_value_resolved,
+                    "dateCreated": int(trans.get("dateCreated", 0)),
+                }
+
+                priority_transactions.append(transformed)
+
+            log.debug(
+                f"Found {len(priority_transactions)} priority transactions for {task_phid} (T{task_id})"
+            )
+
+            return priority_transactions
+        except AttributeError as e:
+            log.warning(
+                f"Unexpected API response structure for {task_phid}: {e}. "
+                "The Phabricator API format may have changed."
+            )
+            return []
+        except KeyError as e:
+            log.warning(f"Missing expected data in API response for {task_phid}: {e}")
+            return []
+        except Exception as e:
+            log.warning(
+                f"Failed to fetch priority transactions for {task_phid}: {type(e).__name__}: {e}"
+            )
+            return []
+
     def _get_column_info(self, board_phid):
         """
         Get column information for a workboard.
@@ -358,6 +490,41 @@ class Maniphest(Phabfive):
 
         return col_data["name"] if col_data else None
 
+    def _task_matches_priority_patterns(self, task, task_phid, priority_patterns):
+        """
+        Check if a task matches any of the given priority patterns.
+
+        Parameters
+        ----------
+        task : dict
+            Task data from maniphest.search
+        task_phid : str
+            Task PHID
+        priority_patterns : list
+            List of PriorityPattern objects
+
+        Returns
+        -------
+        tuple
+            (matches: bool, priority_transactions: list)
+            priority_transactions contains all priority change transactions
+        """
+        if not priority_patterns:
+            return (True, [])  # No filtering needed
+
+        # Fetch priority transaction history
+        priority_transactions = self._fetch_priority_transactions(task_phid)
+
+        # Get current priority
+        current_priority = task.get("fields", {}).get("priority", {}).get("name")
+
+        # Check if any pattern matches
+        for pattern in priority_patterns:
+            if pattern.matches(priority_transactions, current_priority):
+                return (True, priority_transactions)
+
+        return (False, [])
+
     def _task_matches_any_pattern(self, task, task_phid, patterns, board_phids):
         """
         Check if a task matches any of the given transition patterns.
@@ -376,11 +543,12 @@ class Maniphest(Phabfive):
         Returns
         -------
         tuple
-            (matches: bool, matched_transitions: list)
-            matched_transitions contains transaction details if matches
+            (matches: bool, all_transitions: list, matching_board_phids: set)
+            all_transitions contains all transaction details for the task
+            matching_board_phids contains PHIDs of boards that matched the pattern
         """
         if not patterns:
-            return (True, [])  # No filtering needed
+            return (True, [], set())  # No filtering needed
 
         # Fetch transaction history
         transactions = self._fetch_task_transactions(task_phid)
@@ -389,7 +557,10 @@ class Maniphest(Phabfive):
             any(cond.get("type") == "in" for cond in p.conditions) for p in patterns
         ):
             # No transactions and no in-only patterns
-            return (False, [])
+            return (False, [], set())
+
+        # Track which boards matched the pattern
+        matching_board_phids = set()
 
         # Check each board the task is on
         for board_phid in board_phids:
@@ -408,9 +579,65 @@ class Maniphest(Phabfive):
             # Check if any pattern matches
             for pattern in patterns:
                 if pattern.matches(board_transactions, current_column, column_info):
-                    return (True, board_transactions)
+                    matching_board_phids.add(board_phid)
+                    break  # Board matched, no need to check other patterns for this board
 
-        return (False, [])
+        # Return match status, all transitions, and which boards matched
+        if matching_board_phids:
+            return (True, transactions, matching_board_phids)
+
+        return (False, [], set())
+
+    def _print_priority_transitions(self, priority_transactions, indent="  "):
+        """
+        Print priority transition history for a task.
+
+        Parameters
+        ----------
+        priority_transactions : list
+            List of priority change transactions
+        indent : str
+            Indentation string for each transition line
+        """
+        if not priority_transactions:
+            return
+
+        from phabfive.priority_transitions import get_priority_order
+
+        # Sort transitions chronologically (oldest first) for better readability
+        sorted_transactions = sorted(
+            priority_transactions, key=lambda t: t.get("dateCreated", 0)
+        )
+
+        for trans in sorted_transactions:
+            old_value = trans.get("oldValue")
+            new_value = trans.get("newValue")
+            date_created = trans.get("dateCreated")
+
+            # Format timestamp
+            timestamp_str = (
+                format_timestamp(date_created) if date_created else "Unknown"
+            )
+
+            # Handle case where there's no old value (initial priority set)
+            old_priority_name = old_value if old_value else "(initial)"
+            new_priority_name = new_value if new_value else "Unknown"
+
+            # Determine if raised or lowered
+            direction = "[•]"
+            if old_value and new_value:
+                old_order = get_priority_order(old_value)
+                new_order = get_priority_order(new_value)
+
+                if old_order is not None and new_order is not None:
+                    if new_order < old_order:  # Raised (higher priority)
+                        direction = "[↑]"
+                    elif new_order > old_order:  # Lowered (lower priority)
+                        direction = "[↓]"
+
+            print(
+                f'{indent}- "{timestamp_str} {direction} {old_priority_name} → {new_priority_name}"'
+            )
 
     def _print_transitions(self, transactions, column_info, indent="      "):
         """
@@ -473,10 +700,13 @@ class Maniphest(Phabfive):
             )
 
     def _print_task_boards(
-        self, boards, project_phid_to_name, task_transitions_map, task_id
+        self,
+        boards,
+        project_phid_to_name,
+        indent="  ",
     ):
         """
-        Print board information including columns and transitions in nested YAML format.
+        Print board information with current columns only (no transitions).
 
         Parameters
         ----------
@@ -484,10 +714,8 @@ class Maniphest(Phabfive):
             Board data from task attachments
         project_phid_to_name : dict
             Mapping of board PHID to project name
-        task_transitions_map : dict
-            Mapping of task ID to transitions
-        task_id : int
-            Current task ID
+        indent : str
+            Indentation string for output
         """
         if isinstance(boards, list):
             log.debug(f"Boards is a list (likely empty): {boards}")
@@ -496,10 +724,63 @@ class Maniphest(Phabfive):
         if not isinstance(boards, dict) or not boards:
             return
 
-        # Group transitions by board if available
-        transitions_by_board = {}
+        print(f"{indent}Boards:")
+
+        # Sort boards alphabetically by project name
+        sorted_boards = sorted(
+            boards.items(),
+            key=lambda item: project_phid_to_name.get(item[0], "Unknown").lower()
+        )
+
+        for board_phid, board_data in sorted_boards:
+            project_name = project_phid_to_name.get(board_phid, "Unknown")
+            print(f"{indent}  {project_name}:")
+
+            # Print current column only
+            columns = board_data.get("columns", [])
+            if columns:
+                column_name = columns[0].get("name", "Unknown")
+                print(f"{indent}    Column: {column_name}")
+
+    def _print_history_section(
+        self,
+        task_id,
+        boards,
+        project_phid_to_name,
+        priority_transitions_map,
+        task_transitions_map,
+    ):
+        """
+        Print History section with priority and board transitions.
+
+        Parameters
+        ----------
+        task_id : int
+            Task ID
+        boards : dict
+            Board data from task attachments
+        project_phid_to_name : dict
+            Mapping of board PHID to project name
+        priority_transitions_map : dict
+            Mapping of task ID to priority transitions
+        task_transitions_map : dict
+            Mapping of task ID to board transitions
+        """
+        print("History:")
+
+        # Print priority transitions
+        if task_id in priority_transitions_map:
+            priority_trans = priority_transitions_map[task_id]
+            if priority_trans:
+                print("  Priority:")
+                self._print_priority_transitions(priority_trans, indent="    ")
+
+        # Print board transitions
         if task_id in task_transitions_map:
             all_transitions = task_transitions_map[task_id]
+
+            # Group transitions by board
+            transitions_by_board = {}
             for trans in all_transitions:
                 if trans.get("newValue") and len(trans["newValue"]) > 0:
                     board_phid = trans["newValue"][0]
@@ -507,26 +788,64 @@ class Maniphest(Phabfive):
                         transitions_by_board[board_phid] = []
                     transitions_by_board[board_phid].append(trans)
 
-        print("Boards:")
-        for board_phid, board_data in boards.items():
-            project_name = project_phid_to_name.get(board_phid, "Unknown")
-            print(f"  {project_name}:")
+            if transitions_by_board:
+                print("  Boards:")
 
-            # Print column
-            columns = board_data.get("columns", [])
-            if columns:
-                column_name = columns[0].get("name", "Unknown")
-                print(f"    Column: {column_name}")
+                # Sort boards alphabetically by project name
+                sorted_transitions = sorted(
+                    transitions_by_board.items(),
+                    key=lambda item: project_phid_to_name.get(item[0], "Unknown").lower()
+                )
 
-            # Print transitions for this board if available
-            if board_phid in transitions_by_board:
-                board_transitions = transitions_by_board[board_phid]
-                if board_transitions:
-                    print("    Transitions:")
+                for board_phid, board_transitions in sorted_transitions:
+                    project_name = project_phid_to_name.get(board_phid, "Unknown")
+                    print(f"    {project_name}:")
+                    print("      Transitions:")
                     column_info = self._get_column_info(board_phid)
                     self._print_transitions(
-                        board_transitions, column_info, indent="      "
+                        board_transitions, column_info, indent="        "
                     )
+
+    def _print_metadata_section(
+        self,
+        task_id,
+        matching_boards_map,
+        matching_priority_map,
+        project_phid_to_name,
+    ):
+        """
+        Print Metadata section with filter match information.
+
+        Parameters
+        ----------
+        task_id : int
+            Task ID
+        matching_boards_map : dict
+            Mapping of task ID to set of matching board PHIDs
+        matching_priority_map : dict
+            Mapping of task ID to priority match boolean
+        project_phid_to_name : dict
+            Mapping of board PHID to project name
+        """
+        print("Metadata:")
+
+        # Print matched boards
+        if task_id in matching_boards_map:
+            matching_board_phids = matching_boards_map[task_id]
+            board_names = [
+                project_phid_to_name.get(phid, "Unknown")
+                for phid in matching_board_phids
+            ]
+            print(f"  MatchedBoards: {board_names}")
+        else:
+            print("  MatchedBoards: []")
+
+        # Print matched priority
+        if task_id in matching_priority_map:
+            matched_priority = matching_priority_map[task_id]
+            print(f"  MatchedPriority: {str(matched_priority).lower()}")
+        else:
+            print("  MatchedPriority: false")
 
     def task_search(
         self,
@@ -534,7 +853,9 @@ class Maniphest(Phabfive):
         created_after=None,
         updated_after=None,
         transition_patterns=None,
-        show_transitions=False,
+        priority_patterns=None,
+        show_history=False,
+        show_metadata=False,
     ):
         """
         Search for Phabricator Maniphest tasks with given parameters.
@@ -547,7 +868,13 @@ class Maniphest(Phabfive):
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
         transition_patterns (list, optional): List of TransitionPattern objects to filter by.
-        show_transitions (bool, optional): If True, display transition history for each task.
+                      Filters tasks based on column transitions (from, to, in, been, never, forward, backward).
+        priority_patterns (list, optional): List of PriorityPattern objects to filter by.
+                      Filters tasks based on priority transitions (from, to, in, been, never, raised, lowered).
+        show_history (bool, optional): If True, display column and priority transition history for each task.
+                      Must be explicitly requested; not auto-enabled by filters.
+        show_metadata (bool, optional): If True, display which boards/priorities matched the filters.
+                      Shows MatchedBoards list and MatchedPriority boolean for debugging filter logic.
         """
         # Convert date filters to Unix timestamps
         if created_after:
@@ -613,10 +940,23 @@ class Maniphest(Phabfive):
 
         # Initialize task_transitions_map for storing transitions (used by both filtering and display)
         task_transitions_map = {}
+        # Initialize priority_transitions_map for storing priority history
+        priority_transitions_map = {}
+        # Initialize matching_boards_map for storing which boards matched the filter
+        matching_boards_map = {}
+        # Initialize matching_priority_map for storing whether priority filter matched
+        matching_priority_map = {}
 
         # Apply transition filtering if patterns specified
-        if transition_patterns:
-            log.info(f"Filtering {len(result_data)} tasks by transition patterns")
+        if transition_patterns or priority_patterns:
+            filter_desc = []
+            if transition_patterns:
+                filter_desc.append("column transition patterns")
+            if priority_patterns:
+                filter_desc.append("priority patterns")
+            log.info(
+                f"Filtering {len(result_data)} tasks by {' and '.join(filter_desc)}"
+            )
 
             # Add performance warning for large datasets
             if len(result_data) > 50:
@@ -635,70 +975,121 @@ class Maniphest(Phabfive):
                 if not task_phid:
                     continue
 
-                # Determine which boards this specific task is on
-                current_task_boards = search_board_phids
+                # Check column transition patterns
+                column_matches = True
+                all_transitions = []
+                matching_board_phids = set()
 
-                # If searching all projects, extract boards from task's column attachments
-                if not current_task_boards:
-                    boards = (
-                        item.get("attachments", {}).get("columns", {}).get("boards", {})
+                if transition_patterns:
+                    # Determine which boards this specific task is on
+                    current_task_boards = search_board_phids
+
+                    # If searching all projects, extract boards from task's column attachments
+                    if not current_task_boards:
+                        boards = (
+                            item.get("attachments", {})
+                            .get("columns", {})
+                            .get("boards", {})
+                        )
+                        if isinstance(boards, dict):
+                            current_task_boards = list(boards.keys())
+                        else:
+                            current_task_boards = []
+
+                    column_matches, all_transitions, matching_board_phids = (
+                        self._task_matches_any_pattern(
+                            item, task_phid, transition_patterns, current_task_boards
+                        )
                     )
-                    if isinstance(boards, dict):
-                        current_task_boards = list(boards.keys())
-                    else:
-                        current_task_boards = []
 
-                matches, matched_transitions = self._task_matches_any_pattern(
-                    item, task_phid, transition_patterns, current_task_boards
-                )
+                # Check priority patterns and fetch priority history if needed
+                priority_matches = True
+                priority_trans = []
 
-                if matches:
+                if priority_patterns:
+                    # Filtering by priority - check if task matches
+                    priority_matches, priority_trans = (
+                        self._task_matches_priority_patterns(
+                            item, task_phid, priority_patterns
+                        )
+                    )
+                elif show_history:
+                    # Not filtering by priority, but need history for display
+                    priority_trans = self._fetch_priority_transactions(task_phid)
+
+                # Task must match both column AND priority patterns (if specified)
+                if column_matches and priority_matches:
                     filtered_tasks.append(item)
-                    if show_transitions:
-                        task_transitions_map[item["id"]] = matched_transitions
+                    if show_history:
+                        if all_transitions:
+                            task_transitions_map[item["id"]] = all_transitions
+                        if priority_trans:
+                            priority_transitions_map[item["id"]] = priority_trans
+                    # Store which boards matched for this task
+                    if matching_board_phids:
+                        matching_boards_map[item["id"]] = matching_board_phids
+                    # Store whether priority filter matched
+                    if priority_patterns:
+                        matching_priority_map[item["id"]] = priority_matches
 
-            log.info(
-                f"Filtered down to {len(filtered_tasks)} tasks matching transition patterns"
-            )
+            log.info(f"Filtered down to {len(filtered_tasks)} tasks matching patterns")
             result_data = filtered_tasks
-        elif show_transitions:
-            # Fetch transitions for all tasks when --show-transitions is used without filtering
+        elif show_history:
+            # Fetch transitions for all tasks when --show-history is used without filtering
             log.info(f"Fetching transition history for {len(result_data)} tasks")
             for item in result_data:
                 task_phid = item.get("phid")
                 if task_phid:
+                    # Fetch column transitions
                     transactions = self._fetch_task_transactions(task_phid)
                     if transactions:
                         task_transitions_map[item["id"]] = transactions
+                    # Fetch priority transitions
+                    priority_trans = self._fetch_priority_transactions(task_phid)
+                    if priority_trans:
+                        priority_transitions_map[item["id"]] = priority_trans
 
         # Fetch project names for board display (always needed for nested format)
         project_phid_to_name = self._fetch_project_names_for_boards(result_data)
 
+        # New line for separation before displaying tasks
+        print("\n")
+
         # Display each task
         for item in result_data:
             print(f"Link: {self.url}/T{item['id']}")
+            print("Task:")
             fields = item.get("fields", {})
             date_closed = ""
 
+            # Print task fields under Task section
             for key, value in fields.items():
                 if key in ["dateCreated", "dateModified"]:
                     if value:
                         formatted_time = format_timestamp(value)
-                        print(f"{key[4:]}: {formatted_time}")
+                        print(f"  {key[4:]}: {formatted_time}")
                 elif key == "dateClosed":
                     if value:
                         date_closed = format_timestamp(value)
-                        print(f"Closed: {date_closed}")
+                        print(f"  Closed: {date_closed}")
                 elif key == "name":
-                    print(f"Name: '{value}'" if "[" in value else f"Name: {value}")
+                    print(f"  Name: '{value}'" if "[" in value else f"  Name: {value}")
 
             status_name = fields.get("status", {}).get("name", "Unknown")
-            print(f"Status: {status_name} {date_closed}")
+            print(f"  Status: {status_name}")
 
             priority_name = fields.get("priority", {}).get("name", "Unknown")
-            print(f"Priority: {priority_name}")
+            print(f"  Priority: {priority_name}")
 
-            # Display board information (columns and transitions)
+            description_raw = fields.get("description", {}).get("raw", "")
+            if description_raw:
+                print("  Description: |")
+                for line in description_raw.splitlines():
+                    print(f"    > {line}")
+            else:
+                print("  Description: ''")
+
+            # Display board information (current columns only)
             columns_data = item.get("attachments", {}).get("columns", {})
             log.debug(f"Full columns data structure: {columns_data}")
             boards = columns_data.get("boards", {})
@@ -706,18 +1097,29 @@ class Maniphest(Phabfive):
             self._print_task_boards(
                 boards,
                 project_phid_to_name,
-                task_transitions_map if show_transitions else {},
-                item["id"],
+                indent="  ",
             )
 
-            description_raw = fields.get("description", {}).get("raw", "")
-            if description_raw:
-                print("Description: |")
-                print("  >", "  > ".join(description_raw.splitlines(True)), end="")
-            else:
-                print("Description: ''", end="")
+            # Display History section if show_history is enabled
+            if show_history:
+                self._print_history_section(
+                    item["id"],
+                    boards,
+                    project_phid_to_name,
+                    priority_transitions_map,
+                    task_transitions_map,
+                )
 
-            print("\n")
+            # Display Metadata section if show_metadata is enabled
+            if show_metadata:
+                self._print_metadata_section(
+                    item["id"],
+                    matching_boards_map,
+                    matching_priority_map,
+                    project_phid_to_name,
+                )
+
+            print()
 
     def _display_task_transitions(self, task_phid):
         """

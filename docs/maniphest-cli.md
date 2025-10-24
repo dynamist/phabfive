@@ -11,6 +11,7 @@ Maniphest is Phabricator's task tracking application. The phabfive CLI allows yo
 - View task details
 - Create tasks in bulk from configuration files
 - **Track and filter tasks by their workboard column transitions**
+- **Track and filter tasks by their priority transitions**
 
 ## Basic Commands
 
@@ -131,7 +132,7 @@ Common use cases include:
 - **Audit workflow violations**: Tasks that never went through required columns
 - **Analyze task lifecycle**: See complete transition history for debugging workflows
 
-**Note**: When using `--column`, transition history is automatically displayed for matching tasks. Use `--show-transitions` alone to see transition history for all tasks without filtering.
+**Note**: History is only displayed when you use the `--show-history` flag. This works with or without filters.
 
 ### Pattern Syntax
 
@@ -220,31 +221,165 @@ phabfive maniphest search "My Project" \
 
 ### Viewing Transition History
 
-When using `--column`, transition history is automatically displayed for matching tasks. You can also use `--show-transitions` alone to see transition history for all tasks without filtering:
+Use `--show-history` to see transition history for tasks:
 
 ```bash
-# Automatic: filtering shows transitions for matching tasks
-phabfive maniphest search "My Project" --column=backward
+# Show history with filtering
+phabfive maniphest search "My Project" --column=backward --show-history
 
-# Explicit: show transitions for all tasks (no filtering)
-phabfive maniphest search "My Project" --show-transitions
+# Show history without filtering
+phabfive maniphest search "My Project" --show-history
+
+# Filtering without history (only shows current state)
+phabfive maniphest search "My Project" --column=backward
 ```
 
 Output includes:
 - Timestamp of each transition
-- Source and destination columns
-- Direction indicator (forward/backward)
+- Source and destination columns/priorities
+- Direction indicator (forward/backward for columns, raised/lowered for priorities)
 
 Example output:
 ```
-Boards:
-  Development:
-    Column: Up Next
-    Transitions:
-      - "2024-10-10T14:30:00 [→] In Progress → Done"
-      - "2024-10-12T09:15:00 [←] Done → In Progress"
-      - "2024-10-13T16:45:00 [→] In Progress → Done"
+Link: http://phorge.domain.tld/T59
+Task:
+  Name: '[FEATURE] Improved error diagnostics'
+  Created: 2025-10-01T17:21:56
+  Modified: 2025-10-24T08:44:53
+  Status: Open
+  Priority: Unbreak Now!
+  Description: |
+    > Enhanced error reporting in chip simulator
+  Boards:
+    Development:
+      Column: Up Next
+    GUNNAR-Core:
+      Column: In Review
+History:
+  Priority:
+    - "2025-10-01T17:21:56 [↓] Triage → Normal"
+    - "2025-10-23T12:55:59 [↑] Normal → Unbreak Now!"
+  Boards:
+    Development:
+      Transitions:
+        - "2025-10-14T10:52:33 [→] Backlog → In Review"
+        - "2025-10-14T14:31:40 [←] In Review → Up Next"
+    GUNNAR-Core:
+      Transitions:
+        - "2025-10-24T08:44:52 [→] Backlog → Up Next"
+        - "2025-10-24T08:44:53 [→] Up Next → In Review"
 ```
+
+## Priority Filtering
+
+Filter tasks based on their priority changes over time. This helps identify tasks that became urgent, track priority escalations, and analyze how task importance evolved.
+
+### Why Use Priority Filtering?
+
+Common use cases include:
+
+- **Track escalations**: Find tasks that were raised to "Unbreak Now!" from lower priorities
+- **Identify deprioritized work**: Tasks that were lowered from High to Normal
+- **Find urgent tasks**: All tasks currently at "Unbreak Now!" priority
+- **Audit priority history**: See complete priority change history for tasks
+
+### Priority Pattern Types
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `from:PRIORITY` | Task changed from PRIORITY | `from:Normal` |
+| `from:PRIORITY:raised` | Task was raised from PRIORITY | `from:Normal:raised` |
+| `from:PRIORITY:lowered` | Task was lowered from PRIORITY | `from:High:lowered` |
+| `to:PRIORITY` | Task changed to PRIORITY | `to:Unbreak Now!` |
+| `in:PRIORITY` | Task is currently at PRIORITY | `in:High` |
+| `been:PRIORITY` | Task was at PRIORITY at any point | `been:Unbreak Now!` |
+| `never:PRIORITY` | Task was never at PRIORITY | `never:Low` |
+| `raised` | Task had any priority increase | `raised` |
+| `lowered` | Task had any priority decrease | `lowered` |
+
+### Priority Levels
+
+Standard Phabricator/Phorge priorities (from highest to lowest):
+- Unbreak Now!
+- Triage
+- High
+- Normal
+- Low
+- Wishlist
+
+### Basic Priority Examples
+
+```bash
+# Find tasks currently at Unbreak Now!
+phabfive maniphest search "My Project" --priority="in:Unbreak Now!"
+
+# Find tasks that were ever at Unbreak Now!
+phabfive maniphest search "My Project" --priority="been:Unbreak Now!"
+
+# Find tasks that were raised from Normal
+phabfive maniphest search "My Project" --priority="from:Normal:raised"
+
+# Find tasks that had any priority increase
+phabfive maniphest search "My Project" --priority=raised
+```
+
+### Combining Column and Priority Filters
+
+You can combine column and priority filters for powerful queries:
+
+```bash
+# Tasks that moved forward from "Up Next" AND were ever at Normal priority
+phabfive maniphest search '*' \
+  --column='from:Up Next:forward' \
+  --priority='been:Normal'
+
+# Tasks in Done that were raised from Normal
+phabfive maniphest search "My Project" \
+  --column="in:Done" \
+  --priority="from:Normal:raised"
+
+# Recently completed high-priority tasks
+phabfive maniphest search "My Project" \
+  --column="to:Done" \
+  --priority="in:High" \
+  --updated-after=7
+```
+
+### Priority OR/AND Logic
+
+Same as column patterns, priority patterns support OR (comma) and AND (plus):
+
+```bash
+# Tasks at High OR Unbreak Now!
+phabfive maniphest search "My Project" --priority="in:High,in:Unbreak Now!"
+
+# Tasks raised from Normal AND currently at High
+phabfive maniphest search "My Project" --priority="from:Normal:raised+in:High"
+```
+
+## Viewing Metadata
+
+Use `--show-metadata` to see why tasks matched your filters. This is especially useful when debugging complex filter combinations.
+
+```bash
+phabfive maniphest search '*' \
+  --column='from:Up Next:forward' \
+  --priority='been:Normal' \
+  --show-metadata
+```
+
+Output includes:
+```
+Metadata:
+  MatchedBoards: ['Development', 'GUNNAR-Core']
+  MatchedPriority: true
+```
+
+The metadata section shows:
+- **MatchedBoards**: Which boards satisfied the `--column` filter (in alphabetical order)
+- **MatchedPriority**: Whether the task matched the `--priority` filter
+
+This helps you understand exactly why a task appeared in your search results.
 
 ## Real-World Workflows
 
@@ -314,8 +449,8 @@ phabfive maniphest search "Sprint 42" \
 
 If a filter pattern doesn't return expected results:
 
-1. Run the search without `--column` to see all tasks
-2. Add `--show-transitions` to inspect actual column movements for all tasks
+1. Run the search without `--column` or `--priority` to see all tasks
+2. Add `--show-history` to inspect actual column and priority movements for all tasks
 3. Verify column names match exactly (case-sensitive)
 4. Start with simple patterns and add complexity incrementally
 
