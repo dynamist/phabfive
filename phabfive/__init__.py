@@ -18,7 +18,9 @@ def init_logging(log_level):
     _log_level = logging.getLevelName(log_level)
 
     if isinstance(_log_level, str):
-        print("CRITICAL: Undefined log-level set, please use any of the defined log levels inside Python logging module")
+        print(
+            "CRITICAL: Undefined log-level set, please use any of the defined log levels inside Python logging module"
+        )
         sys.exit(1)
 
     if log_level == "DEBUG":
@@ -37,7 +39,7 @@ def init_logging(log_level):
                 "class": "logging.StreamHandler",
                 "level": log_level,
                 "formatter": "simple",
-                "stream": "ext://sys.stdout",
+                "stream": "ext://sys.stderr",
             },
         },
         "formatters": {
