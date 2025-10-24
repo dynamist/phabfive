@@ -117,11 +117,11 @@ phabfive maniphest search "My Project" --updated-after=3
 phabfive maniphest search "My Project" --created-after=30 --updated-after=7
 ```
 
-## Transition Filtering
+## Filtering Tasks
 
 Filter tasks based on their movement through workboard columns. This feature helps you analyze task workflows, identify bottlenecks, and track specific patterns in your development process.
 
-### Why Use Transition Filtering?
+### Why Use Filtering?
 
 Common use cases include:
 
@@ -130,6 +130,8 @@ Common use cases include:
 - **Identify blocked work**: Tasks currently in "Blocked" that came from "In Progress"
 - **Audit workflow violations**: Tasks that never went through required columns
 - **Analyze task lifecycle**: See complete transition history for debugging workflows
+
+**Note**: When using `--column`, transition history is automatically displayed for matching tasks. Use `--show-transitions` alone to see transition history for all tasks without filtering.
 
 ### Pattern Syntax
 
@@ -156,16 +158,16 @@ Transition patterns use a query language with AND/OR logic:
 
 ```bash
 # Find all tasks that moved backward (returned to earlier columns)
-phabfive maniphest search "My Project" --transitions=backward
+phabfive maniphest search "My Project" --column=backward
 
 # Find tasks currently in the "Blocked" column
-phabfive maniphest search "My Project" --transitions="in:Blocked"
+phabfive maniphest search "My Project" --column="in:Blocked"
 
 # Find tasks that moved to "Done"
-phabfive maniphest search "My Project" --transitions="to:Done"
+phabfive maniphest search "My Project" --column="to:Done"
 
 # Find tasks that moved forward from "In Progress"
-phabfive maniphest search "My Project" --transitions="from:In Progress:forward"
+phabfive maniphest search "My Project" --column="from:In Progress:forward"
 ```
 
 ### OR Logic (Comma Separator)
@@ -174,13 +176,13 @@ Match tasks that satisfy **any** of the patterns:
 
 ```bash
 # Tasks that are EITHER in Done OR in Blocked
-phabfive maniphest search "My Project" --transitions="in:Done,in:Blocked"
+phabfive maniphest search "My Project" --column="in:Done,in:Blocked"
 
 # Tasks that moved to Done OR moved backward
-phabfive maniphest search "My Project" --transitions="to:Done,backward"
+phabfive maniphest search "My Project" --column="to:Done,backward"
 
 # Tasks in multiple columns
-phabfive maniphest search "My Project" --transitions="in:In Progress,in:Review,in:Testing"
+phabfive maniphest search "My Project" --column="in:In Progress,in:In Review,in:Testing"
 ```
 
 ### AND Logic (Plus Separator)
@@ -189,13 +191,13 @@ Match tasks that satisfy **all** conditions:
 
 ```bash
 # Tasks that moved from "In Progress" AND are currently in "Done"
-phabfive maniphest search "My Project" --transitions="from:In Progress+in:Done"
+phabfive maniphest search "My Project" --column="from:In Progress+in:Done"
 
 # Tasks that moved from "Up Next" forward AND never got blocked
-phabfive maniphest search "My Project" --transitions="from:Up Next:forward+never:Blocked"
+phabfive maniphest search "My Project" --column="from:Up Next:forward+never:Blocked"
 
 # Tasks currently in Done AND moved there from In Progress (skipped review)
-phabfive maniphest search "My Project" --transitions="in:Done+from:In Progress"
+phabfive maniphest search "My Project" --column="in:Done+from:In Progress"
 ```
 
 ### Complex Combinations
@@ -208,22 +210,24 @@ Combine OR and AND logic for sophisticated queries:
 # OR
 # - Are currently in "Blocked"
 phabfive maniphest search "My Project" \
-  --transitions="from:In Progress:forward+in:Done,in:Blocked"
+  --column="from:In Progress:forward+in:Done,in:Blocked"
 
 # Find workflow violations:
 # Tasks in Done that either moved backward OR never went through Review
 phabfive maniphest search "My Project" \
-  --transitions="in:Done+backward,in:Done+never:Review"
+  --column="in:Done+backward,in:Done+never:In Review"
 ```
 
 ### Viewing Transition History
 
-Add the `--show-transitions` flag to see the complete column movement history for each task:
+When using `--column`, transition history is automatically displayed for matching tasks. You can also use `--show-transitions` alone to see transition history for all tasks without filtering:
 
 ```bash
-phabfive maniphest search "My Project" \
-  --transitions=backward \
-  --show-transitions
+# Automatic: filtering shows transitions for matching tasks
+phabfive maniphest search "My Project" --column=backward
+
+# Explicit: show transitions for all tasks (no filtering)
+phabfive maniphest search "My Project" --show-transitions
 ```
 
 Output includes:
@@ -250,8 +254,7 @@ Identify tasks that moved backward from completion:
 
 ```bash
 phabfive maniphest search "Backend Team" \
-  --transitions="from:Done:backward" \
-  --show-transitions \
+  --column="from:Done:backward" \
   --updated-after=30
 ```
 
@@ -261,7 +264,7 @@ Find tasks that went straight to Done without review:
 
 ```bash
 phabfive maniphest search "Frontend" \
-  --transitions="in:Done+never:Review"
+  --column="in:Done+never:In Review"
 ```
 
 ### Monitoring Blocked Work
@@ -270,8 +273,7 @@ See what's currently blocked and where it came from:
 
 ```bash
 phabfive maniphest search "My Project" \
-  --transitions="in:Blocked+from:In Progress" \
-  --show-transitions
+  --column="in:Blocked+from:In Progress"
 ```
 
 ### Quality Assurance
@@ -280,7 +282,7 @@ Find recently completed tasks that never went through testing:
 
 ```bash
 phabfive maniphest search "Product" \
-  --transitions="in:Done+never:Testing" \
+  --column="in:Done+never:Testing" \
   --updated-after=7
 ```
 
@@ -290,9 +292,8 @@ Analyze all tasks completed in the last sprint:
 
 ```bash
 phabfive maniphest search "Sprint 42" \
-  --transitions="to:Done" \
-  --updated-after=14 \
-  --show-transitions
+  --column="to:Done" \
+  --updated-after=14
 ```
 
 ## Tips and Best Practices
@@ -305,16 +306,16 @@ phabfive maniphest search "Sprint 42" \
 
 ### Performance
 
-- Transition filtering requires fetching task history, which may be slower for large result sets
+- Filtering requires fetching task history, which may be slower for large result sets
 - Consider combining with date filters (`--created-after`, `--updated-after`) to narrow results
 - Use specific project names rather than wildcards when possible
 
 ### Debugging Patterns
 
-If a transition pattern doesn't return expected results:
+If a filter pattern doesn't return expected results:
 
-1. Run the search without `--transitions` to see all tasks
-2. Add `--show-transitions` to inspect actual column movements
+1. Run the search without `--column` to see all tasks
+2. Add `--show-transitions` to inspect actual column movements for all tasks
 3. Verify column names match exactly (case-sensitive)
 4. Start with simple patterns and add complexity incrementally
 
@@ -322,16 +323,16 @@ If a transition pattern doesn't return expected results:
 
 ```bash
 # Just completed (moved to Done in last 7 days)
---transitions="to:Done" --updated-after=7
+--column="to:Done" --updated-after=7
 
 # Currently stuck (backward movement and currently not in Done)
---transitions="backward+in:In Progress"
+--column="backward+in:In Progress"
 
 # Never blocked, fast completion
---transitions="to:Done+never:Blocked" --updated-after=14
+--column="to:Done+never:Blocked" --updated-after=14
 
 # Workflow compliance (went through all required stages)
---transitions="in:Done+been:In Review+been:Testing"
+--column="in:Done+been:In Review+been:Testing"
 ```
 
 ## Error Messages
@@ -339,7 +340,7 @@ If a transition pattern doesn't return expected results:
 ### "Project not found"
 The specified project doesn't exist. Phabfive will suggest similar project names.
 
-### "Invalid transition pattern"
+### "Invalid filter pattern"
 Check your pattern syntax:
 - Use commas for OR, plus signs for AND
 - Ensure column names are in quotes if they contain spaces
@@ -348,7 +349,7 @@ Check your pattern syntax:
 ### "No tasks found"
 The search returned no results. Try:
 - Relaxing date filters
-- Using simpler transition patterns
+- Using simpler filter patterns
 - Verifying the project has tasks with workboard columns
 
 ## See Also
