@@ -241,33 +241,33 @@ Output includes:
 
 Example output:
 ```
-Link: http://phorge.domain.tld/T59
-Task:
-  Name: '[FEATURE] Improved error diagnostics'
-  Created: 2025-10-01T17:21:56
-  Modified: 2025-10-24T08:44:53
-  Status: Open
-  Priority: Unbreak Now!
-  Description: |
-    > Enhanced error reporting in chip simulator
-  Boards:
-    Development:
-      Column: Up Next
-    GUNNAR-Core:
-      Column: In Review
-History:
-  Priority:
-    - "2025-10-01T17:21:56 [↓] Triage → Normal"
-    - "2025-10-23T12:55:59 [↑] Normal → Unbreak Now!"
-  Boards:
-    Development:
-      Transitions:
-        - "2025-10-14T10:52:33 [→] Backlog → In Review"
-        - "2025-10-14T14:31:40 [←] In Review → Up Next"
-    GUNNAR-Core:
-      Transitions:
-        - "2025-10-24T08:44:52 [→] Backlog → Up Next"
-        - "2025-10-24T08:44:53 [→] Up Next → In Review"
+- Link: http://phorge.domain.tld/T59
+  Task:
+    Name: '[FEATURE] Improved error diagnostics'
+    Created: 2025-10-01T17:21:56
+    Modified: 2025-10-24T08:44:53
+    Status: Open
+    Priority: Unbreak Now!
+    Description: |
+      > Enhanced error reporting in chip simulator
+    Boards:
+      Development:
+        Column: Up Next
+      GUNNAR-Core:
+        Column: In Review
+  History:
+    Priority:
+      - "2025-10-01T17:21:56 [↓] Triage → Normal"
+      - "2025-10-23T12:55:59 [↑] Normal → Unbreak Now!"
+    Boards:
+      Development:
+        Transitions:
+          - "2025-10-14T10:52:33 [→] Backlog → In Review"
+          - "2025-10-14T14:31:40 [←] In Review → Up Next"
+      GUNNAR-Core:
+        Transitions:
+          - "2025-10-24T08:44:52 [→] Backlog → Up Next"
+          - "2025-10-24T08:44:53 [→] Up Next → In Review"
 ```
 
 ## Priority Filtering

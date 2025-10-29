@@ -749,6 +749,7 @@ class Maniphest(Phabfive):
         project_phid_to_name,
         priority_transitions_map,
         task_transitions_map,
+        indent="",
     ):
         """
         Print History section with priority and board transitions.
@@ -765,15 +766,17 @@ class Maniphest(Phabfive):
             Mapping of task ID to priority transitions
         task_transitions_map : dict
             Mapping of task ID to board transitions
+        indent : str
+            Base indentation string for output
         """
-        print("History:")
+        print(f"{indent}History:")
 
         # Print priority transitions
         if task_id in priority_transitions_map:
             priority_trans = priority_transitions_map[task_id]
             if priority_trans:
-                print("  Priority:")
-                self._print_priority_transitions(priority_trans, indent="    ")
+                print(f"{indent}  Priority:")
+                self._print_priority_transitions(priority_trans, indent=f"{indent}    ")
 
         # Print board transitions
         if task_id in task_transitions_map:
@@ -789,7 +792,7 @@ class Maniphest(Phabfive):
                     transitions_by_board[board_phid].append(trans)
 
             if transitions_by_board:
-                print("  Boards:")
+                print(f"{indent}  Boards:")
 
                 # Sort boards alphabetically by project name
                 sorted_transitions = sorted(
@@ -799,11 +802,11 @@ class Maniphest(Phabfive):
 
                 for board_phid, board_transitions in sorted_transitions:
                     project_name = project_phid_to_name.get(board_phid, "Unknown")
-                    print(f"    {project_name}:")
-                    print("      Transitions:")
+                    print(f"{indent}    {project_name}:")
+                    print(f"{indent}      Transitions:")
                     column_info = self._get_column_info(board_phid)
                     self._print_transitions(
-                        board_transitions, column_info, indent="        "
+                        board_transitions, column_info, indent=f"{indent}        "
                     )
 
     def _print_metadata_section(
@@ -812,6 +815,7 @@ class Maniphest(Phabfive):
         matching_boards_map,
         matching_priority_map,
         project_phid_to_name,
+        indent="",
     ):
         """
         Print Metadata section with filter match information.
@@ -826,8 +830,10 @@ class Maniphest(Phabfive):
             Mapping of task ID to priority match boolean
         project_phid_to_name : dict
             Mapping of board PHID to project name
+        indent : str
+            Base indentation string for output
         """
-        print("Metadata:")
+        print(f"{indent}Metadata:")
 
         # Print matched boards
         if task_id in matching_boards_map:
@@ -836,16 +842,16 @@ class Maniphest(Phabfive):
                 project_phid_to_name.get(phid, "Unknown")
                 for phid in matching_board_phids
             ]
-            print(f"  MatchedBoards: {board_names}")
+            print(f"{indent}  MatchedBoards: {board_names}")
         else:
-            print("  MatchedBoards: []")
+            print(f"{indent}  MatchedBoards: []")
 
         # Print matched priority
         if task_id in matching_priority_map:
             matched_priority = matching_priority_map[task_id]
-            print(f"  MatchedPriority: {str(matched_priority).lower()}")
+            print(f"{indent}  MatchedPriority: {str(matched_priority).lower()}")
         else:
-            print("  MatchedPriority: false")
+            print(f"{indent}  MatchedPriority: false")
 
     def task_search(
         self,
@@ -1057,8 +1063,8 @@ class Maniphest(Phabfive):
 
         # Display each task
         for item in result_data:
-            print(f"Link: {self.url}/T{item['id']}")
-            print("Task:")
+            print(f"- Link: {self.url}/T{item['id']}")
+            print("  Task:")
             fields = item.get("fields", {})
             date_closed = ""
 
@@ -1067,27 +1073,27 @@ class Maniphest(Phabfive):
                 if key in ["dateCreated", "dateModified"]:
                     if value:
                         formatted_time = format_timestamp(value)
-                        print(f"  {key[4:]}: {formatted_time}")
+                        print(f"    {key[4:]}: {formatted_time}")
                 elif key == "dateClosed":
                     if value:
                         date_closed = format_timestamp(value)
-                        print(f"  Closed: {date_closed}")
+                        print(f"    Closed: {date_closed}")
                 elif key == "name":
-                    print(f"  Name: '{value}'" if "[" in value else f"  Name: {value}")
+                    print(f"    Name: '{value}'" if "[" in value else f"    Name: {value}")
 
             status_name = fields.get("status", {}).get("name", "Unknown")
-            print(f"  Status: {status_name}")
+            print(f"    Status: {status_name}")
 
             priority_name = fields.get("priority", {}).get("name", "Unknown")
-            print(f"  Priority: {priority_name}")
+            print(f"    Priority: {priority_name}")
 
             description_raw = fields.get("description", {}).get("raw", "")
             if description_raw:
-                print("  Description: |")
+                print("    Description: |")
                 for line in description_raw.splitlines():
-                    print(f"    > {line}")
+                    print(f"      > {line}")
             else:
-                print("  Description: ''")
+                print("    Description: ''")
 
             # Display board information (current columns only)
             columns_data = item.get("attachments", {}).get("columns", {})
@@ -1097,7 +1103,7 @@ class Maniphest(Phabfive):
             self._print_task_boards(
                 boards,
                 project_phid_to_name,
-                indent="  ",
+                indent="    ",
             )
 
             # Display History section if show_history is enabled
@@ -1108,6 +1114,7 @@ class Maniphest(Phabfive):
                     project_phid_to_name,
                     priority_transitions_map,
                     task_transitions_map,
+                    indent="  ",
                 )
 
             # Display Metadata section if show_metadata is enabled
@@ -1117,6 +1124,7 @@ class Maniphest(Phabfive):
                     matching_boards_map,
                     matching_priority_map,
                     project_phid_to_name,
+                    indent="  ",
                 )
 
             print()
