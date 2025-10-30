@@ -39,7 +39,7 @@ def init_logging(log_level):
                 "class": "logging.StreamHandler",
                 "level": log_level,
                 "formatter": "simple",
-                "stream": "ext://sys.stderr",
+                "stream": sys.stderr,
             },
         },
         "formatters": {
