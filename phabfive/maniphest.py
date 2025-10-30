@@ -897,10 +897,31 @@ class Maniphest(Phabfive):
             if updated_after:
                 constraints["modifiedStart"] = int(updated_after)
 
-            result = self.phab.maniphest.search(
-                constraints=constraints, attachments={"columns": True}
-            )
-            result_data = result.response["data"]
+            # Use pagination to fetch all tasks (API returns max 100 per page)
+            result_data = []
+            after = None
+
+            while True:
+                if after:
+                    result = self.phab.maniphest.search(
+                        constraints=constraints, attachments={"columns": True}, after=after
+                    )
+                else:
+                    result = self.phab.maniphest.search(
+                        constraints=constraints, attachments={"columns": True}
+                    )
+
+                # Accumulate results from this page
+                result_data.extend(result.response["data"])
+
+                # Check if there are more pages
+                cursor = result.get("cursor", {})
+                after = cursor.get("after")
+                log.debug(f"Fetched page with {len(result.response['data'])} tasks, total so far: {len(result_data)}, next cursor: {after}")
+
+                if after is None:
+                    # No more pages
+                    break
         else:
             # Resolve project name/pattern to PHIDs
             project_phids = self._resolve_project_phids(project)
@@ -919,15 +940,32 @@ class Maniphest(Phabfive):
                     if updated_after:
                         constraints["modifiedStart"] = int(updated_after)
 
-                    result = self.phab.maniphest.search(
-                        constraints=constraints, attachments={"columns": True}
-                    )
+                    # Use pagination for each project (API returns max 100 per page)
+                    after = None
+                    while True:
+                        if after:
+                            result = self.phab.maniphest.search(
+                                constraints=constraints, attachments={"columns": True}, after=after
+                            )
+                        else:
+                            result = self.phab.maniphest.search(
+                                constraints=constraints, attachments={"columns": True}
+                            )
 
-                    # Merge results, avoiding duplicates
-                    for item in result.response["data"]:
-                        task_id = item["id"]
-                        if task_id not in all_tasks:
-                            all_tasks[task_id] = item
+                        # Merge results from this page, avoiding duplicates
+                        for item in result.response["data"]:
+                            task_id = item["id"]
+                            if task_id not in all_tasks:
+                                all_tasks[task_id] = item
+
+                        # Check if there are more pages for this project
+                        cursor = result.get("cursor", {})
+                        after = cursor.get("after")
+                        log.debug(f"Project {phid}: fetched page with {len(result.response['data'])} tasks, total unique: {len(all_tasks)}, next cursor: {after}")
+
+                        if after is None:
+                            # No more pages for this project
+                            break
 
                 # Convert back to list for display
                 result_data = list(all_tasks.values())
@@ -939,10 +977,31 @@ class Maniphest(Phabfive):
                 if updated_after:
                     constraints["modifiedStart"] = int(updated_after)
 
-                result = self.phab.maniphest.search(
-                    constraints=constraints, attachments={"columns": True}
-                )
-                result_data = result.response["data"]
+                # Use pagination to fetch all tasks (API returns max 100 per page)
+                result_data = []
+                after = None
+
+                while True:
+                    if after:
+                        result = self.phab.maniphest.search(
+                            constraints=constraints, attachments={"columns": True}, after=after
+                        )
+                    else:
+                        result = self.phab.maniphest.search(
+                            constraints=constraints, attachments={"columns": True}
+                        )
+
+                    # Accumulate results from this page
+                    result_data.extend(result.response["data"])
+
+                    # Check if there are more pages
+                    cursor = result.get("cursor", {})
+                    after = cursor.get("after")
+                    log.debug(f"Fetched page with {len(result.response['data'])} tasks, total so far: {len(result_data)}, next cursor: {after}")
+
+                    if after is None:
+                        # No more pages
+                        break
 
         # Initialize task_transitions_map for storing transitions (used by both filtering and display)
         task_transitions_map = {}
