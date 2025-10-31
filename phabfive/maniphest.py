@@ -23,7 +23,8 @@ from phabfive.exceptions import (
 )
 
 # 3rd party imports
-import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import PreservedScalarString
 from jinja2 import Template, Environment, meta
 
 # phabfive transition imports - imported in cli.py where patterns are parsed
@@ -1173,14 +1174,12 @@ class Maniphest(Phabfive):
             if fields.get("dateClosed"):
                 task_data["Closed"] = format_timestamp(fields["dateClosed"])
 
-            # Description - use literal block scalar style for multiline
+            # Description - use PreservedScalarString for multi-line descriptions
             description_raw = fields.get("description", {}).get("raw", "")
-            if description_raw:
-                # Format description with "> " prefix for each line to preserve original format
-                formatted_desc = "\n".join(f"> {line}" for line in description_raw.splitlines())
-                task_data["Description"] = formatted_desc
+            if description_raw and "\n" in description_raw:
+                task_data["Description"] = PreservedScalarString(description_raw)
             else:
-                task_data["Description"] = ""
+                task_data["Description"] = description_raw if description_raw else ""
 
             task_dict["Task"] = task_data
 
@@ -1220,16 +1219,14 @@ class Maniphest(Phabfive):
 
             tasks_list.append(task_dict)
 
-        # Output as YAML
+        # Output as YAML using ruamel.yaml for proper multi-line formatting
         print()  # Empty line for separation
-        yaml.safe_dump(
-            tasks_list,
-            stream=sys.stdout,
-            default_flow_style=False,
-            allow_unicode=True,
-            sort_keys=False,
-            explicit_start=False,
-        )
+
+        yaml = YAML()
+        yaml.default_flow_style = False
+        yaml.preserve_quotes = True
+        yaml.width = 4096  # Avoid unwanted line wrapping
+        yaml.dump(tasks_list, sys.stdout)
 
     def _display_task_transitions(self, task_phid):
         """
@@ -1320,7 +1317,8 @@ class Maniphest(Phabfive):
             return
 
         with open(config_file) as stream:
-            root_data = yaml.load(stream, Loader=yaml.Loader)  # nosec-B506
+            yaml_loader = YAML()
+            root_data = yaml_loader.load(stream)
 
         # Fetch all users in phabricator, used by subscribers mapping later
         users_query = self.phab.user.search()

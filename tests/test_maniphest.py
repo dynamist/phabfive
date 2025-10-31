@@ -902,7 +902,7 @@ class TestYAMLOutput:
 
     def test_task_search_yaml_output_is_parsable(self, capsys):
         """Test that task_search generates valid YAML output."""
-        import yaml
+        from ruamel.yaml import YAML
         from io import StringIO
 
         maniphest = Maniphest()
@@ -973,8 +973,9 @@ class TestYAMLOutput:
 
         # Parse the YAML to verify it's valid
         try:
-            parsed_data = yaml.safe_load(yaml_output)
-        except yaml.YAMLError as e:
+            yaml_parser = YAML()
+            parsed_data = yaml_parser.load(StringIO(yaml_output))
+        except Exception as e:
             pytest.fail(f"Generated YAML is not parsable: {e}\n\nOutput:\n{yaml_output}")
 
         # Verify the structure
