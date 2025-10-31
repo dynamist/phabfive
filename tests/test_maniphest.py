@@ -900,11 +900,13 @@ class TestTransitionFilteringIntegration:
 class TestYAMLOutput:
     """Test that YAML output is properly formatted and parsable."""
 
-    def test_task_search_yaml_output_is_parsable(self, capsys):
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_yaml_output_is_parsable(self, mock_init, capsys):
         """Test that task_search generates valid YAML output."""
         from ruamel.yaml import YAML
         from io import StringIO
 
+        mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
 

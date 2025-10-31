@@ -931,7 +931,9 @@ class Maniphest(Phabfive):
             while True:
                 if after:
                     result = self.phab.maniphest.search(
-                        constraints=constraints, attachments={"columns": True}, after=after
+                        constraints=constraints,
+                        attachments={"columns": True},
+                        after=after,
                     )
                 else:
                     result = self.phab.maniphest.search(
@@ -944,7 +946,9 @@ class Maniphest(Phabfive):
                 # Check if there are more pages
                 cursor = result.get("cursor", {})
                 after = cursor.get("after")
-                log.debug(f"Fetched page with {len(result.response['data'])} tasks, total so far: {len(result_data)}, next cursor: {after}")
+                log.debug(
+                    f"Fetched page with {len(result.response['data'])} tasks, total so far: {len(result_data)}, next cursor: {after}"
+                )
 
                 if after is None:
                     # No more pages
@@ -972,7 +976,9 @@ class Maniphest(Phabfive):
                     while True:
                         if after:
                             result = self.phab.maniphest.search(
-                                constraints=constraints, attachments={"columns": True}, after=after
+                                constraints=constraints,
+                                attachments={"columns": True},
+                                after=after,
                             )
                         else:
                             result = self.phab.maniphest.search(
@@ -988,7 +994,9 @@ class Maniphest(Phabfive):
                         # Check if there are more pages for this project
                         cursor = result.get("cursor", {})
                         after = cursor.get("after")
-                        log.debug(f"Project {phid}: fetched page with {len(result.response['data'])} tasks, total unique: {len(all_tasks)}, next cursor: {after}")
+                        log.debug(
+                            f"Project {phid}: fetched page with {len(result.response['data'])} tasks, total unique: {len(all_tasks)}, next cursor: {after}"
+                        )
 
                         if after is None:
                             # No more pages for this project
@@ -1011,7 +1019,9 @@ class Maniphest(Phabfive):
                 while True:
                     if after:
                         result = self.phab.maniphest.search(
-                            constraints=constraints, attachments={"columns": True}, after=after
+                            constraints=constraints,
+                            attachments={"columns": True},
+                            after=after,
                         )
                     else:
                         result = self.phab.maniphest.search(
@@ -1024,7 +1034,9 @@ class Maniphest(Phabfive):
                     # Check if there are more pages
                     cursor = result.get("cursor", {})
                     after = cursor.get("after")
-                    log.debug(f"Fetched page with {len(result.response['data'])} tasks, total so far: {len(result_data)}, next cursor: {after}")
+                    log.debug(
+                        f"Fetched page with {len(result.response['data'])} tasks, total so far: {len(result_data)}, next cursor: {after}"
+                    )
 
                     if after is None:
                         # No more pages
