@@ -515,6 +515,30 @@ class TestParseSingleCondition:
             _parse_single_condition("from:Column:invalid")
         assert "Invalid direction" in str(exc.value)
 
+    def test_parse_not_in(self):
+        result = _parse_single_condition("not:in:Done")
+        assert result == {"type": "in", "column": "Done", "negated": True}
+
+    def test_parse_not_from(self):
+        result = _parse_single_condition("not:from:Backlog")
+        assert result == {"type": "from", "column": "Backlog", "negated": True}
+
+    def test_parse_not_from_with_direction(self):
+        result = _parse_single_condition("not:from:Backlog:forward")
+        assert result == {"type": "from", "column": "Backlog", "direction": "forward", "negated": True}
+
+    def test_parse_not_been(self):
+        result = _parse_single_condition("not:been:Blocked")
+        assert result == {"type": "been", "column": "Blocked", "negated": True}
+
+    def test_parse_not_backward(self):
+        result = _parse_single_condition("not:backward")
+        assert result == {"type": "backward", "negated": True}
+
+    def test_parse_not_forward(self):
+        result = _parse_single_condition("not:forward")
+        assert result == {"type": "forward", "negated": True}
+
 
 class TestParseTransitionPatterns:
     def test_single_simple_pattern(self):

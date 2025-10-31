@@ -134,9 +134,11 @@ Search Options:
                              never:COLUMN             - Never was in COLUMN
                              backward                 - Any backward movement
                              forward                  - Any forward movement
+                             not:PATTERN              - Negates any pattern above
                            Examples:
                              from:In Progress:forward
                              to:Done,in:Blocked
+                             not:in:Done+been:Review
                              from:Up Next:forward+in:Done
     --priority=PATTERNS    Filter tasks by priority transitions (comma=OR, plus=AND).
                            Automatically displays priority history.
@@ -147,9 +149,11 @@ Search Options:
                              never:PRIORITY             - Never was at PRIORITY
                              raised                     - Any priority increase
                              lowered                    - Any priority decrease
+                             not:PATTERN                - Negates any pattern above
                            Examples:
                              been:Unbreak Now!
                              from:Normal:raised
+                             not:in:High+raised
                              in:High,been:Unbreak Now!
     --show-history         Display column and priority transition history for each task
     --show-metadata        Display filter match metadata (which boards/priority matched)

@@ -110,6 +110,30 @@ class TestParseSingleCondition:
             _parse_single_condition("from:Normal:invalid")
         assert "Invalid direction" in str(exc.value)
 
+    def test_parse_not_in(self):
+        result = _parse_single_condition("not:in:High")
+        assert result == {"type": "in", "priority": "High", "negated": True}
+
+    def test_parse_not_from(self):
+        result = _parse_single_condition("not:from:Wishlist")
+        assert result == {"type": "from", "priority": "Wishlist", "negated": True}
+
+    def test_parse_not_from_with_direction(self):
+        result = _parse_single_condition("not:from:Low:raised")
+        assert result == {"type": "from", "priority": "Low", "direction": "raised", "negated": True}
+
+    def test_parse_not_been(self):
+        result = _parse_single_condition("not:been:Unbreak Now!")
+        assert result == {"type": "been", "priority": "Unbreak Now!", "negated": True}
+
+    def test_parse_not_raised(self):
+        result = _parse_single_condition("not:raised")
+        assert result == {"type": "raised", "negated": True}
+
+    def test_parse_not_lowered(self):
+        result = _parse_single_condition("not:lowered")
+        assert result == {"type": "lowered", "negated": True}
+
 
 class TestParsePriorityPatterns:
     def test_single_simple_pattern(self):

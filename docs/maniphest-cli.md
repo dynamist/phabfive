@@ -154,6 +154,13 @@ Transition patterns use a query language with AND/OR logic:
 | `never:COLUMN` | Task was never in COLUMN | `never:Blocked` |
 | `backward` | Task had any backward movement | `backward` |
 | `forward` | Task had any forward movement | `forward` |
+| `not:PATTERN` | Negates any pattern above | `not:in:Done`, `not:backward` |
+
+**Negation Prefix `not:`**: Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+- `not:in:Done` - Tasks NOT currently in Done
+- `not:from:Backlog` - Tasks that didn't move from Backlog
+- `not:backward` - Tasks that haven't moved backward
+- `not:been:Blocked` - Tasks that were never in Blocked (equivalent to `never:Blocked`)
 
 ### Basic Examples
 
@@ -218,6 +225,29 @@ phabfive maniphest search "My Project" \
 phabfive maniphest search "My Project" \
   --column="in:Done+backward,in:Done+never:In Review"
 ```
+
+### Negation Patterns
+
+Use the `not:` prefix to negate any pattern:
+
+```bash
+# Tasks NOT currently in Done
+phabfive maniphest search "My Project" --column="not:in:Done"
+
+# Tasks that have NOT moved backward
+phabfive maniphest search "My Project" --column="not:backward"
+
+# Tasks NOT currently in Done AND have been in Review
+phabfive maniphest search "My Project" --column="not:in:Done+been:In Review"
+
+# Tasks in Done that did NOT come from Backlog
+phabfive maniphest search "My Project" --column="in:Done+not:from:Backlog"
+
+# Complex: Tasks NOT in Review AND have NOT been blocked
+phabfive maniphest search "My Project" --column="not:in:Review+not:been:Blocked"
+```
+
+**Note**: `not:been:COLUMN` is functionally equivalent to `never:COLUMN`. Both patterns exist for flexibility and readability.
 
 ### Viewing Transition History
 
@@ -296,6 +326,12 @@ Common use cases include:
 | `never:PRIORITY` | Task was never at PRIORITY | `never:Low` |
 | `raised` | Task had any priority increase | `raised` |
 | `lowered` | Task had any priority decrease | `lowered` |
+| `not:PATTERN` | Negates any pattern above | `not:in:High`, `not:raised` |
+
+**Negation Prefix `not:`**: Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+- `not:in:High` - Tasks NOT currently at High priority
+- `not:raised` - Tasks whose priority hasn't been raised
+- `not:been:Unbreak Now!` - Tasks never at Unbreak Now! (equivalent to `never:Unbreak Now!`)
 
 ### Priority Levels
 
@@ -356,6 +392,26 @@ phabfive maniphest search "My Project" --priority="in:High,in:Unbreak Now!"
 # Tasks raised from Normal AND currently at High
 phabfive maniphest search "My Project" --priority="from:Normal:raised+in:High"
 ```
+
+### Priority Negation Patterns
+
+Use the `not:` prefix to negate priority patterns:
+
+```bash
+# Tasks NOT currently at High priority
+phabfive maniphest search "My Project" --priority="not:in:High"
+
+# Tasks whose priority has NOT been raised
+phabfive maniphest search "My Project" --priority="not:raised"
+
+# Tasks NOT at High priority AND have been raised at some point
+phabfive maniphest search "My Project" --priority="not:in:High+raised"
+
+# Tasks at Normal that did NOT come from being lowered
+phabfive maniphest search "My Project" --priority="in:Normal+not:lowered"
+```
+
+**Note**: `not:been:PRIORITY` is functionally equivalent to `never:PRIORITY`.
 
 ## Viewing Metadata
 
