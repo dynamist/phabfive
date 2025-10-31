@@ -745,7 +745,7 @@ class Maniphest(Phabfive):
         # Sort boards alphabetically by project name
         sorted_boards = sorted(
             boards.items(),
-            key=lambda item: project_phid_to_name.get(item[0], "Unknown").lower()
+            key=lambda item: project_phid_to_name.get(item[0], "Unknown").lower(),
         )
 
         for board_phid, board_data in sorted_boards:
@@ -815,7 +815,9 @@ class Maniphest(Phabfive):
                 # Sort boards alphabetically by project name
                 sorted_transitions = sorted(
                     transitions_by_board.items(),
-                    key=lambda item: project_phid_to_name.get(item[0], "Unknown").lower()
+                    key=lambda item: project_phid_to_name.get(
+                        item[0], "Unknown"
+                    ).lower(),
                 )
 
                 for board_phid, board_transitions in sorted_transitions:
@@ -824,7 +826,7 @@ class Maniphest(Phabfive):
                     transitions_list = self._build_transitions(
                         board_transitions, column_info
                     )
-                    boards_history[project_name] = {"Transitions": transitions_list}
+                    boards_history[project_name] = transitions_list
 
                 history["Boards"] = boards_history
 
@@ -1149,10 +1151,7 @@ class Maniphest(Phabfive):
             fields = item.get("fields", {})
 
             # Build task dict
-            task_dict = {
-                "Link": f"{self.url}/T{item['id']}",
-                "Task": {}
-            }
+            task_dict = {"Link": f"{self.url}/T{item['id']}", "Task": {}}
 
             # Build task fields
             task_data = {}
@@ -1283,7 +1282,9 @@ class Maniphest(Phabfive):
                     print("    Transitions:")
 
                 # Print the transitions
-                transitions_list = self._build_transitions(board_transitions, column_info)
+                transitions_list = self._build_transitions(
+                    board_transitions, column_info
+                )
                 for transition in transitions_list:
                     print(f"      - {transition}")
 
