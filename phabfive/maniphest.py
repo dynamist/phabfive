@@ -647,7 +647,7 @@ class Maniphest(Phabfive):
 
         return transitions
 
-    def _build_transitions(self, transactions, column_info):
+    def _build_column_transitions(self, transactions, column_info):
         """
         Build transition history data for a task.
 
@@ -823,7 +823,7 @@ class Maniphest(Phabfive):
                 for board_phid, board_transitions in sorted_transitions:
                     project_name = project_phid_to_name.get(board_phid, "Unknown")
                     column_info = self._get_column_info(board_phid)
-                    transitions_list = self._build_transitions(
+                    transitions_list = self._build_column_transitions(
                         board_transitions, column_info
                     )
                     boards_history[project_name] = transitions_list
@@ -1282,8 +1282,8 @@ class Maniphest(Phabfive):
                     print("    Transitions:")
 
                 # Print the transitions
-                transitions_list = self._build_transitions(
-                    board_transitions, column_info
+                transitions_list = self._build_column_transitions(
+                    board_transactions, column_info
                 )
                 for transition in transitions_list:
                     print(f"      - {transition}")
