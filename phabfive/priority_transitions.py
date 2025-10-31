@@ -85,23 +85,30 @@ class PriorityPattern:
         """Check if a single condition matches."""
         condition_type = condition.get("type")
 
+        # Determine the match result based on condition type
         if condition_type == "from":
-            return self._matches_from(condition, priority_transactions)
+            result = self._matches_from(condition, priority_transactions)
         elif condition_type == "to":
-            return self._matches_to(condition, priority_transactions)
+            result = self._matches_to(condition, priority_transactions)
         elif condition_type == "in":
-            return self._matches_current(condition, current_priority)
+            result = self._matches_current(condition, current_priority)
         elif condition_type == "been":
-            return self._matches_been(condition, priority_transactions)
+            result = self._matches_been(condition, priority_transactions)
         elif condition_type == "never":
-            return self._matches_never(condition, priority_transactions)
+            result = self._matches_never(condition, priority_transactions)
         elif condition_type == "raised":
-            return self._matches_raised(priority_transactions)
+            result = self._matches_raised(priority_transactions)
         elif condition_type == "lowered":
-            return self._matches_lowered(priority_transactions)
+            result = self._matches_lowered(priority_transactions)
         else:
             log.warning(f"Unknown condition type: {condition_type}")
-            return False
+            result = False
+
+        # Apply negation if the condition has the "not:" prefix
+        if condition.get("negated"):
+            result = not result
+
+        return result
 
     def _matches_from(self, condition, priority_transactions):
         """Match 'from:PRIORITY[:direction]' pattern."""
@@ -230,11 +237,13 @@ def _parse_single_condition(condition_str):
     ----------
     condition_str : str
         Condition like "from:High:raised", "in:Normal", "raised", "lowered"
+        Can be prefixed with "not:" to negate: "not:in:High", "not:raised"
 
     Returns
     -------
     dict
         Condition dict with keys like {"type": "from", "priority": "High", "direction": "raised"}
+        May include {"negated": True} if prefixed with "not:"
 
     Raises
     ------
@@ -243,11 +252,23 @@ def _parse_single_condition(condition_str):
     """
     condition_str = condition_str.strip()
 
+    # Check for not: prefix
+    negated = False
+    if condition_str.startswith("not:"):
+        negated = True
+        condition_str = condition_str[4:].strip()  # Strip "not:" prefix
+
     # Special keywords without parameters
     if condition_str == "raised":
-        return {"type": "raised"}
+        result = {"type": "raised"}
+        if negated:
+            result["negated"] = True
+        return result
     elif condition_str == "lowered":
-        return {"type": "lowered"}
+        result = {"type": "lowered"}
+        if negated:
+            result["negated"] = True
+        return result
 
     # Patterns with parameters: type:value or type:value:direction
     if ":" not in condition_str:
@@ -283,6 +304,10 @@ def _parse_single_condition(condition_str):
                 f"Invalid direction: '{direction}'. Must be 'raised' or 'lowered'"
             )
         result["direction"] = direction
+
+    # Add negated flag if not: prefix was present
+    if negated:
+        result["negated"] = True
 
     return result
 
