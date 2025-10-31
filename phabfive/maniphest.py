@@ -8,6 +8,7 @@ from functools import lru_cache
 import json
 import logging
 from pathlib import Path
+import sys
 import time
 import datetime
 from typing import Optional
@@ -588,19 +589,22 @@ class Maniphest(Phabfive):
 
         return (False, [], set())
 
-    def _print_priority_transitions(self, priority_transactions, indent="  "):
+    def _build_priority_transitions(self, priority_transactions):
         """
-        Print priority transition history for a task.
+        Build priority transition history data for a task.
 
         Parameters
         ----------
         priority_transactions : list
             List of priority change transactions
-        indent : str
-            Indentation string for each transition line
+
+        Returns
+        -------
+        list
+            List of formatted transition strings
         """
         if not priority_transactions:
-            return
+            return []
 
         from phabfive.priority_transitions import get_priority_order
 
@@ -609,6 +613,7 @@ class Maniphest(Phabfive):
             priority_transactions, key=lambda t: t.get("dateCreated", 0)
         )
 
+        transitions = []
         for trans in sorted_transactions:
             old_value = trans.get("oldValue")
             new_value = trans.get("newValue")
@@ -635,13 +640,15 @@ class Maniphest(Phabfive):
                     elif new_order > old_order:  # Lowered (lower priority)
                         direction = "[↓]"
 
-            print(
-                f'{indent}- "{timestamp_str} {direction} {old_priority_name} → {new_priority_name}"'
+            transitions.append(
+                f"{timestamp_str} {direction} {old_priority_name} → {new_priority_name}"
             )
 
-    def _print_transitions(self, transactions, column_info, indent="      "):
+        return transitions
+
+    def _build_transitions(self, transactions, column_info):
         """
-        Print transition history for a task.
+        Build transition history data for a task.
 
         Parameters
         ----------
@@ -649,17 +656,21 @@ class Maniphest(Phabfive):
             List of column change transactions
         column_info : dict
             Mapping of column PHID to column info
-        indent : str
-            Indentation string for each transition line
+
+        Returns
+        -------
+        list
+            List of formatted transition strings
         """
         if not transactions:
-            return
+            return []
 
         # Sort transitions chronologically (oldest first) for better readability
         sorted_transactions = sorted(
             transactions, key=lambda t: t.get("dateCreated", 0)
         )
 
+        transitions_list = []
         for trans in sorted_transactions:
             old_value = trans.get("oldValue")
             new_value = trans.get("newValue")
@@ -695,18 +706,19 @@ class Maniphest(Phabfive):
                 elif new_seq < old_seq:
                     direction = "[←]"
 
-            print(
-                f'{indent}- "{timestamp_str} {direction} {old_col_name} → {new_col_name}"'
+            transitions_list.append(
+                f"{timestamp_str} {direction} {old_col_name} → {new_col_name}"
             )
 
-    def _print_task_boards(
+        return transitions_list
+
+    def _build_task_boards(
         self,
         boards,
         project_phid_to_name,
-        indent="  ",
     ):
         """
-        Print board information with current columns only (no transitions).
+        Build board information dict with current columns only (no transitions).
 
         Parameters
         ----------
@@ -714,17 +726,20 @@ class Maniphest(Phabfive):
             Board data from task attachments
         project_phid_to_name : dict
             Mapping of board PHID to project name
-        indent : str
-            Indentation string for output
+
+        Returns
+        -------
+        dict
+            Dictionary mapping project names to board data
         """
         if isinstance(boards, list):
             log.debug(f"Boards is a list (likely empty): {boards}")
-            return
+            return {}
 
         if not isinstance(boards, dict) or not boards:
-            return
+            return {}
 
-        print(f"{indent}Boards:")
+        boards_dict = {}
 
         # Sort boards alphabetically by project name
         sorted_boards = sorted(
@@ -734,25 +749,25 @@ class Maniphest(Phabfive):
 
         for board_phid, board_data in sorted_boards:
             project_name = project_phid_to_name.get(board_phid, "Unknown")
-            print(f"{indent}  {project_name}:")
 
-            # Print current column only
+            # Get current column only
             columns = board_data.get("columns", [])
             if columns:
                 column_name = columns[0].get("name", "Unknown")
-                print(f"{indent}    Column: {column_name}")
+                boards_dict[project_name] = {"Column": column_name}
 
-    def _print_history_section(
+        return boards_dict
+
+    def _build_history_section(
         self,
         task_id,
         boards,
         project_phid_to_name,
         priority_transitions_map,
         task_transitions_map,
-        indent="",
     ):
         """
-        Print History section with priority and board transitions.
+        Build History section dict with priority and board transitions.
 
         Parameters
         ----------
@@ -766,19 +781,21 @@ class Maniphest(Phabfive):
             Mapping of task ID to priority transitions
         task_transitions_map : dict
             Mapping of task ID to board transitions
-        indent : str
-            Base indentation string for output
-        """
-        print(f"{indent}History:")
 
-        # Print priority transitions
+        Returns
+        -------
+        dict
+            History section data
+        """
+        history = {}
+
+        # Build priority transitions
         if task_id in priority_transitions_map:
             priority_trans = priority_transitions_map[task_id]
             if priority_trans:
-                print(f"{indent}  Priority:")
-                self._print_priority_transitions(priority_trans, indent=f"{indent}    ")
+                history["Priority"] = self._build_priority_transitions(priority_trans)
 
-        # Print board transitions
+        # Build board transitions
         if task_id in task_transitions_map:
             all_transitions = task_transitions_map[task_id]
 
@@ -792,7 +809,7 @@ class Maniphest(Phabfive):
                     transitions_by_board[board_phid].append(trans)
 
             if transitions_by_board:
-                print(f"{indent}  Boards:")
+                boards_history = {}
 
                 # Sort boards alphabetically by project name
                 sorted_transitions = sorted(
@@ -802,23 +819,25 @@ class Maniphest(Phabfive):
 
                 for board_phid, board_transitions in sorted_transitions:
                     project_name = project_phid_to_name.get(board_phid, "Unknown")
-                    print(f"{indent}    {project_name}:")
-                    print(f"{indent}      Transitions:")
                     column_info = self._get_column_info(board_phid)
-                    self._print_transitions(
-                        board_transitions, column_info, indent=f"{indent}        "
+                    transitions_list = self._build_transitions(
+                        board_transitions, column_info
                     )
+                    boards_history[project_name] = {"Transitions": transitions_list}
 
-    def _print_metadata_section(
+                history["Boards"] = boards_history
+
+        return history
+
+    def _build_metadata_section(
         self,
         task_id,
         matching_boards_map,
         matching_priority_map,
         project_phid_to_name,
-        indent="",
     ):
         """
-        Print Metadata section with filter match information.
+        Build Metadata section dict with filter match information.
 
         Parameters
         ----------
@@ -830,28 +849,33 @@ class Maniphest(Phabfive):
             Mapping of task ID to priority match boolean
         project_phid_to_name : dict
             Mapping of board PHID to project name
-        indent : str
-            Base indentation string for output
-        """
-        print(f"{indent}Metadata:")
 
-        # Print matched boards
+        Returns
+        -------
+        dict
+            Metadata section data
+        """
+        metadata = {}
+
+        # Build matched boards
         if task_id in matching_boards_map:
             matching_board_phids = matching_boards_map[task_id]
             board_names = [
                 project_phid_to_name.get(phid, "Unknown")
                 for phid in matching_board_phids
             ]
-            print(f"{indent}  MatchedBoards: {board_names}")
+            metadata["MatchedBoards"] = board_names
         else:
-            print(f"{indent}  MatchedBoards: []")
+            metadata["MatchedBoards"] = []
 
-        # Print matched priority
+        # Build matched priority
         if task_id in matching_priority_map:
             matched_priority = matching_priority_map[task_id]
-            print(f"{indent}  MatchedPriority: {str(matched_priority).lower()}")
+            metadata["MatchedPriority"] = matched_priority
         else:
-            print(f"{indent}  MatchedPriority: false")
+            metadata["MatchedPriority"] = False
+
+        return metadata
 
     def task_search(
         self,
@@ -1117,76 +1141,95 @@ class Maniphest(Phabfive):
         # Fetch project names for board display (always needed for nested format)
         project_phid_to_name = self._fetch_project_names_for_boards(result_data)
 
-        # New line for separation before displaying tasks
-        print("\n")
+        # Build YAML data structure
+        tasks_list = []
 
-        # Display each task
         for item in result_data:
-            print(f"- Link: {self.url}/T{item['id']}")
-            print("  Task:")
             fields = item.get("fields", {})
-            date_closed = ""
 
-            # Print task fields under Task section
-            for key, value in fields.items():
-                if key in ["dateCreated", "dateModified"]:
-                    if value:
-                        formatted_time = format_timestamp(value)
-                        print(f"    {key[4:]}: {formatted_time}")
-                elif key == "dateClosed":
-                    if value:
-                        date_closed = format_timestamp(value)
-                        print(f"    Closed: {date_closed}")
-                elif key == "name":
-                    print(f"    Name: '{value}'" if "[" in value else f"    Name: {value}")
+            # Build task dict
+            task_dict = {
+                "Link": f"{self.url}/T{item['id']}",
+                "Task": {}
+            }
 
-            status_name = fields.get("status", {}).get("name", "Unknown")
-            print(f"    Status: {status_name}")
+            # Build task fields
+            task_data = {}
 
-            priority_name = fields.get("priority", {}).get("name", "Unknown")
-            print(f"    Priority: {priority_name}")
+            # Name
+            task_data["Name"] = fields.get("name", "")
 
+            # Status
+            task_data["Status"] = fields.get("status", {}).get("name", "Unknown")
+
+            # Priority
+            task_data["Priority"] = fields.get("priority", {}).get("name", "Unknown")
+
+            # Dates
+            if fields.get("dateCreated"):
+                task_data["Created"] = format_timestamp(fields["dateCreated"])
+            if fields.get("dateModified"):
+                task_data["Modified"] = format_timestamp(fields["dateModified"])
+            if fields.get("dateClosed"):
+                task_data["Closed"] = format_timestamp(fields["dateClosed"])
+
+            # Description - use literal block scalar style for multiline
             description_raw = fields.get("description", {}).get("raw", "")
             if description_raw:
-                print("    Description: |")
-                for line in description_raw.splitlines():
-                    print(f"      > {line}")
+                # Format description with "> " prefix for each line to preserve original format
+                formatted_desc = "\n".join(f"> {line}" for line in description_raw.splitlines())
+                task_data["Description"] = formatted_desc
             else:
-                print("    Description: ''")
+                task_data["Description"] = ""
+
+            task_dict["Task"] = task_data
 
             # Display board information (current columns only)
             columns_data = item.get("attachments", {}).get("columns", {})
             log.debug(f"Full columns data structure: {columns_data}")
             boards = columns_data.get("boards", {})
             log.debug(f"Boards type: {type(boards)}, value: {boards}")
-            self._print_task_boards(
+            boards_data = self._build_task_boards(
                 boards,
                 project_phid_to_name,
-                indent="    ",
             )
+            if boards_data:
+                task_dict["Boards"] = boards_data
 
-            # Display History section if show_history is enabled
+            # Add History section if show_history is enabled
             if show_history:
-                self._print_history_section(
+                history_data = self._build_history_section(
                     item["id"],
                     boards,
                     project_phid_to_name,
                     priority_transitions_map,
                     task_transitions_map,
-                    indent="  ",
                 )
+                if history_data:
+                    task_dict["History"] = history_data
 
-            # Display Metadata section if show_metadata is enabled
+            # Add Metadata section if show_metadata is enabled
             if show_metadata:
-                self._print_metadata_section(
+                metadata_data = self._build_metadata_section(
                     item["id"],
                     matching_boards_map,
                     matching_priority_map,
                     project_phid_to_name,
-                    indent="  ",
                 )
+                task_dict["Metadata"] = metadata_data
 
-            print()
+            tasks_list.append(task_dict)
+
+        # Output as YAML
+        print()  # Empty line for separation
+        yaml.safe_dump(
+            tasks_list,
+            stream=sys.stdout,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+            explicit_start=False,
+        )
 
     def _display_task_transitions(self, task_phid):
         """
@@ -1243,7 +1286,9 @@ class Maniphest(Phabfive):
                     print("    Transitions:")
 
                 # Print the transitions
-                self._print_transitions(board_transitions, column_info, indent="      ")  # noqa: F821
+                transitions_list = self._build_transitions(board_transitions, column_info)
+                for transition in transitions_list:
+                    print(f"      - {transition}")
 
     def add_comment(self, ticket_identifier, comment_string):
         """
