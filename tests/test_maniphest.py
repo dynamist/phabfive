@@ -400,57 +400,59 @@ class TestFetchProjectNamesForBoards:
         assert result == {}
 
 
-class TestPrintTaskColumns:
+class TestBuildTaskBoards:
+    """Test that _build_task_boards creates correct data structures."""
+
     @patch("phabfive.maniphest.Phabfive.__init__")
-    @patch("builtins.print")
-    def test_print_with_project_filter(self, mock_print, mock_init):
+    def test_build_with_empty_project_names(self, mock_init):
         mock_init.return_value = None
         maniphest = Maniphest()
 
         boards = {"PHID-PROJ-123": {"columns": [{"name": "Backlog"}, {"name": "Done"}]}}
 
-        maniphest._print_task_boards(boards, {})
-        # Updated expectations for new board format which shows nested structure
-        assert mock_print.called
+        result = maniphest._build_task_boards(boards, {})
+        # Should return dict with Unknown project name
+        assert isinstance(result, dict)
+        assert "Unknown" in result
+        assert result["Unknown"]["Column"] == "Backlog"  # First column only
 
     @patch("phabfive.maniphest.Phabfive.__init__")
-    @patch("builtins.print")
-    def test_print_without_project_filter(self, mock_print, mock_init):
+    def test_build_with_project_names(self, mock_init):
         mock_init.return_value = None
         maniphest = Maniphest()
 
         boards = {"PHID-PROJ-123": {"columns": [{"name": "Backlog"}]}}
         project_names = {"PHID-PROJ-123": "Project A"}
 
-        maniphest._print_task_boards(boards, project_names)
-        # New board display format shows nested structure with project name
-        assert mock_print.called
+        result = maniphest._build_task_boards(boards, project_names)
+        # Should return dict with proper project name
+        assert isinstance(result, dict)
+        assert "Project A" in result
+        assert result["Project A"]["Column"] == "Backlog"
 
     @patch("phabfive.maniphest.Phabfive.__init__")
-    @patch("builtins.print")
-    def test_print_with_list_boards(self, mock_print, mock_init):
-        """Test that list boards format doesn't crash."""
+    def test_build_with_list_boards(self, mock_init):
+        """Test that list boards format returns empty dict."""
         mock_init.return_value = None
         maniphest = Maniphest()
 
         boards = []  # List format
 
-        # Should not crash, just return without printing
-        maniphest._print_task_boards(boards, {})
-        mock_print.assert_not_called()
+        result = maniphest._build_task_boards(boards, {})
+        # Should return empty dict
+        assert result == {}
 
     @patch("phabfive.maniphest.Phabfive.__init__")
-    @patch("builtins.print")
-    def test_print_with_list_boards_single_project(self, mock_print, mock_init):
-        """Test that list boards format doesn't crash with single project."""
+    def test_build_with_list_boards_single_project(self, mock_init):
+        """Test that list boards format returns empty dict."""
         mock_init.return_value = None
         maniphest = Maniphest()
 
         boards = []  # List format
 
-        # Should not crash, just return without printing
-        maniphest._print_task_boards(boards, {})
-        mock_print.assert_not_called()
+        result = maniphest._build_task_boards(boards, {})
+        # Should return empty dict
+        assert result == {}
 
 
 class TestParseSingleCondition:
@@ -893,3 +895,105 @@ class TestTransitionFilteringIntegration:
 
         # Task 2 should not match (only forward movement)
         assert matches2 is False
+
+
+class TestYAMLOutput:
+    """Test that YAML output is properly formatted and parsable."""
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_yaml_output_is_parsable(self, mock_init, capsys):
+        """Test that task_search generates valid YAML output."""
+        from ruamel.yaml import YAML
+        from io import StringIO
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.url = "https://phabricator.example.com"
+
+        # Mock the phab API
+        maniphest.phab = MagicMock()
+
+        # Mock project search to return a project
+        maniphest.phab.project.search.return_value = {
+            "data": [{"phid": "PHID-PROJ-123", "fields": {"name": "Test Project"}}],
+            "cursor": {"after": None}
+        }
+
+        # Mock maniphest search with tasks containing special YAML characters
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [
+                {
+                    "id": 1,
+                    "phid": "PHID-TASK-1",
+                    "fields": {
+                        "name": "Bug: Authentication failed in api.login()",
+                        "status": {"name": "Open"},
+                        "priority": {"name": "High"},
+                        "description": {"raw": "Steps to reproduce:\n1. Call api.login()\n2. Check response"},
+                        "dateCreated": 1234567890,
+                        "dateModified": 1234567900,
+                        "dateClosed": None,
+                    },
+                    "attachments": {
+                        "columns": {
+                            "boards": {
+                                "PHID-PROJ-123": {
+                                    "columns": [{"phid": "PHID-COL-1", "name": "In Progress: Review"}]
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "id": 2,
+                    "phid": "PHID-TASK-2",
+                    "fields": {
+                        "name": "Feature request: Add support for {template} variables",
+                        "status": {"name": "Resolved"},
+                        "priority": {"name": "Normal"},
+                        "description": {"raw": ""},
+                        "dateCreated": 1234567800,
+                        "dateModified": 1234567850,
+                        "dateClosed": 1234567900,
+                    },
+                    "attachments": {
+                        "columns": {"boards": {}}
+                    }
+                }
+            ]
+        }
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        # Call task_search
+        maniphest.task_search(project="Test Project")
+
+        # Capture output
+        captured = capsys.readouterr()
+        yaml_output = captured.out
+
+        # Parse the YAML to verify it's valid
+        try:
+            yaml_parser = YAML()
+            parsed_data = yaml_parser.load(StringIO(yaml_output))
+        except Exception as e:
+            pytest.fail(f"Generated YAML is not parsable: {e}\n\nOutput:\n{yaml_output}")
+
+        # Verify the structure
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 2
+
+        # Check first task (contains colons in name)
+        task1 = parsed_data[0]
+        assert "Link" in task1
+        assert task1["Link"] == "https://phabricator.example.com/T1"
+        assert "Task" in task1
+        assert task1["Task"]["Name"] == "Bug: Authentication failed in api.login()"
+        assert task1["Task"]["Status"] == "Open"
+        assert task1["Task"]["Priority"] == "High"
+
+        # Check second task (contains curly braces in name)
+        task2 = parsed_data[1]
+        assert task2["Task"]["Name"] == "Feature request: Add support for {template} variables"
+        assert task2["Task"]["Status"] == "Resolved"
