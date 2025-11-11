@@ -7,8 +7,7 @@ from datetime import datetime
 from pprint import pprint as pp
 
 # 3rd party imports
-from docopt import docopt, extras, Option, DocoptExit
-
+from docopt import DocoptExit, Option, docopt, extras
 
 base_args = """
 Usage:
@@ -117,10 +116,11 @@ Usage:
     phabfive maniphest search <project_name> [options]
 
 Search Arguments:
-    <project_name>       Project name or wildcard pattern.
-                         Supports: "*" (all projects), "prefix*" (starts with),
-                         "*suffix" (ends with), "*contains*" (contains text).
-                         Empty string "" returns no results.
+     <project_name>       Project name or filter pattern (supports OR/AND logic and wildcards).
+                          Supports: "*" (all projects), "prefix*" (starts with),
+                          "*suffix" (ends with), "*contains*" (contains text).
+                          Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
+                          Empty string "" returns no results.
 
 Search Options:
     --created-after=N      Tasks created within the last N days
@@ -165,13 +165,13 @@ Search Options:
                              raised                   - Status progressed forward
                              lowered                  - Status moved backward
                              not:PATTERN              - Negates any pattern above
-                           Examples:
-                             been:Open
-                             from:Open:raised
-                             not:in:Resolved+raised
-                             in:Open,been:Resolved
-    --show-history         Display column, priority, and status transition history
-    --show-metadata        Display filter match metadata (which boards/priority/status matched)
+                            Examples:
+                              been:Open
+                              from:Open:raised
+                              not:in:Resolved+raised
+                              in:Open,been:Resolved
+     --show-history         Display column, priority, and status transition history
+     --show-metadata        Display filter match metadata (which boards/priority/status matched)
 
 Options:
     --all                Show all fields for a ticket
@@ -263,12 +263,11 @@ def run(cli_args, sub_args):
     Execute the CLI
     """
     # Local imports required due to logging limitation
-    from phabfive import passphrase, diffusion, paste, user, repl, maniphest
-    from phabfive.maniphest_transitions import parse_transition_patterns
-    from phabfive.priority_transitions import parse_priority_patterns
-    from phabfive.status_transitions import parse_status_patterns
+    from phabfive import diffusion, maniphest, passphrase, paste, repl, user
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.exceptions import PhabfiveException
+    from phabfive.maniphest_transitions import parse_transition_patterns
+    from phabfive.priority_transitions import parse_priority_patterns
 
     retcode = 0
 
@@ -401,7 +400,10 @@ def run(cli_args, sub_args):
                             sub_args["--column"]
                         )
                     except Exception as e:
-                        print(f"ERROR: Invalid column filter pattern: {e}", file=sys.stderr)
+                        print(
+                            f"ERROR: Invalid column filter pattern: {e}",
+                            file=sys.stderr,
+                        )
                         retcode = 1
                         return retcode
 
@@ -412,18 +414,25 @@ def run(cli_args, sub_args):
                             sub_args["--priority"]
                         )
                     except Exception as e:
-                        print(f"ERROR: Invalid priority filter pattern: {e}", file=sys.stderr)
+                        print(
+                            f"ERROR: Invalid priority filter pattern: {e}",
+                            file=sys.stderr,
+                        )
                         retcode = 1
                         return retcode
 
                 status_patterns = None
                 if sub_args.get("--status"):
                     try:
-                        status_patterns = parse_status_patterns(
+                        # Parse status patterns with API-fetched status ordering
+                        status_patterns = maniphest_app.parse_status_patterns_with_api(
                             sub_args["--status"]
                         )
                     except Exception as e:
-                        print(f"ERROR: Invalid status filter pattern: {e}", file=sys.stderr)
+                        print(
+                            f"ERROR: Invalid status filter pattern: {e}",
+                            file=sys.stderr,
+                        )
                         retcode = 1
                         return retcode
 

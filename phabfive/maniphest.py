@@ -4,6 +4,7 @@
 import datetime
 import difflib
 import fnmatch
+import itertools
 import json
 import logging
 import sys
@@ -28,6 +29,7 @@ from phabfive.exceptions import (
     PhabfiveException,
     PhabfiveRemoteException,
 )
+from phabfive.project_filters import parse_project_patterns
 
 # phabfive transition imports - imported in cli.py where patterns are parsed
 
@@ -452,6 +454,97 @@ class Maniphest(Phabfive):
             "0": "Wishlist",
         }
 
+    @lru_cache(maxsize=1)
+    def _get_api_status_map(self):
+        """
+        Get status information from Phabricator API using maniphest.querystatuses.
+
+        Uses the maniphest.querystatuses API to dynamically fetch all available
+        statuses and their metadata. This allows the tool to work with custom
+        status configurations in Phabricator/Phorge instances.
+
+        Uses LRU cache (size=1) since status mappings are global and rarely change.
+
+        Returns
+        -------
+        dict
+            Response from maniphest.querystatuses API containing:
+            - defaultStatus: default status key
+            - defaultClosedStatus: default closed status key
+            - duplicateStatus: duplicate status key
+            - openStatuses: list of open status keys
+            - closedStatuses: dict of closed status keys/names
+            - allStatuses: list of all status keys
+            - statusMap: dict mapping status keys to display names
+        """
+        try:
+            result = self.phab.maniphest.querystatuses()
+            log.debug(
+                f"Fetched {len(result.get('allStatuses', []))} statuses from maniphest.querystatuses"
+            )
+            return result
+        except Exception as e:
+            log.warning(
+                f"Failed to fetch statuses from API: {e}. Using fallback statuses."
+            )
+            # Fallback to standard Phabricator statuses if API call fails
+            return {
+                "defaultStatus": "open",
+                "defaultClosedStatus": "resolved",
+                "duplicateStatus": "duplicate",
+                "openStatuses": ["open"],
+                "closedStatuses": {
+                    "1": "resolved",
+                    "2": "wontfix",
+                    "3": "invalid",
+                    "4": "duplicate",
+                    "5": "spite",
+                },
+                "allStatuses": [
+                    "open",
+                    "resolved",
+                    "wontfix",
+                    "invalid",
+                    "duplicate",
+                    "spite",
+                ],
+                "statusMap": {
+                    "open": "Open",
+                    "resolved": "Resolved",
+                    "wontfix": "Wontfix",
+                    "invalid": "Invalid",
+                    "duplicate": "Duplicate",
+                    "spite": "Spite",
+                },
+            }
+
+    def parse_status_patterns_with_api(self, patterns_str):
+        """
+        Parse status patterns with API-fetched status ordering.
+
+        This is a wrapper that fetches status information from the Phabricator API
+        and passes it to parse_status_patterns for dynamic status ordering.
+
+        Parameters
+        ----------
+        patterns_str : str
+            Pattern string like "from:Open:raised+in:Resolved,to:Closed"
+
+        Returns
+        -------
+        list
+            List of StatusPattern objects
+
+        Raises
+        ------
+        PhabfiveException
+            If pattern syntax is invalid
+        """
+        from phabfive.status_transitions import parse_status_patterns
+
+        api_response = self._get_api_status_map()
+        return parse_status_patterns(patterns_str, api_response)
+
     def _fetch_priority_transactions(self, task_phid):
         """
         Fetch priority change transaction history for a task.
@@ -720,7 +813,9 @@ class Maniphest(Phabfive):
         if transactions is not None and "status" in transactions:
             status_transactions = transactions["status"]
         else:
-            status_transactions = self._fetch_status_transactions(task_phid)
+            # Fetch status transactions using consolidated method
+            all_transactions = self._fetch_all_transactions(task_phid, need_status=True)
+            status_transactions = all_transactions.get("status", [])
 
         # Get current status
         current_status = task.get("fields", {}).get("status", {}).get("name")
@@ -731,6 +826,66 @@ class Maniphest(Phabfive):
                 return (True, status_transactions)
 
         return (False, [])
+
+    def _task_matches_project_patterns(
+        self, task, project_patterns, resolved_phids_by_pattern
+    ):
+        """
+        Check if a task matches the project filter criteria.
+
+        For patterns with AND logic (multiple projects in one pattern):
+        - Task must belong to ALL projects in at least one combination
+
+        For patterns with OR logic (separate patterns from comma):
+        - Task must belong to ANY project from ANY pattern
+
+        Parameters
+        ----------
+        task : dict
+            Task data from maniphest.search
+        project_patterns : list
+            List of ProjectPattern objects
+        resolved_phids_by_pattern : list
+            Either a list of PHIDs (for OR logic) or list of tuples (for AND logic)
+            For 'dyn127*,dynatron': [['PHID-1', 'PHID-2', 'PHID-3'], ['PHID-4']]
+            For 'dyn127*+dynatron': [[('PHID-1', 'PHID-4'), ('PHID-2', 'PHID-4'), ...]]
+
+        Returns
+        -------
+        bool
+            True if task matches the filter criteria, False otherwise
+        """
+        if not project_patterns or not resolved_phids_by_pattern:
+            return True  # No filtering needed
+
+        # Get project PHIDs from the boards the task is on
+        # Project information is stored in attachments.columns.boards, not in fields
+        boards = task.get("attachments", {}).get("columns", {}).get("boards", {})
+        task_project_phids = set(boards.keys()) if boards else set()
+
+        if not task_project_phids:
+            # Task has no projects, can't match
+            log.debug(f"Task {task.get('id')} has no projects")
+            return False
+
+        # Check each pattern (separated by comma = OR logic between patterns)
+        for pattern, pattern_data in zip(project_patterns, resolved_phids_by_pattern):
+            # If pattern has multiple project names (AND logic with +):
+            # pattern_data is a list of tuples (combinations)
+            if len(pattern.project_names) > 1:
+                # AND logic: check if ANY combination matches
+                for combo in pattern_data:
+                    combo_set = set(combo)
+                    if combo_set.issubset(task_project_phids):
+                        return True
+            else:
+                # Single project in pattern (OR logic from wildcard expansion):
+                # pattern_data is a flat list of PHIDs
+                pattern_phids_set = set(pattern_data)
+                if pattern_phids_set & task_project_phids:
+                    return True
+
+        return False
 
     def _task_matches_any_pattern(
         self, task, task_phid, patterns, board_phids, transactions=None
@@ -860,6 +1015,65 @@ class Maniphest(Phabfive):
 
         return transitions
 
+    def _build_status_transitions(self, status_transactions):
+        """
+        Build status transition history data for a task.
+
+        Parameters
+        ----------
+        status_transactions : list
+            List of status change transactions
+
+        Returns
+        -------
+        list
+            List of formatted transition strings
+        """
+        if not status_transactions:
+            return []
+
+        from phabfive.status_transitions import get_status_order
+
+        # Sort transitions chronologically (oldest first) for better readability
+        sorted_transactions = sorted(
+            status_transactions, key=lambda t: t.get("dateCreated", 0)
+        )
+
+        transitions = []
+        for trans in sorted_transactions:
+            old_value = trans.get("oldValue")
+            new_value = trans.get("newValue")
+            date_created = trans.get("dateCreated")
+
+            # Format timestamp
+            timestamp_str = (
+                format_timestamp(date_created) if date_created else "Unknown"
+            )
+
+            # Handle case where there's no old value (initial status set)
+            old_status_name = old_value if old_value else "(initial)"
+            new_status_name = new_value if new_value else "Unknown"
+
+            # Determine if raised (progressed) or lowered (regressed)
+            direction = "[•]"
+            if old_value and new_value:
+                # Get status info from API
+                api_response = self._get_api_status_map()
+                old_order = get_status_order(old_value, api_response)
+                new_order = get_status_order(new_value, api_response)
+
+                if old_order is not None and new_order is not None:
+                    if new_order > old_order:  # Raised (progressed forward)
+                        direction = "[↑]"
+                    elif new_order < old_order:  # Lowered (moved backward)
+                        direction = "[↓]"
+
+            transitions.append(
+                f"{timestamp_str} {direction} {old_status_name} → {new_status_name}"
+            )
+
+        return transitions
+
     def _build_column_transitions(self, transactions, column_info):
         """
         Build transition history data for a task.
@@ -979,9 +1193,10 @@ class Maniphest(Phabfive):
         project_phid_to_name,
         priority_transitions_map,
         task_transitions_map,
+        status_transitions_map,
     ):
         """
-        Build History section dict with priority and board transitions.
+        Build History section dict with priority, status, and board transitions.
 
         Parameters
         ----------
@@ -995,6 +1210,8 @@ class Maniphest(Phabfive):
             Mapping of task ID to priority transitions
         task_transitions_map : dict
             Mapping of task ID to board transitions
+        status_transitions_map : dict
+            Mapping of task ID to status transitions
 
         Returns
         -------
@@ -1008,6 +1225,12 @@ class Maniphest(Phabfive):
             priority_trans = priority_transitions_map[task_id]
             if priority_trans:
                 history["Priority"] = self._build_priority_transitions(priority_trans)
+
+        # Build status transitions
+        if task_id in status_transitions_map:
+            status_trans = status_transitions_map[task_id]
+            if status_trans:
+                history["Status"] = self._build_status_transitions(status_trans)
 
         # Build board transitions
         if task_id in task_transitions_map:
@@ -1119,8 +1342,9 @@ class Maniphest(Phabfive):
 
         Parameters
         ----------
-        project       (str, required): Project name or wildcard pattern.
+        project       (str, required): Project name, wildcard pattern, or filter pattern.
                       Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
+                      Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
                       Empty string returns no results.
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
@@ -1140,6 +1364,74 @@ class Maniphest(Phabfive):
             created_after = days_to_unix(created_after)
         if updated_after:
             updated_after = days_to_unix(updated_after)
+
+        # Parse project patterns from the project argument
+        # This allows for OR/AND logic like "ProjectA,ProjectB" or "ProjectA+ProjectB"
+        # Also handles projects with spaces like "Project A,Project B"
+        project_patterns = None
+        project_phids = []
+        resolved_phids_by_pattern = []
+
+        if project and project != "*":
+            # Check if it contains pattern operators (comma or plus)
+            # This includes cases with spaces like "Project A, Project B"
+            if "," in project or "+" in project:
+                try:
+                    project_patterns = parse_project_patterns(project)
+                    log.debug(
+                        f"Parsed {len(project_patterns)} project patterns from '{project}'"
+                    )
+
+                    # Resolve each project name/wildcard in all patterns to PHIDs
+                    # Keep track of which PHIDs belong to which pattern for AND/OR logic
+                    resolved_phids_set = set()
+                    resolved_phids_by_pattern = []
+
+                    for pattern in project_patterns:
+                        # Resolve all project names in this pattern to PHIDs
+                        phids_by_name = []
+                        for project_name in pattern.project_names:
+                            phids = self._resolve_project_phids(project_name)
+                            if not phids:
+                                log.error(
+                                    f"No projects matched '{project_name}' in pattern '{project}'"
+                                )
+                                return
+                            phids_by_name.append(phids)
+
+                        # For AND logic (multiple project names): create cartesian product
+                        # For OR logic (single project name): just flatten the list
+                        if len(pattern.project_names) > 1:
+                            # AND logic: create all combinations (cartesian product)
+                            combinations = list(itertools.product(*phids_by_name))
+                            # Store as tuples that must all be in task's projectPHIDs
+                            resolved_phids_by_pattern.append(combinations)
+                        else:
+                            # OR logic: just a flat list of PHIDs (from wildcard expansion)
+                            resolved_phids_by_pattern.append(phids_by_name[0])
+
+                        # Add all PHIDs to the set for fetching
+                        for phid_list in phids_by_name:
+                            resolved_phids_set.update(phid_list)
+
+                    project_phids = list(resolved_phids_set)
+
+                    if not project_phids:
+                        log.error(f"No projects matched the pattern '{project}'")
+                        return
+
+                    log.info(
+                        f"Pattern '{project}' resolved to {len(project_phids)} project(s)"
+                    )
+                except PhabfiveException as e:
+                    log.error(f"Invalid project pattern: {e}")
+                    return
+            else:
+                # Simple project name - use existing logic (backward compatibility)
+                project_phids = self._resolve_project_phids(project)
+                if not project_phids:
+                    # Error already logged in _resolve_project_phids
+                    return
 
         # Special case: "*" means search all projects (no filter)
         if project == "*":
@@ -1180,12 +1472,6 @@ class Maniphest(Phabfive):
                     # No more pages
                     break
         else:
-            # Resolve project name/pattern to PHIDs
-            project_phids = self._resolve_project_phids(project)
-            if not project_phids:
-                # Error already logged in _resolve_project_phids
-                return
-
             # Handle multiple projects with OR logic (make separate calls and merge)
             if len(project_phids) > 1:
                 log.info(f"Searching {len(project_phids)} projects with OR logic")
@@ -1288,7 +1574,12 @@ class Maniphest(Phabfive):
         need_status = bool(status_patterns) or show_history
 
         # Apply transition filtering if patterns specified
-        if transition_patterns or priority_patterns or status_patterns:
+        if (
+            transition_patterns
+            or priority_patterns
+            or status_patterns
+            or project_patterns
+        ):
             filter_desc = []
             if transition_patterns:
                 filter_desc.append("column transition patterns")
@@ -1296,6 +1587,8 @@ class Maniphest(Phabfive):
                 filter_desc.append("priority patterns")
             if status_patterns:
                 filter_desc.append("status patterns")
+            if project_patterns:
+                filter_desc.append("project patterns")
             log.info(
                 f"Filtering {len(result_data)} tasks by {' and '.join(filter_desc)}"
             )
@@ -1392,8 +1685,24 @@ class Maniphest(Phabfive):
                     # Not filtering by status, but need history for display
                     status_trans = all_fetched_transactions.get("status", [])
 
-                # Task must match column AND priority AND status patterns (if specified)
-                if column_matches and priority_matches and status_matches:
+                # Check project patterns
+                project_matches = True
+
+                if project_patterns:
+                    # Filtering by project - check if task matches
+                    project_matches = self._task_matches_project_patterns(
+                        item,
+                        project_patterns,
+                        resolved_phids_by_pattern,
+                    )
+
+                # Task must match column AND priority AND status AND project patterns (if specified)
+                if (
+                    column_matches
+                    and priority_matches
+                    and status_matches
+                    and project_matches
+                ):
                     filtered_tasks.append(item)
                     if show_history:
                         if all_transitions:

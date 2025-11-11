@@ -10,7 +10,7 @@ Phabfive currently supports the following Phabricator/Phorge applications:
 - **Diffusion** - List repositories, get branches, clone URIs, add repositories, manage URIs
 - **Paste** - List, get, and add code pastes
 - **User** - Get information about the logged-in user
-- **Maniphest** - Add comments, show task details, create tasks from templates, and search with advanced transition filtering
+- **Maniphest** - Add comments, show task details, create tasks from templates, and search with advanced project filtering and transition filtering
 
 ## Getting Started
 

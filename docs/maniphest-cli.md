@@ -73,7 +73,7 @@ phabfive maniphest create tasks.yaml --dry-run
 
 ## Task Search
 
-Search for tasks within projects with various filtering options.
+Search for tasks within projects with various filtering options, including advanced project pattern matching with AND/OR logic.
 
 ### Basic Search
 
@@ -83,7 +83,16 @@ phabfive maniphest search "My Project"
 
 # Search all projects
 phabfive maniphest search "*"
+
+# Search multiple projects (OR logic)
+phabfive maniphest search "ProjectA,ProjectB"
+
+# Search project intersection (AND logic)
+phabfive maniphest search "Team Alpha+Sprint 42"
 ```
+
+!!! tip
+    For advanced project filtering with AND/OR logic and complex patterns, see the [Advanced Project Filtering](#advanced-project-filtering) section below.
 
 ### Wildcard Project Matching
 
@@ -102,6 +111,189 @@ phabfive maniphest search "*API*"
 
 !!! note
     Project matching is case-insensitive. If no exact match is found, phabfive will suggest similar project names.
+
+### Advanced Project Filtering
+
+Search for tasks that belong to multiple projects using AND/OR logic. This powerful feature allows you to find tasks at the intersection of different project scopes or combine results from multiple project queries.
+
+#### Pattern Syntax
+
+Project patterns use a query language with AND/OR logic:
+
+- **Comma (`,`)** = OR logic - match tasks in ANY of the projects
+- **Plus (`+`)** = AND logic - match tasks in ALL specified projects
+- **Wildcards (`*`)** can be combined with AND/OR operators
+
+#### OR Logic Examples
+
+Find tasks that belong to ANY of the specified projects:
+
+```bash
+# Tasks in EITHER ProjectA OR ProjectB
+phabfive maniphest search "ProjectA,ProjectB"
+
+# Tasks in any Backend project OR any Frontend project
+phabfive maniphest search "Backend*,Frontend*"
+
+# Tasks in ProjectA OR ProjectB OR ProjectC
+phabfive maniphest search "ProjectA,ProjectB,ProjectC"
+```
+
+**Use case**: Finding all tasks across multiple related projects or teams.
+
+#### AND Logic Examples
+
+Find tasks that belong to ALL specified projects simultaneously:
+
+```bash
+# Tasks that are in BOTH ProjectA AND ProjectB
+phabfive maniphest search "ProjectA+ProjectB"
+
+# Tasks tagged with both a team and a sprint
+phabfive maniphest search "Backend Team+Sprint 42"
+
+# Tasks in multiple categories
+phabfive maniphest search "Security+High Priority+Q1 2024"
+```
+
+**Use case**: Finding tasks at the intersection of multiple categorizations (e.g., tasks that belong to both a team project and a sprint milestone).
+
+#### Complex Combinations
+
+Combine OR and AND logic for sophisticated queries:
+
+```bash
+# Tasks that are in (ProjectA AND ProjectB) OR (ProjectC)
+phabfive maniphest search "ProjectA+ProjectB,ProjectC"
+
+# Tasks in (Backend Team AND Sprint 42) OR (Frontend Team AND Sprint 42)
+phabfive maniphest search "Backend Team+Sprint 42,Frontend Team+Sprint 42"
+
+# Tasks in any Q1 project AND tagged as urgent, OR any Q2 project
+phabfive maniphest search "Q1*+Urgent,Q2*"
+```
+
+**How it works**: Comma-separated groups are evaluated independently (OR), and within each group, plus-separated projects must all match (AND).
+
+#### Wildcards with AND/OR Logic
+
+Combine wildcard patterns with logical operators:
+
+```bash
+# Tasks in any Backend project OR any API project
+phabfive maniphest search "Backend*,API*"
+
+# Tasks in both a Backend project AND marked as Security
+phabfive maniphest search "Backend*+Security"
+
+# Tasks in (any 2024 project AND High Priority) OR (any Archive project)
+phabfive maniphest search "*2024+High Priority,Archive*"
+```
+
+#### Projects with Spaces
+
+Project names containing spaces are fully supported:
+
+```bash
+# Single project with spaces
+phabfive maniphest search "My Project"
+
+# OR logic with spaces
+phabfive maniphest search "Project A,Project B"
+
+# AND logic with spaces
+phabfive maniphest search "Backend Team+Sprint 42"
+
+# Complex pattern with spaces
+phabfive maniphest search "Q1 2024+Backend Team,Q1 2024+Frontend Team"
+```
+
+#### Real-World Examples
+
+**Sprint Planning**: Find all tasks for a specific sprint across multiple teams:
+```bash
+phabfive maniphest search "Backend+Sprint 15,Frontend+Sprint 15,QA+Sprint 15"
+```
+
+**Cross-Team Features**: Find tasks that involve multiple teams:
+```bash
+phabfive maniphest search "Backend Team+Mobile Team"
+```
+
+**Security Audits**: Find security tasks across all product areas:
+```bash
+phabfive maniphest search "Product*+Security"
+```
+
+**Quarterly Planning**: Find all high-priority tasks for Q1 across teams:
+```bash
+phabfive maniphest search "Q1 2024+High Priority"
+```
+
+**Release Tracking**: Find tasks for a specific release across components:
+```bash
+phabfive maniphest search "Release 2.0+API,Release 2.0+UI,Release 2.0+Database"
+```
+
+#### Combining with Other Filters
+
+Project patterns work seamlessly with other search filters:
+
+```bash
+# Recent tasks in multiple projects
+phabfive maniphest search "ProjectA,ProjectB" --updated-after=7
+
+# Tasks in both team and sprint, currently in specific column
+phabfive maniphest search "Backend+Sprint 42" --column="in:In Progress"
+
+# High-priority tasks across backend services
+phabfive maniphest search "Backend*" --priority="in:High"
+
+# Tasks at intersection of team and milestone, recently completed
+phabfive maniphest search "API Team+Milestone 3" \
+  --column="to:Done" \
+  --updated-after=14
+
+# Security tasks across products that moved backward
+phabfive maniphest search "Product*+Security" \
+  --column=backward \
+  --show-history
+```
+
+#### Tips for Project Filtering
+
+**Pattern Evaluation**:
+- OR patterns (comma-separated) are evaluated left to right - tasks matching ANY pattern are included
+- AND patterns (plus-separated) require the task to belong to ALL specified projects
+- Empty strings (`""`) return no results - use `"*"` to search all projects instead
+
+**Performance Considerations**:
+- Specific project names are faster than wildcards
+- Wildcards like `"*"` (all projects) may take longer for large instances
+- Combine with date filters (`--created-after`, `--updated-after`) to narrow results
+
+**Debugging Patterns**:
+If a pattern doesn't return expected results:
+
+1. Test each project name individually first
+2. Verify project names match exactly (check for typos, extra spaces)
+3. Remember that AND logic requires tasks to be in ALL projects simultaneously
+4. Use `phabfive maniphest search "*"` to see all available tasks and their projects
+
+**Common Patterns**:
+```bash
+# Multiple teams working on same feature
+"Team A+Feature X,Team B+Feature X"
+
+# All projects in a category
+"Backend*,Frontend*,Mobile*"
+
+# Specific sprint across teams
+"Sprint 42+Backend,Sprint 42+Frontend,Sprint 42+QA"
+
+# Cross-functional initiatives
+"Security+*"
+```
 
 ### Date Filtering
 
@@ -460,7 +652,7 @@ The tool dynamically fetches status information from your Phabricator/Phorge ins
 
 **Open vs Closed**: Only Open and Blocked are "open" statuses. All others (Wontfix, Invalid, Duplicate, Resolved) are terminal/closed states.
 
-**Status Progression**: 
+**Status Progression**:
 - Moving from a lower number to a higher number is considered **"raised"** (forward progression)
 - Moving from a higher number to a lower number is considered **"lowered"** (regression/reopening)
 - For example: Open (0) → Resolved (5) is "raised" (task progressed forward)
