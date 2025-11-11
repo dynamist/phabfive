@@ -413,6 +413,132 @@ phabfive maniphest search "My Project" --priority="in:Normal+not:lowered"
 
 **Note**: `not:been:PRIORITY` is functionally equivalent to `never:PRIORITY`.
 
+## Status Filtering
+
+Filter tasks based on their status changes over time. This helps identify tasks that progressed through workflows, track status regressions, and analyze how task completion status evolved.
+
+### Why Use Status Filtering?
+
+Common use cases include:
+
+- **Track completions**: Find tasks that changed to "Resolved"
+- **Identify regressions**: Tasks that moved backward from Resolved to Open
+- **Find blocked work**: Tasks that are currently Blocked
+- **Audit status history**: See complete status change history for tasks
+- **Monitor workflow progression**: Find tasks that reached specific milestones
+
+### Status Pattern Types
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `from:STATUS` | Task changed from STATUS | `from:Open` |
+| `from:STATUS:raised` | Task progressed from STATUS | `from:Open:raised` |
+| `from:STATUS:lowered` | Task regressed from STATUS | `from:Resolved:lowered` |
+| `to:STATUS` | Task changed to STATUS | `to:Resolved` |
+| `in:STATUS` | Task is currently at STATUS | `in:Resolved` |
+| `been:STATUS` | Task was at STATUS at any point | `been:Resolved` |
+| `never:STATUS` | Task was never at STATUS | `never:Blocked` |
+| `raised` | Task had any status progression | `raised` |
+| `lowered` | Task had any status regression | `lowered` |
+| `not:PATTERN` | Negates any pattern above | `not:in:Open`, `not:raised` |
+
+**Negation Prefix `not:`**: Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+- `not:in:Open` - Tasks NOT currently Open
+- `not:raised` - Tasks whose status hasn't progressed
+- `not:been:Resolved` - Tasks never been Resolved (equivalent to `never:Resolved`)
+
+### Status Values
+
+The tool dynamically fetches status information from your Phabricator/Phorge instance using the `maniphest.querystatuses` API. Standard Phabricator statuses include (in progression order):
+
+- **Open** (0) - Initial state for new tasks
+- **Blocked** (1) - Task is blocked/waiting on something
+- **Wontfix** (2) - Terminal: Won't be fixed
+- **Invalid** (3) - Terminal: Invalid task
+- **Duplicate** (4) - Terminal: Duplicate of another task
+- **Resolved** (5) - Terminal: Task completed successfully
+
+**Open vs Closed**: Only Open and Blocked are "open" statuses. All others (Wontfix, Invalid, Duplicate, Resolved) are terminal/closed states.
+
+**Status Progression**: 
+- Moving from a lower number to a higher number is considered **"raised"** (forward progression)
+- Moving from a higher number to a lower number is considered **"lowered"** (regression/reopening)
+- For example: Open (0) → Resolved (5) is "raised" (task progressed forward)
+- For example: Resolved (5) → Open (0) is "lowered" (task was reopened)
+
+**Note**: If your Phabricator/Phorge instance uses custom statuses, the tool will automatically adapt to your configuration.
+
+### Basic Status Examples
+
+```bash
+# Find tasks currently Open
+phabfive maniphest search "My Project" --status="in:Open"
+
+# Find tasks that were ever Resolved
+phabfive maniphest search "My Project" --status="been:Resolved"
+
+# Find tasks that progressed from Open
+phabfive maniphest search "My Project" --status="from:Open:raised"
+
+# Find tasks that had any status progression
+phabfive maniphest search "My Project" --status=raised
+```
+
+### Combining Column, Priority, and Status Filters
+
+You can combine all three filter types for powerful queries:
+
+```bash
+# Tasks moved to Done AND were raised from Open AND are currently Resolved
+phabfive maniphest search '*' \
+  --column='to:Done' \
+  --priority='from:Normal:raised' \
+  --status='in:Resolved'
+
+# Tasks in progress that have been blocked
+phabfive maniphest search "My Project" \
+  --column="in:In Progress" \
+  --status="been:Blocked"
+
+# Recently completed tasks that were never blocked
+phabfive maniphest search "My Project" \
+  --status="to:Resolved" \
+  --updated-after=7 \
+  --status="never:Blocked"
+```
+
+### Status OR/AND Logic
+
+Same as column and priority patterns, status patterns support OR (comma) and AND (plus):
+
+```bash
+# Tasks currently Open OR Blocked
+phabfive maniphest search "My Project" --status="in:Open,in:Blocked"
+
+# Tasks raised from Open AND currently Resolved
+phabfive maniphest search "My Project" --status="from:Open:raised+in:Resolved"
+```
+
+### Status Negation Patterns
+
+Use the `not:` prefix to negate status patterns:
+
+```bash
+# Tasks NOT currently Open
+phabfive maniphest search "My Project" --status="not:in:Open"
+
+# Tasks whose status has NOT progressed
+phabfive maniphest search "My Project" --status="not:raised"
+
+# Tasks NOT Resolved AND have been Blocked at some point
+phabfive maniphest search "My Project" --status="not:in:Resolved+been:Blocked"
+
+# Tasks that progressed but did NOT reach Resolved
+phabfive maniphest search "My Project" --status="raised+not:in:Resolved"
+```
+
+**Note**: `not:been:STATUS` is functionally equivalent to `never:STATUS`.
+
 ## Viewing Metadata
 
 Use `--show-metadata` to see why tasks matched your filters. This is especially useful when debugging complex filter combinations.
@@ -421,6 +547,7 @@ Use `--show-metadata` to see why tasks matched your filters. This is especially 
 phabfive maniphest search '*' \
   --column='from:Up Next:forward' \
   --priority='been:Normal' \
+  --status='in:Resolved' \
   --show-metadata
 ```
 
@@ -429,11 +556,13 @@ Output includes:
 Metadata:
   MatchedBoards: ['Development', 'GUNNAR-Core']
   MatchedPriority: true
+  MatchedStatus: true
 ```
 
 The metadata section shows:
 - **MatchedBoards**: Which boards satisfied the `--column` filter (in alphabetical order)
 - **MatchedPriority**: Whether the task matched the `--priority` filter
+- **MatchedStatus**: Whether the task matched the `--status` filter
 
 This helps you understand exactly why a task appeared in your search results.
 

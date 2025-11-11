@@ -155,8 +155,23 @@ Search Options:
                              from:Normal:raised
                              not:in:High+raised
                              in:High,been:Unbreak Now!
-    --show-history         Display column and priority transition history for each task
-    --show-metadata        Display filter match metadata (which boards/priority matched)
+    --status=PATTERNS      Filter tasks by status transitions (comma=OR, plus=AND).
+                           Automatically displays status history.
+                             from:STATUS[:direction]  - Changed from STATUS
+                             to:STATUS                - Changed to STATUS
+                             in:STATUS                - Currently at STATUS
+                             been:STATUS              - Was at STATUS at any point
+                             never:STATUS             - Never was at STATUS
+                             raised                   - Status progressed forward
+                             lowered                  - Status moved backward
+                             not:PATTERN              - Negates any pattern above
+                           Examples:
+                             been:Open
+                             from:Open:raised
+                             not:in:Resolved+raised
+                             in:Open,been:Resolved
+    --show-history         Display column, priority, and status transition history
+    --show-metadata        Display filter match metadata (which boards/priority/status matched)
 
 Options:
     --all                Show all fields for a ticket
@@ -251,6 +266,7 @@ def run(cli_args, sub_args):
     from phabfive import passphrase, diffusion, paste, user, repl, maniphest
     from phabfive.maniphest_transitions import parse_transition_patterns
     from phabfive.priority_transitions import parse_priority_patterns
+    from phabfive.status_transitions import parse_status_patterns
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.exceptions import PhabfiveException
 
@@ -400,6 +416,17 @@ def run(cli_args, sub_args):
                         retcode = 1
                         return retcode
 
+                status_patterns = None
+                if sub_args.get("--status"):
+                    try:
+                        status_patterns = parse_status_patterns(
+                            sub_args["--status"]
+                        )
+                    except Exception as e:
+                        print(f"ERROR: Invalid status filter pattern: {e}", file=sys.stderr)
+                        retcode = 1
+                        return retcode
+
                 # Only show history if explicitly requested
                 show_history = sub_args.get("--show-history", False)
 
@@ -411,6 +438,7 @@ def run(cli_args, sub_args):
                     updated_after=sub_args["--updated-after"],
                     transition_patterns=transition_patterns,
                     priority_patterns=priority_patterns,
+                    status_patterns=status_patterns,
                     show_history=show_history,
                     show_metadata=show_metadata,
                 )
