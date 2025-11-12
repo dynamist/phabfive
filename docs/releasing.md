@@ -26,7 +26,7 @@ PEP 440 also allows for post and dev releases if needed, but in general we shoul
 
 1. **PyPI Account & Permissions**
    - You must be an **owner** or **maintainer** for phabfive on PyPI
-   - Currently only Johan and Henrik are owners
+   - Currently only Henrik and Tim are owners
    - Ask them for assistance if you need upload permissions
 
 2. **Tools Installed**
