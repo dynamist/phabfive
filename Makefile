@@ -107,3 +107,6 @@ phabfive-run-dev: phabfive-build ## run phabfive connected to local phorge insta
 		--add-host=phorge-files.domain.tld:host-gateway \
 		$(PHABFIVE_CONFIG_MOUNT) \
 		phabfive $(ARGS)
+
+format: ## format code using ruff
+	ruff format .

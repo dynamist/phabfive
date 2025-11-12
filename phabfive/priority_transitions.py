@@ -77,7 +77,9 @@ class PriorityPattern:
         """
         # All conditions must match for the pattern to match
         for condition in self.conditions:
-            if not self._matches_condition(condition, priority_transactions, current_priority):
+            if not self._matches_condition(
+                condition, priority_transactions, current_priority
+            ):
                 return False
         return True
 
@@ -284,7 +286,9 @@ def _parse_single_condition(condition_str):
         )
 
     if len(parts) < 2:
-        raise PhabfiveException(f"Missing priority name for condition: '{condition_str}'")
+        raise PhabfiveException(
+            f"Missing priority name for condition: '{condition_str}'"
+        )
 
     priority_name = parts[1].strip()
     if not priority_name:
