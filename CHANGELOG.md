@@ -1,3 +1,56 @@
+# 0.4.0 (2025-11-12)
+
+## Prelude
+
+Major feature release focused on significantly expanding Maniphest capabilities and modernizing the project infrastructure. This release introduces advanced task filtering, search patterns, template v2 system, and comprehensive developer tooling with Phorge Docker setup.
+
+## Upgrade Notes
+
+* **Python support bumped to minimum version 3.10** (adds support for 3.13 and 3.14)
+* **Project management migrated to modern `pyproject.toml`** - replaced `setup.py` with PEP 621 compliant configuration
+* **Switched to `uv` for dependency management** - faster, more reliable package management
+* **Dependency updates:**
+  - `docopt` → `docopt-ng` for improved Python 3 support
+  - Added `ruamel-yaml>=0.18.16`
+  - Updated `mkdocs>=1.6.1`
+
+## New Features
+
+### Maniphest Enhancements
+* **Advanced filtering system** - Filter tasks by status, priority, and projects with complex logic
+* **Wildcard project search** - Search and resolve projects using pattern matching
+* **Search negation support** - Exclude items from search results with negation patterns
+* **Pagination for large result sets** - Automatically handles API pagination for projects and tasks
+* **Template v2 system** - Complete rewrite with variable dependency resolution and improved structure
+* **Task transition management** - Advanced filtering for status, priority, and project transitions
+* **Project column inspection** - Query project boards to see columns and associated tasks
+* **Monogram support** - View tasks using T123 format directly from CLI
+* **YAML output improvements** - Proper formatting using yaml libraries
+
+### Developer Experience
+* **Phorge Docker environment** - Automated local Phorge setup for testing and development
+* **Enhanced Makefile** - Dependency checks, Phorge management commands, improved build targets
+* **REPL tab completion** - Navigate commands more efficiently in interactive mode
+* **Comprehensive documentation:**
+  - Detailed maniphest CLI guide (`docs/maniphest-cli.md`)
+  - Phorge setup instructions (`docs/phorge-setup.md`)
+  - Release process documentation (`docs/releasing.md`)
+* **ReadTheDocs integration** - Hosted documentation at readthedocs.org
+
+### Testing & Quality
+* **Windows CI support** - Cross-platform testing in CI matrix
+
+## Bug Fixes
+* Fixed logging output to use stderr instead of stdout
+* Improved URL validation and parsing logic
+* Corrected YAML output formatting issues
+
+## Other Notes
+* Added `.editorconfig` for consistent code style
+* Enhanced `.flake8` configuration
+* Added `dependabot` support for automated dependency updates
+
+
 # 0.3.0 (2023-01-13)
 
 ## Prelude
