@@ -122,8 +122,15 @@ uv venv test-pypi-env
 source test-pypi-env/bin/activate
 
 # Install from TestPyPI
-# Note: --extra-index-url allows installing dependencies from main PyPI
-uv pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ phabfive
+# --index-strategy unsafe-best-match: Required because uv's default security
+#   prevents mixing package versions from different indexes. Since you control
+#   both TestPyPI and PyPI for phabfive, this is safe and necessary.
+# --extra-index-url: Allows dependencies (like mkdocs) to be installed from PyPI
+uv pip install \
+  --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  --index-strategy unsafe-best-match \
+  phabfive
 
 # Verify it works
 phabfive --help
