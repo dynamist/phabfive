@@ -1,13 +1,10 @@
 .PHONY: help clean cleanpy cleanall cleantox cleanvenv test install phorge-down phorge-up phorge-logs phorge-shell phabfive-build phabfive-run phabfive-run-dev docs
 
 # Detect container runtime (prefer podman)
-CONTAINER_RUNTIME := $(shell command -v podman 2> /dev/null)
-ifndef CONTAINER_RUNTIME
-    CONTAINER_RUNTIME := $(shell command -v docker 2> /dev/null)
-endif
-ifndef CONTAINER_RUNTIME
-    $(error Neither podman nor docker found. Please install one of them.)
-endif
+CONTAINER_RUNTIME = $(or \
+	$(shell command -v podman 2>/dev/null), \
+	$(shell command -v docker 2>/dev/null) \
+)
 
 COMPOSE_FILE := compose-phorge.yml
 
@@ -70,12 +67,20 @@ sdist: clean ## make a source distribution
 bdist: clean ## build a wheel distribution
 	uv build --wheel
 
+check-runtime: ## Checks runtime and exits if not found
+	@echo "Checking runtime..."
+	@if [ -z "$(CONTAINER_RUNTIME)" ]; then \
+		echo "Error: Neither podman nor docker found."; \
+		exit 1; \
+	fi
+	@$(CONTAINER_RUNTIME) --version
+
 ##@ Phorge Testing
 
-phorge-down: ## stop and remove phorge containers
+phorge-down: check-runtime ## stop and remove phorge containers
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) down
 
-phorge-up: ## start phorge (mariadb detached, phorge in foreground)
+phorge-up: check-runtime ## start phorge (mariadb detached, phorge in foreground)
 	@echo "Starting mariadb in background..."
 	@$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) up -d mariadb
 	@echo "Waiting for mariadb to be ready..."
@@ -83,15 +88,15 @@ phorge-up: ## start phorge (mariadb detached, phorge in foreground)
 	@echo "Starting phorge in foreground (logs will be visible)..."
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) up --build phorge
 
-phorge-logs: ## view logs from phorge containers
+phorge-logs: check-runtime ## view logs from phorge containers
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) logs -f
 
-phorge-shell: ## open shell in phorge container
+phorge-shell: check-runtime ## open shell in phorge container
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) exec phorge /bin/bash
 
 ##@ Docker
 
-phabfive-build: ## build phabfive docker image
+phabfive-build: check-runtime ## build phabfive docker image
 	$(CONTAINER_RUNTIME) build -f Dockerfile -t phabfive .
 
 phabfive-run: phabfive-build ## run phabfive in docker container with ARGS="your args here"
