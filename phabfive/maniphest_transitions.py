@@ -47,11 +47,15 @@ class TransitionPattern:
         """
         # All conditions must match for the pattern to match
         for condition in self.conditions:
-            if not self._matches_condition(condition, task_transactions, current_column, column_info):
+            if not self._matches_condition(
+                condition, task_transactions, current_column, column_info
+            ):
                 return False
         return True
 
-    def _matches_condition(self, condition, task_transactions, current_column, column_info):
+    def _matches_condition(
+        self, condition, task_transactions, current_column, column_info
+    ):
         """Check if a single condition matches."""
         condition_type = condition.get("type")
 
@@ -113,9 +117,15 @@ class TransitionPattern:
 
                 # Check direction
                 if new_col_info:
-                    if direction == "forward" and new_col_info["sequence"] > old_col_info["sequence"]:
+                    if (
+                        direction == "forward"
+                        and new_col_info["sequence"] > old_col_info["sequence"]
+                    ):
                         return True
-                    elif direction == "backward" and new_col_info["sequence"] < old_col_info["sequence"]:
+                    elif (
+                        direction == "backward"
+                        and new_col_info["sequence"] < old_col_info["sequence"]
+                    ):
                         return True
 
         return False
@@ -283,7 +293,9 @@ def _parse_single_condition(condition_str):
 
     # Patterns with parameters: type:value or type:value:direction
     if ":" not in condition_str:
-        raise PhabfiveException(f"Invalid transition condition syntax: '{condition_str}'")
+        raise PhabfiveException(
+            f"Invalid transition condition syntax: '{condition_str}'"
+        )
 
     parts = condition_str.split(":", 2)  # Split into max 3 parts
     condition_type = parts[0].strip()

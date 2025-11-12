@@ -119,7 +119,12 @@ class TestParseSingleCondition:
 
     def test_parse_not_from_with_direction(self):
         result = _parse_single_condition("not:from:Open:raised")
-        assert result == {"type": "from", "status": "Open", "direction": "raised", "negated": True}
+        assert result == {
+            "type": "from",
+            "status": "Open",
+            "direction": "raised",
+            "negated": True,
+        }
 
     def test_parse_not_been(self):
         result = _parse_single_condition("not:been:Resolved")
@@ -236,7 +241,7 @@ class TestStatusPatternMatching:
 
         transactions = [
             {"oldValue": "Open", "newValue": "Blocked", "dateCreated": 1234567890},
-            {"oldValue": "Blocked", "newValue": "Resolved", "dateCreated": 1234567900}
+            {"oldValue": "Blocked", "newValue": "Resolved", "dateCreated": 1234567900},
         ]
         current_status = "Resolved"
 
@@ -286,10 +291,9 @@ class TestStatusPatternMatching:
 
     def test_matches_and_conditions(self):
         """Test multiple AND conditions must all match"""
-        pattern = StatusPattern([
-            {"type": "been", "status": "Open"},
-            {"type": "in", "status": "Resolved"}
-        ])
+        pattern = StatusPattern(
+            [{"type": "been", "status": "Open"}, {"type": "in", "status": "Resolved"}]
+        )
 
         transactions = [
             {"oldValue": "Open", "newValue": "Resolved", "dateCreated": 1234567890}
@@ -300,10 +304,9 @@ class TestStatusPatternMatching:
 
     def test_matches_and_conditions_fail(self):
         """Test multiple AND conditions fail if any doesn't match"""
-        pattern = StatusPattern([
-            {"type": "been", "status": "Open"},
-            {"type": "in", "status": "Wontfix"}
-        ])
+        pattern = StatusPattern(
+            [{"type": "been", "status": "Open"}, {"type": "in", "status": "Wontfix"}]
+        )
 
         transactions = [
             {"oldValue": "Open", "newValue": "Resolved", "dateCreated": 1234567890}
@@ -314,7 +317,9 @@ class TestStatusPatternMatching:
 
     def test_matches_from_with_raised_direction(self):
         """Test 'from:STATUS:raised' matches status change with progression"""
-        pattern = StatusPattern([{"type": "from", "status": "Open", "direction": "raised"}])
+        pattern = StatusPattern(
+            [{"type": "from", "status": "Open", "direction": "raised"}]
+        )
 
         transactions = [
             {"oldValue": "Open", "newValue": "Resolved", "dateCreated": 1234567890}
@@ -325,7 +330,9 @@ class TestStatusPatternMatching:
 
     def test_matches_from_with_lowered_direction(self):
         """Test 'from:STATUS:lowered' matches status change with regression"""
-        pattern = StatusPattern([{"type": "from", "status": "Resolved", "direction": "lowered"}])
+        pattern = StatusPattern(
+            [{"type": "from", "status": "Resolved", "direction": "lowered"}]
+        )
 
         transactions = [
             {"oldValue": "Resolved", "newValue": "Open", "dateCreated": 1234567890}

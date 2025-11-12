@@ -120,7 +120,12 @@ class TestParseSingleCondition:
 
     def test_parse_not_from_with_direction(self):
         result = _parse_single_condition("not:from:Low:raised")
-        assert result == {"type": "from", "priority": "Low", "direction": "raised", "negated": True}
+        assert result == {
+            "type": "from",
+            "priority": "Low",
+            "direction": "raised",
+            "negated": True,
+        }
 
     def test_parse_not_been(self):
         result = _parse_single_condition("not:been:Unbreak Now!")
@@ -148,7 +153,7 @@ class TestParsePriorityPatterns:
         assert patterns[0].conditions[0] == {
             "type": "from",
             "priority": "Normal",
-            "direction": "raised"
+            "direction": "raised",
         }
 
     def test_or_patterns_with_comma(self):
@@ -188,11 +193,7 @@ class TestPriorityPatternMatching:
 
         # Transaction with priority increase (Normal -> High)
         transactions = [
-            {
-                "oldValue": "Normal",
-                "newValue": "High",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Normal", "newValue": "High", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "High") is True
@@ -202,37 +203,29 @@ class TestPriorityPatternMatching:
 
         # Transaction with priority decrease (High -> Normal)
         transactions = [
-            {
-                "oldValue": "High",
-                "newValue": "Normal",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "High", "newValue": "Normal", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "Normal") is True
 
     def test_matches_from_with_raised_direction(self):
-        pattern = PriorityPattern([{"type": "from", "priority": "Normal", "direction": "raised"}])
+        pattern = PriorityPattern(
+            [{"type": "from", "priority": "Normal", "direction": "raised"}]
+        )
 
         transactions = [
-            {
-                "oldValue": "Normal",
-                "newValue": "High",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Normal", "newValue": "High", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "High") is True
 
     def test_matches_from_with_lowered_direction(self):
-        pattern = PriorityPattern([{"type": "from", "priority": "High", "direction": "lowered"}])
+        pattern = PriorityPattern(
+            [{"type": "from", "priority": "High", "direction": "lowered"}]
+        )
 
         transactions = [
-            {
-                "oldValue": "High",
-                "newValue": "Normal",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "High", "newValue": "Normal", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "Normal") is True
@@ -250,7 +243,7 @@ class TestPriorityPatternMatching:
             {
                 "oldValue": "Normal",
                 "newValue": "Unbreak Now!",
-                "dateCreated": 1234567890
+                "dateCreated": 1234567890,
             }
         ]
 
@@ -263,13 +256,9 @@ class TestPriorityPatternMatching:
             {
                 "oldValue": "Normal",
                 "newValue": "Unbreak Now!",
-                "dateCreated": 1234567890
+                "dateCreated": 1234567890,
             },
-            {
-                "oldValue": "Unbreak Now!",
-                "newValue": "High",
-                "dateCreated": 1234567891
-            }
+            {"oldValue": "Unbreak Now!", "newValue": "High", "dateCreated": 1234567891},
         ]
 
         assert pattern.matches(transactions, "High") is True
@@ -278,11 +267,7 @@ class TestPriorityPatternMatching:
         pattern = PriorityPattern([{"type": "never", "priority": "Low"}])
 
         transactions = [
-            {
-                "oldValue": "Normal",
-                "newValue": "High",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Normal", "newValue": "High", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "High") is True
@@ -291,28 +276,19 @@ class TestPriorityPatternMatching:
         pattern = PriorityPattern([{"type": "never", "priority": "Low"}])
 
         transactions = [
-            {
-                "oldValue": "Low",
-                "newValue": "High",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Low", "newValue": "High", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "High") is False
 
     def test_matches_and_conditions(self):
         # Pattern with AND: from:Normal AND in:High
-        pattern = PriorityPattern([
-            {"type": "from", "priority": "Normal"},
-            {"type": "in", "priority": "High"}
-        ])
+        pattern = PriorityPattern(
+            [{"type": "from", "priority": "Normal"}, {"type": "in", "priority": "High"}]
+        )
 
         transactions = [
-            {
-                "oldValue": "Normal",
-                "newValue": "High",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Normal", "newValue": "High", "dateCreated": 1234567890}
         ]
 
         # Both conditions must match
@@ -324,11 +300,7 @@ class TestPriorityPatternMatching:
 
         # Transaction with priority decrease
         transactions = [
-            {
-                "oldValue": "High",
-                "newValue": "Normal",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "High", "newValue": "Normal", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "Normal") is False
@@ -338,11 +310,7 @@ class TestPriorityPatternMatching:
 
         # Transaction with priority increase
         transactions = [
-            {
-                "oldValue": "Normal",
-                "newValue": "High",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Normal", "newValue": "High", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "High") is False
@@ -351,11 +319,7 @@ class TestPriorityPatternMatching:
         pattern = PriorityPattern([{"type": "to", "priority": "High"}])
 
         transactions = [
-            {
-                "oldValue": "Normal",
-                "newValue": "Low",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Normal", "newValue": "Low", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "Low") is False
@@ -364,11 +328,7 @@ class TestPriorityPatternMatching:
         pattern = PriorityPattern([{"type": "been", "priority": "high"}])
 
         transactions = [
-            {
-                "oldValue": "Normal",
-                "newValue": "High",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Normal", "newValue": "High", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "High") is True
@@ -381,11 +341,7 @@ class TestPriorityPatternMatching:
         pattern = PriorityPattern([{"type": "raised"}])
 
         transactions = [
-            {
-                "oldValue": None,
-                "newValue": "High",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": None, "newValue": "High", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "High") is False
@@ -416,7 +372,7 @@ class TestPriorityOrdering:
             {
                 "oldValue": "Normal",
                 "newValue": "Unbreak Now!",
-                "dateCreated": 1234567890
+                "dateCreated": 1234567890,
             }
         ]
 
@@ -428,11 +384,7 @@ class TestPriorityOrdering:
 
         # Wishlist (5) is lower priority than Normal (3)
         transactions = [
-            {
-                "oldValue": "Normal",
-                "newValue": "Wishlist",
-                "dateCreated": 1234567890
-            }
+            {"oldValue": "Normal", "newValue": "Wishlist", "dateCreated": 1234567890}
         ]
 
         assert pattern.matches(transactions, "Wishlist") is True

@@ -527,7 +527,12 @@ class TestParseSingleCondition:
 
     def test_parse_not_from_with_direction(self):
         result = _parse_single_condition("not:from:Backlog:forward")
-        assert result == {"type": "from", "column": "Backlog", "direction": "forward", "negated": True}
+        assert result == {
+            "type": "from",
+            "column": "Backlog",
+            "direction": "forward",
+            "negated": True,
+        }
 
     def test_parse_not_been(self):
         result = _parse_single_condition("not:been:Blocked")
@@ -555,7 +560,7 @@ class TestParseTransitionPatterns:
         assert patterns[0].conditions[0] == {
             "type": "from",
             "column": "In Progress",
-            "direction": "forward"
+            "direction": "forward",
         }
 
     def test_or_patterns_with_comma(self):
@@ -597,12 +602,12 @@ class TestTransitionPatternMatching:
         transactions = [
             {
                 "oldValue": ["board-phid", "col1-phid"],
-                "newValue": ["board-phid", "col2-phid"]
+                "newValue": ["board-phid", "col2-phid"],
             }
         ]
         column_info = {
             "col1-phid": {"name": "In Progress", "sequence": 2},
-            "col2-phid": {"name": "Backlog", "sequence": 1}
+            "col2-phid": {"name": "Backlog", "sequence": 1},
         }
 
         assert pattern.matches(transactions, None, column_info) is True
@@ -614,28 +619,30 @@ class TestTransitionPatternMatching:
         transactions = [
             {
                 "oldValue": ["board-phid", "col1-phid"],
-                "newValue": ["board-phid", "col2-phid"]
+                "newValue": ["board-phid", "col2-phid"],
             }
         ]
         column_info = {
             "col1-phid": {"name": "Backlog", "sequence": 1},
-            "col2-phid": {"name": "In Progress", "sequence": 2}
+            "col2-phid": {"name": "In Progress", "sequence": 2},
         }
 
         assert pattern.matches(transactions, None, column_info) is True
 
     def test_matches_from_forward_direction(self):
-        pattern = TransitionPattern([{"type": "from", "column": "Backlog", "direction": "forward"}])
+        pattern = TransitionPattern(
+            [{"type": "from", "column": "Backlog", "direction": "forward"}]
+        )
 
         transactions = [
             {
                 "oldValue": ["board-phid", "col1-phid"],
-                "newValue": ["board-phid", "col2-phid"]
+                "newValue": ["board-phid", "col2-phid"],
             }
         ]
         column_info = {
             "col1-phid": {"name": "Backlog", "sequence": 1},
-            "col2-phid": {"name": "In Progress", "sequence": 2}
+            "col2-phid": {"name": "In Progress", "sequence": 2},
         }
 
         assert pattern.matches(transactions, None, column_info) is True
@@ -652,12 +659,12 @@ class TestTransitionPatternMatching:
         transactions = [
             {
                 "oldValue": ["board-phid", "col1-phid"],
-                "newValue": ["board-phid", "col2-phid"]
+                "newValue": ["board-phid", "col2-phid"],
             }
         ]
         column_info = {
             "col1-phid": {"name": "In Progress", "sequence": 2},
-            "col2-phid": {"name": "Done", "sequence": 3}
+            "col2-phid": {"name": "Done", "sequence": 3},
         }
 
         assert pattern.matches(transactions, None, column_info) is True
@@ -668,12 +675,12 @@ class TestTransitionPatternMatching:
         transactions = [
             {
                 "oldValue": ["board-phid", "blocked-phid"],
-                "newValue": ["board-phid", "done-phid"]
+                "newValue": ["board-phid", "done-phid"],
             }
         ]
         column_info = {
             "blocked-phid": {"name": "Blocked", "sequence": 1},
-            "done-phid": {"name": "Done", "sequence": 2}
+            "done-phid": {"name": "Done", "sequence": 2},
         }
 
         assert pattern.matches(transactions, None, column_info) is True
@@ -684,32 +691,34 @@ class TestTransitionPatternMatching:
         transactions = [
             {
                 "oldValue": ["board-phid", "col1-phid"],
-                "newValue": ["board-phid", "col2-phid"]
+                "newValue": ["board-phid", "col2-phid"],
             }
         ]
         column_info = {
             "col1-phid": {"name": "Backlog", "sequence": 1},
-            "col2-phid": {"name": "Done", "sequence": 2}
+            "col2-phid": {"name": "Done", "sequence": 2},
         }
 
         assert pattern.matches(transactions, None, column_info) is True
 
     def test_matches_and_conditions(self):
         # Pattern with AND: from:A AND in:B
-        pattern = TransitionPattern([
-            {"type": "from", "column": "In Progress"},
-            {"type": "in", "column": "Done"}
-        ])
+        pattern = TransitionPattern(
+            [
+                {"type": "from", "column": "In Progress"},
+                {"type": "in", "column": "Done"},
+            ]
+        )
 
         transactions = [
             {
                 "oldValue": ["board-phid", "inprogress-phid"],
-                "newValue": ["board-phid", "done-phid"]
+                "newValue": ["board-phid", "done-phid"],
             }
         ]
         column_info = {
             "inprogress-phid": {"name": "In Progress", "sequence": 2},
-            "done-phid": {"name": "Done", "sequence": 3}
+            "done-phid": {"name": "Done", "sequence": 3},
         }
 
         # Both conditions must match
@@ -722,12 +731,12 @@ class TestTransitionPatternMatching:
         transactions = [
             {
                 "oldValue": ["board-phid", "col1-phid"],
-                "newValue": ["board-phid", "col2-phid"]
+                "newValue": ["board-phid", "col2-phid"],
             }
         ]
         column_info = {
             "col1-phid": {"name": "Backlog", "sequence": 1},
-            "col2-phid": {"name": "In Progress", "sequence": 2}
+            "col2-phid": {"name": "In Progress", "sequence": 2},
         }
 
         assert pattern.matches(transactions, None, column_info) is False
@@ -747,49 +756,63 @@ class TestTransitionFilteringIntegration:
         # Mock task search results
         maniphest.phab.maniphest.search.side_effect = [
             # First call: initial search
-            MagicMock(response={"data": [
-                {
-                    "id": 1,
-                    "phid": "PHID-TASK-1",
-                    "fields": {
-                        "name": "Test Task 1",
-                        "status": {"name": "Open"},
-                        "priority": {"name": "Normal"},
-                        "description": {"raw": "Description 1"}
-                    },
-                    "attachments": {
-                        "columns": {
-                            "boards": {
-                                "PHID-PROJ-123": {
-                                    "columns": [{"phid": "PHID-COL-DONE", "name": "Done"}]
+            MagicMock(
+                response={
+                    "data": [
+                        {
+                            "id": 1,
+                            "phid": "PHID-TASK-1",
+                            "fields": {
+                                "name": "Test Task 1",
+                                "status": {"name": "Open"},
+                                "priority": {"name": "Normal"},
+                                "description": {"raw": "Description 1"},
+                            },
+                            "attachments": {
+                                "columns": {
+                                    "boards": {
+                                        "PHID-PROJ-123": {
+                                            "columns": [
+                                                {
+                                                    "phid": "PHID-COL-DONE",
+                                                    "name": "Done",
+                                                }
+                                            ]
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                    }
-                },
-                {
-                    "id": 2,
-                    "phid": "PHID-TASK-2",
-                    "fields": {
-                        "name": "Test Task 2",
-                        "status": {"name": "Resolved"},
-                        "priority": {"name": "High"},
-                        "description": {"raw": "Description 2"}
-                    },
-                    "attachments": {
-                        "columns": {
-                            "boards": {
-                                "PHID-PROJ-123": {
-                                    "columns": [{"phid": "PHID-COL-INPROGRESS", "name": "In Progress"}]
+                            },
+                        },
+                        {
+                            "id": 2,
+                            "phid": "PHID-TASK-2",
+                            "fields": {
+                                "name": "Test Task 2",
+                                "status": {"name": "Resolved"},
+                                "priority": {"name": "High"},
+                                "description": {"raw": "Description 2"},
+                            },
+                            "attachments": {
+                                "columns": {
+                                    "boards": {
+                                        "PHID-PROJ-123": {
+                                            "columns": [
+                                                {
+                                                    "phid": "PHID-COL-INPROGRESS",
+                                                    "name": "In Progress",
+                                                }
+                                            ]
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                    }
+                            },
+                        },
+                    ]
                 }
-            ]}),
+            ),
             # Subsequent calls for _fetch_task_transactions
             {"data": [{"id": 1}]},
-            {"data": [{"id": 2}]}
+            {"data": [{"id": 2}]},
         ]
 
         # Mock gettasktransactions for transition history
@@ -799,22 +822,28 @@ class TestTransitionFilteringIntegration:
                 "1": [
                     {
                         "transactionType": "core:columns",
-                        "newValue": [{
-                            "boardPHID": "PHID-PROJ-123",
-                            "columnPHID": "PHID-COL-DONE",
-                            "fromColumnPHIDs": {"PHID-COL-INPROGRESS": "PHID-COL-INPROGRESS"}
-                        }],
-                        "dateCreated": 1234567893
+                        "newValue": [
+                            {
+                                "boardPHID": "PHID-PROJ-123",
+                                "columnPHID": "PHID-COL-DONE",
+                                "fromColumnPHIDs": {
+                                    "PHID-COL-INPROGRESS": "PHID-COL-INPROGRESS"
+                                },
+                            }
+                        ],
+                        "dateCreated": 1234567893,
                     },
                     {
                         "transactionType": "core:columns",
-                        "newValue": [{
-                            "boardPHID": "PHID-PROJ-123",
-                            "columnPHID": "PHID-COL-INPROGRESS",
-                            "fromColumnPHIDs": {"PHID-COL-DONE": "PHID-COL-DONE"}
-                        }],
-                        "dateCreated": 1234567892
-                    }
+                        "newValue": [
+                            {
+                                "boardPHID": "PHID-PROJ-123",
+                                "columnPHID": "PHID-COL-INPROGRESS",
+                                "fromColumnPHIDs": {"PHID-COL-DONE": "PHID-COL-DONE"},
+                            }
+                        ],
+                        "dateCreated": 1234567892,
+                    },
                 ]
             },
             # Task 2: Only forward movement
@@ -822,23 +851,33 @@ class TestTransitionFilteringIntegration:
                 "2": [
                     {
                         "transactionType": "core:columns",
-                        "newValue": [{
-                            "boardPHID": "PHID-PROJ-123",
-                            "columnPHID": "PHID-COL-INPROGRESS",
-                            "fromColumnPHIDs": {"PHID-COL-BACKLOG": "PHID-COL-BACKLOG"}
-                        }],
-                        "dateCreated": 1234567890
+                        "newValue": [
+                            {
+                                "boardPHID": "PHID-PROJ-123",
+                                "columnPHID": "PHID-COL-INPROGRESS",
+                                "fromColumnPHIDs": {
+                                    "PHID-COL-BACKLOG": "PHID-COL-BACKLOG"
+                                },
+                            }
+                        ],
+                        "dateCreated": 1234567890,
                     }
                 ]
-            }
+            },
         ]
 
         # Mock column info
         maniphest.phab.project.column.search.return_value = {
             "data": [
-                {"phid": "PHID-COL-BACKLOG", "fields": {"name": "Backlog", "sequence": 1}},
-                {"phid": "PHID-COL-INPROGRESS", "fields": {"name": "In Progress", "sequence": 2}},
-                {"phid": "PHID-COL-DONE", "fields": {"name": "Done", "sequence": 3}}
+                {
+                    "phid": "PHID-COL-BACKLOG",
+                    "fields": {"name": "Backlog", "sequence": 1},
+                },
+                {
+                    "phid": "PHID-COL-INPROGRESS",
+                    "fields": {"name": "In Progress", "sequence": 2},
+                },
+                {"phid": "PHID-COL-DONE", "fields": {"name": "Done", "sequence": 3}},
             ]
         }
 
@@ -861,7 +900,7 @@ class TestTransitionFilteringIntegration:
                         }
                     }
                 }
-            }
+            },
         }
         task2 = {
             "id": 2,
@@ -870,17 +909,19 @@ class TestTransitionFilteringIntegration:
                 "columns": {
                     "boards": {
                         "PHID-PROJ-123": {
-                            "columns": [{"phid": "PHID-COL-INPROGRESS", "name": "In Progress"}]
+                            "columns": [
+                                {"phid": "PHID-COL-INPROGRESS", "name": "In Progress"}
+                            ]
                         }
                     }
                 }
-            }
+            },
         }
 
         # Reset side effects for transaction fetching in the actual test
         maniphest.phab.maniphest.search.side_effect = [
             {"data": [{"id": 1}]},
-            {"data": [{"id": 2}]}
+            {"data": [{"id": 2}]},
         ]
 
         matches1, _, _ = maniphest._task_matches_any_pattern(
@@ -916,7 +957,7 @@ class TestYAMLOutput:
         # Mock project search to return a project
         maniphest.phab.project.search.return_value = {
             "data": [{"phid": "PHID-PROJ-123", "fields": {"name": "Test Project"}}],
-            "cursor": {"after": None}
+            "cursor": {"after": None},
         }
 
         # Mock maniphest search with tasks containing special YAML characters
@@ -930,7 +971,9 @@ class TestYAMLOutput:
                         "name": "Bug: Authentication failed in api.login()",
                         "status": {"name": "Open"},
                         "priority": {"name": "High"},
-                        "description": {"raw": "Steps to reproduce:\n1. Call api.login()\n2. Check response"},
+                        "description": {
+                            "raw": "Steps to reproduce:\n1. Call api.login()\n2. Check response"
+                        },
                         "dateCreated": 1234567890,
                         "dateModified": 1234567900,
                         "dateClosed": None,
@@ -939,11 +982,16 @@ class TestYAMLOutput:
                         "columns": {
                             "boards": {
                                 "PHID-PROJ-123": {
-                                    "columns": [{"phid": "PHID-COL-1", "name": "In Progress: Review"}]
+                                    "columns": [
+                                        {
+                                            "phid": "PHID-COL-1",
+                                            "name": "In Progress: Review",
+                                        }
+                                    ]
                                 }
                             }
                         }
-                    }
+                    },
                 },
                 {
                     "id": 2,
@@ -957,10 +1005,8 @@ class TestYAMLOutput:
                         "dateModified": 1234567850,
                         "dateClosed": 1234567900,
                     },
-                    "attachments": {
-                        "columns": {"boards": {}}
-                    }
-                }
+                    "attachments": {"columns": {"boards": {}}},
+                },
             ]
         }
         mock_response.get.return_value = {"after": None}
@@ -978,7 +1024,9 @@ class TestYAMLOutput:
             yaml_parser = YAML()
             parsed_data = yaml_parser.load(StringIO(yaml_output))
         except Exception as e:
-            pytest.fail(f"Generated YAML is not parsable: {e}\n\nOutput:\n{yaml_output}")
+            pytest.fail(
+                f"Generated YAML is not parsable: {e}\n\nOutput:\n{yaml_output}"
+            )
 
         # Verify the structure
         assert isinstance(parsed_data, list)
@@ -995,5 +1043,8 @@ class TestYAMLOutput:
 
         # Check second task (contains curly braces in name)
         task2 = parsed_data[1]
-        assert task2["Task"]["Name"] == "Feature request: Add support for {template} variables"
+        assert (
+            task2["Task"]["Name"]
+            == "Feature request: Add support for {template} variables"
+        )
         assert task2["Task"]["Status"] == "Resolved"
