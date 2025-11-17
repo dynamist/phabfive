@@ -42,16 +42,21 @@ class Maniphest(Phabfive):
 
     def _resolve_project_phids(self, project: str) -> list[str]:
         """
-        Resolve project name or wildcard pattern to list of project PHIDs.
+        Resolve project name, hashtag, or wildcard pattern to list of project PHIDs.
+
+        Matches against all project slugs/hashtags, not just the primary name.
+        This allows users to search using any hashtag associated with a project.
 
         Parameters
         ----------
-        project (str): Project name or wildcard pattern.
+        project (str): Project name, hashtag, or wildcard pattern.
                       Supports: "*" (all), "prefix*", "*suffix", "*contains*"
+                      Matches against any project slug/hashtag (case-insensitive).
 
         Returns
         -------
         list: List of project PHIDs matching the pattern. Empty list if no matches.
+              Duplicates are automatically removed when multiple slugs match the same project.
         """
         # Validate project parameter
         if not project or project == "":
@@ -61,80 +66,115 @@ class Maniphest(Phabfive):
         # Fetch all projects from Phabricator regardless of exact match or not to be able to suggest project names
         log.debug("Fetching all projects from Phabricator")
 
-        # Use pagination to fetch all projects (API returns max 100 per page)
-        all_projects = {}
-        after = None
+        # Use project.query to get slugs (project.search doesn't return all hashtags)
+        # Note: project.query doesn't support pagination, so we fetch all at once
+        slug_to_phid = {}  # Maps each slug/hashtag to its project PHID
+        phid_to_primary_name = {}  # Maps PHID to primary project name
 
-        while True:
-            # Use queryKey="all" to get all projects, with cursor-based pagination
-            if after:
-                projects_query = self.phab.project.search(queryKey="all", after=after)
-            else:
-                projects_query = self.phab.project.search(queryKey="all")
+        try:
+            # project.query returns a Result object with 'data' key containing projects
+            projects_result = self.phab.project.query()
+            projects_data = projects_result.get("data", {})
 
-            # Merge results from this page
-            for p in projects_query["data"]:
-                all_projects[p["fields"]["name"]] = p["phid"]
+            # Process all projects (projects_data is a dict keyed by PHID)
+            for phid, project_data in projects_data.items():
+                primary_name = project_data["name"]
+                phid_to_primary_name[phid] = primary_name
 
-            # Check if there are more pages
-            cursor = projects_query.get("cursor", {})
-            after = cursor.get("after")
+                # Always add the primary name as a searchable slug
+                slug_to_phid[primary_name] = phid
 
-            if after is None:
-                # No more pages
-                break
+                # Get all slugs (hashtags) for this project and add them too
+                slugs = project_data.get("slugs", [])
+                if slugs:
+                    for slug in slugs:
+                        if slug:
+                            slug_to_phid[slug] = phid
 
-        log.debug(f"Fetched {len(all_projects)} total projects from Phabricator")
-        # Create case-insensitive lookup mappings
-        lower_to_phid = {name.lower(): phid for name, phid in all_projects.items()}
-        lower_to_original = {name.lower(): name for name in all_projects.keys()}
+        except Exception as e:
+            log.error(f"Failed to fetch projects: {e}")
+            return []
+
+        log.debug(
+            f"Fetched {len(phid_to_primary_name)} total projects with {len(slug_to_phid)} slugs/hashtags from Phabricator"
+        )
+        # Create case-insensitive lookup mappings for slugs
+        lower_slug_to_phid = {slug.lower(): phid for slug, phid in slug_to_phid.items()}
+        lower_slug_to_original = {slug.lower(): slug for slug in slug_to_phid.keys()}
 
         # Check if wildcard search is needed
         has_wildcard = "*" in project
 
         if has_wildcard:
             if project == "*":
-                # Search all projects
-                log.info(f"Wildcard '*' matched all {len(all_projects)} projects")
-                return list(all_projects.values())
+                # Search all projects - return unique PHIDs
+                unique_phids = list(set(slug_to_phid.values()))
+                log.info(f"Wildcard '*' matched all {len(unique_phids)} projects")
+                return unique_phids
             else:
-                # Filter projects by wildcard pattern (case-insensitive)
-                matching_projects: list[str] = [
-                    lower_to_original[name_lower]
-                    for name_lower in lower_to_phid.keys()
-                    if fnmatch.fnmatch(name_lower, project.lower())
-                ]
+                # Filter slugs by wildcard pattern (case-insensitive)
+                # Use set to avoid duplicate PHIDs when multiple slugs of same project match
+                matching_phids = set()
+                matching_display_names = []
 
-                if not matching_projects:
+                for slug_lower in lower_slug_to_phid.keys():
+                    if fnmatch.fnmatch(slug_lower, project.lower()):
+                        phid = lower_slug_to_phid[slug_lower]
+                        if phid not in matching_phids:
+                            matching_phids.add(phid)
+                            # Use primary name for display
+                            matching_display_names.append(phid_to_primary_name[phid])
+
+                if not matching_phids:
                     log.warning(f"Wildcard pattern '{project}' matched no projects")
                     return []
 
                 log.info(
-                    f"Wildcard pattern '{project}' matched {len(matching_projects)} "
-                    + f"project(s): {', '.join(matching_projects)}"
+                    f"Wildcard pattern '{project}' matched {len(matching_phids)} "
+                    + f"project(s): {', '.join(sorted(matching_display_names))}"
                 )
-                return [all_projects[name] for name in matching_projects]
+                return list(matching_phids)
         # Exact match - validate project exists (case-insensitive)
+        # Match against any slug/hashtag
         log.debug(f"Exact match mode, validating project '{project}'")
 
         project_lower = project.lower()
-        if project_lower in lower_to_phid:
-            original_name = lower_to_original[project_lower]
+        if project_lower in lower_slug_to_phid:
+            phid = lower_slug_to_phid[project_lower]
+            matched_slug = lower_slug_to_original[project_lower]
+            primary_name = phid_to_primary_name[phid]
             log.debug(
-                f"Found case-insensitive match for project '{project}' -> '{original_name}'"
+                f"Found case-insensitive match for project '{project}' -> slug '{matched_slug}' (primary: '{primary_name}')"
             )
-            return [lower_to_phid[project_lower]]
+            return [phid]
         else:
-            # Project not found - suggest similar names (case-insensitive)
+            # Project not found - suggest similar slugs (case-insensitive)
+            # Deduplicate suggestions by PHID to avoid showing same project multiple times
             cutoff = 0.6 if len(project_lower) > 3 else 0.4
-            similar = difflib.get_close_matches(
-                project_lower, lower_to_phid.keys(), n=3, cutoff=cutoff
+            similar_slugs = difflib.get_close_matches(
+                project_lower, lower_slug_to_phid.keys(), n=10, cutoff=cutoff
             )
-            if similar:
-                # Map back to original names for display
-                original_similar = [lower_to_original[s] for s in similar]
+
+            if similar_slugs:
+                # Deduplicate by PHID - show primary names with matched slugs
+                seen_phids = set()
+                unique_suggestions = []
+
+                for slug in similar_slugs:
+                    phid = lower_slug_to_phid[slug]
+                    if phid not in seen_phids:
+                        seen_phids.add(phid)
+                        primary_name = phid_to_primary_name[phid]
+                        original_slug = lower_slug_to_original[slug]
+
+                        # Format: "Primary Name (matched-slug)"
+                        unique_suggestions.append(f"{primary_name} ({original_slug})")
+
+                # Limit to 3 unique projects
+                unique_suggestions = unique_suggestions[:3]
+
                 log.error(
-                    f"Project '{project}' not found. Did you mean: {', '.join(original_similar)}?"
+                    f"Project '{project}' not found. Did you mean: {', '.join(unique_suggestions)}?"
                 )
             else:
                 log.error(f"Project '{project}' not found")

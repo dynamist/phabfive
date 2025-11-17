@@ -954,11 +954,15 @@ class TestYAMLOutput:
         # Mock the phab API
         maniphest.phab = MagicMock()
 
-        # Mock project search to return a project
-        maniphest.phab.project.search.return_value = {
-            "data": [{"phid": "PHID-PROJ-123", "fields": {"name": "Test Project"}}],
-            "cursor": {"after": None},
+        # Mock project.query to return a project with slugs
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {
+                "name": "Test Project",
+                "slugs": ["test-project", "test_project"],
+            }
         }
+        maniphest.phab.project.query.return_value = mock_project_result
 
         # Mock maniphest search with tasks containing special YAML characters
         mock_response = MagicMock()
