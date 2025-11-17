@@ -108,21 +108,66 @@ Options:
     -h, --help  Show this help message and exit
 """
 
-sub_maniphest_args = """
+sub_maniphest_base_args = """
 Usage:
     phabfive maniphest comment add <ticket_id> <comment> [options]
-    phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
-    phabfive maniphest create <config-file> [--dry-run] [options]
+    phabfive maniphest show <ticket_id> [options]
+    phabfive maniphest create <config-file> [options]
     phabfive maniphest search <project_name> [options]
 
-Search Arguments:
+Options:
+    -h, --help           Show this help message and exit
+"""
+
+sub_maniphest_show_args = """
+Usage:
+    phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
+
+Arguments:
+    <ticket_id>          Task ID (e.g., T123)
+
+Options:
+    --all                Show all fields for a ticket
+    --pp                 Show all fields rendering with pretty print
+    -h, --help           Show this help message and exit
+"""
+
+sub_maniphest_create_args = """
+Usage:
+    phabfive maniphest create <config-file> [--dry-run] [options]
+
+Arguments:
+    <config-file>        Path to YAML configuration file
+
+Options:
+    --dry-run            Does everything except commiting the tickets
+    -h, --help           Show this help message and exit
+"""
+
+sub_maniphest_comment_args = """
+Usage:
+    phabfive maniphest comment add <ticket_id> <comment> [options]
+
+Arguments:
+    <ticket_id>          Task ID (e.g., T123)
+    <comment>            Comment text to add
+
+Options:
+    -h, --help           Show this help message and exit
+"""
+
+sub_maniphest_search_args = """
+Usage:
+    phabfive maniphest search <project_name> [options]
+
+Arguments:
      <project_name>       Project name or filter pattern (supports OR/AND logic and wildcards).
                           Supports: "*" (all projects), "prefix*" (starts with),
                           "*suffix" (ends with), "*contains*" (contains text).
                           Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
                           Empty string "" returns no results.
 
-Search Options:
+Options:
     --created-after=N      Tasks created within the last N days
     --updated-after=N      Tasks updated within the last N days
     --column=PATTERNS      Filter tasks by column transitions (comma=OR, plus=AND).
@@ -172,12 +217,7 @@ Search Options:
                               in:Open,been:Resolved
      --show-history         Display column, priority, and status transition history
      --show-metadata        Display filter match metadata (which boards/priority/status matched)
-
-Options:
-    --all                Show all fields for a ticket
-    --dry-run            Does everything except commiting the tickets
-    --pp                 Show all fields rendering with pretty print
-    -h, --help           Show this help message and exit
+     -h, --help             Show this help message and exit
 """
 
 
@@ -230,7 +270,12 @@ def parse_cli():
 
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
-        sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)  # nosec-B307
+
+        # For maniphest shortcuts, use the show command
+        if app == "maniphest":
+            sub_args = docopt(sub_maniphest_show_args, argv=argv)
+        else:
+            sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)  # nosec-B307
     elif cli_args["<command>"] == "passphrase":
         sub_args = docopt(sub_passphrase_args, argv=argv)
     elif cli_args["<command>"] == "diffusion":
@@ -242,7 +287,30 @@ def parse_cli():
     elif cli_args["<command>"] == "repl":
         sub_args = docopt(sub_repl_args, argv=argv)
     elif cli_args["<command>"] == "maniphest":
-        sub_args = docopt(sub_maniphest_args, argv=argv)
+        # Determine which maniphest subcommand is being called
+        maniphest_subcmd = None
+        if len(argv) > 1:
+            if argv[1] == "show":
+                maniphest_subcmd = "show"
+            elif argv[1] == "create":
+                maniphest_subcmd = "create"
+            elif argv[1] == "search":
+                maniphest_subcmd = "search"
+            elif argv[1] == "comment":
+                maniphest_subcmd = "comment"
+
+        # Use the appropriate help string based on subcommand
+        if maniphest_subcmd == "show":
+            sub_args = docopt(sub_maniphest_show_args, argv=argv)
+        elif maniphest_subcmd == "create":
+            sub_args = docopt(sub_maniphest_create_args, argv=argv)
+        elif maniphest_subcmd == "search":
+            sub_args = docopt(sub_maniphest_search_args, argv=argv)
+        elif maniphest_subcmd == "comment":
+            sub_args = docopt(sub_maniphest_comment_args, argv=argv)
+        else:
+            # No subcommand or unrecognized subcommand - show base help
+            sub_args = docopt(sub_maniphest_base_args, argv=argv)
     else:
         extras(
             True,
@@ -452,14 +520,14 @@ def run(cli_args, sub_args):
                     show_metadata=show_metadata,
                 )
 
-            if sub_args["create"]:
+            if sub_args.get("create"):
                 # This part is responsible for bulk creating several tickets at once
                 maniphest_app.create_from_config(
                     sub_args["<config-file>"],
                     dry_run=sub_args["--dry-run"],
                 )
 
-            if sub_args["comment"] and sub_args["add"]:
+            if sub_args.get("comment") and sub_args.get("add"):
                 result = maniphest_app.add_comment(
                     sub_args["<ticket_id>"],
                     sub_args["<comment>"],
@@ -472,7 +540,7 @@ def run(cli_args, sub_args):
                     print("Comment successfully added")
                     print("Ticket URI: {0}".format(ticket["uri"]))
 
-            if sub_args["show"]:
+            if sub_args.get("show"):
                 _, result = maniphest_app.info(int(sub_args["<ticket_id>"][1:]))
 
                 if sub_args["--pp"]:
