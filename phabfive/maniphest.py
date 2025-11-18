@@ -1366,6 +1366,210 @@ class Maniphest(Phabfive):
 
         return metadata
 
+    def _format_and_display_tasks(
+        self,
+        result_data,
+        task_transitions_map=None,
+        priority_transitions_map=None,
+        status_transitions_map=None,
+        matching_boards_map=None,
+        matching_priority_map=None,
+        matching_status_map=None,
+        show_history=False,
+        show_metadata=False,
+    ):
+        """
+        Format and display tasks in YAML format.
+
+        This method is shared by both task_search() and task_show() commands
+        to ensure consistent output formatting.
+
+        Parameters
+        ----------
+        result_data : list
+            List of task data from maniphest.search API
+        task_transitions_map : dict, optional
+            Mapping of task ID to column transitions
+        priority_transitions_map : dict, optional
+            Mapping of task ID to priority transitions
+        status_transitions_map : dict, optional
+            Mapping of task ID to status transitions
+        matching_boards_map : dict, optional
+            Mapping of task ID to matching board PHIDs
+        matching_priority_map : dict, optional
+            Mapping of task ID to priority match boolean
+        matching_status_map : dict, optional
+            Mapping of task ID to status match boolean
+        show_history : bool, optional
+            Whether to display transition history
+        show_metadata : bool, optional
+            Whether to display filter match metadata
+        """
+        # Initialize empty dicts if None
+        if task_transitions_map is None:
+            task_transitions_map = {}
+        if priority_transitions_map is None:
+            priority_transitions_map = {}
+        if status_transitions_map is None:
+            status_transitions_map = {}
+        if matching_boards_map is None:
+            matching_boards_map = {}
+        if matching_priority_map is None:
+            matching_priority_map = {}
+        if matching_status_map is None:
+            matching_status_map = {}
+
+        # Fetch project names for board display (always needed for nested format)
+        project_phid_to_name = self._fetch_project_names_for_boards(result_data)
+
+        # Build YAML data structure
+        tasks_list = []
+
+        for item in result_data:
+            fields = item.get("fields", {})
+
+            # Build task dict
+            task_dict = {"Link": f"{self.url}/T{item['id']}", "Task": {}}
+
+            # Build task fields
+            task_data = {}
+
+            # Name
+            task_data["Name"] = fields.get("name", "")
+
+            # Status
+            task_data["Status"] = fields.get("status", {}).get("name", "Unknown")
+
+            # Priority
+            task_data["Priority"] = fields.get("priority", {}).get("name", "Unknown")
+
+            # Dates
+            if fields.get("dateCreated"):
+                task_data["Created"] = format_timestamp(fields["dateCreated"])
+            if fields.get("dateModified"):
+                task_data["Modified"] = format_timestamp(fields["dateModified"])
+            if fields.get("dateClosed"):
+                task_data["Closed"] = format_timestamp(fields["dateClosed"])
+
+            # Description - use PreservedScalarString for multi-line descriptions
+            description_raw = fields.get("description", {}).get("raw", "")
+            if description_raw and "\n" in description_raw:
+                task_data["Description"] = PreservedScalarString(description_raw)
+            else:
+                task_data["Description"] = description_raw if description_raw else ""
+
+            task_dict["Task"] = task_data
+
+            # Display board information (current columns only)
+            columns_data = item.get("attachments", {}).get("columns", {})
+            log.debug(f"Full columns data structure: {columns_data}")
+            boards = columns_data.get("boards", {})
+            log.debug(f"Boards type: {type(boards)}, value: {boards}")
+            boards_data = self._build_task_boards(
+                boards,
+                project_phid_to_name,
+            )
+            if boards_data:
+                task_dict["Boards"] = boards_data
+
+            # Add History section if show_history is enabled
+            if show_history:
+                history_data = self._build_history_section(
+                    item["id"],
+                    boards,
+                    project_phid_to_name,
+                    priority_transitions_map,
+                    task_transitions_map,
+                    status_transitions_map,
+                )
+                if history_data:
+                    task_dict["History"] = history_data
+
+            # Add Metadata section if show_metadata is enabled
+            if show_metadata:
+                metadata_data = self._build_metadata_section(
+                    item["id"],
+                    matching_boards_map,
+                    matching_priority_map,
+                    matching_status_map,
+                    project_phid_to_name,
+                )
+                task_dict["Metadata"] = metadata_data
+
+            tasks_list.append(task_dict)
+
+        # Output as YAML using ruamel.yaml for proper multi-line formatting
+        print()  # Empty line for separation
+
+        yaml = YAML()
+        yaml.default_flow_style = False
+        yaml.preserve_quotes = True
+        yaml.width = 4096  # Avoid unwanted line wrapping
+        yaml.dump(tasks_list, sys.stdout)
+
+    def task_show(self, task_id, show_history=False, show_metadata=False):
+        """
+        Show a single Phabricator Maniphest task with optional history and metadata.
+
+        This method uses the same display format as task_search() for consistency.
+
+        Parameters
+        ----------
+        task_id : int
+            Task ID (e.g., 123 for T123)
+        show_history : bool, optional
+            If True, display column, priority, and status transition history
+        show_metadata : bool, optional
+            If True, display metadata (mainly useful for debugging, less useful for single task)
+        """
+        # Use maniphest.search API to fetch the task
+        result = self.phab.maniphest.search(
+            constraints={"ids": [task_id]}, attachments={"columns": True}
+        )
+
+        result_data = result.response.get("data", [])
+
+        if not result_data:
+            log.error(f"Task T{task_id} not found")
+            return
+
+        # Initialize maps for storing transitions
+        task_transitions_map = {}
+        priority_transitions_map = {}
+        status_transitions_map = {}
+
+        # Fetch transition history if requested
+        if show_history:
+            task_phid = result_data[0].get("phid")
+            if task_phid:
+                log.info(f"Fetching transition history for T{task_id}")
+                # Fetch all transaction types in a single API call
+                all_fetched_transactions = self._fetch_all_transactions(
+                    task_phid,
+                    need_columns=True,
+                    need_priority=True,
+                    need_status=True,
+                )
+                # Store transactions for history display
+                if all_fetched_transactions.get("columns"):
+                    task_transitions_map[task_id] = all_fetched_transactions["columns"]
+                if all_fetched_transactions.get("priority"):
+                    priority_transitions_map[task_id] = all_fetched_transactions[
+                        "priority"
+                    ]
+                if all_fetched_transactions.get("status"):
+                    status_transitions_map[task_id] = all_fetched_transactions["status"]
+
+        # Use shared method to format and display the task
+        self._format_and_display_tasks(
+            result_data,
+            task_transitions_map=task_transitions_map,
+            priority_transitions_map=priority_transitions_map,
+            status_transitions_map=status_transitions_map,
+            show_history=show_history,
+            show_metadata=show_metadata,
+        )
+
     def task_search(
         self,
         project,
@@ -1790,93 +1994,18 @@ class Maniphest(Phabfive):
                             "status"
                         ]
 
-        # Fetch project names for board display (always needed for nested format)
-        project_phid_to_name = self._fetch_project_names_for_boards(result_data)
-
-        # Build YAML data structure
-        tasks_list = []
-
-        for item in result_data:
-            fields = item.get("fields", {})
-
-            # Build task dict
-            task_dict = {"Link": f"{self.url}/T{item['id']}", "Task": {}}
-
-            # Build task fields
-            task_data = {}
-
-            # Name
-            task_data["Name"] = fields.get("name", "")
-
-            # Status
-            task_data["Status"] = fields.get("status", {}).get("name", "Unknown")
-
-            # Priority
-            task_data["Priority"] = fields.get("priority", {}).get("name", "Unknown")
-
-            # Dates
-            if fields.get("dateCreated"):
-                task_data["Created"] = format_timestamp(fields["dateCreated"])
-            if fields.get("dateModified"):
-                task_data["Modified"] = format_timestamp(fields["dateModified"])
-            if fields.get("dateClosed"):
-                task_data["Closed"] = format_timestamp(fields["dateClosed"])
-
-            # Description - use PreservedScalarString for multi-line descriptions
-            description_raw = fields.get("description", {}).get("raw", "")
-            if description_raw and "\n" in description_raw:
-                task_data["Description"] = PreservedScalarString(description_raw)
-            else:
-                task_data["Description"] = description_raw if description_raw else ""
-
-            task_dict["Task"] = task_data
-
-            # Display board information (current columns only)
-            columns_data = item.get("attachments", {}).get("columns", {})
-            log.debug(f"Full columns data structure: {columns_data}")
-            boards = columns_data.get("boards", {})
-            log.debug(f"Boards type: {type(boards)}, value: {boards}")
-            boards_data = self._build_task_boards(
-                boards,
-                project_phid_to_name,
-            )
-            if boards_data:
-                task_dict["Boards"] = boards_data
-
-            # Add History section if show_history is enabled
-            if show_history:
-                history_data = self._build_history_section(
-                    item["id"],
-                    boards,
-                    project_phid_to_name,
-                    priority_transitions_map,
-                    task_transitions_map,
-                    status_transitions_map,
-                )
-                if history_data:
-                    task_dict["History"] = history_data
-
-            # Add Metadata section if show_metadata is enabled
-            if show_metadata:
-                metadata_data = self._build_metadata_section(
-                    item["id"],
-                    matching_boards_map,
-                    matching_priority_map,
-                    matching_status_map,
-                    project_phid_to_name,
-                )
-                task_dict["Metadata"] = metadata_data
-
-            tasks_list.append(task_dict)
-
-        # Output as YAML using ruamel.yaml for proper multi-line formatting
-        print()  # Empty line for separation
-
-        yaml = YAML()
-        yaml.default_flow_style = False
-        yaml.preserve_quotes = True
-        yaml.width = 4096  # Avoid unwanted line wrapping
-        yaml.dump(tasks_list, sys.stdout)
+        # Use shared method to format and display tasks
+        self._format_and_display_tasks(
+            result_data,
+            task_transitions_map=task_transitions_map,
+            priority_transitions_map=priority_transitions_map,
+            status_transitions_map=status_transitions_map,
+            matching_boards_map=matching_boards_map,
+            matching_priority_map=matching_priority_map,
+            matching_status_map=matching_status_map,
+            show_history=show_history,
+            show_metadata=show_metadata,
+        )
 
     def _display_task_transitions(self, task_phid):
         """

@@ -3,8 +3,6 @@
 # python std lib
 import re
 import sys
-from datetime import datetime
-from pprint import pprint as pp
 
 # 3rd party imports
 from docopt import DocoptExit, Option, docopt, extras
@@ -121,14 +119,14 @@ Options:
 
 sub_maniphest_show_args = """
 Usage:
-    phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
+    phabfive maniphest show <ticket_id> [options]
 
 Arguments:
     <ticket_id>          Task ID (e.g., T123)
 
 Options:
-    --all                Show all fields for a ticket
-    --pp                 Show all fields rendering with pretty print
+    --show-history       Display transition history for columns, priority, and status
+    --show-metadata      Display metadata about the task
     -h, --help           Show this help message and exit
 """
 
@@ -459,7 +457,7 @@ def run(cli_args, sub_args):
         if cli_args["<command>"] == "maniphest":
             maniphest_app = maniphest.Maniphest()
 
-            if sub_args["search"]:
+            if sub_args.get("search"):
                 # Parse filter patterns if provided
                 transition_patterns = None
                 if sub_args.get("--column"):
@@ -541,52 +539,18 @@ def run(cli_args, sub_args):
                     print("Ticket URI: {0}".format(ticket["uri"]))
 
             if sub_args.get("show"):
-                _, result = maniphest_app.info(int(sub_args["<ticket_id>"][1:]))
+                # Use new unified task_show() method
+                task_id = int(sub_args["<ticket_id>"][1:])
 
-                if sub_args["--pp"]:
-                    pp({key: value for key, value in result.items()})
-                elif sub_args["--all"]:
-                    print(f"Ticket ID:      {result['id']}")
-                    print(f"phid:           {result['phid']}")
-                    print(f"authorPHID:     {result['authorPHID']}")
-                    print(f"ownerPHID:      {result['ownerPHID']}")
-                    print(f"ccPHIDs:        {result['ccPHIDs']}")
-                    print(f"status:         {result['status']}")
-                    print(f"statusName:     {result['statusName']}")
-                    print(f"isClosed:       {result['isClosed']}")
-                    print(f"priority:       {result['priority']}")
-                    print(f"priorityColor:  {result['priorityColor']}")
-                    print(f"title:          {result['title']}")
-                    print(f"description:    {result['description']}")
-                    print(f"projectPHIDs:   {result['projectPHIDs']}")
-                    print(f"uri:            {result['uri']}")
-                    print(f"auxiliary:      {result['auxiliary']}")
-                    print(f"objectName:     {result['objectName']}")
+                # Handle flags
+                show_history = sub_args.get("--show-history", False)
+                show_metadata = sub_args.get("--show-metadata", False)
 
-                    date_created = datetime.fromtimestamp(int(result["dateCreated"]))
-                    print(f"dateCreated:    {date_created}")
-
-                    date_modified = datetime.fromtimestamp(int(result["dateModified"]))
-                    print(f"dateModified:   {date_modified}")
-
-                    print(f"dependsOnTaskPHIDs: {result['dependsOnTaskPHIDs']}")
-
-                    # Display workboard transition history
-                    task_phid = result.get("phid")
-                    if task_phid:
-                        maniphest_app._display_task_transitions(task_phid)
-                else:
-                    print(f"Ticket ID:     {result['id']}")
-                    print(f"phid:          {result['phid']}")
-                    print(f"status:        {result['status']}")
-                    print(f"priority:      {result['priority']}")
-                    print(f"title:         {result['title']}")
-                    print(f"uri:           {result['uri']}")
-                    date_created = datetime.fromtimestamp(int(result["dateCreated"]))
-                    print(f"dateCreated:   {date_created}")
-
-                    date_modified = datetime.fromtimestamp(int(result["dateModified"]))
-                    print(f"dateModified:  {date_modified}")
+                maniphest_app.task_show(
+                    task_id,
+                    show_history=show_history,
+                    show_metadata=show_metadata,
+                )
     except PhabfiveException as e:
         # Catch all types of phabricator base exceptions
         print(f"CRITICAL :: {str(e)}", file=sys.stderr)
