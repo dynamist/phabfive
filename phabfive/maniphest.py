@@ -1572,7 +1572,8 @@ class Maniphest(Phabfive):
 
     def task_search(
         self,
-        project,
+        text_query=None,
+        tag=None,
         created_after=None,
         updated_after=None,
         transition_patterns=None,
@@ -1586,10 +1587,12 @@ class Maniphest(Phabfive):
 
         Parameters
         ----------
-        project       (str, required): Project name, wildcard pattern, or filter pattern.
+        text_query    (str, optional): Free-text search in task title/description.
+                      Uses Phabricator's query constraint.
+        tag           (str, optional): Project name, wildcard pattern, or filter pattern.
                       Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
                       Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
-                      Empty string returns no results.
+                      If None, no project filtering is applied.
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
         transition_patterns (list, optional): List of TransitionPattern objects to filter by.
@@ -1603,27 +1606,50 @@ class Maniphest(Phabfive):
         show_metadata (bool, optional): If True, display which boards/priorities/statuses matched the filters.
                       Shows MatchedBoards list, MatchedPriority, and MatchedStatus boolean for debugging filter logic.
         """
+        # Validation - require at least one filter
+        has_any_filter = any(
+            [
+                text_query,
+                tag,
+                created_after,
+                updated_after,
+                transition_patterns,
+                priority_patterns,
+                status_patterns,
+            ]
+        )
+
+        if not has_any_filter:
+            log.error("No search criteria specified. Please provide at least one of:")
+            log.error("  - Free-text query: phabfive maniphest search 'search text'")
+            log.error("  - Project tag: --tag='Project Name'")
+            log.error("  - Date filter: --created-after=N or --updated-after=N")
+            log.error("  - Column filter: --column='pattern'")
+            log.error("  - Priority filter: --priority='pattern'")
+            log.error("  - Status filter: --status='pattern'")
+            return
+
         # Convert date filters to Unix timestamps
         if created_after:
             created_after = days_to_unix(created_after)
         if updated_after:
             updated_after = days_to_unix(updated_after)
 
-        # Parse project patterns from the project argument
+        # Parse tag patterns from the tag argument
         # This allows for OR/AND logic like "ProjectA,ProjectB" or "ProjectA+ProjectB"
         # Also handles projects with spaces like "Project A,Project B"
         project_patterns = None
         project_phids = []
         resolved_phids_by_pattern = []
 
-        if project and project != "*":
+        if tag and tag != "*":
             # Check if it contains pattern operators (comma or plus)
             # This includes cases with spaces like "Project A, Project B"
-            if "," in project or "+" in project:
+            if "," in tag or "+" in tag:
                 try:
-                    project_patterns = parse_project_patterns(project)
+                    project_patterns = parse_project_patterns(tag)
                     log.debug(
-                        f"Parsed {len(project_patterns)} project patterns from '{project}'"
+                        f"Parsed {len(project_patterns)} tag patterns from '{tag}'"
                     )
 
                     # Resolve each project name/wildcard in all patterns to PHIDs
@@ -1638,7 +1664,7 @@ class Maniphest(Phabfive):
                             phids = self._resolve_project_phids(project_name)
                             if not phids:
                                 log.error(
-                                    f"No projects matched '{project_name}' in pattern '{project}'"
+                                    f"No projects matched '{project_name}' in tag pattern '{tag}'"
                                 )
                                 return
                             phids_by_name.append(phids)
@@ -1661,26 +1687,38 @@ class Maniphest(Phabfive):
                     project_phids = list(resolved_phids_set)
 
                     if not project_phids:
-                        log.error(f"No projects matched the pattern '{project}'")
+                        log.error(f"No projects matched the tag pattern '{tag}'")
                         return
 
                     log.info(
-                        f"Pattern '{project}' resolved to {len(project_phids)} project(s)"
+                        f"Tag pattern '{tag}' resolved to {len(project_phids)} project(s)"
                     )
                 except PhabfiveException as e:
-                    log.error(f"Invalid project pattern: {e}")
+                    log.error(f"Invalid tag pattern: {e}")
                     return
             else:
                 # Simple project name - use existing logic (backward compatibility)
-                project_phids = self._resolve_project_phids(project)
+                project_phids = self._resolve_project_phids(tag)
                 if not project_phids:
                     # Error already logged in _resolve_project_phids
                     return
 
-        # Special case: "*" means search all projects (no filter)
-        if project == "*":
-            log.info("Searching across all projects (no project filter)")
+        # Build base constraints for API query
+        # Special case: tag == "*" or tag == None means search all projects (no project filter)
+        if tag == "*" or tag is None:
+            if tag == "*":
+                log.info("Searching across all projects (tag='*', no project filter)")
+            else:
+                log.info("No tag specified, searching across all projects")
             constraints = {}
+
+            # Add free-text search if provided
+            if text_query:
+                log.info(f"Free-text search: '{text_query}'")
+                # Note: maniphest.search doesn't have a fullText constraint
+                # We use the 'query' constraint which searches titles and descriptions
+                constraints["query"] = text_query
+
             if created_after:
                 constraints["createdStart"] = int(created_after)
             if updated_after:
@@ -1722,6 +1760,11 @@ class Maniphest(Phabfive):
                 all_tasks = {}  # task_id -> task_data
                 for phid in project_phids:
                     constraints = {"projects": [phid]}
+
+                    # Add free-text search if provided
+                    if text_query:
+                        constraints["query"] = text_query
+
                     if created_after:
                         constraints["createdStart"] = int(created_after)
                     if updated_after:
@@ -1763,6 +1806,11 @@ class Maniphest(Phabfive):
             else:
                 # Single project
                 constraints = {"projects": project_phids}
+
+                # Add free-text search if provided
+                if text_query:
+                    constraints["query"] = text_query
+
                 if created_after:
                     constraints["createdStart"] = int(created_after)
                 if updated_after:
@@ -1847,7 +1895,7 @@ class Maniphest(Phabfive):
             filtered_tasks = []
 
             # Get board PHIDs for filtering (these are the project boards we're searching)
-            search_board_phids = project_phids if project != "*" else []
+            search_board_phids = project_phids if tag and tag != "*" else []
 
             for item in result_data:
                 task_phid = item.get("phid")
