@@ -156,16 +156,18 @@ Options:
 
 sub_maniphest_search_args = """
 Usage:
-    phabfive maniphest search <project_name> [options]
+    phabfive maniphest search [<text_query>] [options]
 
 Arguments:
-     <project_name>       Project name or filter pattern (supports OR/AND logic and wildcards).
+     <text_query>         Optional free-text search in task title/description.
+                         Searches the "Query" field in Phabricator's advanced search.
+                         If omitted, you must provide at least one filter option.
+
+Options:
+    --tag=PATTERN          Filter by project/workboard tag (supports OR/AND logic and wildcards).
                           Supports: "*" (all projects), "prefix*" (starts with),
                           "*suffix" (ends with), "*contains*" (contains text).
                           Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
-                          Empty string "" returns no results.
-
-Options:
     --created-after=N      Tasks created within the last N days
     --updated-after=N      Tasks updated within the last N days
     --column=PATTERNS      Filter tasks by column transitions (comma=OR, plus=AND).
@@ -216,6 +218,21 @@ Options:
      --show-history         Display column, priority, and status transition history
      --show-metadata        Display filter match metadata (which boards/priority/status matched)
      -h, --help             Show this help message and exit
+
+Examples:
+    # Free-text search
+    phabfive maniphest search 'Lets Encrypt'
+    phabfive maniphest search 'Lets Encrypt' --status 'in:Resolved'
+
+    # Tag search (project/workboard filtering)
+    phabfive maniphest search --tag Developer-Experience
+    phabfive maniphest search --tag Developer-Experience --updated-after 7
+
+    # Combined search
+    phabfive maniphest search OpenStack --tag System-Board --updated-after 7
+
+    # Requires at least one filter (text, tag, date, column, priority, or status)
+    phabfive maniphest search  # ERROR: not specific enough
 """
 
 
@@ -507,8 +524,13 @@ def run(cli_args, sub_args):
 
                 show_metadata = sub_args.get("--show-metadata", False)
 
+                # Extract text query and tag (both are optional now)
+                text_query = sub_args.get("<text_query>")  # May be None
+                tag = sub_args.get("--tag")  # May be None
+
                 maniphest_app.task_search(
-                    sub_args["<project_name>"],
+                    text_query=text_query,
+                    tag=tag,
                     created_after=sub_args["--created-after"],
                     updated_after=sub_args["--updated-after"],
                     transition_patterns=transition_patterns,

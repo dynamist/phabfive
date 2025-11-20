@@ -73,22 +73,50 @@ phabfive maniphest create tasks.yaml --dry-run
 
 ## Task Search
 
-Search for tasks within projects with various filtering options, including advanced project pattern matching with AND/OR logic.
+Search for tasks using free-text queries and various filtering options, including advanced project pattern matching with AND/OR logic.
 
-### Basic Search
+### Free-Text Search
+
+Search for tasks by text in their title or description:
+
+```bash
+# Search for "Let's Encrypt" in any task
+phabfive maniphest search "Let's Encrypt"
+
+# Search for "OpenStack" with date filter
+phabfive maniphest search "OpenStack" --updated-after=7
+
+# Search for text within a specific project
+phabfive maniphest search "API error" --tag "Backend Team"
+
+# Search with status filter
+phabfive maniphest search "database migration" --status="in:Open"
+```
+
+**How it works:**
+- Searches both task titles and descriptions
+- Case-insensitive matching
+- Uses Phabricator's built-in full-text search
+
+### Basic Project Filtering
+
+Filter tasks by project/workboard using the `--tag` option:
 
 ```bash
 # Search within a specific project
-phabfive maniphest search "My Project"
+phabfive maniphest search --tag "My Project"
 
-# Search all projects
-phabfive maniphest search "*"
+# Search all projects (or omit --tag entirely)
+phabfive maniphest search --tag "*"
 
 # Search multiple projects (OR logic)
-phabfive maniphest search "ProjectA,ProjectB"
+phabfive maniphest search --tag "ProjectA,ProjectB"
 
 # Search project intersection (AND logic)
-phabfive maniphest search "Team Alpha+Sprint 42"
+phabfive maniphest search --tag "Team Alpha+Sprint 42"
+
+# Combine with date filters
+phabfive maniphest search --tag "Backend" --updated-after=7
 ```
 
 !!! tip
@@ -96,21 +124,39 @@ phabfive maniphest search "Team Alpha+Sprint 42"
 
 ### Wildcard Project Matching
 
-The project name supports wildcard patterns:
+The `--tag` option supports wildcard patterns:
 
 ```bash
 # All projects starting with "Backend"
-phabfive maniphest search "Backend*"
+phabfive maniphest search --tag "Backend*"
 
 # All projects ending with "2024"
-phabfive maniphest search "*2024"
+phabfive maniphest search --tag "*2024"
 
 # All projects containing "API"
-phabfive maniphest search "*API*"
+phabfive maniphest search --tag "*API*"
 ```
 
 !!! note
     Project matching is case-insensitive. If no exact match is found, phabfive will suggest similar project names.
+
+### Combining Filters
+
+You can combine free-text search with project filters and other options:
+
+```bash
+# Text search within a specific project
+phabfive maniphest search "kubernetes" --tag "Infrastructure"
+
+# Text search across multiple projects
+phabfive maniphest search "security" --tag "Backend*,Frontend*"
+
+# Text search with date and column filters
+phabfive maniphest search "migration" --tag "Database" --column="in:In Progress" --updated-after=14
+```
+
+!!! important
+    **Validation:** At least one filter is required (text query, --tag, --created-after, --updated-after, --column, --priority, or --status) to prevent accidentally querying all tasks.
 
 ### Advanced Project Filtering
 
@@ -130,13 +176,13 @@ Find tasks that belong to ANY of the specified projects:
 
 ```bash
 # Tasks in EITHER ProjectA OR ProjectB
-phabfive maniphest search "ProjectA,ProjectB"
+phabfive maniphest search --tag "ProjectA,ProjectB"
 
 # Tasks in any Backend project OR any Frontend project
-phabfive maniphest search "Backend*,Frontend*"
+phabfive maniphest search --tag "Backend*,Frontend*"
 
 # Tasks in ProjectA OR ProjectB OR ProjectC
-phabfive maniphest search "ProjectA,ProjectB,ProjectC"
+phabfive maniphest search --tag "ProjectA,ProjectB,ProjectC"
 ```
 
 **Use case**: Finding all tasks across multiple related projects or teams.
@@ -147,13 +193,13 @@ Find tasks that belong to ALL specified projects simultaneously:
 
 ```bash
 # Tasks that are in BOTH ProjectA AND ProjectB
-phabfive maniphest search "ProjectA+ProjectB"
+phabfive maniphest search --tag "ProjectA+ProjectB"
 
 # Tasks tagged with both a team and a sprint
-phabfive maniphest search "Backend Team+Sprint 42"
+phabfive maniphest search --tag "Backend Team+Sprint 42"
 
 # Tasks in multiple categories
-phabfive maniphest search "Security+High Priority+Q1 2024"
+phabfive maniphest search --tag "Security+High Priority+Q1 2024"
 ```
 
 **Use case**: Finding tasks at the intersection of multiple categorizations (e.g., tasks that belong to both a team project and a sprint milestone).
@@ -164,13 +210,13 @@ Combine OR and AND logic for sophisticated queries:
 
 ```bash
 # Tasks that are in (ProjectA AND ProjectB) OR (ProjectC)
-phabfive maniphest search "ProjectA+ProjectB,ProjectC"
+phabfive maniphest search --tag "ProjectA+ProjectB,ProjectC"
 
 # Tasks in (Backend Team AND Sprint 42) OR (Frontend Team AND Sprint 42)
-phabfive maniphest search "Backend Team+Sprint 42,Frontend Team+Sprint 42"
+phabfive maniphest search --tag "Backend Team+Sprint 42,Frontend Team+Sprint 42"
 
 # Tasks in any Q1 project AND tagged as urgent, OR any Q2 project
-phabfive maniphest search "Q1*+Urgent,Q2*"
+phabfive maniphest search --tag "Q1*+Urgent,Q2*"
 ```
 
 **How it works**: Comma-separated groups are evaluated independently (OR), and within each group, plus-separated projects must all match (AND).
@@ -181,13 +227,13 @@ Combine wildcard patterns with logical operators:
 
 ```bash
 # Tasks in any Backend project OR any API project
-phabfive maniphest search "Backend*,API*"
+phabfive maniphest search --tag "Backend*,API*"
 
 # Tasks in both a Backend project AND marked as Security
-phabfive maniphest search "Backend*+Security"
+phabfive maniphest search --tag "Backend*+Security"
 
 # Tasks in (any 2024 project AND High Priority) OR (any Archive project)
-phabfive maniphest search "*2024+High Priority,Archive*"
+phabfive maniphest search --tag "*2024+High Priority,Archive*"
 ```
 
 #### Projects with Spaces
@@ -196,43 +242,43 @@ Project names containing spaces are fully supported:
 
 ```bash
 # Single project with spaces
-phabfive maniphest search "My Project"
+phabfive maniphest search --tag "My Project"
 
 # OR logic with spaces
-phabfive maniphest search "Project A,Project B"
+phabfive maniphest search --tag "Project A,Project B"
 
 # AND logic with spaces
-phabfive maniphest search "Backend Team+Sprint 42"
+phabfive maniphest search --tag "Backend Team+Sprint 42"
 
 # Complex pattern with spaces
-phabfive maniphest search "Q1 2024+Backend Team,Q1 2024+Frontend Team"
+phabfive maniphest search --tag "Q1 2024+Backend Team,Q1 2024+Frontend Team"
 ```
 
 #### Real-World Examples
 
 **Sprint Planning**: Find all tasks for a specific sprint across multiple teams:
 ```bash
-phabfive maniphest search "Backend+Sprint 15,Frontend+Sprint 15,QA+Sprint 15"
+phabfive maniphest search --tag "Backend+Sprint 15,Frontend+Sprint 15,QA+Sprint 15"
 ```
 
 **Cross-Team Features**: Find tasks that involve multiple teams:
 ```bash
-phabfive maniphest search "Backend Team+Mobile Team"
+phabfive maniphest search --tag "Backend Team+Mobile Team"
 ```
 
 **Security Audits**: Find security tasks across all product areas:
 ```bash
-phabfive maniphest search "Product*+Security"
+phabfive maniphest search --tag "Product*+Security"
 ```
 
 **Quarterly Planning**: Find all high-priority tasks for Q1 across teams:
 ```bash
-phabfive maniphest search "Q1 2024+High Priority"
+phabfive maniphest search --tag "Q1 2024+High Priority"
 ```
 
 **Release Tracking**: Find tasks for a specific release across components:
 ```bash
-phabfive maniphest search "Release 2.0+API,Release 2.0+UI,Release 2.0+Database"
+phabfive maniphest search --tag "Release 2.0+API,Release 2.0+UI,Release 2.0+Database"
 ```
 
 #### Combining with Other Filters
@@ -241,21 +287,21 @@ Project patterns work seamlessly with other search filters:
 
 ```bash
 # Recent tasks in multiple projects
-phabfive maniphest search "ProjectA,ProjectB" --updated-after=7
+phabfive maniphest search --tag "ProjectA,ProjectB" --updated-after=7
 
 # Tasks in both team and sprint, currently in specific column
-phabfive maniphest search "Backend+Sprint 42" --column="in:In Progress"
+phabfive maniphest search --tag "Backend+Sprint 42" --column="in:In Progress"
 
 # High-priority tasks across backend services
-phabfive maniphest search "Backend*" --priority="in:High"
+phabfive maniphest search --tag "Backend*" --priority="in:High"
 
 # Tasks at intersection of team and milestone, recently completed
-phabfive maniphest search "API Team+Milestone 3" \
+phabfive maniphest search --tag "API Team+Milestone 3" \
   --column="to:Done" \
   --updated-after=14
 
 # Security tasks across products that moved backward
-phabfive maniphest search "Product*+Security" \
+phabfive maniphest search --tag "Product*+Security" \
   --column=backward \
   --show-history
 ```
@@ -265,7 +311,7 @@ phabfive maniphest search "Product*+Security" \
 **Pattern Evaluation**:
 - OR patterns (comma-separated) are evaluated left to right - tasks matching ANY pattern are included
 - AND patterns (plus-separated) require the task to belong to ALL specified projects
-- Empty strings (`""`) return no results - use `"*"` to search all projects instead
+- Use `--tag "*"` to search all projects, or omit `--tag` entirely for the same effect
 
 **Performance Considerations**:
 - Specific project names are faster than wildcards
@@ -278,7 +324,7 @@ If a pattern doesn't return expected results:
 1. Test each project name individually first
 2. Verify project names match exactly (check for typos, extra spaces)
 3. Remember that AND logic requires tasks to be in ALL projects simultaneously
-4. Use `phabfive maniphest search "*"` to see all available tasks and their projects
+4. Use `phabfive maniphest search --tag "*"` to see all available tasks and their projects
 
 **Common Patterns**:
 ```bash
@@ -300,14 +346,14 @@ If a pattern doesn't return expected results:
 Filter tasks by creation or modification date:
 
 ```bash
-# Tasks created in the last 7 days
-phabfive maniphest search "My Project" --created-after=7
+# Tasks created in the last 7 days (in a specific project)
+phabfive maniphest search --tag "My Project" --created-after=7
 
-# Tasks updated in the last 3 days
-phabfive maniphest search "My Project" --updated-after=3
+# Tasks updated in the last 3 days (across all projects)
+phabfive maniphest search --updated-after=3
 
-# Combine both filters
-phabfive maniphest search "My Project" --created-after=30 --updated-after=7
+# Combine both filters with free-text search
+phabfive maniphest search "migration" --created-after=30 --updated-after=7
 ```
 
 ## Filtering Tasks
@@ -358,16 +404,16 @@ Transition patterns use a query language with AND/OR logic:
 
 ```bash
 # Find all tasks that moved backward (returned to earlier columns)
-phabfive maniphest search "My Project" --column=backward
+phabfive maniphest search --tag "My Project" --column=backward
 
 # Find tasks currently in the "Blocked" column
-phabfive maniphest search "My Project" --column="in:Blocked"
+phabfive maniphest search --tag "My Project" --column="in:Blocked"
 
 # Find tasks that moved to "Done"
-phabfive maniphest search "My Project" --column="to:Done"
+phabfive maniphest search --tag "My Project" --column="to:Done"
 
 # Find tasks that moved forward from "In Progress"
-phabfive maniphest search "My Project" --column="from:In Progress:forward"
+phabfive maniphest search --tag "My Project" --column="from:In Progress:forward"
 ```
 
 ### OR Logic (Comma Separator)
@@ -376,13 +422,13 @@ Match tasks that satisfy **any** of the patterns:
 
 ```bash
 # Tasks that are EITHER in Done OR in Blocked
-phabfive maniphest search "My Project" --column="in:Done,in:Blocked"
+phabfive maniphest search --tag "My Project" --column="in:Done,in:Blocked"
 
 # Tasks that moved to Done OR moved backward
-phabfive maniphest search "My Project" --column="to:Done,backward"
+phabfive maniphest search --tag "My Project" --column="to:Done,backward"
 
 # Tasks in multiple columns
-phabfive maniphest search "My Project" --column="in:In Progress,in:In Review,in:Testing"
+phabfive maniphest search --tag "My Project" --column="in:In Progress,in:In Review,in:Testing"
 ```
 
 ### AND Logic (Plus Separator)
@@ -391,13 +437,13 @@ Match tasks that satisfy **all** conditions:
 
 ```bash
 # Tasks that moved from "In Progress" AND are currently in "Done"
-phabfive maniphest search "My Project" --column="from:In Progress+in:Done"
+phabfive maniphest search --tag "My Project" --column="from:In Progress+in:Done"
 
 # Tasks that moved from "Up Next" forward AND never got blocked
-phabfive maniphest search "My Project" --column="from:Up Next:forward+never:Blocked"
+phabfive maniphest search --tag "My Project" --column="from:Up Next:forward+never:Blocked"
 
 # Tasks currently in Done AND moved there from In Progress (skipped review)
-phabfive maniphest search "My Project" --column="in:Done+from:In Progress"
+phabfive maniphest search --tag "My Project" --column="in:Done+from:In Progress"
 ```
 
 ### Complex Combinations
@@ -409,12 +455,12 @@ Combine OR and AND logic for sophisticated queries:
 # - Moved from "In Progress" forward AND are currently in "Done"
 # OR
 # - Are currently in "Blocked"
-phabfive maniphest search "My Project" \
+phabfive maniphest search --tag "My Project" \
   --column="from:In Progress:forward+in:Done,in:Blocked"
 
 # Find workflow violations:
 # Tasks in Done that either moved backward OR never went through Review
-phabfive maniphest search "My Project" \
+phabfive maniphest search --tag "My Project" \
   --column="in:Done+backward,in:Done+never:In Review"
 ```
 
@@ -424,19 +470,19 @@ Use the `not:` prefix to negate any pattern:
 
 ```bash
 # Tasks NOT currently in Done
-phabfive maniphest search "My Project" --column="not:in:Done"
+phabfive maniphest search --tag "My Project" --column="not:in:Done"
 
 # Tasks that have NOT moved backward
-phabfive maniphest search "My Project" --column="not:backward"
+phabfive maniphest search --tag "My Project" --column="not:backward"
 
 # Tasks NOT currently in Done AND have been in Review
-phabfive maniphest search "My Project" --column="not:in:Done+been:In Review"
+phabfive maniphest search --tag "My Project" --column="not:in:Done+been:In Review"
 
 # Tasks in Done that did NOT come from Backlog
-phabfive maniphest search "My Project" --column="in:Done+not:from:Backlog"
+phabfive maniphest search --tag "My Project" --column="in:Done+not:from:Backlog"
 
 # Complex: Tasks NOT in Review AND have NOT been blocked
-phabfive maniphest search "My Project" --column="not:in:Review+not:been:Blocked"
+phabfive maniphest search --tag "My Project" --column="not:in:Review+not:been:Blocked"
 ```
 
 **Note**: `not:been:COLUMN` is functionally equivalent to `never:COLUMN`. Both patterns exist for flexibility and readability.
@@ -447,13 +493,13 @@ Use `--show-history` to see transition history for tasks:
 
 ```bash
 # Show history with filtering
-phabfive maniphest search "My Project" --column=backward --show-history
+phabfive maniphest search --tag "My Project" --column=backward --show-history
 
 # Show history without filtering
-phabfive maniphest search "My Project" --show-history
+phabfive maniphest search --tag "My Project" --show-history
 
 # Filtering without history (only shows current state)
-phabfive maniphest search "My Project" --column=backward
+phabfive maniphest search --tag "My Project" --column=backward
 ```
 
 Output includes:
@@ -539,16 +585,16 @@ Standard Phabricator/Phorge priorities (from highest to lowest):
 
 ```bash
 # Find tasks currently at Unbreak Now!
-phabfive maniphest search "My Project" --priority="in:Unbreak Now!"
+phabfive maniphest search --tag "My Project" --priority="in:Unbreak Now!"
 
 # Find tasks that were ever at Unbreak Now!
-phabfive maniphest search "My Project" --priority="been:Unbreak Now!"
+phabfive maniphest search --tag "My Project" --priority="been:Unbreak Now!"
 
 # Find tasks that were raised from Normal
-phabfive maniphest search "My Project" --priority="from:Normal:raised"
+phabfive maniphest search --tag "My Project" --priority="from:Normal:raised"
 
 # Find tasks that had any priority increase
-phabfive maniphest search "My Project" --priority=raised
+phabfive maniphest search --tag "My Project" --priority=raised
 ```
 
 ### Combining Column and Priority Filters
@@ -562,12 +608,12 @@ phabfive maniphest search '*' \
   --priority='been:Normal'
 
 # Tasks in Done that were raised from Normal
-phabfive maniphest search "My Project" \
+phabfive maniphest search --tag "My Project" \
   --column="in:Done" \
   --priority="from:Normal:raised"
 
 # Recently completed high-priority tasks
-phabfive maniphest search "My Project" \
+phabfive maniphest search --tag "My Project" \
   --column="to:Done" \
   --priority="in:High" \
   --updated-after=7
@@ -579,10 +625,10 @@ Same as column patterns, priority patterns support OR (comma) and AND (plus):
 
 ```bash
 # Tasks at High OR Unbreak Now!
-phabfive maniphest search "My Project" --priority="in:High,in:Unbreak Now!"
+phabfive maniphest search --tag "My Project" --priority="in:High,in:Unbreak Now!"
 
 # Tasks raised from Normal AND currently at High
-phabfive maniphest search "My Project" --priority="from:Normal:raised+in:High"
+phabfive maniphest search --tag "My Project" --priority="from:Normal:raised+in:High"
 ```
 
 ### Priority Negation Patterns
@@ -591,16 +637,16 @@ Use the `not:` prefix to negate priority patterns:
 
 ```bash
 # Tasks NOT currently at High priority
-phabfive maniphest search "My Project" --priority="not:in:High"
+phabfive maniphest search --tag "My Project" --priority="not:in:High"
 
 # Tasks whose priority has NOT been raised
-phabfive maniphest search "My Project" --priority="not:raised"
+phabfive maniphest search --tag "My Project" --priority="not:raised"
 
 # Tasks NOT at High priority AND have been raised at some point
-phabfive maniphest search "My Project" --priority="not:in:High+raised"
+phabfive maniphest search --tag "My Project" --priority="not:in:High+raised"
 
 # Tasks at Normal that did NOT come from being lowered
-phabfive maniphest search "My Project" --priority="in:Normal+not:lowered"
+phabfive maniphest search --tag "My Project" --priority="in:Normal+not:lowered"
 ```
 
 **Note**: `not:been:PRIORITY` is functionally equivalent to `never:PRIORITY`.
@@ -664,16 +710,16 @@ The tool dynamically fetches status information from your Phabricator/Phorge ins
 
 ```bash
 # Find tasks currently Open
-phabfive maniphest search "My Project" --status="in:Open"
+phabfive maniphest search --tag "My Project" --status="in:Open"
 
 # Find tasks that were ever Resolved
-phabfive maniphest search "My Project" --status="been:Resolved"
+phabfive maniphest search --tag "My Project" --status="been:Resolved"
 
 # Find tasks that progressed from Open
-phabfive maniphest search "My Project" --status="from:Open:raised"
+phabfive maniphest search --tag "My Project" --status="from:Open:raised"
 
 # Find tasks that had any status progression
-phabfive maniphest search "My Project" --status=raised
+phabfive maniphest search --tag "My Project" --status=raised
 ```
 
 ### Combining Column, Priority, and Status Filters
@@ -688,12 +734,12 @@ phabfive maniphest search '*' \
   --status='in:Resolved'
 
 # Tasks in progress that have been blocked
-phabfive maniphest search "My Project" \
+phabfive maniphest search --tag "My Project" \
   --column="in:In Progress" \
   --status="been:Blocked"
 
 # Recently completed tasks that were never blocked
-phabfive maniphest search "My Project" \
+phabfive maniphest search --tag "My Project" \
   --status="to:Resolved" \
   --updated-after=7 \
   --status="never:Blocked"
@@ -705,10 +751,10 @@ Same as column and priority patterns, status patterns support OR (comma) and AND
 
 ```bash
 # Tasks currently Open OR Blocked
-phabfive maniphest search "My Project" --status="in:Open,in:Blocked"
+phabfive maniphest search --tag "My Project" --status="in:Open,in:Blocked"
 
 # Tasks raised from Open AND currently Resolved
-phabfive maniphest search "My Project" --status="from:Open:raised+in:Resolved"
+phabfive maniphest search --tag "My Project" --status="from:Open:raised+in:Resolved"
 ```
 
 ### Status Negation Patterns
@@ -717,16 +763,16 @@ Use the `not:` prefix to negate status patterns:
 
 ```bash
 # Tasks NOT currently Open
-phabfive maniphest search "My Project" --status="not:in:Open"
+phabfive maniphest search --tag "My Project" --status="not:in:Open"
 
 # Tasks whose status has NOT progressed
-phabfive maniphest search "My Project" --status="not:raised"
+phabfive maniphest search --tag "My Project" --status="not:raised"
 
 # Tasks NOT Resolved AND have been Blocked at some point
-phabfive maniphest search "My Project" --status="not:in:Resolved+been:Blocked"
+phabfive maniphest search --tag "My Project" --status="not:in:Resolved+been:Blocked"
 
 # Tasks that progressed but did NOT reach Resolved
-phabfive maniphest search "My Project" --status="raised+not:in:Resolved"
+phabfive maniphest search --tag "My Project" --status="raised+not:in:Resolved"
 ```
 
 **Note**: `not:been:STATUS` is functionally equivalent to `never:STATUS`.
@@ -765,7 +811,7 @@ This helps you understand exactly why a task appeared in your search results.
 Identify tasks that moved backward from completion:
 
 ```bash
-phabfive maniphest search "Backend Team" \
+phabfive maniphest search --tag "Backend Team" \
   --column="from:Done:backward" \
   --updated-after=30
 ```
@@ -775,7 +821,7 @@ phabfive maniphest search "Backend Team" \
 Find tasks that went straight to Done without review:
 
 ```bash
-phabfive maniphest search "Frontend" \
+phabfive maniphest search --tag "Frontend" \
   --column="in:Done+never:In Review"
 ```
 
@@ -784,7 +830,7 @@ phabfive maniphest search "Frontend" \
 See what's currently blocked and where it came from:
 
 ```bash
-phabfive maniphest search "My Project" \
+phabfive maniphest search --tag "My Project" \
   --column="in:Blocked+from:In Progress"
 ```
 
@@ -793,7 +839,7 @@ phabfive maniphest search "My Project" \
 Find recently completed tasks that never went through testing:
 
 ```bash
-phabfive maniphest search "Product" \
+phabfive maniphest search --tag "Product" \
   --column="in:Done+never:Testing" \
   --updated-after=7
 ```
@@ -803,7 +849,7 @@ phabfive maniphest search "Product" \
 Analyze all tasks completed in the last sprint:
 
 ```bash
-phabfive maniphest search "Sprint 42" \
+phabfive maniphest search --tag "Sprint 42" \
   --column="to:Done" \
   --updated-after=14
 ```
