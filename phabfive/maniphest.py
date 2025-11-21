@@ -1712,7 +1712,6 @@ class Maniphest(Phabfive):
                 log.info("No tag specified, searching across all projects")
             constraints = {}
 
-            # Add free-text search if provided
             if text_query:
                 log.info(f"Free-text search: '{text_query}'")
                 # Note: maniphest.search doesn't have a fullText constraint
@@ -1761,7 +1760,6 @@ class Maniphest(Phabfive):
                 for phid in project_phids:
                     constraints = {"projects": [phid]}
 
-                    # Add free-text search if provided
                     if text_query:
                         constraints["query"] = text_query
 
@@ -1807,7 +1805,6 @@ class Maniphest(Phabfive):
                 # Single project
                 constraints = {"projects": project_phids}
 
-                # Add free-text search if provided
                 if text_query:
                     constraints["query"] = text_query
 
