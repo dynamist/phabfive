@@ -7,7 +7,7 @@ services:
   phabricator:
     image: 'nasqueron/phabricator'
     environment:
-      - PHABRICATOR_URL="http://phabricator.domain.tld"
+      - PHABRICATOR_URL="http://phabricator.domain.tld"r
       - PHABRICATOR_TITLE="Acme"
       - PHABRICATOR_ALT_FILE_DOMAIN="files-for-phabricator.anotherdomain.tld"
       - MYSQL_ENV_MYSQL_ROOT_PASSWORD=somerootpassword

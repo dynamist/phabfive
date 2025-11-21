@@ -42,7 +42,11 @@ generate_recovery_link
 # Step 7: Create additional fake users
 create_fake_users
 
-# Step 8: Create default projects and workboards
+# Step 8: Create default Spaces
+source "${LIB_DIR}/setup-spaces.sh"
+create_spaces
+
+# Step 9: Create default projects and workboards
 source "${LIB_DIR}/setup-projects.sh"
 create_projects
 
@@ -64,6 +68,9 @@ echo "  - sonja.bergstrom (Sonja Bergström - Windows SharePoint Developer)"
 echo "  - gabriel.blomqvist (Gabriel Blomqvist - Windows C# Developer)"
 echo "  - sebastian.soderberg (Sebastian Söderberg - Windows C# Developer)"
 echo "  - tommy.svensson (Tommy Svensson - QA Engineer)"
+echo ""
+echo "Default Spaces Created:"
+echo "  - Public (default), Internal, Restricted"
 echo ""
 echo "Default Projects Created:"
 echo "  - GUNNAR-Core, Architecture, Infrastructure, Development"

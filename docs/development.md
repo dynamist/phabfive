@@ -10,9 +10,18 @@ Get from zero to working development environment in 2 steps:
 # 1. Set up development environment
 make install         # or: uv sync --group dev
 
-# 2. Start local Phorge test instance
-make phorge-up
+# 2. Start local Phorge with demo data (recommended)
+make phorge-setup    # Starts Phorge + creates ~70 demo tasks
+
+# OR just start Phorge without demo data
+make phorge-up       # Clean slate
 ```
+
+The `phorge-setup` target gives you a fully populated Phorge instance with:
+- 3 Spaces (Public, Internal, Restricted)
+- 7 Projects with workboards
+- ~70 tasks distributed across columns
+- Realistic task history for testing
 
 ## Installation in a Development Environment
 

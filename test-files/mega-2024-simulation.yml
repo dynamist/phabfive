@@ -99,6 +99,7 @@ tasks:
       - "GUNNAR-Core"
       - "Architecture"
     priority: "high"
+    space: "Internal"
     subscribers: *FULL_TEAM
     tasks:
       - title: "Define cryptographic algorithm requirements"
@@ -111,6 +112,7 @@ tasks:
           - "Architecture"
           - "Security"
         priority: "high"
+        space: "Restricted"
         assignment: "ove.pettersson"
 
       - title: "Design hardware security module layout"
@@ -121,6 +123,7 @@ tasks:
           - "GUNNAR-Core"
           - "Architecture"
         priority: "high"
+        space: "Restricted"
         assignment: "ove.pettersson"
 
       - title: "Specify secure boot sequence"
@@ -131,6 +134,7 @@ tasks:
           - "Architecture"
           - "Security"
         priority: "normal"
+        space: "Restricted"
 
       - title: "Create chip specification document v1.0"
         description: |
@@ -139,6 +143,7 @@ tasks:
         projects:
           - "Architecture"
         priority: "normal"
+        space: "Internal"
         assignment: "ove.pettersson"
 
   - title: "[EPIC] Development Environment Setup {{ q1 }}"
@@ -152,6 +157,7 @@ tasks:
       - "Development"
       - "Infrastructure"
     priority: "unbreak"
+    space: "Internal"
     subscribers: *INFRA_TEAM
     tasks:
       - title: "Deploy {{ hypervisor }} cluster on {{ os_version }}"
@@ -161,6 +167,7 @@ tasks:
         projects:
           - "Infrastructure"
         priority: "high"
+        space: "Internal"
         assignment: "viola.larsson"
 
       - title: "Create development VM templates"
@@ -173,6 +180,7 @@ tasks:
           - "Infrastructure"
           - "Development"
         priority: "high"
+        space: "Internal"
         assignment: "daniel.lindgren"
 
       - title: "Set up PKI for smartcard authentication"
@@ -184,6 +192,7 @@ tasks:
           - "Infrastructure"
           - "Security"
         priority: "high"
+        space: "Restricted"
         assignment: "viola.larsson"
 
       - title: "Configure network isolation for {{ project_name }} system"
@@ -194,6 +203,7 @@ tasks:
         projects:
           - "Infrastructure"
         priority: "normal"
+        space: "Restricted"
         assignment: "daniel.lindgren"
 
   - title: "[BUG] SharePoint document library permissions not working"
@@ -204,6 +214,7 @@ tasks:
       - "SharePoint"
       - "Infrastructure"
     priority: "high"
+    space: "Internal"
     assignment: "sonja.bergstrom"
 
   - title: "Set up automated backup solution for VMs"
@@ -215,6 +226,7 @@ tasks:
     projects:
       - "Infrastructure"
     priority: "normal"
+    space: "Internal"
     assignment: "viola.larsson"
     subscribers: *INFRA_TEAM
 
@@ -224,6 +236,7 @@ tasks:
       - "SharePoint"
       - "Security"
     priority: "low"
+    space: "Public"
     assignment: "sonja.bergstrom"
 
   # ========================================
@@ -240,6 +253,7 @@ tasks:
       - "GUNNAR-Core"
       - "Development"
     priority: "unbreak"
+    space: "Restricted"
     subscribers: *DEV_TEAM
     tasks:
       - title: "Implement {{ crypto_algorithm }} encryption module"
@@ -250,6 +264,7 @@ tasks:
         projects:
           - "GUNNAR-Core"
         priority: "high"
+        space: "Restricted"
         assignment: "gabriel.blomqvist"
 
       - title: "Implement {{ signature_algorithm }} signature verification"
@@ -259,6 +274,7 @@ tasks:
         projects:
           - "GUNNAR-Core"
         priority: "high"
+        space: "Restricted"
         assignment: "sebastian.soderberg"
 
       - title: "Create key derivation functions (KDF)"
@@ -268,6 +284,7 @@ tasks:
         projects:
           - "GUNNAR-Core"
         priority: "normal"
+        space: "Restricted"
         assignment: "gabriel.blomqvist"
 
       - title: "Write cryptographic library documentation"
@@ -277,6 +294,7 @@ tasks:
         projects:
           - "SharePoint"
         priority: "low"
+        space: "Public"
         assignment: "sonja.bergstrom"
 
   - title: "[FEATURE] Chip simulator GUI application"
@@ -291,6 +309,7 @@ tasks:
       - "GUNNAR-Core"
       - "Development"
     priority: "high"
+    space: "Internal"
     assignment: "sebastian.soderberg"
     subscribers: *FULL_TEAM
 
@@ -304,6 +323,7 @@ tasks:
       - "GUNNAR-Core"
       - "Security"
     priority: "normal"
+    space: "Internal"
     assignment: "gabriel.blomqvist"
 
   - title: "[BUG] Memory alignment issues in cryptographic operations"
@@ -313,6 +333,7 @@ tasks:
     projects:
       - "GUNNAR-Core"
     priority: "high"
+    space: "Internal"
     assignment: "gabriel.blomqvist"
 
   - title: "Update development tools and dependencies"
@@ -323,6 +344,7 @@ tasks:
     projects:
       - "Development"
     priority: "normal"
+    space: "Internal"
     subscribers: *DEV_TEAM
 
   - title: "Create chip specification SharePoint site"
@@ -333,6 +355,7 @@ tasks:
     projects:
       - "SharePoint"
     priority: "normal"
+    space: "Internal"
     assignment: "sonja.bergstrom"
 
   - title: "[BUG] VM performance degradation over time"
@@ -340,6 +363,7 @@ tasks:
     projects:
       - "Infrastructure"
     priority: "normal"
+    space: "Internal"
     assignment: "viola.larsson"
 
   - title: "Configure code signing infrastructure"
@@ -352,6 +376,7 @@ tasks:
       - "Security"
       - "Infrastructure"
     priority: "high"
+    space: "Internal"
     assignment: "viola.larsson"
 
   - title: "Optimize chip simulator performance"
@@ -364,6 +389,7 @@ tasks:
       - "GUNNAR-Core"
       - "Development"
     priority: "high"
+    space: "Internal"
     assignment: "sebastian.soderberg"
 
   # ========================================
@@ -380,6 +406,7 @@ tasks:
       - "QA"
       - "Security"
     priority: "high"
+    space: "Restricted"
     subscribers: *QA_TEAM
     tasks:
       - title: "Side-channel attack resistance testing"
@@ -390,6 +417,7 @@ tasks:
           - "QA"
           - "Security"
         priority: "high"
+        space: "Restricted"
         assignment: "tommy.svensson"
 
       - title: "Fault injection testing"
@@ -400,6 +428,7 @@ tasks:
           - "QA"
           - "Security"
         priority: "high"
+        space: "Restricted"
         assignment: "tommy.svensson"
 
       - title: "Cryptographic validation tests"
@@ -411,6 +440,7 @@ tasks:
         projects:
           - "QA"
         priority: "normal"
+        space: "Restricted"
         assignment: "tommy.svensson"
 
       - title: "Create security test report for certification"
@@ -421,6 +451,7 @@ tasks:
           - "QA"
           - "SharePoint"
         priority: "normal"
+        space: "Restricted"
         assignment: "sonja.bergstrom"
 
   - title: "[FEATURE] Automated test harness for chip validation"
@@ -433,6 +464,7 @@ tasks:
       - "QA"
       - "Development"
     priority: "high"
+    space: "Internal"
     assignment: "tommy.svensson"
     subscribers: *FULL_TEAM
 
@@ -444,6 +476,7 @@ tasks:
       - "GUNNAR-Core"
       - "Security"
     priority: "unbreak"
+    space: "Internal"
     assignment: "gabriel.blomqvist"
 
   - title: "Third-party security audit preparation"
@@ -455,6 +488,7 @@ tasks:
       - "Security"
       - "QA"
     priority: "high"
+    space: "Internal"
     assignment: "ove.pettersson"
 
   - title: "[BUG] Secure boot verification bypassed in certain conditions"
@@ -463,6 +497,7 @@ tasks:
       - "GUNNAR-Core"
       - "Security"
     priority: "unbreak"
+    space: "Internal"
     assignment: "sebastian.soderberg"
 
   - title: "Implement hardware tamper detection simulation"
@@ -474,6 +509,7 @@ tasks:
     projects:
       - "GUNNAR-Core"
     priority: "high"
+    space: "Internal"
     assignment: "gabriel.blomqvist"
 
   - title: "Create automated regression test suite"
@@ -482,6 +518,7 @@ tasks:
       - "QA"
       - "Development"
     priority: "normal"
+    space: "Internal"
     assignment: "tommy.svensson"
 
   - title: "Performance benchmarking against requirements"
@@ -493,6 +530,7 @@ tasks:
     projects:
       - "QA"
     priority: "normal"
+    space: "Internal"
     assignment: "tommy.svensson"
 
   - title: "[FEATURE] Debug interface with access controls"
@@ -505,6 +543,7 @@ tasks:
       - "GUNNAR-Core"
       - "Security"
     priority: "normal"
+    space: "Internal"
     assignment: "sebastian.soderberg"
 
   - title: "Update smartcard authentication certificates"
@@ -516,6 +555,7 @@ tasks:
       - "Infrastructure"
       - "Security"
     priority: "high"
+    space: "Internal"
     assignment: "viola.larsson"
 
   # ========================================
@@ -535,6 +575,7 @@ tasks:
       - "Security"
       - "QA"
     priority: "unbreak"
+    space: "Restricted"
     subscribers: *FULL_TEAM
     tasks:
       - title: "Complete security requirements traceability matrix"
@@ -545,6 +586,7 @@ tasks:
           - "Security"
           - "SharePoint"
         priority: "high"
+        space: "Restricted"
         assignment: "ove.pettersson"
 
       - title: "Final security penetration testing"
@@ -555,6 +597,7 @@ tasks:
           - "Security"
           - "QA"
         priority: "high"
+        space: "Restricted"
         assignment: "tommy.svensson"
 
       - title: "Create certification evidence package"
@@ -565,6 +608,7 @@ tasks:
           - "SharePoint"
           - "Security"
         priority: "normal"
+        space: "Restricted"
         assignment: "sonja.bergstrom"
 
       - title: "Certification submission and review"
@@ -574,6 +618,7 @@ tasks:
         projects:
           - "Security"
         priority: "high"
+        space: "Restricted"
         assignment: "ove.pettersson"
 
   - title: "[FEATURE] Chip manufacturing specification export"
@@ -586,6 +631,7 @@ tasks:
       - "GUNNAR-Core"
       - "Architecture"
     priority: "normal"
+    space: "Internal"
     assignment: "ove.pettersson"
 
   - title: "Set up production code repository"
@@ -598,6 +644,7 @@ tasks:
       - "Development"
       - "Security"
     priority: "high"
+    space: "Internal"
     assignment: "daniel.lindgren"
 
   - title: "[BUG] Key zeroization incomplete on tamper event"
@@ -608,6 +655,7 @@ tasks:
       - "GUNNAR-Core"
       - "Security"
     priority: "unbreak"
+    space: "Internal"
     assignment: "gabriel.blomqvist"
 
   - title: "Aviation authority compliance review"
@@ -620,6 +668,7 @@ tasks:
     projects:
       - "Security"
     priority: "high"
+    space: "Internal"
     assignment: "ove.pettersson"
 
   - title: "[FEATURE] Secure logging and audit trail"
@@ -632,6 +681,7 @@ tasks:
       - "GUNNAR-Core"
       - "SharePoint"
     priority: "normal"
+    space: "Internal"
     assignment: "sonja.bergstrom"
 
   - title: "Black box integration testing plan"
@@ -643,6 +693,7 @@ tasks:
     projects:
       - "QA"
     priority: "normal"
+    space: "Internal"
     assignment: "tommy.svensson"
     subscribers: *QA_TEAM
 
@@ -656,6 +707,7 @@ tasks:
     projects:
       - "SharePoint"
     priority: "low"
+    space: "Public"
     assignment: "sonja.bergstrom"
 
   - title: "Chip fabrication vendor selection"
@@ -667,6 +719,7 @@ tasks:
     projects:
       - "GUNNAR-Core"
     priority: "high"
+    space: "Internal"
     assignment: "ove.pettersson"
     subscribers: *FULL_TEAM
 
@@ -675,6 +728,7 @@ tasks:
     projects:
       - "GUNNAR-Core"
     priority: "high"
+    space: "Internal"
     assignment: "sebastian.soderberg"
 
   - title: "Holiday on-call schedule for critical systems"
@@ -682,6 +736,7 @@ tasks:
     projects:
       - "Infrastructure"
     priority: "normal"
+    space: "Internal"
     assignment: "viola.larsson"
 
   # ========================================
@@ -693,6 +748,7 @@ tasks:
     projects:
       - "Infrastructure"
     priority: "normal"
+    space: "Internal"
     assignment: "viola.larsson"
 
   - title: "Weekly code review sessions"
@@ -700,12 +756,14 @@ tasks:
     projects:
       - "Development"
     priority: "normal"
+    space: "Internal"
 
   - title: "Bi-weekly scrum retrospectives"
     description: "Team retrospective meetings led by Scrum Master"
     projects:
       - "Development"
     priority: "low"
+    space: "Public"
     assignment: "mikael.wallin"
 
   - title: "[FEATURE] Improved error diagnostics"
@@ -718,6 +776,7 @@ tasks:
       - "GUNNAR-Core"
       - "Development"
     priority: "normal"
+    space: "Internal"
     assignment: "sebastian.soderberg"
 
   - title: "Regulatory compliance monitoring"
@@ -729,6 +788,7 @@ tasks:
     projects:
       - "Security"
     priority: "low"
+    space: "Public"
     assignment: "ove.pettersson"
 
   - title: "[BUG] VM network connectivity drops intermittently"
@@ -736,6 +796,7 @@ tasks:
     projects:
       - "Infrastructure"
     priority: "normal"
+    space: "Internal"
     assignment: "daniel.lindgren"
 
   - title: "Infrastructure cost review"
@@ -747,6 +808,7 @@ tasks:
     projects:
       - "Infrastructure"
     priority: "normal"
+    space: "Internal"
     assignment: "viola.larsson"
 
   - title: "SharePoint workflow automation"
@@ -758,6 +820,7 @@ tasks:
     projects:
       - "SharePoint"
     priority: "wish"
+    space: "Internal"
     assignment: "sonja.bergstrom"
 
   - title: "[FEATURE] Visual Studio integration for chip simulator"
@@ -769,6 +832,7 @@ tasks:
     projects:
       - "Development"
     priority: "wish"
+    space: "Internal"
     assignment: "sebastian.soderberg"
 
   - title: "Physical security compliance audit"
@@ -780,6 +844,7 @@ tasks:
     projects:
       - "Security"
     priority: "high"
+    space: "Internal"
     assignment: "ove.pettersson"
 
   - title: "End of year system maintenance"
@@ -794,4 +859,5 @@ tasks:
     projects:
       - "Infrastructure"
     priority: "normal"
+    space: "Internal"
     assignment: "viola.larsson"
