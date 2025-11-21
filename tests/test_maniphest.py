@@ -1058,44 +1058,236 @@ class TestYAMLOutput:
 
 
 class TestTaskSearchTextQuery:
-    """Test suite for free-text search functionality (#107)."""
+    """Test suite for free-text search functionality."""
 
-    def test_task_search_with_text_query_only(self):
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_with_text_query_only(self, mock_init, capsys):
         """Test searching with only a free-text query."""
-        # This test documents expected behavior for the new text search feature
-        # It would need a mock Phabricator instance to run
-        # Expected: API called with fullText constraint, no projects constraint
-        pass
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
 
-    def test_task_search_with_tag_only(self):
+        # Mock the API response
+        mock_response = MagicMock()
+        mock_response.response = {"data": []}
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        # Mock project.query for board name resolution
+        maniphest.phab.project.query.return_value = {"data": {}}
+
+        # Call with text query only
+        maniphest.task_search(text_query="authentication bug")
+
+        # Verify API was called with query constraint only
+        assert maniphest.phab.maniphest.search.called
+        call_kwargs = maniphest.phab.maniphest.search.call_args[1]
+        constraints = call_kwargs["constraints"]
+
+        # Should have query constraint
+        assert "query" in constraints
+        assert constraints["query"] == "authentication bug"
+
+        # Should NOT have projects constraint
+        assert "projects" not in constraints
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_with_tag_only(self, mock_init, capsys):
         """Test searching with only --tag option (backward compat)."""
-        # This test documents that --tag works for project filtering
-        # Expected: API called with projects constraint, no fullText
-        pass
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
 
-    def test_task_search_with_text_and_tag(self):
+        # Mock project resolution
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {
+                "name": "MyProject",
+                "slugs": ["myproject"],
+            }
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        # Mock the API response
+        mock_response = MagicMock()
+        mock_response.response = {"data": []}
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        # Call with tag only
+        maniphest.task_search(tag="MyProject")
+
+        # Verify API was called with projects constraint only
+        assert maniphest.phab.maniphest.search.called
+        call_kwargs = maniphest.phab.maniphest.search.call_args[1]
+        constraints = call_kwargs["constraints"]
+
+        # Should have projects constraint
+        assert "projects" in constraints
+        assert constraints["projects"] == ["PHID-PROJ-123"]
+
+        # Should NOT have query constraint
+        assert "query" not in constraints
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_with_text_and_tag(self, mock_init, capsys):
         """Test searching with both text query and tag filter."""
-        # This test documents combined search behavior
-        # Expected: API called with both fullText and projects constraints
-        pass
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
 
-    def test_task_search_requires_at_least_one_filter(self):
+        # Mock project resolution
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {
+                "name": "MyProject",
+                "slugs": ["myproject"],
+            }
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        # Mock the API response
+        mock_response = MagicMock()
+        mock_response.response = {"data": []}
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        # Call with both text query and tag
+        maniphest.task_search(text_query="bug", tag="MyProject")
+
+        # Verify API was called with both constraints
+        assert maniphest.phab.maniphest.search.called
+        call_kwargs = maniphest.phab.maniphest.search.call_args[1]
+        constraints = call_kwargs["constraints"]
+
+        # Should have both constraints
+        assert "query" in constraints
+        assert constraints["query"] == "bug"
+        assert "projects" in constraints
+        assert constraints["projects"] == ["PHID-PROJ-123"]
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_requires_at_least_one_filter(self, mock_init, capsys):
         """Test that search without any filters shows error."""
-        # This test documents validation behavior
-        # Expected: Error logged, no API call made
-        pass
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
 
-    def test_task_search_with_text_and_date_filters(self):
+        # Call with no filters
+        maniphest.task_search()
+
+        # Verify error was logged (captured in stderr by capsys)
+        _ = capsys.readouterr()
+
+        # Verify API was NOT called
+        assert not maniphest.phab.maniphest.search.called
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_with_text_and_date_filters(self, mock_init, capsys):
         """Test text search with date filters."""
-        # Expected: API called with fullText, createdStart, and/or modifiedStart
-        pass
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
 
-    def test_task_search_tag_supports_wildcards(self):
+        # Mock the API response
+        mock_response = MagicMock()
+        mock_response.response = {"data": []}
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        # Mock project.query for board name resolution
+        maniphest.phab.project.query.return_value = {"data": {}}
+
+        # Call with text query and date filters
+        maniphest.task_search(text_query="bug", created_after=7, updated_after=3)
+
+        # Verify API was called with all constraints
+        assert maniphest.phab.maniphest.search.called
+        call_kwargs = maniphest.phab.maniphest.search.call_args[1]
+        constraints = call_kwargs["constraints"]
+
+        # Should have query constraint
+        assert "query" in constraints
+        assert constraints["query"] == "bug"
+
+        # Should have date constraints (converted to Unix timestamps)
+        assert "createdStart" in constraints
+        assert "modifiedStart" in constraints
+        assert isinstance(constraints["createdStart"], int)
+        assert isinstance(constraints["modifiedStart"], int)
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_tag_supports_wildcards(self, mock_init, capsys):
         """Test that --tag option supports wildcard patterns."""
-        # Expected: Wildcard resolution works same as before
-        pass
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
 
-    def test_task_search_tag_supports_and_or_logic(self):
+        # Mock project resolution with wildcard match
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-1": {
+                "name": "Development",
+                "slugs": ["development", "dev"],
+            },
+            "PHID-PROJ-2": {
+                "name": "DevOps",
+                "slugs": ["devops"],
+            },
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        # Mock the API response
+        mock_response = MagicMock()
+        mock_response.response = {"data": []}
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        # Call with wildcard pattern
+        maniphest.task_search(tag="dev*")
+
+        # Verify API was called multiple times (once per matched project)
+        assert maniphest.phab.maniphest.search.called
+        # With 2 matching projects, should make 2 calls
+        assert maniphest.phab.maniphest.search.call_count >= 2
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_task_search_tag_supports_and_or_logic(self, mock_init, capsys):
         """Test that --tag option supports AND/OR pattern logic."""
-        # Expected: Complex patterns like "ProjectA+ProjectB,ProjectC" work
-        pass
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
+
+        # Mock project resolution
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-A": {
+                "name": "ProjectA",
+                "slugs": ["projecta"],
+            },
+            "PHID-PROJ-B": {
+                "name": "ProjectB",
+                "slugs": ["projectb"],
+            },
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        # Mock the API response
+        mock_response = MagicMock()
+        mock_response.response = {"data": []}
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        # Test OR logic: ProjectA,ProjectB
+        maniphest.task_search(tag="ProjectA,ProjectB")
+
+        # Verify API was called (implementation fetches both projects)
+        assert maniphest.phab.maniphest.search.called
+        # Should make multiple calls for OR logic
+        assert maniphest.phab.maniphest.search.call_count >= 2
