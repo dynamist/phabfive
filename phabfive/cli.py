@@ -160,7 +160,6 @@ Usage:
 
 Arguments:
      <text_query>         Optional free-text search in task title/description.
-                         Searches the "Query" field in Phabricator's advanced search.
                          If omitted, you must provide at least one filter option.
 
 Options:

@@ -25,6 +25,7 @@ from phabfive.constants import TICKET_PRIORITY_NORMAL
 # phabfive imports
 from phabfive.core import Phabfive
 from phabfive.exceptions import (
+    PhabfiveConfigException,
     PhabfiveDataException,
     PhabfiveException,
     PhabfiveRemoteException,
@@ -1620,14 +1621,15 @@ class Maniphest(Phabfive):
         )
 
         if not has_any_filter:
-            log.error("No search criteria specified. Please provide at least one of:")
-            log.error("  - Free-text query: phabfive maniphest search 'search text'")
-            log.error("  - Project tag: --tag='Project Name'")
-            log.error("  - Date filter: --created-after=N or --updated-after=N")
-            log.error("  - Column filter: --column='pattern'")
-            log.error("  - Priority filter: --priority='pattern'")
-            log.error("  - Status filter: --status='pattern'")
-            return
+            raise PhabfiveConfigException(
+                "No search criteria specified. Please provide at least one of:\n"
+                "  - Free-text query: phabfive maniphest search 'search text'\n"
+                "  - Project tag: --tag='Project Name'\n"
+                "  - Date filter: --created-after=N or --updated-after=N\n"
+                "  - Column filter: --column='pattern'\n"
+                "  - Priority filter: --priority='pattern'\n"
+                "  - Status filter: --status='pattern'"
+            )
 
         # Convert date filters to Unix timestamps
         if created_after:
@@ -1635,16 +1637,11 @@ class Maniphest(Phabfive):
         if updated_after:
             updated_after = days_to_unix(updated_after)
 
-        # Parse tag patterns from the tag argument
-        # This allows for OR/AND logic like "ProjectA,ProjectB" or "ProjectA+ProjectB"
-        # Also handles projects with spaces like "Project A,Project B"
         project_patterns = None
         project_phids = []
         resolved_phids_by_pattern = []
 
         if tag and tag != "*":
-            # Check if it contains pattern operators (comma or plus)
-            # This includes cases with spaces like "Project A, Project B"
             if "," in tag or "+" in tag:
                 try:
                     project_patterns = parse_project_patterns(tag)
@@ -1697,14 +1694,11 @@ class Maniphest(Phabfive):
                     log.error(f"Invalid tag pattern: {e}")
                     return
             else:
-                # Simple project name - use existing logic (backward compatibility)
                 project_phids = self._resolve_project_phids(tag)
                 if not project_phids:
                     # Error already logged in _resolve_project_phids
                     return
 
-        # Build base constraints for API query
-        # Special case: tag == "*" or tag == None means search all projects (no project filter)
         if tag == "*" or tag is None:
             if tag == "*":
                 log.info("Searching across all projects (tag='*', no project filter)")
