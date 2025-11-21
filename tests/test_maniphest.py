@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from phabfive.exceptions import PhabfiveDataException, PhabfiveException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveException,
+)
 
 # phabfive imports
 from phabfive.maniphest import (
@@ -1171,19 +1175,17 @@ class TestTaskSearchTextQuery:
 
     @patch("phabfive.maniphest.Phabfive.__init__")
     def test_task_search_requires_at_least_one_filter(self, mock_init, capsys):
-        """Test that search without any filters shows error."""
+        """Test that search without any filters raises an exception."""
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
 
-        # Call with no filters
-        maniphest.task_search()
+        # Call with no filters - should raise exception
+        with pytest.raises(PhabfiveConfigException) as exc_info:
+            maniphest.task_search()
 
-        # Verify error was logged (captured in stderr by capsys)
-        _ = capsys.readouterr()
-
-        # Verify API was NOT called
-        assert not maniphest.phab.maniphest.search.called
+        # Verify the error message contains helpful information
+        assert "No search criteria specified" in str(exc_info.value)
 
     @patch("phabfive.maniphest.Phabfive.__init__")
     def test_task_search_with_text_and_date_filters(self, mock_init, capsys):
