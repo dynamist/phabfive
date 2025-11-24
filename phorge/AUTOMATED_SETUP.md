@@ -24,6 +24,12 @@ Eight RMI GUNNAR team members for testing:
 - **sebastian.soderberg** - Sebastian Söderberg, Windows C# Developer (sebastian.soderberg@air.rmi.se)
 - **tommy.svensson** - Tommy Svensson, QA Engineer (tommy.svensson@air.rmi.se)
 
+### Default Spaces
+Three Spaces for access control and organization:
+- **Public** (default) - Public space for customer-facing work (view: public, edit: users)
+- **Internal** - Internal team work and development (view: users, edit: users)
+- **Restricted** - Security-sensitive and compliance work (view: users, edit: admin)
+
 ### Default Projects with Workboards
 Seven projects with 5-column workboards (Backlog → Up Next → In Progress → In Review → Done):
 - **GUNNAR-Core** - Main chip blueprint development and secure design
@@ -55,8 +61,9 @@ The script runs automatically during container startup and:
 1. Enables username/password authentication
 2. Creates admin and test user accounts with verified emails
 3. Generates API token for immediate use
-4. Creates default projects with workboard columns
-5. Generates a one-time password recovery link
+4. Creates default Spaces for access control
+5. Creates default projects with workboard columns
+6. Generates a one-time password recovery link
 
 All operations are idempotent and safe to run multiple times.
 
@@ -110,6 +117,27 @@ uv run phabfive user whoami
 
 Note. You need to have configured phabfive with your API token.
 
+## Distributing Tasks Across Workboard Columns
+
+After creating tasks from a YAML file, you can distribute them across workboard columns to simulate work in progress using the included Python script:
+
+```bash
+# Create tasks first
+uv run phabfive maniphest create test-files/mega-2024-simulation.yml
+
+# Then distribute them across columns
+uv run python phorge/lib/move-tasks-to-columns.py test-files/mega-2024-simulation.yml
+```
+
+The script automatically moves tasks based on priority:
+- **Backlog** (default column): wish and low priority tasks
+- **Up Next**: normal priority tasks
+- **In Progress**: high priority tasks
+- **In Review**: unbreak priority tasks
+- **Done**: Some Q1 tasks to simulate completed work
+
+This gives you a realistic workboard state with tasks distributed across different stages of development, perfect for testing and feature development.
+
 ## Security Notes
 
 **⚠️ IMPORTANT FOR PRODUCTION USE:**
@@ -136,6 +164,48 @@ environment:
   - PHORGE_API_TOKEN=api-your-secure-token-here
 ```
 
+## Quick Start Workflows
+
+### Standard Workflow (Recommended)
+
+Start Phorge in the background, then populate with demo data when ready:
+
+```bash
+# 1. Start Phorge (runs in background)
+make phorge-setup
+
+# This will:
+# - Start MariaDB and Phorge containers
+# - Wait for initialization
+# - Create ~70 demo tasks with Space assignments
+# - Distribute tasks across workboard columns
+# - Give you a realistic development environment
+```
+
+### Manual Control Workflow
+
+For more control over each step:
+
+```bash
+# 1. Start Phorge only
+make phorge-up
+
+# 2. In another terminal, populate demo data (optional)
+make phorge-populate
+
+# 3. Or just create tasks without distribution
+uv run phabfive maniphest create test-files/mega-2024-simulation.yml
+```
+
+### Clean Slate Workflow
+
+Start fresh without demo data:
+
+```bash
+# Start Phorge without any demo tasks
+make phorge-up
+```
+
 ## Troubleshooting
 
 ### View setup logs
@@ -157,6 +227,18 @@ podman exec <container-name> /app/phorge/bin/auth recover admin
 
 # Or with docker
 docker exec <container-name> /app/phorge/bin/auth recover admin
+```
+
+### Demo data population fails
+
+Ensure phabfive is configured:
+```bash
+cat ~/.config/phabfive/phabfive.yaml
+```
+
+You can re-run just the population step:
+```bash
+make phorge-populate
 ```
 
 ## References

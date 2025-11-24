@@ -34,6 +34,14 @@ export DEFAULT_PROJECTS=(
   "Security:Security compliance, hardening, and vulnerability assessment"
 )
 
+# Default Spaces (name:description:viewPolicy:editPolicy:isDefault)
+# Policy values: "public" (anyone), "users" (logged in), "PHID-PLCY-admin" (admins only)
+export DEFAULT_SPACES=(
+  "Public:Public space for customer-facing work:public:users:1"
+  "Internal:Internal team work and development:users:users:0"
+  "Restricted:Security-sensitive and compliance work:users:PHID-PLCY-admin:0"
+)
+
 # Function to generate a PHID
 generate_phid() {
   local type=$1

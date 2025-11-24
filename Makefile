@@ -94,6 +94,31 @@ phorge-logs: check-runtime ## view logs from phorge containers
 phorge-shell: check-runtime ## open shell in phorge container
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) exec phorge /bin/bash
 
+phorge-populate: ## create and distribute demo tasks (requires phabfive config)
+	@echo "Creating demo tasks from test-files/mega-2024-simulation.yml..."
+	@uv run phabfive maniphest create test-files/mega-2024-simulation.yml
+	@echo ""
+	@echo "Distributing tasks across workboard columns..."
+	@uv run python phorge/lib/move-tasks-to-columns.py
+	@echo ""
+	@echo "✓ Demo data populated successfully!"
+	@echo "  - Tasks created with Space assignments"
+	@echo "  - Tasks distributed across workboard columns"
+	@echo "  - Visit http://phorge.domain.tld to view"
+
+phorge-setup: check-runtime ## start phorge and populate demo data (all-in-one)
+	@echo "Starting Phorge environment..."
+	@$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) up -d
+	@echo ""
+	@echo "Waiting for Phorge to initialize (30 seconds)..."
+	@sleep 30
+	@echo ""
+	@$(MAKE) phorge-populate
+	@echo ""
+	@echo "✓ Phorge setup complete!"
+	@echo "  View logs: make phorge-logs"
+	@echo "  Open shell: make phorge-shell"
+
 ##@ Docker
 
 phabfive-build: check-runtime ## build phabfive docker image
