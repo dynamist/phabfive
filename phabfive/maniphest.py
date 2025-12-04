@@ -2144,8 +2144,6 @@ class Maniphest(Phabfive):
             root_data = yaml_loader.load(stream)
 
         # Fetch all users in phabricator, used by subscribers mapping later
-        # Extended support for phabricator instances with more than 100 (i.e. deftault query limit) users
-        # BUT with limieted exception handling e.g. retries needed when phabricator instance is not responding to API calls
         users_query = raw_data = self.phab.user.search()
         
         while (len(raw_data.data) >= 100 and not raw_data.cursor["after"] is None):
@@ -2160,8 +2158,6 @@ class Maniphest(Phabfive):
         log.debug(username_to_id_mapping)
 
         # Fetch all projects in phabricator, used to map ticket -> projects later
-        # Extended support for phabricator instances with more than 100 (i.e. deftault query limit) projects
-        # BUT with limieted exception handling, e.g. retries needed when phabricator instance is not responding to API calls
         projects_query = raw_data = self.phab.project.search(constraints={"name": ""})
         
         while (len(raw_data.data) >= 100 and not raw_data.cursor["after"] is None):
