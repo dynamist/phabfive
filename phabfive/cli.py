@@ -3,14 +3,9 @@
 # python std lib
 import re
 import sys
-import logging
-import logging.config
-from datetime import datetime
-from pprint import pprint as pp
 
 # 3rd party imports
-from docopt import docopt, extras, Option, DocoptExit
-
+from docopt import DocoptExit, Option, docopt, extras
 
 base_args = """
 Usage:
@@ -44,7 +39,7 @@ Usage:
 Options:
     -h, --help   Show this help message and exit
 
-""" # nosec-B105
+"""  # nosec-B105
 
 sub_diffusion_args = """
 Usage:
@@ -111,25 +106,132 @@ Options:
     -h, --help  Show this help message and exit
 """
 
-sub_maniphest_args = """
+sub_maniphest_base_args = """
 Usage:
     phabfive maniphest comment add <ticket_id> <comment> [options]
-    phabfive maniphest show <ticket_id> ([--all] | [--pp]) [options]
-    phabfive maniphest create <config-file> [--dry-run] [options]
+    phabfive maniphest show <ticket_id> [options]
+    phabfive maniphest create <config-file> [options]
     phabfive maniphest search <project_name> [options]
 
-Search Arguments:
-    <project_name>       The name of the project
+Options:
+    -h, --help           Show this help message and exit
+"""
 
-Search Options:
-    --created-after=N    Tasks created within the last N days
-    --updated-after=N    Tasks updated within the last N days
+sub_maniphest_show_args = """
+Usage:
+    phabfive maniphest show <ticket_id> [options]
+
+Arguments:
+    <ticket_id>          Task ID (e.g., T123)
 
 Options:
-    --all                Show all fields for a ticket
-    --dry-run            Does everything except commiting the tickets
-    --pp                 Show all fields rendering with pretty print
+    --show-history       Display transition history for columns, priority, and status
+    --show-metadata      Display metadata about the task
     -h, --help           Show this help message and exit
+"""
+
+sub_maniphest_create_args = """
+Usage:
+    phabfive maniphest create <config-file> [--dry-run] [options]
+
+Arguments:
+    <config-file>        Path to YAML configuration file
+
+Options:
+    --dry-run            Does everything except commiting the tickets
+    -h, --help           Show this help message and exit
+"""
+
+sub_maniphest_comment_args = """
+Usage:
+    phabfive maniphest comment add <ticket_id> <comment> [options]
+
+Arguments:
+    <ticket_id>          Task ID (e.g., T123)
+    <comment>            Comment text to add
+
+Options:
+    -h, --help           Show this help message and exit
+"""
+
+sub_maniphest_search_args = """
+Usage:
+    phabfive maniphest search [<text_query>] [options]
+
+Arguments:
+     <text_query>         Optional free-text search in task title/description.
+                         If omitted, you must provide at least one filter option.
+
+Options:
+    --tag=PATTERN          Filter by project/workboard tag (supports OR/AND logic and wildcards).
+                          Supports: "*" (all projects), "prefix*" (starts with),
+                          "*suffix" (ends with), "*contains*" (contains text).
+                          Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
+    --created-after=N      Tasks created within the last N days
+    --updated-after=N      Tasks updated within the last N days
+    --column=PATTERNS      Filter tasks by column transitions (comma=OR, plus=AND).
+                           Automatically displays transition history.
+                             from:COLUMN[:direction]  - Moved from COLUMN
+                             to:COLUMN                - Moved to COLUMN
+                             in:COLUMN                - Currently in COLUMN
+                             been:COLUMN              - Was in COLUMN at any point
+                             never:COLUMN             - Never was in COLUMN
+                             backward                 - Any backward movement
+                             forward                  - Any forward movement
+                             not:PATTERN              - Negates any pattern above
+                           Examples:
+                             from:In Progress:forward
+                             to:Done,in:Blocked
+                             not:in:Done+been:Review
+                             from:Up Next:forward+in:Done
+    --priority=PATTERNS    Filter tasks by priority transitions (comma=OR, plus=AND).
+                           Automatically displays priority history.
+                             from:PRIORITY[:direction]  - Changed from PRIORITY
+                             to:PRIORITY                - Changed to PRIORITY
+                             in:PRIORITY                - Currently at PRIORITY
+                             been:PRIORITY              - Was at PRIORITY at any point
+                             never:PRIORITY             - Never was at PRIORITY
+                             raised                     - Any priority increase
+                             lowered                    - Any priority decrease
+                             not:PATTERN                - Negates any pattern above
+                           Examples:
+                             been:Unbreak Now!
+                             from:Normal:raised
+                             not:in:High+raised
+                             in:High,been:Unbreak Now!
+    --status=PATTERNS      Filter tasks by status transitions (comma=OR, plus=AND).
+                           Automatically displays status history.
+                             from:STATUS[:direction]  - Changed from STATUS
+                             to:STATUS                - Changed to STATUS
+                             in:STATUS                - Currently at STATUS
+                             been:STATUS              - Was at STATUS at any point
+                             never:STATUS             - Never was at STATUS
+                             raised                   - Status progressed forward
+                             lowered                  - Status moved backward
+                             not:PATTERN              - Negates any pattern above
+                            Examples:
+                              been:Open
+                              from:Open:raised
+                              not:in:Resolved+raised
+                              in:Open,been:Resolved
+     --show-history         Display column, priority, and status transition history
+     --show-metadata        Display filter match metadata (which boards/priority/status matched)
+     -h, --help             Show this help message and exit
+
+Examples:
+    # Free-text search
+    phabfive maniphest search 'Lets Encrypt'
+    phabfive maniphest search 'Lets Encrypt' --status 'in:Resolved'
+
+    # Tag search (project/workboard filtering)
+    phabfive maniphest search --tag Developer-Experience
+    phabfive maniphest search --tag Developer-Experience --updated-after 7
+
+    # Combined search
+    phabfive maniphest search OpenStack --tag System-Board --updated-after 7
+
+    # Requires at least one filter (text, tag, date, column, priority, or status)
+    phabfive maniphest search  # ERROR: not specific enough
 """
 
 
@@ -144,7 +246,7 @@ def parse_cli():
             base_args,
             options_first=True,
             version=phabfive.__version__,
-            help=True,
+            default_help=True,
         )
     except DocoptExit:
         extras(
@@ -155,7 +257,6 @@ def parse_cli():
         )
 
     phabfive.init_logging(cli_args["--log-level"])
-    log = logging.getLogger(__name__)
 
     argv = [cli_args["<command>"]] + cli_args["<args>"]
 
@@ -183,7 +284,12 @@ def parse_cli():
 
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
-        sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv) # nosec-B307
+
+        # For maniphest shortcuts, use the show command
+        if app == "maniphest":
+            sub_args = docopt(sub_maniphest_show_args, argv=argv)
+        else:
+            sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)  # nosec-B307
     elif cli_args["<command>"] == "passphrase":
         sub_args = docopt(sub_passphrase_args, argv=argv)
     elif cli_args["<command>"] == "diffusion":
@@ -195,7 +301,30 @@ def parse_cli():
     elif cli_args["<command>"] == "repl":
         sub_args = docopt(sub_repl_args, argv=argv)
     elif cli_args["<command>"] == "maniphest":
-        sub_args = docopt(sub_maniphest_args, argv=argv)
+        # Determine which maniphest subcommand is being called
+        maniphest_subcmd = None
+        if len(argv) > 1:
+            if argv[1] == "show":
+                maniphest_subcmd = "show"
+            elif argv[1] == "create":
+                maniphest_subcmd = "create"
+            elif argv[1] == "search":
+                maniphest_subcmd = "search"
+            elif argv[1] == "comment":
+                maniphest_subcmd = "comment"
+
+        # Use the appropriate help string based on subcommand
+        if maniphest_subcmd == "show":
+            sub_args = docopt(sub_maniphest_show_args, argv=argv)
+        elif maniphest_subcmd == "create":
+            sub_args = docopt(sub_maniphest_create_args, argv=argv)
+        elif maniphest_subcmd == "search":
+            sub_args = docopt(sub_maniphest_search_args, argv=argv)
+        elif maniphest_subcmd == "comment":
+            sub_args = docopt(sub_maniphest_comment_args, argv=argv)
+        else:
+            # No subcommand or unrecognized subcommand - show base help
+            sub_args = docopt(sub_maniphest_base_args, argv=argv)
     else:
         extras(
             True,
@@ -216,9 +345,11 @@ def run(cli_args, sub_args):
     Execute the CLI
     """
     # Local imports required due to logging limitation
-    from phabfive import passphrase, diffusion, paste, user, repl, maniphest
+    from phabfive import diffusion, maniphest, passphrase, paste, repl, user
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.exceptions import PhabfiveException
+    from phabfive.maniphest_transitions import parse_transition_patterns
+    from phabfive.priority_transitions import parse_priority_patterns
 
     retcode = 0
 
@@ -239,7 +370,9 @@ def run(cli_args, sub_args):
                     else:  # default value
                         status = ["active"]
 
-                    diffusion_app.print_repositories(status=status, url=sub_args["--url"])
+                    diffusion_app.print_repositories(
+                        status=status, url=sub_args["--url"]
+                    )
                 elif sub_args["create"]:
                     diffusion_app.create_repository(name=sub_args["<name>"])
             elif sub_args["uri"]:
@@ -340,23 +473,84 @@ def run(cli_args, sub_args):
         if cli_args["<command>"] == "maniphest":
             maniphest_app = maniphest.Maniphest()
 
-            if sub_args["search"]:
+            if sub_args.get("search"):
+                # Parse filter patterns if provided
+                transition_patterns = None
+                if sub_args.get("--column"):
+                    try:
+                        transition_patterns = parse_transition_patterns(
+                            sub_args["--column"]
+                        )
+                    except Exception as e:
+                        print(
+                            f"ERROR: Invalid column filter pattern: {e}",
+                            file=sys.stderr,
+                        )
+                        retcode = 1
+                        return retcode
+
+                priority_patterns = None
+                if sub_args.get("--priority"):
+                    try:
+                        priority_patterns = parse_priority_patterns(
+                            sub_args["--priority"]
+                        )
+                    except Exception as e:
+                        print(
+                            f"ERROR: Invalid priority filter pattern: {e}",
+                            file=sys.stderr,
+                        )
+                        retcode = 1
+                        return retcode
+
+                status_patterns = None
+                if sub_args.get("--status"):
+                    try:
+                        # Parse status patterns with API-fetched status ordering
+                        status_patterns = maniphest_app.parse_status_patterns_with_api(
+                            sub_args["--status"]
+                        )
+                    except Exception as e:
+                        print(
+                            f"ERROR: Invalid status filter pattern: {e}",
+                            file=sys.stderr,
+                        )
+                        retcode = 1
+                        return retcode
+
+                # Only show history if explicitly requested
+                show_history = sub_args.get("--show-history", False)
+
+                show_metadata = sub_args.get("--show-metadata", False)
+
+                # Extract text query and tag (both are optional now)
+                text_query = sub_args.get("<text_query>")  # May be None
+                tag = sub_args.get("--tag")  # May be None
 
                 maniphest_app.task_search(
-                    sub_args["<project_name>"],
+                    text_query=text_query,
+                    tag=tag,
                     created_after=sub_args["--created-after"],
                     updated_after=sub_args["--updated-after"],
+                    transition_patterns=transition_patterns,
+                    priority_patterns=priority_patterns,
+                    status_patterns=status_patterns,
+                    show_history=show_history,
+                    show_metadata=show_metadata,
                 )
 
-            if sub_args["create"]:
+            if sub_args.get("create"):
                 # This part is responsible for bulk creating several tickets at once
                 maniphest_app.create_from_config(
                     sub_args["<config-file>"],
-                    dry_run = sub_args["--dry-run"],
+                    dry_run=sub_args["--dry-run"],
                 )
 
-            if sub_args["comment"] and sub_args["add"]:
-                result = maniphest_app.add_comment(sub_args["<ticket_id>"], sub_args["<comment>"],)
+            if sub_args.get("comment") and sub_args.get("add"):
+                result = maniphest_app.add_comment(
+                    sub_args["<ticket_id>"],
+                    sub_args["<comment>"],
+                )
 
                 if result[0]:
                     # Query the ticket to fetch the URI for it
@@ -365,48 +559,19 @@ def run(cli_args, sub_args):
                     print("Comment successfully added")
                     print("Ticket URI: {0}".format(ticket["uri"]))
 
-            if sub_args["show"]:
-                _, result = maniphest_app.info(int(sub_args["<ticket_id>"][1:]))
+            if sub_args.get("show"):
+                # Use new unified task_show() method
+                task_id = int(sub_args["<ticket_id>"][1:])
 
-                if sub_args["--pp"]:
-                    pp({key: value for key, value in result.items()})
-                elif sub_args["--all"]:
-                    print(f"Ticket ID:      {result['id']}")
-                    print(f"phid:           {result['phid']}")
-                    print(f"authorPHID:     {result['authorPHID']}")
-                    print(f"ownerPHID:      {result['ownerPHID']}")
-                    print(f"ccPHIDs:        {result['ccPHIDs']}")
-                    print(f"status:         {result['status']}")
-                    print(f"statusName:     {result['statusName']}")
-                    print(f"isClosed:       {result['isClosed']}")
-                    print(f"priority:       {result['priority']}")
-                    print(f"priorityColor:  {result['priorityColor']}")
-                    print(f"title:          {result['title']}")
-                    print(f"description:    {result['description']}")
-                    print(f"projectPHIDs:   {result['projectPHIDs']}")
-                    print(f"uri:            {result['uri']}")
-                    print(f"auxiliary:      {result['auxiliary']}")
-                    print(f"objectName:     {result['objectName']}")
+                # Handle flags
+                show_history = sub_args.get("--show-history", False)
+                show_metadata = sub_args.get("--show-metadata", False)
 
-                    date_created = datetime.fromtimestamp(int(result['dateCreated']))
-                    print(f"dateCreated:    {date_created}")
-
-                    date_modified = datetime.fromtimestamp(int(result['dateModified']))
-                    print(f"dateModified:   {date_modified}")
-
-                    print(f"dependsOnTaskPHIDs: {result['dependsOnTaskPHIDs']}")
-                else:
-                    print(f"Ticket ID:     {result['id']}")
-                    print(f"phid:          {result['phid']}")
-                    print(f"status:        {result['status']}")
-                    print(f"priority:      {result['priority']}")
-                    print(f"title:         {result['title']}")
-                    print(f"uri:           {result['uri']}")
-                    date_created = datetime.fromtimestamp(int(result['dateCreated']))
-                    print(f"dateCreated:   {date_created}")
-
-                    date_modified = datetime.fromtimestamp(int(result['dateModified']))
-                    print(f"dateModified:  {date_modified}")
+                maniphest_app.task_show(
+                    task_id,
+                    show_history=show_history,
+                    show_metadata=show_metadata,
+                )
     except PhabfiveException as e:
         # Catch all types of phabricator base exceptions
         print(f"CRITICAL :: {str(e)}", file=sys.stderr)

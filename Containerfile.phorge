@@ -1,0 +1,48 @@
+# Use PHP 8.1 with Apache (matches guide's PHP 8.0+ requirement)
+FROM php:8.1-apache
+
+WORKDIR /app
+
+ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+
+
+RUN install-php-extensions mbstring iconv mysqli curl pcntl gd zip apcu opcache
+
+RUN apt update && apt install -y git default-mysql-client python3-pygments
+
+# Configure PHP
+RUN echo "post_max_size = 64M" >> /usr/local/etc/php/conf.d/phorge.ini && \
+    echo "upload_max_filesize = 64M" >> /usr/local/etc/php/conf.d/phorge.ini && \
+    echo "opcache.validate_timestamps = 0" >> /usr/local/etc/php/conf.d/phorge.ini && \
+    echo "date.timezone = UTC" >> /usr/local/etc/php/conf.d/phorge.ini
+
+# Enable Apache modules
+RUN a2enmod rewrite
+
+# Clone Phorge and Arcanist from GitHub mirrors (per guide)
+RUN git clone https://github.com/phorgeit/phorge.git
+RUN git clone https://github.com/phorgeit/arcanist.git
+RUN git config --system --add safe.directory /app/phorge
+RUN git config --system --add safe.directory /app/arcanist
+
+# Set up Apache config for Phorge (points to webroot)
+COPY phorge/phorge.conf /etc/apache2/conf-enabled/phorge.conf
+
+# Copy and set up entrypoint script
+COPY phorge/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Copy initialization scripts (main + lib modules)
+COPY phorge/init-phorge.sh /usr/local/bin/init-phorge.sh
+COPY phorge/lib/ /usr/local/bin/lib/
+RUN chmod +x /usr/local/bin/init-phorge.sh /usr/local/bin/lib/*.sh
+
+# Create configuration directory and storage directories
+RUN mkdir -p /app/phorge/conf/local /app/repo /app/files && \
+    chown -R www-data:www-data /app/phorge /app/repo /app/files
+
+# Expose port 80
+EXPOSE 80
+
+# Entry point
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

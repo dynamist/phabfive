@@ -1,99 +1,129 @@
-## Installation in a development environment
+# Development Guide
 
-Install the `virtualenv` and `virtualenvwrapper` software packages.
+This guide covers everything you need to contribute to phabfive.
 
-Ensure to source the correct virtualenvwrapper shell script before installing the development environment, on Ubuntu that would be `source /usr/share/virtualenvwrapper/virtualenvwrapper.sh`.
+## Quick Start
 
-Create a virtualenv for phabfive running on Python 3.8:
-```
-mkvirtualenv phabfive --python=python3.8
-```
+Get from zero to working development environment in 2 steps:
 
-Install code in editable mode and pull in all test and documentation dependencies:
-```
-workon phabfive37
-pip install -e '.[test,docs]'
-```
+```bash
+# 1. Set up development environment
+make install         # or: uv sync --group dev
 
-
-
-## Build and run in a Docker image
-
-Build a Docker image:
-```
-docker build -t phabfive .
+# 2. Start local Phorge test instance
+make phorge-up
 ```
 
-Run a one-off execution:
+## Installation in a Development Environment
+
+This project uses [uv](https://github.com/astral-sh/uv) for dependency management:
+
+```bash
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone https://github.com/dynamist/phabfive.git
+cd phabfive
+
+# Create virtual environment and install dependencies
+uv sync --group dev
+
+# Run the CLI during development
+uv run phabfive --help
 ```
-docker run --rm phabfive
-docker run --rm phabfive passphrase --help
+
+## Build and Run in a Docker/Podman Image
+
+The project includes Makefile targets for Docker/Podman builds (automatically detects which is available):
+
+```bash
+# Build the image
+make phabfive-build
+
+# Run commands
+make phabfive-run ARGS="--help"
+make phabfive-run ARGS="paste list"
+
+# Run against local Phorge instance
+make phabfive-run-dev ARGS="maniphest search qa"
 ```
 
+**Configuration:** The Makefile automatically handles your credentials:
+- **Environment variables:** `PHAB_TOKEN` and `PHAB_URL` are passed through if set
+- **Config file:** Automatically detected and mounted from OS-specific locations:
+  - macOS: `~/Library/Application Support/phabfive.yaml`
+  - Linux: `~/.config/phabfive.yaml`
 
+## Run Unit Tests
 
-## Run unittests
+This repo uses `pytest` as the test runner and `tox` to orchestrate tests for various Python versions (3.10-3.13).
 
-This repo uses `pytest` module as the test runner and `tox` to orchestrate tests for various Python versions.
+**Quick test run:**
+```bash
+# Run tests with current Python version
+uv run pytest
 
-To run the tests locally on your machine for all supported and installed versions of Python 3:
+# Run linting
+uv run flake8 phabfive/ tests/
 ```
+
+**Testing across all Python versions:**
+```bash
+# Run all Python versions
 make test
+# or
+uv run tox
+
+# Run specific environment
+uv run tox -e py313
+uv run tox -e py310
+
+# Run linting
+uv run tox -e flake8
+
+# Run coverage report
+uv run tox -e coverage
 ```
 
-Or individually for Python 3.8 and Python 3.10:
-```
-tox -e py38
-tox -e py310
-```
+With `tox-uv`, tox automatically uses uv for fast dependency resolution and isolated testing environments.
 
-Old versions of Python are available in the Deadsnakes PPA for Ubuntu or EPEL for Red Hat.
+## Testing Against a Local Phorge/Phabricator Instance
 
+For instructions on setting up a local Phorge or Phabricator instance for testing, see [Phorge Setup Guide](phorge-setup.md).
 
+## Run mkdocs Locally
 
-## Set up a Phabricator instance for tests
+For documentation updates:
 
-Follow the instructions at https://docs.docker.com/install/ to install Docker, once this is done continue with the steps below.
+```bash
+# Install with docs dependencies
+uv sync --extra docs
 
-Go into the `tests` directory and start the Bitnami Docker image for Phabricator and MySQL. The documentation for that image is at: https://github.com/bitnami/bitnami-docker-phabricator
-```
-cd tests
-docker-compose up -d
+# Serve the docs
+uv run mkdocs serve
 ```
 
-Now Phabricator is accessible on localhost. Go to https://127.0.0.1/ and log in with user `user` and password `bitnami1`, then head over to https://127.0.0.1/settings/user/user/page/apitokens/ to create your Conduit API token. Add those to `~/.config/phabfive.yaml`, here is an example:
-```
-PHAB_URL: http://127.0.0.1/api/
-PHAB_TOKEN: api-2hwi... (your token)
-```
+Navigate to `http://127.0.0.1:8000` to view the rendered documentation.
 
-You should now be able to run phabfive against your own local copy of Phabricator!
+For more about mkdocs, see the [Mkdocs homepage](https://www.mkdocs.org/).
 
-To view logs as they come in: `docker-compose logs -f`
-To shut down containers and remove its data: `docker-compose down -v`
+## Code Style and Linting
 
+This project uses:
+- **flake8** for linting
+- **pytest** for testing
 
+Before submitting changes:
+```bash
+# Run linting
+uv run flake8 phabfive/ tests/
 
-## Run mkdocs locally for documentation updates
+# Run tests
+uv run pytest
 
-Overall documentation for mkdocs can be found at [Mkdocs homepage](https://www.mkdocs.org/#installation)
-
-Install mkdocs in a virtualenv
-
-```
-pip install mkdocs
-```
-
-From the root of phabfive project folder run
-
-```
-$ mkdocs serve
-
-INFO    -  Building documentation...
-INFO    -  Cleaning site directory
-[I 160402 15:50:43 server:271] Serving on http://127.0.0.1:8000
-[I 160402 15:50:43 handlers:58] Start watching changes
-[I 160402 15:50:43 handlers:60] Start detecting changes
+# Or run everything with tox
+uv run tox
 ```
 
-Surf into `http://127.0.0.1:8000` to view the rendered docs.
+The CI will run these checks automatically, but running locally first saves time!

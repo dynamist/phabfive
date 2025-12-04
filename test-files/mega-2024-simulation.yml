@@ -1,0 +1,797 @@
+---
+# Mega Test File - 2024 GUNNAR Project Simulation
+# Simulates one year of realistic project work for RMI GUNNAR secure chip development
+# ~70 tasks with varied priorities, statuses, assignments, and cross-project tags
+#
+# Usage: phabfive maniphest create test-files/mega-2024-simulation.yml
+
+variables:
+  # Base variables
+  year: 2024
+  company: "RMI"
+  division: "Aviation"
+  project_name: "GUNNAR"
+  generation: "Gen1"
+
+  # Derived project identifiers (demonstrate variable dependency)
+  full_project: "{{ project_name }} {{ generation }}"
+  project_title: "{{ company }} {{ full_project }}"
+
+  # Quarter definitions using year variable
+  q1: "Q1 {{ year }}"
+  q2: "Q2 {{ year }}"
+  q3: "Q3 {{ year }}"
+  q4: "Q4 {{ year }}"
+
+  # Network and domain configuration
+  protocol: "https"
+  base_domain: "rmi.lab"
+  email_domain: "air.rmi.se"
+  phorge_domain: "phorge.{{ base_domain }}"
+  sharepoint_domain: "sharepoint.{{ base_domain }}"
+
+  # URLs built from protocol and domains
+  phorge_url: "{{ protocol }}://{{ phorge_domain }}"
+  sharepoint_url: "{{ protocol }}://{{ sharepoint_domain }}"
+
+  # Compliance standards
+  primary_standard: "DO-326A"
+  secondary_standard: "ED-202A"
+  compliance_standards: "{{ primary_standard }}/{{ secondary_standard }}"
+
+  # Technical specifications
+  crypto_algorithm: "AES-256-GCM"
+  signature_algorithm: "ECDSA P-256"
+  hash_algorithm: "SHA-256"
+
+  # Server configuration
+  os_version: "Windows Server 2022"
+  client_os: "Windows 11"
+  hypervisor: "Hyper-V"
+  dev_framework: ".NET SDK"
+
+  # Common paths and references
+  cert_expiry_q3: "Sept 30, {{ year }}"
+  audit_month: "September {{ year }}"
+  maintenance_window: "Dec 31, {{ year }}, 20:00-22:00"
+
+  # Common team groups
+  dev_team: &DEV_TEAM
+    - "admin"
+    - "gabriel.blomqvist"
+    - "sebastian.soderberg"
+    - "sonja.bergstrom"
+
+  full_team: &FULL_TEAM
+    - "admin"
+    - "mikael.wallin"
+    - "ove.pettersson"
+    - "viola.larsson"
+    - "daniel.lindgren"
+    - "sonja.bergstrom"
+    - "gabriel.blomqvist"
+    - "sebastian.soderberg"
+    - "tommy.svensson"
+
+  qa_team: &QA_TEAM
+    - "tommy.svensson"
+    - "ove.pettersson"
+
+  infra_team: &INFRA_TEAM
+    - "viola.larsson"
+    - "daniel.lindgren"
+
+tasks:
+  # ========================================
+  # Q1 2024 - Infrastructure & Planning
+  # ========================================
+
+  - title: "[EPIC] {{ full_project }} Chip Architecture Design {{ q1 }}"
+    description: |
+      Complete initial architecture design for {{ project_title }} secure chip.
+
+      Goals:
+      - Define hardware security modules (HSM)
+      - Specify cryptographic requirements ({{ crypto_algorithm }}, {{ signature_algorithm }})
+      - Design secure boot sequence
+      - Document chip specifications for {{ compliance_standards }}
+    projects:
+      - "GUNNAR-Core"
+      - "Architecture"
+    priority: "high"
+    subscribers: *FULL_TEAM
+    tasks:
+      - title: "Define cryptographic algorithm requirements"
+        description: |
+          Specify required cryptographic algorithms for black box data protection.
+          Primary: {{ crypto_algorithm }} for encryption
+          Signatures: {{ signature_algorithm }}
+          Must meet aviation security standards ({{ compliance_standards }}).
+        projects:
+          - "Architecture"
+          - "Security"
+        priority: "high"
+        assignment: "ove.pettersson"
+
+      - title: "Design hardware security module layout"
+        description: |
+          Create HSM block diagram showing secure boot, key storage, and tamper detection.
+          Document in {{ sharepoint_url }}/{{ project_name }}/Architecture
+        projects:
+          - "GUNNAR-Core"
+          - "Architecture"
+        priority: "high"
+        assignment: "ove.pettersson"
+
+      - title: "Specify secure boot sequence"
+        description: |
+          Document boot chain with signed firmware verification using {{ signature_algorithm }}.
+          Hash verification using {{ hash_algorithm }}.
+        projects:
+          - "Architecture"
+          - "Security"
+        priority: "normal"
+
+      - title: "Create chip specification document v1.0"
+        description: |
+          Compile all {{ full_project }} specifications into formal document for review.
+          Publish to {{ sharepoint_url }}
+        projects:
+          - "Architecture"
+        priority: "normal"
+        assignment: "ove.pettersson"
+
+  - title: "[EPIC] Development Environment Setup {{ q1 }}"
+    description: |
+      Set up virtualized development environment for {{ project_name }} team.
+      Infrastructure: {{ hypervisor }} on {{ os_version }}
+      Workstations: {{ client_os }}
+
+      Critical path for {{ q2 }} development work.
+    projects:
+      - "Development"
+      - "Infrastructure"
+    priority: "unbreak"
+    subscribers: *INFRA_TEAM
+    tasks:
+      - title: "Deploy {{ hypervisor }} cluster on {{ os_version }}"
+        description: |
+          Set up virtualization cluster with 3 physical servers running {{ os_version }}.
+          Configure failover clustering and live migration.
+        projects:
+          - "Infrastructure"
+        priority: "high"
+        assignment: "viola.larsson"
+
+      - title: "Create development VM templates"
+        description: |
+          Create VM templates:
+          - {{ client_os }} workstation with {{ dev_framework }} and Visual Studio
+          - {{ os_version }} development server
+          Pre-install all {{ project_name }} development tools.
+        projects:
+          - "Infrastructure"
+          - "Development"
+        priority: "high"
+        assignment: "daniel.lindgren"
+
+      - title: "Set up PKI for smartcard authentication"
+        description: |
+          Deploy Active Directory Certificate Services for smartcard login.
+          Domain: {{ base_domain }}
+          Configure certificate auto-enrollment for {{ email_domain }} users.
+        projects:
+          - "Infrastructure"
+          - "Security"
+        priority: "high"
+        assignment: "viola.larsson"
+
+      - title: "Configure network isolation for {{ project_name }} system"
+        description: |
+          Implement air-gapped network with time-gated internet access.
+          Internal domain: {{ base_domain }}
+          Internal services: {{ phorge_url }}, {{ sharepoint_url }}
+        projects:
+          - "Infrastructure"
+        priority: "normal"
+        assignment: "daniel.lindgren"
+
+  - title: "[BUG] SharePoint document library permissions not working"
+    description: |
+      Engineers unable to access chip specification documents.
+      Permissions appear correct but access denied.
+    projects:
+      - "SharePoint"
+      - "Infrastructure"
+    priority: "high"
+    assignment: "sonja.bergstrom"
+
+  - title: "Set up automated backup solution for VMs"
+    description: |
+      Configure Windows Server Backup for VM snapshots
+      - Daily incremental backups
+      - Weekly full backups
+      - 30-day retention
+    projects:
+      - "Infrastructure"
+    priority: "normal"
+    assignment: "viola.larsson"
+    subscribers: *INFRA_TEAM
+
+  - title: "Create Q1 compliance audit dashboard"
+    description: "SharePoint dashboard tracking DO-326A compliance requirements"
+    projects:
+      - "SharePoint"
+      - "Security"
+    priority: "low"
+    assignment: "sonja.bergstrom"
+
+  # ========================================
+  # Q2 2024 - Core Development
+  # ========================================
+
+  - title: "[EPIC] Cryptographic Library Implementation {{ q2 }}"
+    description: |
+      Implement secure cryptographic library in C# for {{ full_project }} chip simulation.
+      Target algorithms: {{ crypto_algorithm }}, {{ signature_algorithm }}, {{ hash_algorithm }}
+
+      Key deliverable for {{ q3 }} testing.
+    projects:
+      - "GUNNAR-Core"
+      - "Development"
+    priority: "unbreak"
+    subscribers: *DEV_TEAM
+    tasks:
+      - title: "Implement {{ crypto_algorithm }} encryption module"
+        description: |
+          C# implementation of {{ crypto_algorithm }} for data encryption.
+          Must pass FIPS 140-2 validation tests.
+          Framework: {{ dev_framework }}
+        projects:
+          - "GUNNAR-Core"
+        priority: "high"
+        assignment: "gabriel.blomqvist"
+
+      - title: "Implement {{ signature_algorithm }} signature verification"
+        description: |
+          {{ signature_algorithm }} for firmware signature verification.
+          Hash algorithm: {{ hash_algorithm }}
+        projects:
+          - "GUNNAR-Core"
+        priority: "high"
+        assignment: "sebastian.soderberg"
+
+      - title: "Create key derivation functions (KDF)"
+        description: |
+          PBKDF2 and HKDF implementations for key management.
+          Compatible with {{ crypto_algorithm }} key sizes.
+        projects:
+          - "GUNNAR-Core"
+        priority: "normal"
+        assignment: "gabriel.blomqvist"
+
+      - title: "Write cryptographic library documentation"
+        description: |
+          API documentation and usage examples for {{ full_project }}.
+          Publish to {{ sharepoint_url }}/{{ project_name }}/Documentation
+        projects:
+          - "SharePoint"
+        priority: "low"
+        assignment: "sonja.bergstrom"
+
+  - title: "[FEATURE] Chip simulator GUI application"
+    description: |
+      Create Windows desktop application to simulate chip behavior.
+      WPF application with:
+      - Visual chip state display
+      - Command interface
+      - Debug logging
+      - Test vector input
+    projects:
+      - "GUNNAR-Core"
+      - "Development"
+    priority: "high"
+    assignment: "sebastian.soderberg"
+    subscribers: *FULL_TEAM
+
+  - title: "[FEATURE] Secure firmware update mechanism"
+    description: |
+      Implement secure firmware update protocol
+      - Signed firmware validation
+      - Rollback protection
+      - Anti-downgrade enforcement
+    projects:
+      - "GUNNAR-Core"
+      - "Security"
+    priority: "normal"
+    assignment: "gabriel.blomqvist"
+
+  - title: "[BUG] Memory alignment issues in cryptographic operations"
+    description: |
+      Encryption operations failing with alignment exceptions on certain data sizes.
+      Appears to be related to SIMD optimizations.
+    projects:
+      - "GUNNAR-Core"
+    priority: "high"
+    assignment: "gabriel.blomqvist"
+
+  - title: "Update development tools and dependencies"
+    description: |
+      Update Visual Studio and {{ dev_framework }} to latest stable versions.
+      Update NuGet packages for {{ project_name }} project.
+      Security audit showed outdated packages in {{ q1 }}.
+    projects:
+      - "Development"
+    priority: "normal"
+    subscribers: *DEV_TEAM
+
+  - title: "Create chip specification SharePoint site"
+    description: |
+      Centralized SharePoint site for all {{ full_project }} documentation.
+      URL: {{ sharepoint_url }}/{{ project_name }}
+      Categories: Architecture, Security, Testing, Compliance
+    projects:
+      - "SharePoint"
+    priority: "normal"
+    assignment: "sonja.bergstrom"
+
+  - title: "[BUG] VM performance degradation over time"
+    description: "Development VMs becoming slow after 2-3 days of operation"
+    projects:
+      - "Infrastructure"
+    priority: "normal"
+    assignment: "viola.larsson"
+
+  - title: "Configure code signing infrastructure"
+    description: |
+      Set up code signing for firmware and software releases
+      - Hardware Security Module (HSM) for key storage
+      - Automated signing pipeline
+      - Key ceremony documentation
+    projects:
+      - "Security"
+      - "Infrastructure"
+    priority: "high"
+    assignment: "viola.larsson"
+
+  - title: "Optimize chip simulator performance"
+    description: |
+      Current simulation runs at 1/100th real-time speed. Target: 1/10th.
+      - Profile hotspots
+      - Optimize critical paths
+      - Parallelize where possible
+    projects:
+      - "GUNNAR-Core"
+      - "Development"
+    priority: "high"
+    assignment: "sebastian.soderberg"
+
+  # ========================================
+  # Q3 2024 - Testing & Validation
+  # ========================================
+
+  - title: "[EPIC] Security Validation and Testing {{ q3 }}"
+    description: |
+      Comprehensive security testing of {{ project_title }} chip.
+
+      Target: Pass {{ primary_standard }} security requirements
+      Compliance: {{ compliance_standards }}
+    projects:
+      - "QA"
+      - "Security"
+    priority: "high"
+    subscribers: *QA_TEAM
+    tasks:
+      - title: "Side-channel attack resistance testing"
+        description: |
+          Test resistance to timing attacks, power analysis, EM radiation.
+          Validate {{ crypto_algorithm }} and {{ signature_algorithm }} implementations.
+        projects:
+          - "QA"
+          - "Security"
+        priority: "high"
+        assignment: "tommy.svensson"
+
+      - title: "Fault injection testing"
+        description: |
+          Validate tamper detection mechanisms against fault injection.
+          Required for {{ compliance_standards }} certification.
+        projects:
+          - "QA"
+          - "Security"
+        priority: "high"
+        assignment: "tommy.svensson"
+
+      - title: "Cryptographic validation tests"
+        description: |
+          Run NIST test vectors against all crypto implementations:
+          - {{ crypto_algorithm }}
+          - {{ signature_algorithm }}
+          - {{ hash_algorithm }}
+        projects:
+          - "QA"
+        priority: "normal"
+        assignment: "tommy.svensson"
+
+      - title: "Create security test report for certification"
+        description: |
+          Compile test results into formal {{ primary_standard }} report for aviation authorities.
+          Upload to {{ sharepoint_url }}/{{ project_name }}/Certification
+        projects:
+          - "QA"
+          - "SharePoint"
+        priority: "normal"
+        assignment: "sonja.bergstrom"
+
+  - title: "[FEATURE] Automated test harness for chip validation"
+    description: |
+      Create automated test framework in C#
+      - Unit tests for crypto functions
+      - Integration tests for chip simulator
+      - Regression test suite
+    projects:
+      - "QA"
+      - "Development"
+    priority: "high"
+    assignment: "tommy.svensson"
+    subscribers: *FULL_TEAM
+
+  - title: "[BUG] Random number generator fails statistical tests"
+    description: |
+      PRNG implementation failing NIST SP 800-22 randomness tests.
+      Critical security issue.
+    projects:
+      - "GUNNAR-Core"
+      - "Security"
+    priority: "unbreak"
+    assignment: "gabriel.blomqvist"
+
+  - title: "Third-party security audit preparation"
+    description: |
+      External security audit scheduled for {{ audit_month }}.
+      Prepare {{ full_project }} documentation and test environment.
+      Focus areas: {{ compliance_standards }} compliance validation.
+    projects:
+      - "Security"
+      - "QA"
+    priority: "high"
+    assignment: "ove.pettersson"
+
+  - title: "[BUG] Secure boot verification bypassed in certain conditions"
+    description: "Boot signature verification can be skipped if specific timing condition met"
+    projects:
+      - "GUNNAR-Core"
+      - "Security"
+    priority: "unbreak"
+    assignment: "sebastian.soderberg"
+
+  - title: "Implement hardware tamper detection simulation"
+    description: |
+      Simulate hardware tamper sensors:
+      - Voltage monitoring
+      - Temperature sensors
+      - Physical intrusion detection
+    projects:
+      - "GUNNAR-Core"
+    priority: "high"
+    assignment: "gabriel.blomqvist"
+
+  - title: "Create automated regression test suite"
+    description: "Automated tests to run after each code change"
+    projects:
+      - "QA"
+      - "Development"
+    priority: "normal"
+    assignment: "tommy.svensson"
+
+  - title: "Performance benchmarking against requirements"
+    description: |
+      Validate chip meets performance requirements:
+      - Encryption throughput
+      - Boot time
+      - Power consumption (simulated)
+    projects:
+      - "QA"
+    priority: "normal"
+    assignment: "tommy.svensson"
+
+  - title: "[FEATURE] Debug interface with access controls"
+    description: |
+      Secure debug interface for development
+      - Authenticated access only
+      - Audit logging
+      - Production lock-down mode
+    projects:
+      - "GUNNAR-Core"
+      - "Security"
+    priority: "normal"
+    assignment: "sebastian.soderberg"
+
+  - title: "Update smartcard authentication certificates"
+    description: |
+      Renew PKI certificates for {{ project_name }} team smartcards.
+      Expiration date: {{ cert_expiry_q3 }}
+      Domain: {{ base_domain }}
+    projects:
+      - "Infrastructure"
+      - "Security"
+    priority: "high"
+    assignment: "viola.larsson"
+
+  # ========================================
+  # Q4 2024 - Certification & Documentation
+  # ========================================
+
+  - title: "[EPIC] {{ primary_standard }} Certification Preparation {{ q4 }}"
+    description: |
+      Final preparations for {{ full_project }} aviation security certification.
+      Standards: {{ compliance_standards }}
+
+      Tasks:
+      - Documentation completion
+      - Compliance validation
+      - Certification package assembly
+    projects:
+      - "Security"
+      - "QA"
+    priority: "unbreak"
+    subscribers: *FULL_TEAM
+    tasks:
+      - title: "Complete security requirements traceability matrix"
+        description: |
+          Map all {{ primary_standard }} requirements to {{ project_title }} implementation and test results.
+          Also verify {{ secondary_standard }} (European) compliance.
+        projects:
+          - "Security"
+          - "SharePoint"
+        priority: "high"
+        assignment: "ove.pettersson"
+
+      - title: "Final security penetration testing"
+        description: |
+          External penetration test by certified aviation security firm.
+          Focus: {{ crypto_algorithm }}, {{ signature_algorithm }} implementations
+        projects:
+          - "Security"
+          - "QA"
+        priority: "high"
+        assignment: "tommy.svensson"
+
+      - title: "Create certification evidence package"
+        description: |
+          Assemble all {{ full_project }} documentation, test results, and evidence.
+          Package location: {{ sharepoint_url }}/{{ project_name }}/Certification
+        projects:
+          - "SharePoint"
+          - "Security"
+        priority: "normal"
+        assignment: "sonja.bergstrom"
+
+      - title: "Certification submission and review"
+        description: |
+          Submit {{ primary_standard }} certification package and address reviewer feedback.
+          Project: {{ project_title }}
+        projects:
+          - "Security"
+        priority: "high"
+        assignment: "ove.pettersson"
+
+  - title: "[FEATURE] Chip manufacturing specification export"
+    description: |
+      Generate manufacturing specifications from design
+      - Verilog/VHDL export
+      - Mask generation specs
+      - Test vectors for production testing
+    projects:
+      - "GUNNAR-Core"
+      - "Architecture"
+    priority: "normal"
+    assignment: "ove.pettersson"
+
+  - title: "Set up production code repository"
+    description: |
+      Git repository with strict access controls for production code
+      - Require code review
+      - Automated security scanning
+      - Immutable audit trail
+    projects:
+      - "Development"
+      - "Security"
+    priority: "high"
+    assignment: "daniel.lindgren"
+
+  - title: "[BUG] Key zeroization incomplete on tamper event"
+    description: |
+      Cryptographic keys not fully erased from memory when tamper detected.
+      Security compliance issue.
+    projects:
+      - "GUNNAR-Core"
+      - "Security"
+    priority: "unbreak"
+    assignment: "gabriel.blomqvist"
+
+  - title: "Aviation authority compliance review"
+    description: |
+      Ensure {{ project_title }} compliance with all aviation regulations:
+      - {{ primary_standard }} (Airworthiness Security Process)
+      - {{ secondary_standard }} (European equivalent)
+      - Export control requirements for {{ division }} sector
+      Documentation: {{ sharepoint_url }}/{{ project_name }}/Compliance
+    projects:
+      - "Security"
+    priority: "high"
+    assignment: "ove.pettersson"
+
+  - title: "[FEATURE] Secure logging and audit trail"
+    description: |
+      Implement tamper-evident logging:
+      - Cryptographically signed logs
+      - Write-once storage
+      - Export to SharePoint
+    projects:
+      - "GUNNAR-Core"
+      - "SharePoint"
+    priority: "normal"
+    assignment: "sonja.bergstrom"
+
+  - title: "Black box integration testing plan"
+    description: |
+      Plan for integration testing with actual black box hardware
+      - Test procedures
+      - Success criteria
+      - Failure analysis protocols
+    projects:
+      - "QA"
+    priority: "normal"
+    assignment: "tommy.svensson"
+    subscribers: *QA_TEAM
+
+  - title: "Year-end technical documentation update"
+    description: |
+      Update all project documentation for archival:
+      - Architecture diagrams
+      - API documentation
+      - User manuals
+      - Maintenance procedures
+    projects:
+      - "SharePoint"
+    priority: "low"
+    assignment: "sonja.bergstrom"
+
+  - title: "Chip fabrication vendor selection"
+    description: |
+      Evaluate and select semiconductor fabrication partner
+      - Security clearance requirements
+      - Supply chain security
+      - Quality certifications
+    projects:
+      - "GUNNAR-Core"
+    priority: "high"
+    assignment: "ove.pettersson"
+    subscribers: *FULL_TEAM
+
+  - title: "[BUG] Power consumption exceeds specifications"
+    description: "Simulated power draw 15% over spec during crypto operations"
+    projects:
+      - "GUNNAR-Core"
+    priority: "high"
+    assignment: "sebastian.soderberg"
+
+  - title: "Holiday on-call schedule for critical systems"
+    description: "Set up on-call rotation for virtualization infrastructure (Dec 20 - Jan 5)"
+    projects:
+      - "Infrastructure"
+    priority: "normal"
+    assignment: "viola.larsson"
+
+  # ========================================
+  # Ongoing / Year-round Tasks
+  # ========================================
+
+  - title: "Monthly security patch deployment"
+    description: "Deploy Windows security updates during maintenance windows"
+    projects:
+      - "Infrastructure"
+    priority: "normal"
+    assignment: "viola.larsson"
+
+  - title: "Weekly code review sessions"
+    description: "Team code review meetings for crypto implementations"
+    projects:
+      - "Development"
+    priority: "normal"
+
+  - title: "Bi-weekly scrum retrospectives"
+    description: "Team retrospective meetings led by Scrum Master"
+    projects:
+      - "Development"
+    priority: "low"
+    assignment: "mikael.wallin"
+
+  - title: "[FEATURE] Improved error diagnostics"
+    description: |
+      Enhanced error reporting in chip simulator
+      - Detailed error messages
+      - Stack traces with security filtering
+      - Error code documentation
+    projects:
+      - "GUNNAR-Core"
+      - "Development"
+    priority: "normal"
+    assignment: "sebastian.soderberg"
+
+  - title: "Regulatory compliance monitoring"
+    description: |
+      Track changes to aviation security regulations
+      - DO-326A updates
+      - Export control changes
+      - Industry best practices
+    projects:
+      - "Security"
+    priority: "low"
+    assignment: "ove.pettersson"
+
+  - title: "[BUG] VM network connectivity drops intermittently"
+    description: "Development VMs losing network connection randomly, requires VM restart"
+    projects:
+      - "Infrastructure"
+    priority: "normal"
+    assignment: "daniel.lindgren"
+
+  - title: "Infrastructure cost review"
+    description: |
+      Review server and licensing costs
+      - Optimize VM resource allocation
+      - Review Windows Server licenses
+      - Identify underutilized resources
+    projects:
+      - "Infrastructure"
+    priority: "normal"
+    assignment: "viola.larsson"
+
+  - title: "SharePoint workflow automation"
+    description: |
+      Automate document approval workflows
+      - Specification review process
+      - Test report approvals
+      - Change request tracking
+    projects:
+      - "SharePoint"
+    priority: "wish"
+    assignment: "sonja.bergstrom"
+
+  - title: "[FEATURE] Visual Studio integration for chip simulator"
+    description: |
+      VS extension for chip development
+      - Syntax highlighting for chip configs
+      - Integrated debugger
+      - Test runner integration
+    projects:
+      - "Development"
+    priority: "wish"
+    assignment: "sebastian.soderberg"
+
+  - title: "Physical security compliance audit"
+    description: |
+      Ensure office building meets security requirements
+      - Access control review
+      - Hardware storage verification
+      - Visitor policy compliance
+    projects:
+      - "Security"
+    priority: "high"
+    assignment: "ove.pettersson"
+
+  - title: "End of year system maintenance"
+    description: |
+      Scheduled maintenance window: {{ maintenance_window }}
+
+      Tasks:
+      - {{ hypervisor }} cluster updates ({{ os_version }})
+      - Database maintenance ({{ phorge_url }})
+      - Backup verification for {{ project_name }} data
+      - Security hardening review for {{ base_domain }}
+    projects:
+      - "Infrastructure"
+    priority: "normal"
+    assignment: "viola.larsson"

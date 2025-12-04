@@ -1,47 +1,34 @@
 # phabfive
 
-A command line tool to interact with Phabricator.
-
-The complete documentation for Phabfive can be found at [Read the Docs](https://phabfive.readthedocs.io/en/latest/).
+A command line tool to interact with Phabricator/Phorge.
 
 ## Features
 
 A summary of the currently supported features:
 
-- Passphrase
-  - Get specified secret
+- **Passphrase** - Get specified secret
+- **Diffusion** - List repositories, get branches, clone URIs, add repositories, manage URIs
+- **Paste** - List, get, and add pastes
+- **User** - Get information about the logged-in user
+- **Maniphest** - Add comments, show task details, create tasks from templates
 
-- Diffusion
-  - List repositories
-  - Get branches for specified repository
-  - Get clone URI for specified repository
-  - Add repository
-  - Edit URI
-  - Create URI (observe repository)
+For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/en/latest/).
 
-- Paste
-  - List pastes
-  - Get specified paste
-  - Add paste
+## Installation
 
-- User
-  - Who am I: information about the logged-in user
-
-- Maniphest
-  - Add comment to task
-  - Show task summary or full details
-  - Create multiple tasks via template config file
-
-## Example usage
-
-Grab a Phabricator token at `https://<yourserver.com>/settings/panel/apitokens/`
-
-Configure in Linux:
+[uv](https://github.com/astral-sh/uv) is a fast Python package installer (10-100x faster than pip):
 
 ```bash
-export PHAB_TOKEN=cli-ABC123
-# --OR--
-echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+Configure in Linux:
+# Install phabfive
+uv tool install phabfive
+
+# Or install in a virtual environment
+uv venv
+uv pip install phabfive
 ```
 
 Configure in Windows:
@@ -72,42 +59,62 @@ Usage:
 ```bash
 phabfive passphrase K123
 phabfive --log-level=DEBUG user whoami
+**Install the latest development version:**
+```bash
+# Install from git to get unreleased features and fixes
+uv tool install git+https://github.com/dynamist/phabfive@master
 ```
 
-## Run local development phabricator instance
+## Quick Start
 
-First add the following to your `/etc/hosts` file:
+### 1. Get an API token
 
-```text
-127.0.0.1       phabricator.domain.tld
+Grab a Phabricator/Phorge token at `https://<yourserver.com>/settings/panel/apitokens/`
+
+### 2. Configure credentials
+
+**Environment variables:**
+```bash
+export PHAB_TOKEN=cli-ABC123
+export PHAB_URL=https://yourserver.com/api/
 ```
 
-Next start the mysql instance separate (in the first terminal) from the phabricator instance with
+**Or use a configuration file:**
+```bash
+# Linux/XDG
+echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
+echo "PHAB_URL: https://yourserver.com/api/" >> ~/.config/phabfive.yaml
+
+# macOS
+echo "PHAB_TOKEN: cli-ABC123" > ~/Library/Application\ Support/phabfive.yaml
+echo "PHAB_URL: https://yourserver.com/api/" >> ~/Library/Application\ Support/phabfive.yaml
+
+# Windows - create at: %LOCALAPPDATA%\phabfive\phabfive.yaml
+```
+
+**Note:** On macOS, you can use `~/.config` by setting `export XDG_CONFIG_HOME=~/.config`
+
+### 3. Use phabfive
 
 ```bash
-docker compose -f docker-compose-phabricator.yml up mysql
+phabfive passphrase K123
+phabfive paste list
+phabfive maniphest search "migration tasks" --tag myproject
+phabfive maniphest search --tag myproject --updated-after=7
 ```
 
-Then after the database is up and running you can start the webserver with (in a second terminal)
+## Documentation
 
-```bash
-docker compose -f docker-compose-phabricator.yml up phabricator
-```
+- **[Full CLI Reference](https://phabfive.readthedocs.io)** - Complete command documentation
+- **[Development Guide](docs/development.md)** - Set up dev environment, run tests, local Phorge/Phabricator setup
+- **[Release Process](docs/releasing.md)** - How to build and publish releases
 
-This startup will take some time to setup the demo instance. Once completed you can access your instance in your browser at `http://phabricator.domain.tld/`. On first use you need to setup your admin account. Most development for phabfive requires an API token, create one here `http://phabricator.domain.tld/settings/user/<username>/page/apitokens/`.
+## Contributing
 
-Note there is no persistence disks so if the container is shutdown any data will be lost and you have to restart.
+See [docs/development.md](docs/development.md) for instructions on setting up your development environment.
 
-## Building a release
+## License
 
-For version schema we follow basic [SemVer](https://semver.org/) versioning schema system with the extensions that is defined by python in this [PEP 440](https://peps.python.org/pep-0440/). It allows for some post and dev releases if we need to, but in general we should only publish stable regular semver releases.
-
-Instructions how to build a release and upload it to PyPi can be found in the official [packaging documentation at Python.org](https://packaging.python.org/en/latest/tutorials/packaging-projects/).
-
-In order to be allowed to upload a new release for phabfive, you need to be a *owner* or *maintainer* for this project inside PyPi. Currently only Johan and Henrik are owners. Ask them for assistance if you need permissions to upload a new release.
-
-## LICENSE
-
-Copyright (c) 2017-2024 Dynamist AB
+Copyright (c) 2017-2025 Dynamist AB
 
 See the LICENSE file provided with the source distribution for full details.

@@ -36,7 +36,9 @@ class Paste(Phabfive):
 
         return ids_list_int
 
-    def create_paste(self, title=None, file=None, language=None, tags=None, subscribers=None):
+    def create_paste(
+        self, title=None, file=None, language=None, tags=None, subscribers=None
+    ):
         """
         Wrapper that connects to Phabricator and creates paste.
 
@@ -68,9 +70,7 @@ class Paste(Phabfive):
 
         # Phabricator does not take None (empty list is ok for projects/subscribers) as a value, therefor only "type" that has valid value can be sent as an argument
         transactions = [
-            item
-            for item in transactions_values
-            if None not in item.values()
+            item for item in transactions_values if None not in item.values()
         ]
 
         try:
@@ -119,10 +119,7 @@ class Paste(Phabfive):
             raise PhabfiveDataException("No data or other error")
 
         # sort based on title
-        response = sorted(
-            pastes,
-            key=lambda key: key["fields"]["title"]
-        )
+        response = sorted(pastes, key=lambda key: key["fields"]["title"])
 
         for item in response:
             paste = item["fields"]["title"]

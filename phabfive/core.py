@@ -8,7 +8,14 @@ import re
 from urllib.parse import urlparse
 
 # phabfive imports
-from phabfive.constants import *
+from phabfive.constants import (
+    REQUIRED,
+    CONFIG_EXAMPLES,
+    VALIDATORS,
+    VALID_EXAMPLES,
+    DEFAULTS,
+    CONFIGURABLES,
+)
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
 
 # 3rd party imports
@@ -21,11 +28,9 @@ log = logging.getLogger(__name__)
 logging.getLogger("anyconfig").setLevel(logging.ERROR)
 
 
-class Phabfive():
-
+class Phabfive:
     def __init__(self):
-        """
-        """
+        """ """
         self.conf = self.load_config()
 
         maxlen = 8 + len(max(dict(self.conf).keys(), key=len))
@@ -57,14 +62,15 @@ class Phabfive():
                 raise PhabfiveConfigException(error)
 
         self.phab = Phabricator(
-            host=self.conf.get("PHAB_URL"),
+            host=self._normalize_url(self.conf.get("PHAB_URL")),
             token=self.conf.get("PHAB_TOKEN"),
         )
+
+        url = urlparse(self.conf["PHAB_URL"])
+
+        self.url = f"{url.scheme}://{url.netloc}"
         # This enables extra endpoints that normally is unaccessible
         self.phab.update_interfaces()
-
-        url = urlparse(self.conf['PHAB_URL'])
-        self.url = f"{url.scheme}://{url.netloc}"
 
         self.verify_connection()
 
@@ -156,11 +162,7 @@ class Phabfive():
         log.debug("Loading configuration from environment variables")
         anyconfig.merge(
             conf,
-            {
-                key: value
-                for key, value in environ.items()
-                if key in CONFIGURABLES
-            },
+            {key: value for key, value in environ.items() if key in CONFIGURABLES},
         )
 
         return conf
@@ -173,9 +175,23 @@ class Phabfive():
         result = []
 
         for transaction_type, transaction_value in data.items():
-            result.append({
-                "type": transaction_type,
-                "value": transaction_value,
-            })
+            result.append(
+                {
+                    "type": transaction_type,
+                    "value": transaction_value,
+                }
+            )
 
         return result
+
+    def _normalize_url(self, url):
+        """
+        Normalizes a URL by removing trailing slashes and ensuring it ends with '/api/'
+        """
+        url = url.rstrip("/")
+        url += "/"
+
+        if not url.endswith("/api/"):
+            url += "/api/"
+
+        return url
