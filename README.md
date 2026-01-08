@@ -16,24 +16,27 @@ For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/
 
 ## Installation
 
-[uv](https://github.com/astral-sh/uv) is a fast Python package installer (10-100x faster than pip):
+[uv](https://docs.astral.sh/uv/) is a fast Python package installer (10-100x faster than pip):
 
 ```bash
 # Install uv if you haven't already
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install phabfive
+# Install from pypi.org
 uv tool install phabfive
 
-# Or install in a virtual environment
-uv venv
-uv pip install phabfive
+# Install from Github to get unreleased features and fixes
+uv tool install git+https://github.com/dynamist/phabfive@master
 ```
 
-**Install the latest development version:**
-```bash
-# Install from git to get unreleased features and fixes
-uv tool install git+https://github.com/dynamist/phabfive@master
+If you prefer [mise-en-place](https://mise.jdx.dev/) the polyglot tool version manager:
+
+```
+# Install mise if you haven't already
+curl https://mise.run | sh
+
+# Install from pypi.org
+mise use --global --pin pipx:phabfive
 ```
 
 ## Quick Start
@@ -45,12 +48,14 @@ Grab a Phabricator/Phorge token at `https://<yourserver.com>/settings/panel/apit
 ### 2. Configure credentials
 
 **Environment variables:**
+
 ```bash
 export PHAB_TOKEN=cli-ABC123
 export PHAB_URL=https://yourserver.com/api/
 ```
 
 **Or use a configuration file:**
+
 ```bash
 # Linux/XDG
 echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
