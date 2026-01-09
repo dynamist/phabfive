@@ -130,7 +130,61 @@ EOF
   fi
 }
 
+set_user_password() {
+  local username="$1"
+  local password="$2"
+
+  if [ -z "$password" ]; then
+    return 0
+  fi
+
+  echo "Setting password for user: $username"
+
+  # Get user PHID
+  local user_phid=$(mysql_query phabricator_user "SELECT phid FROM user WHERE userName='$username'")
+  if [ -z "$user_phid" ] || [ "$user_phid" = "0" ]; then
+    echo "ERROR: User '$username' not found"
+    return 1
+  fi
+
+  # Check if password already exists for this user
+  local pw_count=$(mysql_query phabricator_auth "SELECT COUNT(*) FROM auth_password WHERE objectPHID='$user_phid' AND passwordType='account'")
+  if [ "$pw_count" -gt 0 ]; then
+    echo "Password already set for $username, skipping..."
+    return 0
+  fi
+
+  # Generate password salt (64 random alphanumeric chars), hash, and PHID
+  local salt=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 64)
+  local pw_phid=$(generate_phid "APHP")
+  local timestamp=$(get_timestamp)
+
+  # Phorge: HMAC-SHA256(password, salt) -> hex string -> bcrypt
+  # Hash format is "bcrypt:$2y$..."
+  local hash=$(php -r '
+    $password = $argv[1];
+    $salt = $argv[2];
+    $hmac = hash_hmac("sha256", $password, $salt, false);
+    $bcrypt = password_hash($hmac, PASSWORD_BCRYPT, ["cost" => 11]);
+    echo "bcrypt:" . $bcrypt;
+  ' -- "$password" "$salt")
+
+  # Insert into auth_password table (pipe to avoid $ interpretation in bcrypt hash)
+  printf "INSERT INTO auth_password (phid, objectPHID, passwordType, passwordHash, passwordSalt, isRevoked, dateCreated, dateModified) VALUES ('%s', '%s', 'account', '%s', '%s', 0, %s, %s);" \
+    "$pw_phid" "$user_phid" "$hash" "$salt" "$timestamp" "$timestamp" | \
+    mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASS" phabricator_auth
+
+  echo "Password set for $username"
+}
+
 generate_recovery_link() {
+  # Skip recovery link if password was set directly
+  if [ ! -z "$PHORGE_ADMIN_PASS" ]; then
+    echo "Password set directly, skipping recovery link generation."
+    export RECOVERY_LINK=""
+    return 0
+  fi
+
   echo "Step 3: Generating password recovery link..."
   cd "$PHORGE_PATH"
 

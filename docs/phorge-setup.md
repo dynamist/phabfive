@@ -30,13 +30,15 @@ The `init-phorge.sh` script automatically creates:
 ### Admin Account
 
 - **Username:** `admin`
-- **Email:** `admin@example.com` (verified)
+- **Password:** `supersecr3tpassw0rdfordevelop1` (if `PHORGE_ADMIN_PASS` is set)
+- **Email:** `admin@domain.tld` (verified)
 - **API Token:** `api-supersecr3tapikeyfordevelop1`
-- **Password Recovery Link** - One-time link displayed in logs
+
+If `PHORGE_ADMIN_PASS` is not set, a one-time password recovery link is displayed in the logs instead.
 
 ### Test Users
 
-Eight RMI GUNNAR team members for testing:
+Eight RMI GUNNAR team members for testing (all share the same password as admin if `PHORGE_ADMIN_PASS` is set):
 
 - **daniel.lindgren** - Daniel Lindgren (daniel.lindgren@air.rmi.se)
 - **gabriel.blomqvist** - Gabriel Blomqvist (gabriel.blomqvist@air.rmi.se)
@@ -74,6 +76,7 @@ environment:
   - PHORGE_ADMIN_EMAIL=admin@example.com
   - PHORGE_ADMIN_NAME=Administrator
   - PHORGE_ADMIN_TOKEN=api-supersecr3tapikeyfordevelop1
+  - PHORGE_ADMIN_PASS=secret  # Optional: enables immediate login
 ```
 
 Defaults are in `phorge/lib/common.sh` and used if environment variables are not set.
@@ -141,7 +144,7 @@ The script runs automatically during container startup and:
 2. Creates admin and test user accounts with verified emails
 3. Generates API token for immediate use
 4. Creates default projects with workboard columns
-5. Generates a one-time password recovery link
+5. Sets passwords for all users (if `PHORGE_ADMIN_PASS` is set) or generates a recovery link
 
 All operations are idempotent - safe to run multiple times. Container restarts won't duplicate data.
 
