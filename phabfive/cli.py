@@ -110,7 +110,8 @@ sub_maniphest_base_args = """
 Usage:
     phabfive maniphest comment <ticket_id> <comment> [options]
     phabfive maniphest show <ticket_id> [options]
-    phabfive maniphest create --with TEMPLATE [options]
+    phabfive maniphest create <title> [options]
+    phabfive maniphest create --with=TEMPLATE [options]
     phabfive maniphest search <project_name> [options]
 
 Options:
@@ -133,14 +134,29 @@ Options:
 
 sub_maniphest_create_args = """
 Usage:
-    phabfive maniphest create --with TEMPLATE [--dry-run] [options]
+    phabfive maniphest create <title> [--tag=TAG]... [--subscribe=USER]... [options]
+    phabfive maniphest create --with=TEMPLATE [options]
+
+Arguments:
+    <title>              Task title (for CLI mode)
 
 Options:
-    --with=TEMPLATE      Load task creation template from YAML file
-    --dry-run            Does everything except commiting the tickets
-    -h, --help           Show this help message and exit
+    --with=TEMPLATE         Load task creation template from YAML file (bulk mode)
+    --description=<text>    Task description (optional)
+    --tag=TAG               Project/workboard tag (repeatable, or use + for multiple)
+    --assign=<user>         Assignee username
+    --status=<status>       Task status (Open, Resolved, Wontfix, Invalid, Duplicate, Spite)
+    --priority=<level>      Task priority (Unbreak, Triage, High, Normal, Low, Wish)
+    --subscribe=USER        Subscriber username (repeatable, or use + for multiple)
+    --dry-run               Preview without creating task
+    -h, --help              Show this help message and exit
 
 Examples:
+    # CLI mode - single task creation
+    phabfive maniphest create 'Fix login bug' --tag DevTeam --assign hholm --priority High
+    phabfive maniphest create 'New feature' --tag ProjectA --tag ProjectB --subscribe user1
+
+    # Template mode - bulk creation
     phabfive maniphest create --with templates/task-create/project-setup.yaml
     phabfive maniphest create --with templates/task-create/sprint-planning.yaml --dry-run
 """
@@ -606,13 +622,36 @@ def run(cli_args, sub_args):
                     )
 
             if sub_args.get("create"):
-                # This part is responsible for bulk creating several tickets at once
-
-                # Get config file from --with option
-                create_config = sub_args.get("--with")
-
-                if not create_config:
-                    print("ERROR: Must specify --with TEMPLATE", file=sys.stderr)
+                # Check if template mode or CLI mode
+                if sub_args.get("--with"):
+                    # Existing bulk creation from template file
+                    maniphest_app.create_from_config(
+                        sub_args["--with"],
+                        dry_run=sub_args.get("--dry-run", False),
+                    )
+                elif sub_args.get("<title>"):
+                    # New CLI-based single task creation
+                    result = maniphest_app.create_task_cli(
+                        title=sub_args["<title>"],
+                        description=sub_args.get("--description"),
+                        tags=sub_args.get("--tag"),
+                        assignee=sub_args.get("--assign"),
+                        status=sub_args.get("--status"),
+                        priority=sub_args.get("--priority"),
+                        subscribers=sub_args.get("--subscribe"),
+                        dry_run=sub_args.get("--dry-run", False),
+                    )
+                    if result:
+                        print(result["uri"])
+                        # Print clickable tag URLs if any tags were added
+                        if result.get("tag_slugs"):
+                            for slug in result["tag_slugs"]:
+                                print(f"{result['base_url']}/tag/{slug}/")
+                else:
+                    print(
+                        "ERROR: Must provide either a title or --with=TEMPLATE",
+                        file=sys.stderr,
+                    )
                     retcode = 1
                     return retcode
 

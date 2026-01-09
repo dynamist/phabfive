@@ -580,6 +580,288 @@ class Maniphest(Phabfive):
                 },
             }
 
+    def _parse_plus_separated(self, values):
+        """
+        Parse plus-separated values from CLI options.
+
+        Handles both string (single option) and list (multiple options) inputs,
+        and splits values on '+' to support syntax like 'ProjectA+ProjectB'.
+
+        Parameters
+        ----------
+        values : str, list, or None
+            Value(s) from docopt - either a single string or a list of strings.
+            May contain plus-separated values.
+
+        Returns
+        -------
+        list
+            Flattened list of individual values
+
+        Examples
+        --------
+        >>> _parse_plus_separated("ProjectA+ProjectB")
+        ["ProjectA", "ProjectB"]
+        >>> _parse_plus_separated(["ProjectA+ProjectB", "ProjectC"])
+        ["ProjectA", "ProjectB", "ProjectC"]
+        >>> _parse_plus_separated(["ProjectA", "ProjectB"])
+        ["ProjectA", "ProjectB"]
+        """
+        if not values:
+            return []
+
+        # Convert single string to list for uniform processing
+        if isinstance(values, str):
+            values = [values]
+
+        result = []
+        for value in values:
+            if "+" in value:
+                # Split on + and add each part
+                result.extend(part.strip() for part in value.split("+") if part.strip())
+            else:
+                result.append(value.strip())
+
+        return result
+
+    def _validate_priority(self, priority):
+        """
+        Validate and normalize priority value.
+
+        Parameters
+        ----------
+        priority : str
+            Priority name (case-insensitive)
+
+        Returns
+        -------
+        str
+            Normalized priority value for API (lowercase)
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If priority is invalid
+        """
+        # Map of user-friendly names to API values
+        priority_map = {
+            "unbreak": "unbreak",
+            "unbreak now": "unbreak",
+            "unbreak now!": "unbreak",
+            "triage": "triage",
+            "high": "high",
+            "normal": "normal",
+            "low": "low",
+            "wish": "wish",
+            "wishlist": "wish",
+        }
+
+        normalized = priority.lower().strip()
+
+        if normalized not in priority_map:
+            valid_choices = ["Unbreak", "Triage", "High", "Normal", "Low", "Wish"]
+            raise PhabfiveConfigException(
+                f"Invalid priority '{priority}'. Valid choices: {', '.join(valid_choices)}"
+            )
+
+        return priority_map[normalized]
+
+    def _validate_status(self, status):
+        """
+        Validate and normalize status value.
+
+        Parameters
+        ----------
+        status : str
+            Status name (case-insensitive)
+
+        Returns
+        -------
+        str
+            Normalized status key for API (lowercase)
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If status is invalid
+        """
+        # Get status map from API for dynamic validation
+        api_status = self._get_api_status_map()
+        status_map = api_status.get("statusMap", {})
+
+        # Build reverse map: display name (lowercase) -> key
+        name_to_key = {v.lower(): k for k, v in status_map.items()}
+        # Also allow using the key directly
+        key_set = {k.lower() for k in status_map.keys()}
+
+        normalized = status.lower().strip()
+
+        # Check if it's a display name
+        if normalized in name_to_key:
+            return name_to_key[normalized]
+
+        # Check if it's already a key
+        if normalized in key_set:
+            return normalized
+
+        # Invalid status
+        valid_choices = sorted(set(status_map.values()))
+        raise PhabfiveConfigException(
+            f"Invalid status '{status}'. Valid choices: {', '.join(valid_choices)}"
+        )
+
+    def _resolve_user_phid(self, username):
+        """
+        Resolve a single username to PHID.
+
+        Parameters
+        ----------
+        username : str
+            Phabricator username
+
+        Returns
+        -------
+        str or None
+            User PHID, or None if not found
+        """
+        try:
+            result = self.phab.user.search(constraints={"usernames": [username]})
+
+            if result.get("data"):
+                return result["data"][0]["phid"]
+
+            return None
+        except Exception as e:
+            log.warning(f"Failed to resolve user '{username}': {e}")
+            return None
+
+    def _resolve_user_phids(self, usernames):
+        """
+        Resolve multiple usernames to PHIDs.
+
+        Parameters
+        ----------
+        usernames : list
+            List of Phabricator usernames
+
+        Returns
+        -------
+        list
+            List of user PHIDs
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If any username is not found
+        """
+        if not usernames:
+            return []
+
+        try:
+            result = self.phab.user.search(constraints={"usernames": usernames})
+
+            found_users = {
+                user["fields"]["username"].lower(): user["phid"]
+                for user in result.get("data", [])
+            }
+
+            phids = []
+            not_found = []
+
+            for username in usernames:
+                phid = found_users.get(username.lower())
+                if phid:
+                    phids.append(phid)
+                else:
+                    not_found.append(username)
+
+            if not_found:
+                raise PhabfiveConfigException(
+                    f"User(s) not found: {', '.join(not_found)}"
+                )
+
+            return phids
+        except PhabfiveConfigException:
+            raise
+        except Exception as e:
+            raise PhabfiveRemoteException(f"Failed to resolve users: {e}")
+
+    def _resolve_project_phids_for_create(self, project_names):
+        """
+        Resolve project names to PHIDs and slugs for task creation.
+
+        Unlike _resolve_project_phids() which supports wildcards for search,
+        this requires exact matches and raises an error if any project is not found.
+
+        Parameters
+        ----------
+        project_names : list
+            List of project names
+
+        Returns
+        -------
+        dict
+            Dictionary with 'phids' (list of PHIDs) and 'slugs' (list of URL slugs)
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If any project is not found or wildcards are used
+        """
+        if not project_names:
+            return {"phids": [], "slugs": []}
+
+        # Fetch all projects to get both PHIDs and slugs
+        try:
+            projects_result = self.phab.project.query()
+            projects_data = projects_result.get("data", {})
+        except Exception as e:
+            raise PhabfiveRemoteException(f"Failed to fetch projects: {e}")
+
+        # Build lookup maps
+        name_to_phid = {}
+        name_to_slug = {}
+        for phid, project_data in projects_data.items():
+            primary_name = project_data["name"]
+            slugs = project_data.get("slugs", [])
+            # Use first slug for URL, or lowercase name if no slugs
+            primary_slug = slugs[0] if slugs else primary_name.lower().replace(" ", "-")
+
+            # Map by primary name (case-insensitive)
+            name_to_phid[primary_name.lower()] = phid
+            name_to_slug[primary_name.lower()] = primary_slug
+
+            # Also map by each slug
+            for slug in slugs:
+                if slug:
+                    name_to_phid[slug.lower()] = phid
+                    name_to_slug[slug.lower()] = primary_slug
+
+        phids = []
+        slugs = []
+        not_found = []
+
+        for name in project_names:
+            # Disallow wildcards for task creation
+            if "*" in name:
+                raise PhabfiveConfigException(
+                    f"Wildcards not allowed in project names for task creation: '{name}'"
+                )
+
+            name_lower = name.lower()
+            if name_lower in name_to_phid:
+                phids.append(name_to_phid[name_lower])
+                slugs.append(name_to_slug[name_lower])
+            else:
+                not_found.append(name)
+
+        if not_found:
+            raise PhabfiveConfigException(
+                f"Project(s) not found: {', '.join(not_found)}"
+            )
+
+        return {"phids": phids, "slugs": slugs}
+
     def parse_status_patterns_with_api(self, patterns_str):
         """
         Parse status patterns with API-fetched status ordering.
@@ -2608,6 +2890,146 @@ class Maniphest(Phabfive):
 
         # Always start with a blank parent
         recurse_commit_transactions(parsed_root_data, None)
+
+    def create_task_cli(
+        self,
+        title,
+        description=None,
+        tags=None,
+        assignee=None,
+        status=None,
+        priority=None,
+        subscribers=None,
+        dry_run=False,
+    ):
+        """
+        Create a single Maniphest task from CLI arguments.
+
+        Parameters
+        ----------
+        title : str
+            Task title (required)
+        description : str, optional
+            Task description
+        tags : list, optional
+            List of project names/tags (may contain plus-separated values)
+        assignee : str, optional
+            Username of the assignee
+        status : str, optional
+            Task status (Open, Resolved, etc.)
+        priority : str, optional
+            Task priority (Unbreak, Triage, High, Normal, Low, Wish)
+        subscribers : list, optional
+            List of subscriber usernames (may contain plus-separated values)
+        dry_run : bool
+            If True, validate and display without creating
+
+        Returns
+        -------
+        dict or None
+            Task info dict with 'phid', 'id', 'uri' keys, or None if dry_run
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If validation fails (invalid priority, status, user not found, etc.)
+        PhabfiveRemoteException
+            If API call fails
+        """
+        # Parse plus-separated values (supports both repeat option and plus syntax)
+        parsed_tags = self._parse_plus_separated(tags) if tags else []
+        parsed_subscribers = self._parse_plus_separated(subscribers) if subscribers else []
+
+        # Build transactions list
+        transactions = []
+
+        # Title is required
+        transactions.append({"type": "title", "value": title})
+
+        # Description is optional
+        if description:
+            transactions.append({"type": "description", "value": description})
+
+        # Validate and resolve priority
+        if priority:
+            validated_priority = self._validate_priority(priority)
+            transactions.append({"type": "priority", "value": validated_priority})
+
+        # Validate and resolve status
+        if status:
+            validated_status = self._validate_status(status)
+            transactions.append({"type": "status", "value": validated_status})
+
+        # Resolve assignee username to PHID
+        if assignee:
+            assignee_phid = self._resolve_user_phid(assignee)
+            if not assignee_phid:
+                raise PhabfiveConfigException(
+                    f"User '{assignee}' not found on Phabricator"
+                )
+            transactions.append({"type": "owner", "value": assignee_phid})
+
+        # Resolve project tags to PHIDs and slugs
+        project_slugs = []
+        if parsed_tags:
+            project_info = self._resolve_project_phids_for_create(parsed_tags)
+            if project_info["phids"]:
+                transactions.append(
+                    {"type": "projects.set", "value": project_info["phids"]}
+                )
+                project_slugs = project_info["slugs"]
+
+        # Resolve subscriber usernames to PHIDs
+        if parsed_subscribers:
+            subscriber_phids = self._resolve_user_phids(parsed_subscribers)
+            if subscriber_phids:
+                transactions.append(
+                    {"type": "subscribers.set", "value": subscriber_phids}
+                )
+
+        # Dry run - display what would be created
+        if dry_run:
+            log.info("Dry run mode - task would be created with these transactions:")
+            print("\n--- DRY RUN ---")
+            print(f"Title: {title}")
+            if description:
+                print(f"Description: {description}")
+            if priority:
+                print(f"Priority: {priority}")
+            if status:
+                print(f"Status: {status}")
+            if assignee:
+                print(f"Assignee: {assignee}")
+            if parsed_tags:
+                print(f"Tags: {', '.join(parsed_tags)}")
+            if parsed_subscribers:
+                print(f"Subscribers: {', '.join(parsed_subscribers)}")
+            print("--- END DRY RUN ---\n")
+            return None
+
+        # Create the task via API
+        try:
+            result = self.phab.maniphest.edit(transactions=transactions)
+            task_object = result["object"]
+
+            # Fetch the task to get the URI
+            task_id = task_object["id"]
+            _, task_info = self.info(task_id)
+            task_uri = task_info.get("uri", f"{self.url}T{task_id}")
+
+            # Extract base URL from task URI for building tag URLs
+            # e.g., "http://phorge.domain.tld/T5" -> "http://phorge.domain.tld"
+            base_url = task_uri.rsplit("/", 1)[0] if "/" in task_uri else self.url
+
+            return {
+                "phid": task_object["phid"],
+                "id": task_id,
+                "uri": task_uri,
+                "tag_slugs": project_slugs,
+                "base_url": base_url,
+            }
+        except Exception as e:
+            raise PhabfiveRemoteException(f"Failed to create task: {e}")
 
 
 def days_to_unix(days):
