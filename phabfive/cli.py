@@ -108,7 +108,7 @@ Options:
 
 sub_maniphest_base_args = """
 Usage:
-    phabfive maniphest comment add <ticket_id> <comment> [options]
+    phabfive maniphest comment <ticket_id> <comment> [options]
     phabfive maniphest show <ticket_id> [options]
     phabfive maniphest create <config-file> [options]
     phabfive maniphest search <project_name> [options]
@@ -144,7 +144,7 @@ Options:
 
 sub_maniphest_comment_args = """
 Usage:
-    phabfive maniphest comment add <ticket_id> <comment> [options]
+    phabfive maniphest comment <ticket_id> <comment> [options]
 
 Arguments:
     <ticket_id>          Task ID (e.g., T123)
@@ -280,14 +280,22 @@ def parse_cli():
         elif app == "user":
             argv = [app, "whoami"] + argv
         elif app == "maniphest":
-            argv = [app, "show"] + argv
+            if len(argv) > 1:  # Extra args = comment text
+                # T123 'my comment' -> maniphest comment T123 'my comment'
+                argv = [app, "comment"] + argv
+            else:
+                # T123 -> maniphest show T123
+                argv = [app, "show"] + argv
 
         cli_args["<args>"] = [monogram]
         cli_args["<command>"] = app
 
-        # For maniphest shortcuts, use the show command
+        # For maniphest shortcuts, use the appropriate docopt schema
         if app == "maniphest":
-            sub_args = docopt(sub_maniphest_show_args, argv=argv)
+            if "comment" in argv:
+                sub_args = docopt(sub_maniphest_comment_args, argv=argv)
+            else:
+                sub_args = docopt(sub_maniphest_show_args, argv=argv)
         else:
             sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)  # nosec-B307
     elif cli_args["<command>"] == "passphrase":
@@ -546,7 +554,7 @@ def run(cli_args, sub_args):
                     dry_run=sub_args["--dry-run"],
                 )
 
-            if sub_args.get("comment") and sub_args.get("add"):
+            if sub_args.get("comment"):
                 result = maniphest_app.add_comment(
                     sub_args["<ticket_id>"],
                     sub_args["<comment>"],
@@ -555,9 +563,7 @@ def run(cli_args, sub_args):
                 if result[0]:
                     # Query the ticket to fetch the URI for it
                     _, ticket = maniphest_app.info(int(sub_args["<ticket_id>"][1:]))
-
-                    print("Comment successfully added")
-                    print("Ticket URI: {0}".format(ticket["uri"]))
+                    print(ticket["uri"])
 
             if sub_args.get("show"):
                 # Use new unified task_show() method
