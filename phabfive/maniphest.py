@@ -210,6 +210,7 @@ class Maniphest(Phabfive):
         need_columns=False,
         need_priority=False,
         need_status=False,
+        need_assignee=False,
         need_comments=False,
     ):
         """
@@ -231,23 +232,25 @@ class Maniphest(Phabfive):
             Whether to fetch and parse priority transitions
         need_status : bool
             Whether to fetch and parse status transitions
+        need_assignee : bool
+            Whether to fetch and parse assignee transitions
         need_comments : bool
             Whether to fetch and parse comments
 
         Returns
         -------
         dict
-            Dictionary with keys 'columns', 'priority', 'status', 'comments',
+            Dictionary with keys 'columns', 'priority', 'status', 'assignee', 'comments'
             each containing a list of transaction dicts with keys:
             - oldValue: previous value (format depends on transaction type)
             - newValue: new value (format depends on transaction type)
             - dateCreated: timestamp (int)
             For comments: authorPHID, text, dateCreated
         """
-        result_dict = {"columns": [], "priority": [], "status": [], "comments": []}
+        result_dict = {"columns": [], "priority": [], "status": [], "assignee": [], "comments": []}
 
         # Early return if nothing requested
-        if not (need_columns or need_priority or need_status or need_comments):
+        if not (need_columns or need_priority or need_status or need_assignee or need_comments):
             return result_dict
 
         try:
@@ -340,6 +343,18 @@ class Maniphest(Phabfive):
                     }
                     result_dict["status"].append(transformed)
 
+                # Process assignee transitions
+                elif need_assignee and trans_type in ["reassign", "core:owner"]:
+                    old_value = trans.get("oldValue")
+                    new_value = trans.get("newValue")
+
+                    transformed = {
+                        "oldValue": old_value,  # User PHID or None
+                        "newValue": new_value,  # User PHID or None
+                        "dateCreated": int(trans.get("dateCreated", 0)),
+                    }
+                    result_dict["assignee"].append(transformed)
+
                 # Process comments
                 elif need_comments and trans_type == "core:comment":
                     comment_text = trans.get("comments", "")
@@ -357,6 +372,7 @@ class Maniphest(Phabfive):
                 f"{len(result_dict['columns'])} column, "
                 f"{len(result_dict['priority'])} priority, "
                 f"{len(result_dict['status'])} status, "
+                f"{len(result_dict['assignee'])} assignee, "
                 f"{len(result_dict['comments'])} comments"
             )
 
@@ -1487,6 +1503,63 @@ class Maniphest(Phabfive):
 
         return transitions
 
+    def _build_assignee_transitions(self, assignee_transactions):
+        """
+        Build assignee transition history data for a task.
+
+        Parameters
+        ----------
+        assignee_transactions : list
+            List of assignee change transactions
+
+        Returns
+        -------
+        list
+            List of formatted transition strings
+        """
+        if not assignee_transactions:
+            return []
+
+        # Collect all user PHIDs that need resolution
+        user_phids = set()
+        for trans in assignee_transactions:
+            if trans.get("oldValue"):
+                user_phids.add(trans["oldValue"])
+            if trans.get("newValue"):
+                user_phids.add(trans["newValue"])
+
+        # Resolve PHIDs to usernames
+        user_map = {}
+        if user_phids:
+            result = self.phab.user.search(constraints={"phids": list(user_phids)})
+            user_map = {
+                u["phid"]: u["fields"]["username"] for u in result.get("data", [])
+            }
+
+        # Sort transitions chronologically (oldest first)
+        sorted_transactions = sorted(
+            assignee_transactions, key=lambda t: t.get("dateCreated", 0)
+        )
+
+        transitions = []
+        for trans in sorted_transactions:
+            old_value = trans.get("oldValue")
+            new_value = trans.get("newValue")
+            date_created = trans.get("dateCreated")
+
+            # Format timestamp
+            timestamp_str = (
+                format_timestamp(date_created) if date_created else "Unknown"
+            )
+
+            # Resolve usernames
+            old_name = user_map.get(old_value, "(none)") if old_value else "(none)"
+            new_name = user_map.get(new_value, "(none)") if new_value else "(none)"
+
+            transitions.append(f"{timestamp_str} [•] {old_name} → {new_name}")
+
+        return transitions
+
     def _build_column_transitions(self, transactions, column_info):
         """
         Build transition history data for a task.
@@ -1607,9 +1680,10 @@ class Maniphest(Phabfive):
         priority_transitions_map,
         task_transitions_map,
         status_transitions_map,
+        assignee_transitions_map=None,
     ):
         """
-        Build History section dict with priority, status, and board transitions.
+        Build History section dict with assignee, priority, status, and board transitions.
 
         Parameters
         ----------
@@ -1625,6 +1699,8 @@ class Maniphest(Phabfive):
             Mapping of task ID to board transitions
         status_transitions_map : dict
             Mapping of task ID to status transitions
+        assignee_transitions_map : dict, optional
+            Mapping of task ID to assignee transitions
 
         Returns
         -------
@@ -1632,6 +1708,15 @@ class Maniphest(Phabfive):
             History section data
         """
         history = {}
+
+        if assignee_transitions_map is None:
+            assignee_transitions_map = {}
+
+        # Build assignee transitions
+        if task_id in assignee_transitions_map:
+            assignee_trans = assignee_transitions_map[task_id]
+            if assignee_trans:
+                history["Assignee"] = self._build_assignee_transitions(assignee_trans)
 
         # Build priority transitions
         if task_id in priority_transitions_map:
@@ -1745,6 +1830,7 @@ class Maniphest(Phabfive):
         task_transitions_map=None,
         priority_transitions_map=None,
         status_transitions_map=None,
+        assignee_transitions_map=None,
         comments_map=None,
         matching_boards_map=None,
         matching_priority_map=None,
@@ -1769,6 +1855,8 @@ class Maniphest(Phabfive):
             Mapping of task ID to priority transitions
         status_transitions_map : dict, optional
             Mapping of task ID to status transitions
+        assignee_transitions_map : dict, optional
+            Mapping of task ID to assignee transitions
         comments_map : dict, optional
             Mapping of task ID to comments list
         matching_boards_map : dict, optional
@@ -1791,6 +1879,8 @@ class Maniphest(Phabfive):
             priority_transitions_map = {}
         if status_transitions_map is None:
             status_transitions_map = {}
+        if assignee_transitions_map is None:
+            assignee_transitions_map = {}
         if comments_map is None:
             comments_map = {}
         if matching_boards_map is None:
@@ -1802,6 +1892,20 @@ class Maniphest(Phabfive):
 
         # Fetch project names for board display (always needed for nested format)
         project_phid_to_name = self._fetch_project_names_for_boards(result_data)
+
+        # Collect and resolve owner PHIDs to usernames
+        owner_phids = set()
+        for item in result_data:
+            owner_phid = item.get("fields", {}).get("ownerPHID")
+            if owner_phid:
+                owner_phids.add(owner_phid)
+
+        owner_map = {}
+        if owner_phids:
+            user_result = self.phab.user.search(constraints={"phids": list(owner_phids)})
+            owner_map = {
+                u["phid"]: u["fields"]["username"] for u in user_result.get("data", [])
+            }
 
         # Build YAML data structure
         tasks_list = []
@@ -1823,6 +1927,13 @@ class Maniphest(Phabfive):
 
             # Priority
             task_data["Priority"] = fields.get("priority", {}).get("name", "Unknown")
+
+            # Assignee
+            owner_phid = fields.get("ownerPHID")
+            if owner_phid:
+                task_data["Assignee"] = owner_map.get(owner_phid, owner_phid)
+            else:
+                task_data["Assignee"] = "(none)"
 
             # Dates
             if fields.get("dateCreated"):
@@ -1870,6 +1981,7 @@ class Maniphest(Phabfive):
                     priority_transitions_map,
                     task_transitions_map,
                     status_transitions_map,
+                    assignee_transitions_map,
                 )
                 if history_data:
                     task_dict["History"] = history_data
@@ -1926,10 +2038,11 @@ class Maniphest(Phabfive):
             log.error(f"Task T{task_id} not found")
             return
 
-        # Initialize maps for storing transitions and comments
+        # Initialize maps for storing transitions, assignee, and comments history
         task_transitions_map = {}
         priority_transitions_map = {}
         status_transitions_map = {}
+        assignee_transitions_map = {}
         comments_map = {}
 
         # Fetch transaction data if any transaction-based info is requested
@@ -1937,12 +2050,13 @@ class Maniphest(Phabfive):
             task_phid = result_data[0].get("phid")
             if task_phid:
                 log.info(f"Fetching transaction data for T{task_id}")
-                # Fetch all transaction types in a single API call
+                # Fetch all relevant transaction types in a single API call
                 all_fetched_transactions = self._fetch_all_transactions(
                     task_phid,
                     need_columns=show_history,
                     need_priority=show_history,
                     need_status=show_history,
+                    need_assignee=show_history,
                     need_comments=show_comments,
                 )
                 # Store transactions for history display
@@ -1954,6 +2068,10 @@ class Maniphest(Phabfive):
                     ]
                 if all_fetched_transactions.get("status"):
                     status_transitions_map[task_id] = all_fetched_transactions["status"]
+                if all_fetched_transactions.get("assignee"):
+                    assignee_transitions_map[task_id] = all_fetched_transactions[
+                        "assignee"
+                    ]
                 if all_fetched_transactions.get("comments"):
                     comments_map[task_id] = all_fetched_transactions["comments"]
 
@@ -1963,6 +2081,7 @@ class Maniphest(Phabfive):
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
             status_transitions_map=status_transitions_map,
+            assignee_transitions_map=assignee_transitions_map,
             comments_map=comments_map,
             show_history=show_history,
             show_metadata=show_metadata,
