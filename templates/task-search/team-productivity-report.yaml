@@ -1,0 +1,35 @@
+# Team productivity report - analyze work patterns and throughput
+
+title: "📊 Work Created This Week"
+description: "New tasks and incoming work volume"
+search:
+  created-after: 7
+  tag: "*"
+  show-metadata: true
+
+---
+title: "🎯 Work Completed This Week"
+description: "Task completion and throughput"
+search:
+  status: "in:Resolved"
+  updated-after: 7
+  tag: "*"
+  show-history: false
+
+---
+title: "🔥 High Priority Workload"
+description: "Current high-priority task distribution"
+search:
+  priority: "in:High,in:Unbreak Now!,in:Triage"
+  status: "in:Open"
+  tag: "*"
+  show-metadata: true
+
+---
+title: "⌛ Long-Running Tasks"
+description: "Tasks that have been open for a while"
+search:
+  created-after: 60
+  status: "in:Open"
+  tag: "*"
+  show-metadata: true

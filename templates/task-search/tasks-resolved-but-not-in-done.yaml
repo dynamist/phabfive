@@ -1,0 +1,19 @@
+# Find tasks that are marked as resolved but haven't been moved to the Done column
+# This is useful for identifying tasks that need to be properly closed in workboards
+
+search:
+  tag: "dynatron"
+  status: "in:Resolved,in:Duplicate"
+  column: "not:in:Done"
+  show-history: true
+
+description: |
+  This template finds tasks that are technically resolved but still sitting
+  in active columns on workboards. These tasks should typically be moved to
+  a "Done" or similar completion column to keep boards clean.
+
+  Example usage:
+    phabfive maniphest search --with templates/task-search/tasks-resolved-but-not-in-done.yaml
+
+  You can override any parameter from the command line:
+    phabfive maniphest search --with templates/task-search/tasks-resolved-but-not-in-done.yaml --tag "other-project"

@@ -6,12 +6,12 @@ The Maniphest CLI provides powerful commands for managing tasks in Phabricator/P
 
 Maniphest is Phabricator's task tracking application. The phabfive CLI allows you to:
 
-- Search and filter tasks with advanced criteria
+- Search and filter tasks with advanced filtering
+- Use [task search templates](./search-templates.md) for complex, reusable queries
+- Use [task creation templates](./create-templates.md) for bulk task creation with relationships
 - Add comments to tasks
-- View task details
-- Create tasks in bulk from configuration files
-- **Track and filter tasks by their workboard column transitions**
-- **Track and filter tasks by their priority transitions**
+- Track and filter tasks by their workboard column transitions
+- Track and filter tasks by their priority transitions
 
 ## Basic Commands
 
@@ -62,18 +62,77 @@ The command will output the task URI after successfully adding the comment.
 
 ### Create Tasks from Templates
 
-Create multiple tasks in bulk using a YAML configuration file:
+Create multiple related tasks in bulk using YAML configuration files. Task creation templates support:
+
+- **Hierarchical structures**: Create epics with subtasks automatically linked
+- **Variable substitution**: Use Jinja2 templating for dynamic content
+- **Task relationships**: Define dependencies and parent-child relationships
+- **Team assignments**: Assign tasks to users and add subscribers
+- **Project association**: Automatically tag tasks with relevant projects
 
 ```bash
-phabfive maniphest create tasks.yaml
+# Always preview first (recommended)
+phabfive maniphest create templates/task-create/project-setup.yaml --dry-run
 
-# Preview without creating
-phabfive maniphest create tasks.yaml --dry-run
+# Create tasks for real
+phabfive maniphest create templates/task-create/project-setup.yaml
+
+# Debug complex templates
+phabfive --log-level=DEBUG maniphest create templates/task-create/sprint-planning.yaml --dry-run
 ```
+
+**Example template structure:**
+```yaml
+variables:
+  project: "Mobile Redesign"
+  tech_lead: "alice"
+
+tasks:
+  - title: "[EPIC] {{ project }}"
+    description: "Main epic for {{ project }} project"
+    projects: ["{{ project }}", "Design Team"]
+    assignment: "{{ tech_lead }}"
+
+    tasks:  # Nested subtasks
+      - title: "User research"
+        description: "Conduct user interviews"
+        projects: ["{{ project }}", "UX Research"]
+```
+
+**Benefits of creation templates:**
+- **Reproducible**: Same task structure every time
+- **Relationship management**: Automatic linking of related tasks
+- **Team coordination**: Consistent assignments and project tagging
+- **Scalable**: Handle complex project hierarchies easily
+
+For complete documentation on creating and using task templates, see [Task Creation Templates](create-templates.md).
 
 ## Task Search
 
 Search for tasks using free-text queries and various filtering options, including advanced project pattern matching with AND/OR logic.
+
+### Using Search Templates
+
+For complex or frequently-used searches, you can use YAML templates that pre-define search parameters:
+
+```bash
+# Use a search template
+phabfive maniphest search --with templates/task-search/high-priority-stale-tasks.yaml
+
+# Use multi-document templates for comprehensive reports
+phabfive maniphest search --with templates/task-search/project-status-overview.yaml
+
+# Override template parameters from command line
+phabfive maniphest search --with templates/task-search/blocked-tasks.yaml --tag "my-project"
+```
+
+**Benefits of search templates:**
+- **Reusable**: Save complex search patterns for repeated use
+- **Shareable**: Team members can use the same search criteria
+- **Multi-document**: Run multiple related searches in sequence
+- **Override-friendly**: Command-line parameters override template values
+
+For complete documentation on search templates, see [Search Templates](search-templates.md).
 
 ### Free-Text Search
 
@@ -806,6 +865,13 @@ This helps you understand exactly why a task appeared in your search results.
 
 ## Real-World Workflows
 
+**💡 Tip**: Many of these common workflows are available as pre-built search templates in `templates/task-search/`. For example:
+- `project-status-overview.yaml` - Comprehensive project health check
+- `development-workflow-audit.yaml` - Development process analysis
+- `blocked-tasks.yaml` - Find workflow bottlenecks
+
+See [Search Templates](search-templates.md) for the complete list.
+
 ### Finding Tasks That Got Stuck
 
 Identify tasks that moved backward from completion:
@@ -877,6 +943,29 @@ If a filter pattern doesn't return expected results:
 3. Verify column names match exactly (case-sensitive)
 4. Start with simple patterns and add complexity incrementally
 
+### Using Search Templates for Complex Queries
+
+For frequently-used complex searches, consider creating YAML search templates:
+
+```bash
+# Save complex searches in templates/task-search/ for reuse
+phabfive maniphest search --with templates/task-search/project-status-overview.yaml
+
+# Team members can share the same search criteria
+phabfive maniphest search --with templates/task-search/development-workflow-audit.yaml
+
+# Override specific parameters while keeping the rest
+phabfive maniphest search --with templates/task-search/blocked-tasks.yaml --tag "urgent-project"
+```
+
+**Advantages:**
+- **Reproducible**: Same results every time
+- **Shareable**: Team-wide standardized searches
+- **Documentable**: Include descriptions explaining what each search does
+- **Multi-query**: Run several related searches in sequence
+
+For details on creating and using search templates, see [Search Templates](search-templates.md).
+
 ### Common Pattern Combinations
 
 ```bash
@@ -912,5 +1001,7 @@ The search returned no results. Try:
 
 ## See Also
 
+- [Search Templates](search-templates.md) - Complete guide to YAML search templates
+- [Creation Templates](create-templates.md) - Complete guide to YAML task creation templates
 - [Development Guide](development.md) - Set up a local development environment
 - [Phorge Setup](phorge-setup.md) - Run a local Phorge instance for testing

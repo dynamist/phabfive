@@ -1,0 +1,20 @@
+# Find tasks that are currently blocked or have been in blocking states
+# Useful for identifying workflow bottlenecks
+
+search:
+  column: "in:Blocked,been:Waiting,been:Blocked"
+  show-history: true
+
+description: |
+  This template finds tasks that are currently blocked or have spent time
+  in blocking states. This can help identify workflow bottlenecks and
+  understand where work gets stuck.
+
+  The search looks for tasks currently in "Blocked" columns or that have
+  previously been in "Waiting" or "Blocked" states.
+
+  Example usage:
+    phabfive maniphest search --with templates/task-search/blocked-tasks.yaml
+
+  Combine with specific projects:
+    phabfive maniphest search --with templates/task-search/blocked-tasks.yaml --tag "my-project"

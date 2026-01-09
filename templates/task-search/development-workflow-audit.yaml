@@ -1,0 +1,33 @@
+# Development workflow audit - check various stages of the development process
+
+title: "🔄 Tasks Ready for Review"
+description: "Work that needs review attention"
+search:
+  column: "in:Review,in:Code Review,in:QA"
+  created-after: 14
+  show-history: true
+
+---
+title: "⚡ Fast-Moving Tasks"
+description: "Tasks that moved through multiple columns recently"
+search:
+  column: "forward"
+  updated-after: 3
+  show-history: true
+  show-metadata: true
+
+---
+title: "⏪ Tasks Moving Backward"
+description: "Work that may have encountered issues"
+search:
+  column: "backward"
+  updated-after: 7
+  show-history: true
+
+---
+title: "🏁 Tasks Resolved But Not in Done"
+description: "Cleanup needed - resolved tasks still on active boards"
+search:
+  status: "in:Resolved,in:Duplicate"
+  column: "not:in:Done"
+  show-history: false

@@ -11,7 +11,7 @@
 # - Project named IA
 #
 # After they exists, this file can be run with the command during development
-# phabfive --log-level=DEBUG --dry-run maniphest create test-template-v2.yml
+# phabfive --log-level=DEBUG maniphest create templates/task-create/test-template-v2.yml --dry-run
 # Where you remove --dry-run when you want to commit the changes
 ---
 variables:

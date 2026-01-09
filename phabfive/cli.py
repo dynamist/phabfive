@@ -163,6 +163,8 @@ Arguments:
                          If omitted, you must provide at least one filter option.
 
 Options:
+    --with=<yaml_file>     Load search parameters from a YAML template file.
+                          Command-line options will override YAML values.
     --tag=PATTERN          Filter by project/workboard tag (supports OR/AND logic and wildcards).
                           Supports: "*" (all projects), "prefix*" (starts with),
                           "*suffix" (ends with), "*contains*" (contains text).
@@ -229,6 +231,10 @@ Examples:
 
     # Combined search
     phabfive maniphest search OpenStack --tag System-Board --updated-after 7
+
+    # Using YAML templates
+    phabfive maniphest search --with templates/task-search/tasks-resolved-but-not-in-done.yaml
+    phabfive maniphest search --with templates/task-search/search-template.yaml --tag Override-Project
 
     # Requires at least one filter (text, tag, date, column, priority, or status)
     phabfive maniphest search  # ERROR: not specific enough
@@ -474,70 +480,115 @@ def run(cli_args, sub_args):
             maniphest_app = maniphest.Maniphest()
 
             if sub_args.get("search"):
-                # Parse filter patterns if provided
-                transition_patterns = None
-                if sub_args.get("--column"):
+                # Load YAML configurations if --with is provided
+                search_configs = []
+                if sub_args.get("--with"):
                     try:
-                        transition_patterns = parse_transition_patterns(
-                            sub_args["--column"]
+                        search_configs = maniphest_app._load_search_from_yaml(
+                            sub_args["--with"]
                         )
                     except Exception as e:
                         print(
-                            f"ERROR: Invalid column filter pattern: {e}",
+                            f"ERROR: Failed to load YAML file: {e}",
                             file=sys.stderr,
                         )
                         retcode = 1
                         return retcode
+                else:
+                    # Create a single search config from CLI parameters
+                    search_configs = [{
+                        'search': {},
+                        'title': 'Command Line Search',
+                        'description': None
+                    }]
 
-                priority_patterns = None
-                if sub_args.get("--priority"):
-                    try:
-                        priority_patterns = parse_priority_patterns(
-                            sub_args["--priority"]
-                        )
-                    except Exception as e:
-                        print(
-                            f"ERROR: Invalid priority filter pattern: {e}",
-                            file=sys.stderr,
-                        )
-                        retcode = 1
-                        return retcode
+                # Helper function to get value with CLI override priority
+                def get_param(cli_key, yaml_params, yaml_key=None, default=None):
+                    if yaml_key is None:
+                        yaml_key = cli_key.lstrip('-')
 
-                status_patterns = None
-                if sub_args.get("--status"):
-                    try:
-                        # Parse status patterns with API-fetched status ordering
-                        status_patterns = maniphest_app.parse_status_patterns_with_api(
-                            sub_args["--status"]
-                        )
-                    except Exception as e:
-                        print(
-                            f"ERROR: Invalid status filter pattern: {e}",
-                            file=sys.stderr,
-                        )
-                        retcode = 1
-                        return retcode
+                    # CLI takes precedence over YAML
+                    cli_value = sub_args.get(cli_key)
+                    if cli_value is not None:
+                        return cli_value
 
-                # Only show history if explicitly requested
-                show_history = sub_args.get("--show-history", False)
+                    # Fall back to YAML, then default
+                    return yaml_params.get(yaml_key, default)
 
-                show_metadata = sub_args.get("--show-metadata", False)
+                # Execute each search configuration
+                for i, config in enumerate(search_configs):
+                    yaml_params = config['search']
 
-                # Extract text query and tag (both are optional now)
-                text_query = sub_args.get("<text_query>")  # May be None
-                tag = sub_args.get("--tag")  # May be None
+                    # Print search header if multiple searches or if title/description provided
+                    if len(search_configs) > 1 or config['title'] != 'Command Line Search':
+                        print(f"\n{'=' * 60}")
+                        print(f"🔍 {config['title']}")
+                        if config['description']:
+                            print(f"📝 {config['description']}")
+                        print(f"{'=' * 60}")
 
-                maniphest_app.task_search(
-                    text_query=text_query,
-                    tag=tag,
-                    created_after=sub_args["--created-after"],
-                    updated_after=sub_args["--updated-after"],
-                    transition_patterns=transition_patterns,
-                    priority_patterns=priority_patterns,
-                    status_patterns=status_patterns,
-                    show_history=show_history,
-                    show_metadata=show_metadata,
-                )
+                    # Parse filter patterns with CLI override priority
+                    transition_patterns = None
+                    column_pattern = get_param("--column", yaml_params, "column")
+                    if column_pattern:
+                        try:
+                            transition_patterns = parse_transition_patterns(column_pattern)
+                        except Exception as e:
+                            print(
+                                f"ERROR: Invalid column filter pattern in {config['title']}: {e}",
+                                file=sys.stderr,
+                            )
+                            retcode = 1
+                            return retcode
+
+                    priority_patterns = None
+                    priority_pattern = get_param("--priority", yaml_params, "priority")
+                    if priority_pattern:
+                        try:
+                            priority_patterns = parse_priority_patterns(priority_pattern)
+                        except Exception as e:
+                            print(
+                                f"ERROR: Invalid priority filter pattern in {config['title']}: {e}",
+                                file=sys.stderr,
+                            )
+                            retcode = 1
+                            return retcode
+
+                    status_patterns = None
+                    status_pattern = get_param("--status", yaml_params, "status")
+                    if status_pattern:
+                        try:
+                            # Parse status patterns with API-fetched status ordering
+                            status_patterns = maniphest_app.parse_status_patterns_with_api(
+                                status_pattern
+                            )
+                        except Exception as e:
+                            print(
+                                f"ERROR: Invalid status filter pattern in {config['title']}: {e}",
+                                file=sys.stderr,
+                            )
+                            retcode = 1
+                            return retcode
+
+                    # Get other parameters with CLI override priority
+                    show_history = get_param("--show-history", yaml_params, "show-history", False)
+                    show_metadata = get_param("--show-metadata", yaml_params, "show-metadata", False)
+                    text_query = get_param("<text_query>", yaml_params, "text_query")
+                    tag = get_param("--tag", yaml_params, "tag")
+                    created_after = get_param("--created-after", yaml_params, "created-after")
+                    updated_after = get_param("--updated-after", yaml_params, "updated-after")
+
+                    maniphest_app.task_search(
+                        text_query=text_query,
+                        tag=tag,
+                        created_after=created_after,
+                        updated_after=updated_after,
+                        transition_patterns=transition_patterns,
+                        priority_patterns=priority_patterns,
+                        status_patterns=status_patterns,
+                        show_history=show_history,
+                        show_metadata=show_metadata,
+                    )
 
             if sub_args.get("create"):
                 # This part is responsible for bulk creating several tickets at once

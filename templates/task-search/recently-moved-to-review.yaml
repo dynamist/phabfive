@@ -1,0 +1,21 @@
+# Find tasks that were recently moved to review columns
+# Useful for tracking work that needs review attention
+
+search:
+  column: "to:Review,to:Code Review,to:QA"
+  created-after: 7
+  show-history: true
+
+description: |
+  This template finds tasks that have been moved to review-related columns
+  in the past week. Useful for managers or reviewers to see what needs
+  attention.
+
+  The search looks for tasks moved to various review columns and shows
+  the transition history to understand the workflow.
+
+  Example usage:
+    phabfive maniphest search --with templates/task-search/recently-moved-to-review.yaml
+
+  Look further back:
+    phabfive maniphest search --with templates/task-search/recently-moved-to-review.yaml --created-after 14
