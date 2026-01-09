@@ -110,7 +110,7 @@ sub_maniphest_base_args = """
 Usage:
     phabfive maniphest comment add <ticket_id> <comment> [options]
     phabfive maniphest show <ticket_id> [options]
-    phabfive maniphest create <config-file> [options]
+    phabfive maniphest create --with TEMPLATE [options]
     phabfive maniphest search <project_name> [options]
 
 Options:
@@ -132,14 +132,16 @@ Options:
 
 sub_maniphest_create_args = """
 Usage:
-    phabfive maniphest create <config-file> [--dry-run] [options]
-
-Arguments:
-    <config-file>        Path to YAML configuration file
+    phabfive maniphest create --with TEMPLATE [--dry-run] [options]
 
 Options:
+    --with=TEMPLATE      Load task creation template from YAML file
     --dry-run            Does everything except commiting the tickets
     -h, --help           Show this help message and exit
+
+Examples:
+    phabfive maniphest create --with templates/task-create/project-setup.yaml
+    phabfive maniphest create --with templates/task-create/sprint-planning.yaml --dry-run
 """
 
 sub_maniphest_comment_args = """
@@ -592,8 +594,17 @@ def run(cli_args, sub_args):
 
             if sub_args.get("create"):
                 # This part is responsible for bulk creating several tickets at once
+
+                # Get config file from --with option
+                create_config = sub_args.get("--with")
+
+                if not create_config:
+                    print("ERROR: Must specify --with TEMPLATE", file=sys.stderr)
+                    retcode = 1
+                    return retcode
+
                 maniphest_app.create_from_config(
-                    sub_args["<config-file>"],
+                    create_config,
                     dry_run=sub_args["--dry-run"],
                 )
 
