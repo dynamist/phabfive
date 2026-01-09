@@ -1571,14 +1571,14 @@ class Maniphest(Phabfive):
             show_metadata=show_metadata,
         )
 
-    def _load_search_from_yaml(self, yaml_file_path):
+    def _load_search_from_yaml(self, template_path):
         """
         Load search parameters from a YAML file (supports multi-document).
 
         Parameters
         ----------
-        yaml_file_path : str
-            Path to the YAML file containing search parameters
+        template_path : str
+            Path to the YAML template file containing search parameters
 
         Returns
         -------
@@ -1589,26 +1589,26 @@ class Maniphest(Phabfive):
         Raises
         ------
         PhabfiveException
-            If the YAML file is invalid or contains unsupported parameters
+            If the template file is invalid or contains unsupported parameters
         """
-        yaml_path = Path(yaml_file_path)
+        template_file = Path(template_path)
 
-        if not yaml_path.exists():
-            raise PhabfiveException(f"YAML file not found: {yaml_file_path}")
+        if not template_file.exists():
+            raise PhabfiveException(f"Template file not found: {template_path}")
 
-        if not yaml_path.is_file():
-            raise PhabfiveException(f"Path is not a file: {yaml_file_path}")
+        if not template_file.is_file():
+            raise PhabfiveException(f"Path is not a file: {template_path}")
 
         try:
-            with open(yaml_path, 'r', encoding='utf-8') as f:
+            with open(template_file, 'r', encoding='utf-8') as f:
                 yaml_loader = YAML()
                 # Load all documents from the YAML file
                 documents = list(yaml_loader.load_all(f))
         except Exception as e:
-            raise PhabfiveException(f"Failed to parse YAML file {yaml_file_path}: {e}")
+            raise PhabfiveException(f"Failed to parse template file {template_path}: {e}")
 
         if not documents:
-            raise PhabfiveException("YAML file contains no documents")
+            raise PhabfiveException("Template file contains no documents")
 
         search_configs = []
         supported_params = {
@@ -1644,7 +1644,7 @@ class Maniphest(Phabfive):
             }
             search_configs.append(config)
 
-        log.info(f"Loaded {len(search_configs)} search configuration(s) from {yaml_file_path}")
+        log.info(f"Loaded {len(search_configs)} search configuration(s) from {template_path}")
         for i, config in enumerate(search_configs):
             log.debug(f"Search {i + 1} parameters: {config['search']}")
 

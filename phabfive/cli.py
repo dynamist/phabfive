@@ -163,7 +163,7 @@ Arguments:
                          If omitted, you must provide at least one filter option.
 
 Options:
-    --with=<yaml_file>     Load search parameters from a YAML template file.
+    --with=TEMPLATE      Load search parameters from a YAML template file.
                           Command-line options will override YAML values.
     --tag=PATTERN          Filter by project/workboard tag (supports OR/AND logic and wildcards).
                           Supports: "*" (all projects), "prefix*" (starts with),
@@ -489,7 +489,7 @@ def run(cli_args, sub_args):
                         )
                     except Exception as e:
                         print(
-                            f"ERROR: Failed to load YAML file: {e}",
+                            f"ERROR: Failed to load template file: {e}",
                             file=sys.stderr,
                         )
                         retcode = 1
