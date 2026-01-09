@@ -1,6 +1,6 @@
 #!/bin/bash
+
 # Phorge initialization orchestrator script
-# This script coordinates all Phorge setup modules
 
 set -e
 
@@ -51,31 +51,30 @@ echo ""
 echo "================================"
 echo "Phorge Automated Setup Complete!"
 echo "================================"
-echo "Admin Username: $ADMIN_USERNAME"
-echo "Admin Email: $ADMIN_EMAIL"
-echo "API Token: $API_TOKEN"
 echo ""
-echo "Additional Users Created (RMI GUNNAR Team):"
-echo "  - mikael.wallin (Mikael Wallin - Team Lead/Scrum Master)"
-echo "  - ove.pettersson (Ove Pettersson - System Architect)"
-echo "  - viola.larsson (Viola Larsson - System Administrator)"
-echo "  - daniel.lindgren (Daniel Lindgren - DevOps Engineer)"
-echo "  - sonja.bergstrom (Sonja Bergström - Windows SharePoint Developer)"
-echo "  - gabriel.blomqvist (Gabriel Blomqvist - Windows C# Developer)"
-echo "  - sebastian.soderberg (Sebastian Söderberg - Windows C# Developer)"
-echo "  - tommy.svensson (Tommy Svensson - QA Engineer)"
+echo "👨‍💻 Username: $PHORGE_ADMIN_USER"
+echo "🔐 API Token: $PHORGE_ADMIN_TOKEN"
+echo "✉️ Email: $PHORGE_ADMIN_EMAIL"
 echo ""
-echo "Default Projects Created:"
-echo "  - GUNNAR-Core, Architecture, Infrastructure, Development"
-echo "  - QA, SharePoint, Security"
+echo "🤖 Users Created:"
+for user_data in "${FAKE_USERS[@]}"; do
+  IFS=':' read -r username email realname <<< "$user_data"
+  echo "  - ${username} (${realname})"
+done
+echo ""
+echo "🗂️ Projects Created:"
+for project_data in "${DEFAULT_PROJECTS[@]}"; do
+  IFS=':' read -r name description <<< "$project_data"
+  echo "  - ${name}"
+done
 echo ""
 if [ ! -z "$RECOVERY_LINK" ]; then
   echo "🔑 Use this one-time link to set your password:"
   echo "   $RECOVERY_LINK"
   echo ""
 fi
-echo "After setting a password, you can log in at:"
-echo "   ${PHABRICATOR_URL:-http://phorge.domain.tld}"
+echo "🌍 After setting a password, you can log in at:"
+echo "   $PHORGE_URL"
 echo ""
 echo "💡 TIP: The API token works immediately without logging in!"
 echo "================================"

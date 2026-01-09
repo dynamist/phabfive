@@ -10,7 +10,7 @@ create_projects() {
   echo "Creating default projects/workboards..."
 
   # Get admin user PHID for project creation
-  ADMIN_PHID=$(mysql_query phabricator_user "SELECT phid FROM user WHERE userName='$ADMIN_USERNAME'")
+  ADMIN_PHID=$(mysql_query phabricator_user "SELECT phid FROM user WHERE userName='$PHORGE_ADMIN_USER'")
 
   if [ -z "$ADMIN_PHID" ]; then
     echo "ERROR: Admin user not found. Run setup-users.sh first."

@@ -109,13 +109,13 @@ INSERT INTO user_externalaccount (
   'password',
   'self',
   '',
-  '$ADMIN_USERNAME',
-  '$ADMIN_REALNAME',
+  '$PHORGE_ADMIN_USER',
+  '$PHORGE_ADMIN_NAME',
   $TIMESTAMP,
   $TIMESTAMP,
-  '$ADMIN_USERNAME',
-  '$ADMIN_REALNAME',
-  '$ADMIN_EMAIL',
+  '$PHORGE_ADMIN_USER',
+  '$PHORGE_ADMIN_NAME',
+  '$PHORGE_ADMIN_EMAIL',
   1,
   '',
   '',
@@ -134,7 +134,7 @@ generate_recovery_link() {
   echo "Step 3: Generating password recovery link..."
   cd "$PHORGE_PATH"
 
-  RECOVERY_LINK=$("$PHORGE_PATH/bin/auth" recover "$ADMIN_USERNAME" 2>&1 | grep -o 'http[s]*://[^[:space:]]*' || echo "")
+  RECOVERY_LINK=$("$PHORGE_PATH/bin/auth" recover "$PHORGE_ADMIN_USER" 2>&1 | grep -o 'http[s]*://[^[:space:]]*' || echo "")
 
   # Export for use in main script
   export RECOVERY_LINK

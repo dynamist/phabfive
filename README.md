@@ -1,6 +1,6 @@
 # phabfive
 
-A command line tool to interact with Phabricator/Phorge.
+A command line tool to interact with [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https://www.phorge.it/).
 
 ## Features
 
@@ -12,7 +12,7 @@ A summary of the currently supported features:
 - **User** - Get information about the logged-in user
 - **Maniphest** - Add comments, show task details, create tasks from templates
 
-For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/en/latest/).
+For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/).
 
 ## Installation
 
@@ -31,7 +31,7 @@ uv tool install git+https://github.com/dynamist/phabfive@master
 
 If you prefer [mise-en-place](https://mise.jdx.dev/) the polyglot tool version manager:
 
-```
+```bash
 # Install mise if you haven't already
 curl https://mise.run | sh
 
