@@ -42,7 +42,18 @@ generate_recovery_link
 # Step 7: Create additional fake users
 create_fake_users
 
-# Step 8: Create default projects and workboards
+# Step 8: Set passwords if PHORGE_ADMIN_PASS is provided
+if [ ! -z "$PHORGE_ADMIN_PASS" ]; then
+  echo ""
+  echo "Setting passwords for all users..."
+  set_user_password "$PHORGE_ADMIN_USER" "$PHORGE_ADMIN_PASS"
+  for user_data in "${FAKE_USERS[@]}"; do
+    IFS=':' read -r username email realname <<< "$user_data"
+    set_user_password "$username" "$PHORGE_ADMIN_PASS"
+  done
+fi
+
+# Step 9: Create default projects and workboards
 source "${LIB_DIR}/setup-projects.sh"
 create_projects
 
@@ -53,8 +64,16 @@ echo "Phorge Automated Setup Complete!"
 echo "================================"
 echo ""
 echo "👨‍💻 Username: $PHORGE_ADMIN_USER"
+if [ ! -z "$PHORGE_ADMIN_PASS" ]; then
+  echo "🔑 Password: $PHORGE_ADMIN_PASS"
+fi
 echo "🔐 API Token: $PHORGE_ADMIN_TOKEN"
 echo "✉️ Email: $PHORGE_ADMIN_EMAIL"
+if [ ! -z "$RECOVERY_LINK" ]; then
+  echo ""
+  echo "⚡ Use this one-time link to set your password:"
+  echo "   $RECOVERY_LINK"
+fi
 echo ""
 echo "🤖 Users Created:"
 for user_data in "${FAKE_USERS[@]}"; do
@@ -68,12 +87,7 @@ for project_data in "${DEFAULT_PROJECTS[@]}"; do
   echo "  - ${name}"
 done
 echo ""
-if [ ! -z "$RECOVERY_LINK" ]; then
-  echo "🔑 Use this one-time link to set your password:"
-  echo "   $RECOVERY_LINK"
-  echo ""
-fi
-echo "🌍 After setting a password, you can log in at:"
+echo "🌍 Your new Phorge is waiting for you at:"
 echo "   $PHORGE_URL"
 echo ""
 echo "💡 TIP: The API token works immediately without logging in!"

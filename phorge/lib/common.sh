@@ -8,7 +8,8 @@ set -e
 export PHORGE_URL="${PHORGE_URL:-http://phorge.domain.tld}"
 export PHORGE_PATH="${PHORGE_PATH:-/app/phorge}"
 export PHORGE_ADMIN_USER="${PHORGE_ADMIN_USER:-admin}"
-export PHORGE_ADMIN_EMAIL="${PHORGE_ADMIN_EMAIL:-admin@example.com}"
+export PHORGE_ADMIN_PASS="${PHORGE_ADMIN_PASS:-supersecr3tpassw0rdfordevelop1}"
+export PHORGE_ADMIN_EMAIL="${PHORGE_ADMIN_EMAIL:-admin@domain.tld}"
 export PHORGE_ADMIN_NAME="${PHORGE_ADMIN_NAME:-Administrator}"
 export PHORGE_ADMIN_TOKEN="${PHORGE_ADMIN_TOKEN:-api-supersecr3tapikeyfordevelop1}"
 
@@ -60,4 +61,10 @@ mysql_query() {
   local database=$1
   local query=$2
   mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASS" "$database" -N -e "$query" 2>/dev/null || echo "0"
+}
+
+# Function to hash a password using bcrypt (PHP's password_hash)
+hash_password() {
+  local password="$1"
+  php -r "echo password_hash(\$argv[1], PASSWORD_BCRYPT);" -- "$password"
 }

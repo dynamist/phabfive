@@ -7,11 +7,12 @@ services:
       dockerfile: ./Dockerfile.phorge
     environment:
       - PHORGE_URL=http://phorge.domain.tld
-      - PHORGE_ALT_FILE_DOMAIN=http://phorge-files.domain.tld
+      - PHORGE_ALT_FILE_DOMAIN=http://cdn.domain.tld
       - PHORGE_TITLE=RMI
       - PHORGE_ADMIN_USER=admin
-      - PHORGE_ADMIN_EMAIL=admin@example.com
+      - PHORGE_ADMIN_EMAIL=admin@domain.tld
       - PHORGE_ADMIN_NAME=Administrator
+      - PHORGE_ADMIN_PASS=supersecr3tpassw0rdfordevelop1
       - PHORGE_ADMIN_TOKEN=api-supersecr3tapikeyfordevelop1
       - MYSQL_HOST=mariadb
       - MYSQL_PORT=3306
