@@ -1559,7 +1559,9 @@ class Maniphest(Phabfive):
             old_name = user_map.get(old_value, "(none)") if old_value else "(none)"
             new_name = user_map.get(new_value, "(none)") if new_value else "(none)"
 
-            transitions.append(f"{timestamp_str} [•] {old_name} → {new_name}")
+            direction = f"[{self.format_direction('•')}]"
+            arrow = self.format_direction('→')
+            transitions.append(f"{timestamp_str} {direction} {old_name} {arrow} {new_name}")
 
         return transitions
 
@@ -1938,12 +1940,14 @@ class Maniphest(Phabfive):
             # Priority
             task_data["Priority"] = fields.get("priority", {}).get("name", "Unknown")
 
-            # Assignee
+            # Assignee - store separately for direct printing (hyperlink support)
             owner_phid = fields.get("ownerPHID")
             if owner_phid:
-                task_data["Assignee"] = owner_map.get(owner_phid, owner_phid)
+                username = owner_map.get(owner_phid, owner_phid)
+                user_url = f"{self.url}/p/{username}/"
+                task_dict["_assignee"] = self.format_link(user_url, username, show_url=False)
             else:
-                task_data["Assignee"] = "(none)"
+                task_dict["_assignee"] = "(none)"
 
             # Dates
             if fields.get("dateCreated"):
@@ -2022,15 +2026,65 @@ class Maniphest(Phabfive):
             # Extract and remove internal fields
             link = task_dict.pop("_link")
             task_dict.pop("_url")
+            assignee = task_dict.pop("_assignee", None)
+
+            # Get boards for processing
+            boards = task_dict.get("Boards", {})
 
             # Print link directly (bypasses YAML escaping for hyperlinks)
             print(f"- Link: {link}")
 
-            # Print rest of task as YAML (indented to align with "- Link:")
-            yaml_output = StringIO()
-            yaml.dump(task_dict, yaml_output)
-            for line in yaml_output.getvalue().splitlines():
-                print(f"  {line}")
+            # Print Task section with Assignee handled specially
+            task_data = task_dict.get("Task", {})
+            print("  Task:")
+            for key, value in task_data.items():
+                if isinstance(value, str) and "\n" in value:
+                    # Multi-line value (like Description)
+                    print(f"    {key}: |-")
+                    for desc_line in value.splitlines():
+                        print(f"      {desc_line}")
+                elif isinstance(value, PreservedScalarString):
+                    print(f"    {key}: |-")
+                    for desc_line in str(value).splitlines():
+                        print(f"      {desc_line}")
+                elif isinstance(value, str) and (":" in value or "{" in value or "}" in value or value == ""):
+                    # Quote strings with special YAML characters
+                    escaped = value.replace("'", "''")
+                    print(f"    {key}: '{escaped}'")
+                else:
+                    print(f"    {key}: {value}")
+
+            # Print Assignee directly (with hyperlink if enabled)
+            if assignee:
+                print(f"    Assignee: {assignee}")
+
+            # Remove Task from dict since we printed it
+            task_dict.pop("Task", None)
+
+            # Print Boards with clickable names
+            if boards:
+                print("  Boards:")
+                for board_name, board_data in boards.items():
+                    # Create clickable board name (show_url=False keeps name when no hyperlink)
+                    project_slug = board_name.lower().replace(" ", "-")
+                    board_url = f"{self.url}/tag/{project_slug}/"
+                    board_display = self.format_link(board_url, board_name, show_url=False)
+                    print(f"    {board_display}:")
+                    if isinstance(board_data, dict):
+                        for key, value in board_data.items():
+                            if isinstance(value, str) and (":" in value or "{" in value or "}" in value):
+                                escaped = value.replace("'", "''")
+                                print(f"      {key}: '{escaped}'")
+                            else:
+                                print(f"      {key}: {value}")
+                task_dict.pop("Boards", None)
+
+            # Print remaining fields as YAML (History, Metadata, etc.)
+            if task_dict:
+                yaml_output = StringIO()
+                yaml.dump(task_dict, yaml_output)
+                for line in yaml_output.getvalue().splitlines():
+                    print(f"  {line}")
 
     def task_show(
         self, task_id, show_history=False, show_metadata=False, show_comments=False
