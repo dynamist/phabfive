@@ -119,6 +119,25 @@ class StatusPattern:
         self.conditions = conditions
         self.api_response = api_response
 
+    def __str__(self):
+        """Return string representation of the pattern."""
+        parts = []
+        for cond in self.conditions:
+            cond_type = cond.get("type", "")
+            negated = cond.get("negated", False)
+            prefix = "not:" if negated else ""
+
+            if cond_type in ("raised", "lowered"):
+                parts.append(f"{prefix}{cond_type}")
+            else:
+                status = cond.get("status", "")
+                direction = cond.get("direction")
+                if direction:
+                    parts.append(f"{prefix}{cond_type}:{status}:{direction}")
+                else:
+                    parts.append(f"{prefix}{cond_type}:{status}")
+        return "+".join(parts)
+
     def matches(self, status_transactions, current_status):
         """
         Check if all conditions in this pattern match (AND logic).

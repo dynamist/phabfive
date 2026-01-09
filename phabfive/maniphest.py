@@ -2148,7 +2148,7 @@ class Maniphest(Phabfive):
         if show_history or show_comments:
             task_phid = result_data[0].get("phid")
             if task_phid:
-                log.info(f"Fetching transaction data for T{task_id}")
+                log.debug(f"Fetching transactions for T{task_id}")
                 # Fetch all relevant transaction types in a single API call
                 all_fetched_transactions = self._fetch_all_transactions(
                     task_phid,
@@ -2316,17 +2316,11 @@ class Maniphest(Phabfive):
         )
 
         if not has_any_filter:
-            raise PhabfiveConfigException(
-                "No search criteria specified. Please provide at least one of:\n"
-                "  - Free-text query: phabfive maniphest search 'search text'\n"
-                "  - Project tag: --tag='Project Name'\n"
-                "  - Date filter: --created-after=N or --updated-after=N\n"
-                "  - Column filter: --column='pattern'\n"
-                "  - Priority filter: --priority='pattern'\n"
-                "  - Status filter: --status='pattern'"
-            )
+            raise PhabfiveConfigException("No search criteria specified")
 
-        # Convert date filters to Unix timestamps
+        # Convert date filters to Unix timestamps (preserve original day values for logging)
+        created_after_days = created_after
+        updated_after_days = updated_after
         if created_after:
             created_after = days_to_unix(created_after)
         if updated_after:
@@ -2382,8 +2376,13 @@ class Maniphest(Phabfive):
                         log.error(f"No projects matched the tag pattern '{tag}'")
                         return
 
+                    # Determine AND vs OR logic for logging
+                    has_and_patterns = any(
+                        len(p.project_names) > 1 for p in project_patterns
+                    )
+                    logic_type = "AND" if has_and_patterns else "OR"
                     log.info(
-                        f"Tag pattern '{tag}' resolved to {len(project_phids)} project(s)"
+                        f"Tag pattern '{tag}' resolved to {len(project_phids)} project(s) with {logic_type} logic"
                     )
                 except PhabfiveException as e:
                     log.error(f"Invalid tag pattern: {e}")
@@ -2442,9 +2441,8 @@ class Maniphest(Phabfive):
                     # No more pages
                     break
         else:
-            # Handle multiple projects with OR logic (make separate calls and merge)
+            # Handle multiple projects (make separate calls and merge)
             if len(project_phids) > 1:
-                log.info(f"Searching {len(project_phids)} projects with OR logic")
                 all_tasks = {}  # task_id -> task_data
                 for phid in project_phids:
                     constraints = {"projects": [phid]}
@@ -2559,16 +2557,26 @@ class Maniphest(Phabfive):
             or project_patterns
         ):
             filter_desc = []
+            if text_query:
+                filter_desc.append(f"query='{text_query}'")
+            if tag:
+                filter_desc.append(f"tag='{tag}'")
+            if created_after:
+                filter_desc.append(f"created-after={created_after_days}d")
+            if updated_after:
+                filter_desc.append(f"updated-after={updated_after_days}d")
             if transition_patterns:
-                filter_desc.append("column transition patterns")
+                col_strs = [str(p) for p in transition_patterns]
+                filter_desc.append(f"column='{','.join(col_strs)}'")
             if priority_patterns:
-                filter_desc.append("priority patterns")
+                pri_strs = [str(p) for p in priority_patterns]
+                filter_desc.append(f"priority='{','.join(pri_strs)}'")
             if status_patterns:
-                filter_desc.append("status patterns")
-            if project_patterns:
-                filter_desc.append("project patterns")
+                stat_strs = [str(p) for p in status_patterns]
+                filter_desc.append(f"status='{','.join(stat_strs)}'")
+            # Note: project_patterns is derived from tag, so not shown separately
             log.info(
-                f"Filtering {len(result_data)} tasks by {' and '.join(filter_desc)}"
+                f"Filtering {len(result_data)} tasks by {', '.join(filter_desc)}"
             )
 
             # Add performance warning for large datasets
@@ -2699,7 +2707,7 @@ class Maniphest(Phabfive):
                     if status_patterns:
                         matching_status_map[item["id"]] = status_matches
 
-            log.info(f"Filtered down to {len(filtered_tasks)} tasks matching patterns")
+            log.info(f"Found {len(filtered_tasks)} matches out of {len(result_data)} tasks in {len(project_phids)} project(s)")
             result_data = filtered_tasks
         elif show_history:
             # Fetch transitions for all tasks when --show-history is used without filtering

@@ -31,6 +31,10 @@ class ProjectPattern:
         """
         self.project_names = project_names
 
+    def __str__(self):
+        """Return string representation of the pattern."""
+        return "+".join(self.project_names)
+
     def matches(self, task_project_names, resolved_projects_map):
         """
         Check if all conditions in this pattern match (AND logic).

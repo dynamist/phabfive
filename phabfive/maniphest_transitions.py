@@ -27,6 +27,25 @@ class TransitionPattern:
         """
         self.conditions = conditions
 
+    def __str__(self):
+        """Return string representation of the pattern."""
+        parts = []
+        for cond in self.conditions:
+            cond_type = cond.get("type", "")
+            negated = cond.get("negated", False)
+            prefix = "not:" if negated else ""
+
+            if cond_type in ("backward", "forward"):
+                parts.append(f"{prefix}{cond_type}")
+            else:
+                column = cond.get("column", "")
+                direction = cond.get("direction")
+                if direction:
+                    parts.append(f"{prefix}{cond_type}:{column}:{direction}")
+                else:
+                    parts.append(f"{prefix}{cond_type}:{column}")
+        return "+".join(parts)
+
     def matches(self, task_transactions, current_column, column_info):
         """
         Check if all conditions in this pattern match (AND logic).
