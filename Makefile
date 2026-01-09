@@ -6,7 +6,7 @@ CONTAINER_RUNTIME = $(or \
 	$(shell command -v docker 2>/dev/null) \
 )
 
-COMPOSE_FILE := compose-phorge.yml
+COMPOSE_FILE := compose.yml
 
 # Detect host's phabfive config file (OS-specific via appdirs)
 PHABFIVE_HOST_CONFIG := $(shell \

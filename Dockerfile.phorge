@@ -5,16 +5,9 @@ WORKDIR /app
 
 ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 
-
 RUN install-php-extensions mbstring iconv mysqli curl pcntl gd zip apcu opcache
 
 RUN apt update && apt install -y git default-mysql-client python3-pygments
-
-# Configure PHP
-RUN echo "post_max_size = 64M" >> /usr/local/etc/php/conf.d/phorge.ini && \
-    echo "upload_max_filesize = 64M" >> /usr/local/etc/php/conf.d/phorge.ini && \
-    echo "opcache.validate_timestamps = 0" >> /usr/local/etc/php/conf.d/phorge.ini && \
-    echo "date.timezone = UTC" >> /usr/local/etc/php/conf.d/phorge.ini
 
 # Enable Apache modules
 RUN a2enmod rewrite
@@ -25,8 +18,9 @@ RUN git clone https://github.com/phorgeit/arcanist.git
 RUN git config --system --add safe.directory /app/phorge
 RUN git config --system --add safe.directory /app/arcanist
 
-# Set up Apache config for Phorge (points to webroot)
+# Set up Apache and PHP for Phorge
 COPY phorge/phorge.conf /etc/apache2/conf-enabled/phorge.conf
+COPY phorge/phorge.ini /usr/local/etc/php/conf.d/phorge.ini
 
 # Copy and set up entrypoint script
 COPY phorge/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -35,7 +29,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Copy initialization scripts (main + lib modules)
 COPY phorge/init-phorge.sh /usr/local/bin/init-phorge.sh
 COPY phorge/lib/ /usr/local/bin/lib/
-RUN chmod +x /usr/local/bin/init-phorge.sh /usr/local/bin/lib/*.sh
+RUN chmod +x /usr/local/bin/* /usr/local/bin/lib/*
 
 # Create configuration directory and storage directories
 RUN mkdir -p /app/phorge/conf/local /app/repo /app/files && \

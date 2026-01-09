@@ -14,17 +14,17 @@ create_api_token() {
     return 1
   fi
 
-  TOKEN_COUNT=$(mysql_query phabricator_conduit "SELECT COUNT(*) FROM conduit_token WHERE objectPHID='$USER_PHID' AND token='$API_TOKEN'")
+  TOKEN_COUNT=$(mysql_query phabricator_conduit "SELECT COUNT(*) FROM conduit_token WHERE objectPHID='$USER_PHID' AND token='$PHORGE_ADMIN_TOKEN'")
 
   if [ "$TOKEN_COUNT" -gt 0 ]; then
     echo "API token already exists, skipping..."
   else
-    echo "Creating API token: $API_TOKEN"
+    echo "Creating API token: $PHORGE_ADMIN_TOKEN"
     TIMESTAMP=$(get_timestamp)
 
     mysql_exec phabricator_conduit <<EOF
 INSERT INTO conduit_token (objectPHID, tokenType, token, expires, dateCreated, dateModified)
-VALUES ('$USER_PHID', 'cli', '$API_TOKEN', NULL, $TIMESTAMP, $TIMESTAMP);
+VALUES ('$USER_PHID', 'cli', '$PHORGE_ADMIN_TOKEN', NULL, $TIMESTAMP, $TIMESTAMP);
 EOF
 
     echo "API token created successfully!"

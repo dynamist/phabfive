@@ -1,17 +1,14 @@
-# Local Phorge/Phabricator Setup
+# Local Phorge Setup
 
-This guide covers setting up a local Phorge or Phabricator instance for testing phabfive without affecting production systems.
+This guide covers setting up a local Phorge instance for **developing** and **testing** phabfive.
 
-## Set Up a Local Phorge Instance
-
-The project includes a local Phorge development environment with automated setup, perfect for testing phabfive without affecting production systems.
-
-### Initial Setup
+## Quick Start
 
 **1. Configure your hosts file:**
 
-Add the following to your `/etc/hosts` file:
-```
+Add the following to `/etc/hosts`:
+
+```text
 127.0.0.1       phorge.domain.tld
 127.0.0.1       phorge-files.domain.tld
 ```
@@ -22,86 +19,78 @@ Add the following to your `/etc/hosts` file:
 make phorge-up
 ```
 
-The Makefile automatically detects whether you have podman or docker installed (preferring podman). It will start mariadb in the background and phorge in the foreground, so you can see the logs and the admin password recovery link.
+The Makefile automatically detects whether you have podman or docker installed (preferring podman). It starts MariaDB in the background and Phorge in the foreground, so you can see the logs and the admin password recovery link.
 
-**To stop:** Press `Ctrl+C`, then run `make phorge-down`
+**3. Stop Phorge::** When you are done, press `Ctrl+C`, then run `make phorge-down` to remove the containers.
 
-### Automated Setup
+## What Gets Created
 
-The Phorge instance includes **automated setup** with everything you need for development:
+The `init-phorge.sh` script automatically creates:
 
-**Admin Account:**
+### Admin Account
 
 - **Username:** `admin`
-
-- **Email:** `admin@example.com`
-
+- **Email:** `admin@example.com` (verified)
 - **API Token:** `api-supersecr3tapikeyfordevelop1`
+- **Password Recovery Link** - One-time link displayed in logs
 
-- **Password Setup Link:** Generated in container logs (see below)
+### Test Users
 
-**Test Users (RMI GUNNAR Team):**
+Eight RMI GUNNAR team members for testing:
 
-- `mikael.wallin` (Team Lead/Scrum Master)
+- **daniel.lindgren** - Daniel Lindgren (daniel.lindgren@air.rmi.se)
+- **gabriel.blomqvist** - Gabriel Blomqvist (gabriel.blomqvist@air.rmi.se)
+- **mikael.wallin** - Mikael Wallin (mikael.wallin@air.rmi.se)
+- **ove.pettersson** - Ove Pettersson (ove.pettersson@air.rmi.se)
+- **sebastian.soderberg** - Sebastian Söderberg (sebastian.soderberg@air.rmi.se)
+- **sonja.bergstrom** - Sonja Bergström (sonja.bergstrom@air.rmi.se)
+- **tommy.svensson** - Tommy Svensson (tommy.svensson@air.rmi.se)
+- **viola.larsson** - Viola Larsson (viola.larsson@air.rmi.se)
 
-- `ove.pettersson` (System Architect)
+### Default Projects
 
-- `viola.larsson` (System Administrator)
+Seven projects with 5-column workboards (Backlog → Up Next → In Progress → In Review → Done):
 
-- `daniel.lindgren` (DevOps Engineer)
+- **GUNNAR-Core** - Main chip blueprint development and secure design
+- **Architecture** - System architecture and design specifications
+- **Infrastructure** - Servers, virtualization, and network management
+- **Development** - Development tools and environment setup
+- **QA** - Testing, quality assurance, and compliance validation
+- **SharePoint** - Windows SharePoint integration and document management
+- **Security** - Security compliance, hardening, and vulnerability assessment
 
-- `sonja.bergstrom` (Windows SharePoint Developer)
+The admin user is automatically joined to all projects.
 
-- `gabriel.blomqvist` (Windows C# Developer)
+## Configuration
 
-- `sebastian.soderberg` (Windows C# Developer)
+Customize the setup via environment variables in `compose.yml`:
 
-- `tommy.svensson` (QA Engineer)
-
-**Default Projects with Workboards:**
-
-- `GUNNAR-Core`
-
-- `Architecture`
-
-- `Infrastructure`
-
-- `Development`
-
-- `QA`
-
-- `SharePoint`
-
-- `Security`
-
-Each project has 5 columns: Backlog → Up Next → In Progress → In Review → Done
-
-### Getting Your Admin Password
-
-The password recovery link will be displayed in the logs when phorge starts. If you miss it, view logs with:
-
-```bash
-# Using Makefile (recommended)
-make phorge-logs
-
-# Or manually
-podman logs <container-name> | grep "one-time link"
-docker logs <container-name> | grep "one-time link"
+```yaml
+environment:
+  - PHORGE_URL=http://phorge.domain.tld
+  - PHORGE_ALT_FILE_DOMAIN=http://phorge-files.domain.tld
+  - PHORGE_TITLE=RMI
+  - PHORGE_ADMIN_USER=admin
+  - PHORGE_ADMIN_EMAIL=admin@example.com
+  - PHORGE_ADMIN_NAME=Administrator
+  - PHORGE_ADMIN_TOKEN=api-supersecr3tapikeyfordevelop1
 ```
 
-Visit the link to set your password, then log in at `http://phorge.domain.tld/`.
+Defaults are in `phorge/lib/common.sh` and used if environment variables are not set.
 
-### Configure phabfive for Local Development
+## Configure phabfive
 
-You can immediately use the pre-configured API token:
+Use the pre-configured API token:
 
 **Environment variables:**
+
 ```bash
 export PHAB_TOKEN=api-supersecr3tapikeyfordevelop1
 export PHAB_URL=http://phorge.domain.tld/api/
 ```
 
 **Or configuration file:**
+
 ```bash
 # Linux
 echo "PHAB_TOKEN: api-supersecr3tapikeyfordevelop1" > ~/.config/phabfive.yaml
@@ -112,13 +101,51 @@ echo "PHAB_TOKEN: api-supersecr3tapikeyfordevelop1" > ~/Library/Application\ Sup
 echo "PHAB_URL: http://phorge.domain.tld/api/" >> ~/Library/Application\ Support/phabfive.yaml
 ```
 
-Now you can test phabfive against your local instance:
+Test it:
+
 ```bash
 uv run phabfive user whoami
 uv run phabfive paste list
 ```
 
-### Useful Phorge Commands
+## Create Test Tasks
+
+After configuring phabfive, you can populate Phorge with ~70 realistic test tasks:
+
+```bash
+uv run phabfive maniphest create test-files/mega-2024-simulation.yml
+```
+
+This creates a full year simulation of project work for the RMI GUNNAR team, including EPICs with subtasks, varied priorities, and assignments across the default projects.
+
+Use `--dry-run` to preview without creating:
+
+```bash
+uv run phabfive maniphest create test-files/mega-2024-simulation.yml --dry-run
+```
+
+## Using the API Token
+
+The API token works immediately without logging in:
+
+```bash
+curl "http://phorge.domain.tld/api/user.whoami" \
+  -d "api.token=api-supersecr3tapikeyfordevelop1"
+```
+
+## How It Works
+
+The script runs automatically during container startup and:
+
+1. Enables username/password authentication
+2. Creates admin and test user accounts with verified emails
+3. Generates API token for immediate use
+4. Creates default projects with workboard columns
+5. Generates a one-time password recovery link
+
+All operations are idempotent - safe to run multiple times. Container restarts won't duplicate data.
+
+## Useful Commands
 
 ```bash
 make phorge-up      # Start Phorge (mariadb + phorge)
@@ -127,35 +154,38 @@ make phorge-logs    # View container logs
 make phorge-shell   # Open shell in phorge container
 ```
 
+## Troubleshooting
+
+### Get admin password recovery link
+
+The link is displayed in logs when Phorge starts. If you miss it:
+
+```bash
+make phorge-logs | grep "one-time link"
+```
+
+### Generate a new recovery link
+
+```bash
+# With podman
+podman exec <container-name> /app/phorge/bin/auth recover admin
+
+# With docker
+docker exec <container-name> /app/phorge/bin/auth recover admin
+```
+
 ### Data Persistence
 
-**Note:** By default the instance won't persist data. If the mariadb container is shutdown, any data will be lost and you'll need to restart fresh.
+By default the instance won't persist data. If the MariaDB container is shut down, data is lost and you'll need to restart fresh.
 
-### Customization
+## Security Notes
 
-For advanced setup customization (changing admin credentials, test users, projects, etc.), see `phorge/AUTOMATED_SETUP.md` in the repository root.
+**⚠️ IMPORTANT:**
 
-## Set Up a Local Phabricator Instance (Legacy)
+These scripts are intended for development and testing only. For production, follow best practices for securing your Phorge instance.
 
-If you need to test against Phabricator instead of Phorge:
+## References
 
-**1. Configure hosts file:**
-```
-127.0.0.1       phabricator.domain.tld
-```
-
-**2. Start services:**
-```bash
-# Start mysql (in first terminal)
-docker compose -f docker-compose-phabricator.yml up mysql
-
-# Start phabricator (in second terminal, after mysql is ready)
-docker compose -f docker-compose-phabricator.yml up phabricator
-```
-
-**3. Access and configure:**
-- Access at `http://phabricator.domain.tld/`
-- Create admin account on first use
-- Generate API token at `http://phabricator.domain.tld/settings/user/<username>/page/apitokens/`
-
-**Note:** No data persistence - data will be lost when container stops.
+- [Phorge Documentation](https://we.phorge.it/book/phorge/)
+- [Configuring Accounts and Registration](https://we.phorge.it/book/phorge/article/configuring_accounts_and_registration/)
+- [Local Phorge API Documentation](http://phorge.domain.tld/conduit/)

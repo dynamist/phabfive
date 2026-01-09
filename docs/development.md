@@ -50,7 +50,9 @@ make phabfive-run-dev ARGS="maniphest search qa"
 ```
 
 **Configuration:** The Makefile automatically handles your credentials:
+
 - **Environment variables:** `PHAB_TOKEN` and `PHAB_URL` are passed through if set
+
 - **Config file:** Automatically detected and mounted from OS-specific locations:
   - macOS: `~/Library/Application Support/phabfive.yaml`
   - Linux: `~/.config/phabfive.yaml`
@@ -60,6 +62,7 @@ make phabfive-run-dev ARGS="maniphest search qa"
 This repo uses `pytest` as the test runner and `tox` to orchestrate tests for various Python versions (3.10-3.13).
 
 **Quick test run:**
+
 ```bash
 # Run tests with current Python version
 uv run pytest
@@ -69,6 +72,7 @@ uv run flake8 phabfive/ tests/
 ```
 
 **Testing across all Python versions:**
+
 ```bash
 # Run all Python versions
 make test
@@ -88,11 +92,11 @@ uv run tox -e coverage
 
 With `tox-uv`, tox automatically uses uv for fast dependency resolution and isolated testing environments.
 
-## Testing Against a Local Phorge/Phabricator Instance
+## Local Phorge Instance
 
-For instructions on setting up a local Phorge or Phabricator instance for testing, see [Phorge Setup Guide](phorge-setup.md).
+For instructions on setting up a local Phorge instance for testing, see [Phorge Setup Guide](phorge-setup.md).
 
-## Run mkdocs Locally
+## Building the Docs
 
 For documentation updates:
 
@@ -104,17 +108,19 @@ uv sync --extra docs
 uv run mkdocs serve
 ```
 
-Navigate to `http://127.0.0.1:8000` to view the rendered documentation.
+Navigate to <http://127.0.0.1:8000> to view the rendered documentation.
 
-For more about mkdocs, see the [Mkdocs homepage](https://www.mkdocs.org/).
+The documentation is built using [mkdocs](https://www.mkdocs.org/).
 
 ## Code Style and Linting
 
 This project uses:
+
 - **flake8** for linting
 - **pytest** for testing
 
 Before submitting changes:
+
 ```bash
 # Run linting
 uv run flake8 phabfive/ tests/

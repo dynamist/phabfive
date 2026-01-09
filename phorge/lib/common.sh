@@ -4,14 +4,15 @@
 # Exit on error
 set -e
 
-# Configuration - modify these as needed
-export PHORGE_PATH="/app/phorge"
-export ADMIN_USERNAME="admin"
-export ADMIN_EMAIL="admin@example.com"
-export ADMIN_REALNAME="Administrator"
-export API_TOKEN="api-supersecr3tapikeyfordevelop1"
+# Configuration - can be overridden via environment variables
+export PHORGE_URL="${PHORGE_URL:-http://phorge.domain.tld}"
+export PHORGE_PATH="${PHORGE_PATH:-/app/phorge}"
+export PHORGE_ADMIN_USER="${PHORGE_ADMIN_USER:-admin}"
+export PHORGE_ADMIN_EMAIL="${PHORGE_ADMIN_EMAIL:-admin@example.com}"
+export PHORGE_ADMIN_NAME="${PHORGE_ADMIN_NAME:-Administrator}"
+export PHORGE_ADMIN_TOKEN="${PHORGE_ADMIN_TOKEN:-api-supersecr3tapikeyfordevelop1}"
 
-# Additional fake users for testing (RMI GUNNAR team members)
+# Fake users for testing (RMI GUNNAR Team)
 export FAKE_USERS=(
   "mikael.wallin:mikael.wallin@air.rmi.se:Mikael Wallin"
   "ove.pettersson:ove.pettersson@air.rmi.se:Ove Pettersson"

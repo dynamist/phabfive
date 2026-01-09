@@ -24,18 +24,18 @@ cd /app/phorge
 ./bin/config set mysql.pass "$MYSQL_PASS"
 
 # Set base URI if provided
-if [ ! -z "$PHABRICATOR_URL" ]; then
-  ./bin/config set phabricator.base-uri "$PHABRICATOR_URL"
+if [ ! -z "$PHORGE_URL" ]; then
+  ./bin/config set phabricator.base-uri "$PHORGE_URL"
 fi
 
 # Set title if provided - using ui.logo instead of phabricator.title which doesn't exist in Phorge
-if [ ! -z "$PHABRICATOR_TITLE" ]; then
-  ./bin/config set cluster.instance "$PHABRICATOR_TITLE"
+if [ ! -z "$PHORGE_TITLE" ]; then
+  ./bin/config set cluster.instance "$PHORGE_TITLE"
 fi
 
 # Set alternate file domain if provided
-if [ ! -z "$PHABRICATOR_ALT_FILE_DOMAIN" ]; then
-  ./bin/config set security.alternate-file-domain "$PHABRICATOR_ALT_FILE_DOMAIN"
+if [ ! -z "$PHORGE_ALT_FILE_DOMAIN" ]; then
+  ./bin/config set security.alternate-file-domain "$PHORGE_ALT_FILE_DOMAIN"
 fi
 
 # Configure repository local path
@@ -64,13 +64,14 @@ echo "Building static resource map..."
 echo "Initializing Phorge storage..."
 ./bin/storage upgrade --force
 
-echo "Phorge initialization complete!"
-
 # Run custom initialization script
 if [ -f /usr/local/bin/init-phorge.sh ]; then
   echo "Running custom initialization script..."
   bash /usr/local/bin/init-phorge.sh
 fi
+
+(cd /app/phorge; echo "phorge rev $(git rev-parse HEAD)")
+(cd /app/arcanist; echo "arcanist rev $(git rev-parse HEAD)")
 
 # Start daemons in background
 echo "Starting Phorge daemons..."

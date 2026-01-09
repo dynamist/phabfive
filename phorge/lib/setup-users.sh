@@ -8,7 +8,7 @@ source "${LIB_DIR}/common.sh"
 create_admin_user() {
   echo "Step 1: Creating admin user..."
 
-  USER_COUNT=$(mysql_query phabricator_user "SELECT COUNT(*) FROM user WHERE userName='$ADMIN_USERNAME'")
+  USER_COUNT=$(mysql_query phabricator_user "SELECT COUNT(*) FROM user WHERE userName='$PHORGE_ADMIN_USER'")
 
   if [ "$USER_COUNT" -eq 0 ]; then
     USER_PHID=$(generate_phid "USER")
@@ -38,8 +38,8 @@ INSERT INTO user (
   isEnrolledInMultiFactor
 ) VALUES (
   '$USER_PHID',
-  '$ADMIN_USERNAME',
-  '$ADMIN_REALNAME',
+  '$PHORGE_ADMIN_USER',
+  '$PHORGE_ADMIN_NAME',
   1,
   1,
   0,
@@ -54,17 +54,17 @@ INSERT INTO user (
 );
 EOF
 
-    echo "Admin user '$ADMIN_USERNAME' created with PHID: $USER_PHID"
+    echo "Admin user '$PHORGE_ADMIN_USER' created with PHID: $USER_PHID"
   else
-    echo "Admin user '$ADMIN_USERNAME' already exists, skipping..."
-    USER_PHID=$(mysql_query phabricator_user "SELECT phid FROM user WHERE userName='$ADMIN_USERNAME'")
+    echo "Admin user '$PHORGE_ADMIN_USER' already exists, skipping..."
+    USER_PHID=$(mysql_query phabricator_user "SELECT phid FROM user WHERE userName='$PHORGE_ADMIN_USER'")
     echo "Using existing user PHID: $USER_PHID"
 
     # Ensure user is admin
     mysql_exec phabricator_user <<EOF
-UPDATE user SET isAdmin=1, isApproved=1, isEmailVerified=1 WHERE userName='$ADMIN_USERNAME';
+UPDATE user SET isAdmin=1, isApproved=1, isEmailVerified=1 WHERE userName='$PHORGE_ADMIN_USER';
 EOF
-    echo "Admin privileges confirmed for '$ADMIN_USERNAME'"
+    echo "Admin privileges confirmed for '$PHORGE_ADMIN_USER'"
   fi
 
   # Export for use in other scripts
@@ -80,14 +80,14 @@ create_admin_email() {
     return 1
   fi
 
-  EMAIL_COUNT=$(mysql_query phabricator_user "SELECT COUNT(*) FROM user_email WHERE address='$ADMIN_EMAIL'")
+  EMAIL_COUNT=$(mysql_query phabricator_user "SELECT COUNT(*) FROM user_email WHERE address='$PHORGE_ADMIN_EMAIL'")
 
   if [ "$EMAIL_COUNT" -eq 0 ]; then
     EMAIL_PHID=$(generate_phid "EMAIL")
     TIMESTAMP=$(get_timestamp)
     VERIFICATION_CODE=$(openssl rand -hex 12)
 
-    echo "Creating verified email address: $ADMIN_EMAIL"
+    echo "Creating verified email address: $PHORGE_ADMIN_EMAIL"
 
     mysql_exec phabricator_user <<EOF
 INSERT INTO user_email (
@@ -102,7 +102,7 @@ INSERT INTO user_email (
 ) VALUES (
   '$EMAIL_PHID',
   '$USER_PHID',
-  '$ADMIN_EMAIL',
+  '$PHORGE_ADMIN_EMAIL',
   1,
   1,
   '$VERIFICATION_CODE',
@@ -111,15 +111,15 @@ INSERT INTO user_email (
 );
 EOF
 
-    echo "Email '$ADMIN_EMAIL' created and verified!"
+    echo "Email '$PHORGE_ADMIN_EMAIL' created and verified!"
   else
-    echo "Email address '$ADMIN_EMAIL' already exists, skipping..."
+    echo "Email address '$PHORGE_ADMIN_EMAIL' already exists, skipping..."
 
     # Ensure email is verified and primary
     mysql_exec phabricator_user <<EOF
-UPDATE user_email SET isVerified=1, isPrimary=1 WHERE address='$ADMIN_EMAIL';
+UPDATE user_email SET isVerified=1, isPrimary=1 WHERE address='$PHORGE_ADMIN_EMAIL';
 EOF
-    echo "Email verification confirmed for '$ADMIN_EMAIL'"
+    echo "Email verification confirmed for '$PHORGE_ADMIN_EMAIL'"
   fi
 }
 
