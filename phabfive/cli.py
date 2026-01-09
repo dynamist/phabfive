@@ -28,6 +28,8 @@ Shortcuts to view Phabricator monograms (example: phabfive T123):
 
 Options:
     --log-level=LEVEL     Set loglevel [default: INFO]
+    --ascii=WHEN          Use ASCII instead of Unicode (always/auto/never) [default: auto]
+    --hyperlink=WHEN      Enable terminal hyperlinks (always/auto/never) [default: auto]
     -h, --help            Show this help message and exit
     -V, --version         Display the version number and exit
 """
@@ -384,9 +386,30 @@ def run(cli_args, sub_args):
     # Local imports required due to logging limitation
     from phabfive import diffusion, maniphest, passphrase, paste, repl, user
     from phabfive.constants import REPO_STATUS_CHOICES
+    from phabfive.core import Phabfive
     from phabfive.exceptions import PhabfiveException
     from phabfive.maniphest_transitions import parse_transition_patterns
     from phabfive.priority_transitions import parse_priority_patterns
+
+    # Validate and process output options
+    valid_modes = ("always", "auto", "never")
+    ascii_when = cli_args.get("--ascii", "never")
+    hyperlink_when = cli_args.get("--hyperlink", "never")
+
+    if ascii_when not in valid_modes:
+        sys.exit(f"Error: --ascii must be one of: {', '.join(valid_modes)}")
+    if hyperlink_when not in valid_modes:
+        sys.exit(f"Error: --hyperlink must be one of: {', '.join(valid_modes)}")
+
+    # Check mutual exclusivity (only when both explicitly set to always)
+    if ascii_when == "always" and hyperlink_when == "always":
+        sys.exit("Error: --ascii=always and --hyperlink=always are mutually exclusive")
+
+    # Set output formatting options
+    Phabfive.set_output_options(
+        ascii_when=ascii_when,
+        hyperlink_when=hyperlink_when,
+    )
 
     retcode = 0
 
