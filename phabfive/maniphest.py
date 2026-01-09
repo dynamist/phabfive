@@ -11,6 +11,7 @@ import sys
 import time
 from collections.abc import Mapping
 from functools import lru_cache
+from io import StringIO
 from pathlib import Path
 from typing import Optional
 
@@ -1358,19 +1359,20 @@ class Maniphest(Phabfive):
             new_priority_name = new_value if new_value else "Unknown"
 
             # Determine if raised or lowered
-            direction = "[•]"
+            direction = f"[{self.format_direction('•')}]"
             if old_value and new_value:
                 old_order = get_priority_order(old_value)
                 new_order = get_priority_order(new_value)
 
                 if old_order is not None and new_order is not None:
                     if new_order < old_order:  # Raised (higher priority)
-                        direction = "[↑]"
+                        direction = f"[{self.format_direction('↑')}]"
                     elif new_order > old_order:  # Lowered (lower priority)
-                        direction = "[↓]"
+                        direction = f"[{self.format_direction('↓')}]"
 
+            arrow = self.format_direction('→')
             transitions.append(
-                f"{timestamp_str} {direction} {old_priority_name} → {new_priority_name}"
+                f"{timestamp_str} {direction} {old_priority_name} {arrow} {new_priority_name}"
             )
 
         return transitions
@@ -1484,7 +1486,7 @@ class Maniphest(Phabfive):
             new_status_name = new_value if new_value else "Unknown"
 
             # Determine if raised (progressed) or lowered (regressed)
-            direction = "[•]"
+            direction = f"[{self.format_direction('•')}]"
             if old_value and new_value:
                 # Get status info from API
                 api_response = self._get_api_status_map()
@@ -1493,12 +1495,13 @@ class Maniphest(Phabfive):
 
                 if old_order is not None and new_order is not None:
                     if new_order > old_order:  # Raised (progressed forward)
-                        direction = "[↑]"
+                        direction = f"[{self.format_direction('↑')}]"
                     elif new_order < old_order:  # Lowered (moved backward)
-                        direction = "[↓]"
+                        direction = f"[{self.format_direction('↓')}]"
 
+            arrow = self.format_direction('→')
             transitions.append(
-                f"{timestamp_str} {direction} {old_status_name} → {new_status_name}"
+                f"{timestamp_str} {direction} {old_status_name} {arrow} {new_status_name}"
             )
 
         return transitions
@@ -1611,17 +1614,18 @@ class Maniphest(Phabfive):
                 new_col_name = "Unknown"
 
             # Determine if forward or backward
-            direction = "[•]"
+            direction = f"[{self.format_direction('•')}]"
             if old_value and new_value and len(old_value) > 1 and len(new_value) > 1:
                 old_seq = column_info.get(old_value[1], {}).get("sequence", 0)
                 new_seq = column_info.get(new_value[1], {}).get("sequence", 0)
                 if new_seq > old_seq:
-                    direction = "[→]"
+                    direction = f"[{self.format_direction('→')}]"
                 elif new_seq < old_seq:
-                    direction = "[←]"
+                    direction = f"[{self.format_direction('←')}]"
 
+            arrow = self.format_direction('→')
             transitions_list.append(
-                f"{timestamp_str} {direction} {old_col_name} → {new_col_name}"
+                f"{timestamp_str} {direction} {old_col_name} {arrow} {new_col_name}"
             )
 
         return transitions_list
@@ -1913,8 +1917,14 @@ class Maniphest(Phabfive):
         for item in result_data:
             fields = item.get("fields", {})
 
-            # Build task dict
-            task_dict = {"Link": f"{self.url}/T{item['id']}", "Task": {}}
+            # Build task dict - store URL and formatted link separately
+            url = f"{self.url}/T{item['id']}"
+            link_text = f"T{item['id']}"
+            task_dict = {
+                "_url": url,
+                "_link": self.format_link(url, link_text),
+                "Task": {},
+            }
 
             # Build task fields
             task_data = {}
@@ -2006,7 +2016,21 @@ class Maniphest(Phabfive):
         yaml.default_flow_style = False
         yaml.preserve_quotes = True
         yaml.width = 4096  # Avoid unwanted line wrapping
-        yaml.dump(tasks_list, sys.stdout)
+
+        # Print each task, handling hyperlinks specially to avoid YAML escaping
+        for task_dict in tasks_list:
+            # Extract and remove internal fields
+            link = task_dict.pop("_link")
+            task_dict.pop("_url")
+
+            # Print link directly (bypasses YAML escaping for hyperlinks)
+            print(f"- Link: {link}")
+
+            # Print rest of task as YAML (indented to align with "- Link:")
+            yaml_output = StringIO()
+            yaml.dump(task_dict, yaml_output)
+            for line in yaml_output.getvalue().splitlines():
+                print(f"  {line}")
 
     def task_show(
         self, task_id, show_history=False, show_metadata=False, show_comments=False

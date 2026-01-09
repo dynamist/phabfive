@@ -29,6 +29,114 @@ logging.getLogger("anyconfig").setLevel(logging.ERROR)
 
 
 class Phabfive:
+    # Output formatting options (set by CLI)
+    _ascii_when = "auto"
+    _hyperlink_when = "auto"
+
+    @classmethod
+    def set_output_options(cls, ascii_when="auto", hyperlink_when="auto"):
+        """Set global output formatting options."""
+        cls._ascii_when = ascii_when
+        cls._hyperlink_when = hyperlink_when
+
+    @staticmethod
+    def _should_use_ascii():
+        """Determine if ASCII mode should be used based on terminal capabilities."""
+        import sys
+        import locale
+
+        # Check if stdout is a TTY
+        if not sys.stdout.isatty():
+            return True
+
+        # Check locale encoding
+        try:
+            encoding = locale.getpreferredencoding(False).lower()
+            if "utf" not in encoding:
+                return True
+        except Exception:
+            return True
+
+        return False
+
+    @staticmethod
+    def _should_use_hyperlink():
+        """Determine if hyperlinks should be used based on terminal capabilities.
+
+        There's no standard query for OSC 8 support, so we check for known
+        supporting terminals via environment variables.
+        """
+        import sys
+        import os
+
+        # Must be a TTY
+        if not sys.stdout.isatty():
+            return False
+
+        # Check for terminals known to support OSC 8
+        term = os.environ.get("TERM", "")
+        term_program = os.environ.get("TERM_PROGRAM", "")
+        colorterm = os.environ.get("COLORTERM", "")
+
+        # Known supporting terminal programs
+        if term_program in (
+            "iTerm.app", "WezTerm", "vscode", "Hyper", "mintty", "ghostty"
+        ):
+            return True
+
+        # Windows Terminal
+        if os.environ.get("WT_SESSION"):
+            return True
+
+        # VTE-based terminals (GNOME Terminal, Tilix, Terminator, etc.)
+        # VTE >= 0.50 supports OSC 8 (version 5000+)
+        vte_version = os.environ.get("VTE_VERSION", "")
+        if vte_version.isdigit() and int(vte_version) >= 5000:
+            return True
+
+        # KDE Konsole (version 22.04+ has good OSC 8 support)
+        if os.environ.get("KONSOLE_VERSION"):
+            return True
+
+        # Terminals identifiable by TERM
+        if any(t in term for t in ("kitty", "alacritty", "foot", "contour")):
+            return True
+
+        # COLORTERM=truecolor is a reasonable proxy for modern terminals
+        if colorterm in ("truecolor", "24bit"):
+            return True
+
+        return False
+
+    def _is_ascii_enabled(self):
+        """Check if ASCII mode is currently enabled."""
+        if self._ascii_when == "always":
+            return True
+        if self._ascii_when == "auto":
+            return self._should_use_ascii()
+        return False
+
+    def _is_hyperlink_enabled(self):
+        """Check if hyperlink mode is currently enabled."""
+        if self._hyperlink_when == "always":
+            return True
+        if self._hyperlink_when == "auto":
+            return self._should_use_hyperlink()
+        return False
+
+    def format_direction(self, direction):
+        """Format direction indicator based on output mode."""
+        if self._is_ascii_enabled():
+            mapping = {"•": "*", "↑": "^", "↓": "v", "→": ">", "←": "<"}
+            return mapping.get(direction, direction)
+        return direction
+
+    def format_link(self, url, text):
+        """Format URL as hyperlink if enabled, otherwise return url."""
+        if self._is_hyperlink_enabled():
+            return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
+        return url
+
     def __init__(self):
         """ """
         self.conf = self.load_config()
