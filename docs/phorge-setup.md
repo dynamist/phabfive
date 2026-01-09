@@ -10,7 +10,7 @@ Add the following to `/etc/hosts`:
 
 ```text
 127.0.0.1       phorge.domain.tld
-127.0.0.1       phorge-files.domain.tld
+127.0.0.1       cdn.domain.tld
 ```
 
 **2. Start Phorge:**
@@ -65,21 +65,27 @@ The admin user is automatically joined to all projects.
 
 ## Configuration
 
-Customize the setup via environment variables in `compose.yml`:
+All settings can be customized via environment variables. Defaults are in `compose.yml` and can be overridden from the command line:
 
-```yaml
-environment:
-  - PHORGE_URL=http://phorge.domain.tld
-  - PHORGE_ALT_FILE_DOMAIN=http://phorge-files.domain.tld
-  - PHORGE_TITLE=RMI
-  - PHORGE_ADMIN_USER=admin
-  - PHORGE_ADMIN_EMAIL=admin@example.com
-  - PHORGE_ADMIN_NAME=Administrator
-  - PHORGE_ADMIN_TOKEN=api-supersecr3tapikeyfordevelop1
-  - PHORGE_ADMIN_PASS=secret  # Optional: enables immediate login
+```bash
+PHORGE_GIT_REF=master make phorge-up
+PHORGE_ADMIN_PASS=mypassword PHORGE_GIT_REF=master make phorge-up
 ```
 
-Defaults are in `phorge/lib/common.sh` and used if environment variables are not set.
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PHORGE_URL` | `http://phorge.domain.tld` | Base URL for Phorge |
+| `PHORGE_CDN_URL` | `http://cdn.domain.tld` | CDN URL for serving files |
+| `PHORGE_TITLE` | `RMI` | Instance title shown in UI |
+| `PHORGE_ADMIN_USER` | `admin` | Admin username |
+| `PHORGE_ADMIN_EMAIL` | `admin@domain.tld` | Admin email address |
+| `PHORGE_ADMIN_NAME` | `Administrator` | Admin display name |
+| `PHORGE_ADMIN_PASS` | `supersecr3tpassw0rdfordevelop1` | Admin password (enables immediate login) |
+| `PHORGE_ADMIN_TOKEN` | `api-supersecr3tapikeyfordevelop1` | Pre-configured API token |
+| `PHORGE_GIT_REF` | `stable` | Git branch/tag/commit for Phorge |
+| `ARCANIST_GIT_REF` | `stable` | Git branch/tag/commit for Arcanist |
 
 ## Configure phabfive
 

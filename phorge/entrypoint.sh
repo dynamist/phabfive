@@ -14,6 +14,25 @@ until mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASS" -e "
 done
 echo "Database is ready!"
 
+# Checkout specified git refs if provided
+if [ ! -z "$PHORGE_GIT_REF" ]; then
+  cd /app/phorge
+  echo "Fetching phorge..."
+  timeout 30 git fetch --all || echo "Warning: fetch timed out or failed for phorge"
+  echo "Checking out phorge ref: $PHORGE_GIT_REF"
+  git checkout "$PHORGE_GIT_REF" || echo "Warning: checkout failed for phorge"
+fi
+
+if [ ! -z "$ARCANIST_GIT_REF" ]; then
+  cd /app/arcanist
+  echo "Fetching arcanist..."
+  timeout 30 git fetch --all || echo "Warning: fetch timed out or failed for arcanist"
+  echo "Checking out arcanist ref: $ARCANIST_GIT_REF"
+  git checkout "$ARCANIST_GIT_REF" || echo "Warning: checkout failed for arcanist"
+fi
+
+cd /app/phorge
+
 # Configure Phorge database connection
 echo "Configuring Phorge database connection..."
 cd /app/phorge
@@ -34,8 +53,8 @@ if [ ! -z "$PHORGE_TITLE" ]; then
 fi
 
 # Set alternate file domain if provided
-if [ ! -z "$PHORGE_ALT_FILE_DOMAIN" ]; then
-  ./bin/config set security.alternate-file-domain "$PHORGE_ALT_FILE_DOMAIN"
+if [ ! -z "$PHORGE_CDN_URL" ]; then
+  ./bin/config set security.alternate-file-domain "$PHORGE_CDN_URL"
 fi
 
 # Configure repository local path
@@ -70,8 +89,11 @@ if [ -f /usr/local/bin/init-phorge.sh ]; then
   bash /usr/local/bin/init-phorge.sh
 fi
 
-(cd /app/phorge; echo "phorge rev $(git rev-parse HEAD)")
-(cd /app/arcanist; echo "arcanist rev $(git rev-parse HEAD)")
+# Print git refs with history links
+PHORGE_REF=$(cd /app/phorge && git rev-parse --abbrev-ref HEAD 2>/dev/null || git rev-parse --short HEAD)
+ARCANIST_REF=$(cd /app/arcanist && git rev-parse --abbrev-ref HEAD 2>/dev/null || git rev-parse --short HEAD)
+echo "phorge: https://we.phorge.it/source/phorge/history/${PHORGE_REF}/"
+echo "arcanist: https://we.phorge.it/source/arcanist/history/${ARCANIST_REF}/"
 
 # Start daemons in background
 echo "Starting Phorge daemons..."

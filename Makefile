@@ -8,6 +8,14 @@ CONTAINER_RUNTIME = $(or \
 
 COMPOSE_FILE := compose.yml
 
+# Phorge URLs (defaults match compose.yml)
+PHORGE_URL ?= http://phorge.domain.tld
+PHORGE_CDN_URL ?= http://cdn.domain.tld
+
+# Extract hostnames from URLs for --add-host
+PHORGE_HOST := $(shell echo "$(PHORGE_URL)" | sed 's|^https\?://||' | sed 's|/.*||')
+PHORGE_CDN_HOST := $(shell echo "$(PHORGE_CDN_URL)" | sed 's|^https\?://||' | sed 's|/.*||')
+
 # Detect host's phabfive config file (OS-specific via appdirs)
 PHABFIVE_HOST_CONFIG := $(shell \
 	if [ -f "$(HOME)/Library/Application Support/phabfive.yaml" ]; then \
@@ -108,8 +116,8 @@ phabfive-run: phabfive-build ## run phabfive in docker container with ARGS="your
 phabfive-run-dev: phabfive-build ## run phabfive connected to local phorge instance with ARGS="your args here"
 	$(CONTAINER_RUNTIME) run --rm \
 		--env PHAB_TOKEN --env PHAB_URL \
-		--add-host=phorge.domain.tld:host-gateway \
-		--add-host=phorge-files.domain.tld:host-gateway \
+		--add-host=$(PHORGE_HOST):host-gateway \
+		--add-host=$(PHORGE_CDN_HOST):host-gateway \
 		$(PHABFIVE_CONFIG_MOUNT) \
 		phabfive $(ARGS)
 
