@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 
 # python std lib
+import logging
 import re
 import sys
 
 # 3rd party imports
 from docopt import DocoptExit, Option, docopt, extras
+
+log = logging.getLogger(__name__)
 
 base_args = """
 Usage:
@@ -716,7 +719,7 @@ def run(cli_args, sub_args):
                 )
     except PhabfiveException as e:
         # Catch all types of phabricator base exceptions
-        print(f"CRITICAL :: {str(e)}", file=sys.stderr)
+        log.critical(str(e))
         retcode = 1
 
     return retcode

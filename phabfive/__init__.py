@@ -19,7 +19,8 @@ def init_logging(log_level):
 
     if isinstance(_log_level, str):
         print(
-            "CRITICAL: Undefined log-level set, please use any of the defined log levels inside Python logging module"
+            "CRITICAL - Undefined log-level set, please use any of the defined log levels inside Python logging module",
+            file=sys.stderr,
         )
         sys.exit(1)
 
