@@ -131,11 +131,21 @@ class Phabfive:
             return mapping.get(direction, direction)
         return direction
 
-    def format_link(self, url, text):
-        """Format URL as hyperlink if enabled, otherwise return url."""
+    def format_link(self, url, text, show_url=True):
+        """Format URL as hyperlink if enabled, otherwise return text or url.
+
+        Parameters
+        ----------
+        url : str
+            The URL to link to
+        text : str
+            The visible text for the link
+        show_url : bool
+            If True and hyperlinks disabled, return url. If False, return text.
+        """
         if self._is_hyperlink_enabled():
             return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
-        return url
+        return url if show_url else text
 
     def __init__(self):
         """ """
