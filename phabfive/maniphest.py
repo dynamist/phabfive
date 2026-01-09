@@ -1673,8 +1673,13 @@ class Maniphest(Phabfive):
             # Get current column only
             columns = board_data.get("columns", [])
             if columns:
-                column_name = columns[0].get("name", "Unknown")
-                boards_dict[project_name] = {"Column": column_name}
+                column_data = columns[0]
+                column_name = column_data.get("name", "Unknown")
+                column_phid = column_data.get("phid", "")
+                boards_dict[project_name] = {
+                    "Column": column_name,
+                    "_column_phid": column_phid,
+                }
 
         return boards_dict
 
@@ -2072,6 +2077,22 @@ class Maniphest(Phabfive):
                     print(f"    {board_display}:")
                     if isinstance(board_data, dict):
                         for key, value in board_data.items():
+                            # Skip internal fields
+                            if key.startswith("_"):
+                                continue
+                            # Make Column clickable with "View as Query" URL
+                            if key == "Column":
+                                column_phid = board_data.get("_column_phid", "")
+                                if column_phid:
+                                    query_url = f"{self.url}/maniphest/?columns={column_phid}"
+                                    column_display = self.format_link(query_url, value, show_url=False)
+                                    # Quote if column name contains special YAML characters
+                                    if isinstance(value, str) and (":" in value or "{" in value or "}" in value):
+                                        escaped = column_display.replace("'", "''")
+                                        print(f"      {key}: '{escaped}'")
+                                    else:
+                                        print(f"      {key}: {column_display}")
+                                    continue
                             if isinstance(value, str) and (":" in value or "{" in value or "}" in value):
                                 escaped = value.replace("'", "''")
                                 print(f"      {key}: '{escaped}'")
