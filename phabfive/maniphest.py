@@ -2393,7 +2393,7 @@ class Maniphest(Phabfive):
                         parent_phids.append(search_result["data"][0]["phid"])
 
                     add_transaction(transactions, "parents.set", parent_phids)
-            else:
+            elif "tasks" not in task_config:
                 log.warning(
                     "Required fields 'title' and 'description' is not present in this data block, skipping ticket creation"
                 )
@@ -2454,12 +2454,12 @@ class Maniphest(Phabfive):
 
                     # Store the newly created ticket ID in the data structure so child tickets can look it up
                     task_config["phid"] = str(result["object"]["phid"])
-            else:
-                log.warning(
-                    "No transactions to commit here, either a bug or root object that can't be transacted"
-                )
-
             child_tasks = task_config.get("tasks", None)
+
+            if not transactions_to_commit and not child_tasks:
+                log.warning(
+                    "No transactions to commit and no child tasks - possible data issue"
+                )
 
             if child_tasks:
                 for child_task in child_tasks:
