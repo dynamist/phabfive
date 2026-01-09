@@ -1,0 +1,19 @@
+# Find high priority tasks that haven't been updated recently
+# Useful for identifying important work that may have stalled
+
+search:
+  priority: "in:High,in:Unbreak Now!,in:Triage"
+  updated-after: 14
+  show-history: true
+  show-metadata: true
+
+description: |
+  This template identifies high-priority tasks that haven't been updated
+  in the last 2 weeks. These may need attention to ensure important work
+  doesn't get forgotten.
+
+  Example usage:
+    phabfive maniphest search --with templates/task-search/high-priority-stale-tasks.yaml
+
+  Adjust the staleness period:
+    phabfive maniphest search --with templates/task-search/high-priority-stale-tasks.yaml --updated-after 7

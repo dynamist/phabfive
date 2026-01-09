@@ -1571,6 +1571,85 @@ class Maniphest(Phabfive):
             show_metadata=show_metadata,
         )
 
+    def _load_search_from_yaml(self, yaml_file_path):
+        """
+        Load search parameters from a YAML file (supports multi-document).
+
+        Parameters
+        ----------
+        yaml_file_path : str
+            Path to the YAML file containing search parameters
+
+        Returns
+        -------
+        list
+            List of dictionaries, each containing search parameters for one search.
+            Single document files return a list with one element.
+
+        Raises
+        ------
+        PhabfiveException
+            If the YAML file is invalid or contains unsupported parameters
+        """
+        yaml_path = Path(yaml_file_path)
+
+        if not yaml_path.exists():
+            raise PhabfiveException(f"YAML file not found: {yaml_file_path}")
+
+        if not yaml_path.is_file():
+            raise PhabfiveException(f"Path is not a file: {yaml_file_path}")
+
+        try:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                yaml_loader = YAML()
+                # Load all documents from the YAML file
+                documents = list(yaml_loader.load_all(f))
+        except Exception as e:
+            raise PhabfiveException(f"Failed to parse YAML file {yaml_file_path}: {e}")
+
+        if not documents:
+            raise PhabfiveException("YAML file contains no documents")
+
+        search_configs = []
+        supported_params = {
+            'text_query', 'tag', 'created-after', 'updated-after',
+            'column', 'priority', 'status', 'show-history', 'show-metadata'
+        }
+
+        for i, data in enumerate(documents):
+            if not isinstance(data, dict):
+                raise PhabfiveException(
+                    f"Document {i + 1} in YAML file must contain a dictionary at root level"
+                )
+
+            search_params = data.get('search', {})
+            if not isinstance(search_params, dict):
+                raise PhabfiveException(
+                    f"Document {i + 1}: 'search' section must be a dictionary"
+                )
+
+            # Validate supported parameters
+            invalid_params = set(search_params.keys()) - supported_params
+            if invalid_params:
+                raise PhabfiveException(
+                    f"Document {i + 1}: Unsupported search parameters: {', '.join(invalid_params)}. "
+                    f"Supported: {', '.join(sorted(supported_params))}"
+                )
+
+            # Store the search config with optional title and description
+            config = {
+                'search': search_params,
+                'title': data.get('title', f"Search {i + 1}"),
+                'description': data.get('description', None)
+            }
+            search_configs.append(config)
+
+        log.info(f"Loaded {len(search_configs)} search configuration(s) from {yaml_file_path}")
+        for i, config in enumerate(search_configs):
+            log.debug(f"Search {i + 1} parameters: {config['search']}")
+
+        return search_configs
+
     def task_search(
         self,
         text_query=None,

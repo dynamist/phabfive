@@ -1,0 +1,22 @@
+# Find tasks that had their priority raised recently
+# Useful for tracking escalations and understanding priority trends
+
+search:
+  priority: "raised"
+  updated-after: 30
+  show-history: true
+  show-metadata: true
+
+description: |
+  This template finds tasks that have had their priority increased
+  in the past month. This can help track escalations and understand
+  what types of work are becoming more urgent.
+
+  The search includes full priority transition history to see the
+  escalation path.
+
+  Example usage:
+    phabfive maniphest search --with templates/task-search/escalated-priorities.yaml
+
+  Narrow to recent escalations:
+    phabfive maniphest search --with templates/task-search/escalated-priorities.yaml --updated-after 7
