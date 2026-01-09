@@ -125,8 +125,9 @@ Arguments:
     <ticket_id>          Task ID (e.g., T123)
 
 Options:
-    --show-history       Display transition history for columns, priority, and status
-    --show-metadata      Display metadata about the task
+    -H, --show-history   Display transition history for columns, priority, and status
+    -M, --show-metadata  Display metadata about the task
+    -C, --show-comments  Display comments on the task
     -h, --help           Show this help message and exit
 """
 
@@ -288,11 +289,15 @@ def parse_cli():
         elif app == "user":
             argv = [app, "whoami"] + argv
         elif app == "maniphest":
-            if len(argv) > 1:  # Extra args = comment text
+            # Check if there's a non-option argument (comment text)
+            # Options start with '-', positional args are comment text
+            has_comment_text = len(argv) > 1 and not argv[1].startswith("-")
+            if has_comment_text:
                 # T123 'my comment' -> maniphest comment T123 'my comment'
                 argv = [app, "comment"] + argv
             else:
                 # T123 -> maniphest show T123
+                # T123 -C -> maniphest show T123 -C
                 argv = [app, "show"] + argv
 
         cli_args["<args>"] = [monogram]
@@ -634,11 +639,13 @@ def run(cli_args, sub_args):
                 # Handle flags
                 show_history = sub_args.get("--show-history", False)
                 show_metadata = sub_args.get("--show-metadata", False)
+                show_comments = sub_args.get("--show-comments", False)
 
                 maniphest_app.task_show(
                     task_id,
                     show_history=show_history,
                     show_metadata=show_metadata,
+                    show_comments=show_comments,
                 )
     except PhabfiveException as e:
         # Catch all types of phabricator base exceptions
