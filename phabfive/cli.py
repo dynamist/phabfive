@@ -27,7 +27,7 @@ Shortcuts to view Phabricator monograms (example: phabfive T123):
     T[0-9]+   Maniphest task
 
 Options:
-    --log-level=<level>   Set loglevel [default: INFO]
+    --log-level=LEVEL     Set loglevel [default: INFO]
     -h, --help            Show this help message and exit
     -V, --version         Display the version number and exit
 """
@@ -65,10 +65,10 @@ Uri List Options:
     -c, --clone   Show clone url(s)
 
 Uri Edit Options:
-    -n, --new_uri=<value>  Change repository URI
-    -i, --io=<value>       Adjust I/O behavior. Value: default, read, write, never
-    -d, --display=<value>  Change display behavior. Value: default, always, hidden
-    -c, --cred=<value>     Change credential for this URI. Ex. K2
+    -n, --new_uri=URI      Change repository URI
+    -i, --io=VALUE         Adjust I/O behavior. Value: default, read, write, never
+    -d, --display=VALUE    Change display behavior. Value: default, always, hidden
+    -c, --cred=CREDENTIAL  Change credential for this URI. Ex. K2
 """
 
 sub_paste_args = """
@@ -86,8 +86,8 @@ Options:
     -h, --help  Show this help message and exit
 
 Paste Create Options:
-    -t, --tags=<tags> ...         Project name(s), ex. --tags=projectX,projectY,projectZ
-    -s, --subscribers=<sub> ...   Subscribers - user, project, mailing list name. Ex --subscribers=user1,user2,user3
+    -t, --tags=TAGS ...           Project name(s), ex. --tags=projectX,projectY,projectZ
+    -s, --subscribers=USERS ...   Subscribers - user, project, mailing list name. Ex --subscribers=user1,user2,user3
 """
 
 sub_user_args = """
@@ -142,11 +142,11 @@ Arguments:
 
 Options:
     --with=TEMPLATE         Load task creation template from YAML file (bulk mode)
-    --description=<text>    Task description (optional)
+    --description=TEXT      Task description (optional)
     --tag=TAG               Project/workboard tag (repeatable, or use + for multiple)
-    --assign=<user>         Assignee username
-    --status=<status>       Task status (Open, Resolved, Wontfix, Invalid, Duplicate, Spite)
-    --priority=<level>      Task priority (Unbreak, Triage, High, Normal, Low, Wish)
+    --assign=USER           Assignee username
+    --status=STATUS         Task status (Open, Resolved, Wontfix, Invalid, Duplicate, Spite)
+    --priority=LEVEL        Task priority (Unbreak, Triage, High, Normal, Low, Wish)
     --subscribe=USER        Subscriber username (repeatable, or use + for multiple)
     --dry-run               Preview without creating task
     -h, --help              Show this help message and exit
