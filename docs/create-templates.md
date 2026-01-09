@@ -17,13 +17,13 @@ Use any template with the `maniphest create` command:
 
 ```bash
 # Preview tasks without creating them (recommended first step)
-phabfive maniphest create templates/task-create/template.yaml --dry-run
+phabfive maniphest create --with templates/task-create/template.yaml --dry-run
 
 # Create tasks for real
-phabfive maniphest create templates/task-create/template.yaml
+phabfive maniphest create --with templates/task-create/template.yaml
 
 # Enable debug logging to see detailed processing
-phabfive --log-level=DEBUG maniphest create templates/task-create/template.yaml --dry-run
+phabfive --log-level=DEBUG maniphest create --with templates/task-create/template.yaml --dry-run
 ```
 
 ## Template Structure
@@ -282,7 +282,7 @@ Simple example showing basic task creation with variables and project assignment
 **Use case**: Learning template syntax and testing basic functionality.
 
 ```bash
-phabfive maniphest create templates/task-create/test-template.yaml --dry-run
+phabfive maniphest create --with templates/task-create/test-template.yaml --dry-run
 ```
 
 ### test-template-v2.yml
@@ -296,7 +296,7 @@ Advanced example demonstrating:
 **Use case**: Complex project setup with multiple related tasks.
 
 ```bash
-phabfive --log-level=DEBUG maniphest create templates/task-create/test-template-v2.yml --dry-run
+phabfive --log-level=DEBUG maniphest create --with templates/task-create/test-template-v2.yml --dry-run
 ```
 
 ## Requirements and Setup
@@ -316,13 +316,13 @@ Always test templates before creating real tasks:
 
 ```bash
 # 1. Start with dry-run to see what would be created
-phabfive maniphest create templates/task-create/your-template.yaml --dry-run
+phabfive maniphest create --with templates/task-create/your-template.yaml --dry-run
 
 # 2. Enable debug logging for detailed information
-phabfive --log-level=DEBUG maniphest create templates/task-create/your-template.yaml --dry-run
+phabfive --log-level=DEBUG maniphest create --with templates/task-create/your-template.yaml --dry-run
 
 # 3. Create tasks only after verification
-phabfive maniphest create templates/task-create/your-template.yaml
+phabfive maniphest create --with templates/task-create/your-template.yaml
 ```
 
 ### Error Handling

@@ -2210,15 +2210,15 @@ class Maniphest(Phabfive):
 
         return (True, result)
 
-    def create_from_config(self, config_file, dry_run=False):
-        if not config_file:
+    def create_from_config(self, create_config, dry_run=False):
+        if not create_config:
             raise PhabfiveException("Must specify a config file path")
 
-        if not Path(config_file).is_file():
-            log.error(f"Config file '{config_file}' do not exists")
+        if not Path(create_config).is_file():
+            log.error(f"Config file '{create_config}' do not exists")
             return
 
-        with open(config_file) as stream:
+        with open(create_config) as stream:
             yaml_loader = YAML()
             root_data = yaml_loader.load(stream)
 

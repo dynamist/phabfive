@@ -72,13 +72,13 @@ Create multiple related tasks in bulk using YAML configuration files. Task creat
 
 ```bash
 # Always preview first (recommended)
-phabfive maniphest create templates/task-create/project-setup.yaml --dry-run
+phabfive maniphest create --with templates/task-create/project-setup.yaml --dry-run
 
 # Create tasks for real
-phabfive maniphest create templates/task-create/project-setup.yaml
+phabfive maniphest create --with templates/task-create/project-setup.yaml
 
 # Debug complex templates
-phabfive --log-level=DEBUG maniphest create templates/task-create/sprint-planning.yaml --dry-run
+phabfive --log-level=DEBUG maniphest create --with templates/task-create/sprint-planning.yaml --dry-run
 ```
 
 **Example template structure:**
