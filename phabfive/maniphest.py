@@ -240,7 +240,7 @@ class Maniphest(Phabfive):
         Returns
         -------
         dict
-            Dictionary with keys 'columns', 'priority', 'status', 'assignee', 'comments'
+            Dictionary with keys 'columns', 'priority', 'status', 'assignee', and 'comments',
             each containing a list of transaction dicts with keys:
             - oldValue: previous value (format depends on transaction type)
             - newValue: new value (format depends on transaction type)
