@@ -59,6 +59,25 @@ class PriorityPattern:
         """
         self.conditions = conditions
 
+    def __str__(self):
+        """Return string representation of the pattern."""
+        parts = []
+        for cond in self.conditions:
+            cond_type = cond.get("type", "")
+            negated = cond.get("negated", False)
+            prefix = "not:" if negated else ""
+
+            if cond_type in ("raised", "lowered"):
+                parts.append(f"{prefix}{cond_type}")
+            else:
+                priority = cond.get("priority", "")
+                direction = cond.get("direction")
+                if direction:
+                    parts.append(f"{prefix}{cond_type}:{priority}:{direction}")
+                else:
+                    parts.append(f"{prefix}{cond_type}:{priority}")
+        return "+".join(parts)
+
     def matches(self, priority_transactions, current_priority):
         """
         Check if all conditions in this pattern match (AND logic).

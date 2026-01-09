@@ -256,9 +256,6 @@ Examples:
     # Using YAML templates
     phabfive maniphest search --with templates/task-search/tasks-resolved-but-not-in-done.yaml
     phabfive maniphest search --with templates/task-search/search-template.yaml --tag Override-Project
-
-    # Requires at least one filter (text, tag, date, column, priority, or status)
-    phabfive maniphest search  # ERROR: not specific enough
 """
 
 
@@ -631,6 +628,21 @@ def run(cli_args, sub_args):
                     tag = get_param("--tag", yaml_params, "tag")
                     created_after = get_param("--created-after", yaml_params, "created-after")
                     updated_after = get_param("--updated-after", yaml_params, "updated-after")
+
+                    # Check if any search criteria provided, show usage if not
+                    has_criteria = any([
+                        text_query,
+                        tag,
+                        created_after,
+                        updated_after,
+                        transition_patterns,
+                        priority_patterns,
+                        status_patterns,
+                    ])
+                    if not has_criteria:
+                        print("Usage:")
+                        print("    phabfive maniphest search [<text_query>] [options]")
+                        return retcode
 
                     maniphest_app.task_search(
                         text_query=text_query,
