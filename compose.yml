@@ -6,18 +6,20 @@ services:
       context: .
       dockerfile: ./Dockerfile.phorge
     environment:
-      - PHORGE_URL=http://phorge.domain.tld
-      - PHORGE_ALT_FILE_DOMAIN=http://cdn.domain.tld
-      - PHORGE_TITLE=RMI
-      - PHORGE_ADMIN_USER=admin
-      - PHORGE_ADMIN_EMAIL=admin@domain.tld
-      - PHORGE_ADMIN_NAME=Administrator
-      - PHORGE_ADMIN_PASS=supersecr3tpassw0rdfordevelop1
-      - PHORGE_ADMIN_TOKEN=api-supersecr3tapikeyfordevelop1
+      - PHORGE_URL=${PHORGE_URL:-http://phorge.domain.tld}
+      - PHORGE_CDN_URL=${PHORGE_CDN_URL:-http://cdn.domain.tld}
+      - PHORGE_TITLE=${PHORGE_TITLE:-RMI}
+      - PHORGE_ADMIN_USER=${PHORGE_ADMIN_USER:-admin}
+      - PHORGE_ADMIN_EMAIL=${PHORGE_ADMIN_EMAIL:-admin@domain.tld}
+      - PHORGE_ADMIN_NAME=${PHORGE_ADMIN_NAME:-Administrator}
+      - PHORGE_ADMIN_PASS=${PHORGE_ADMIN_PASS:-supersecr3tpassw0rdfordevelop1}
+      - PHORGE_ADMIN_TOKEN=${PHORGE_ADMIN_TOKEN:-api-supersecr3tapikeyfordevelop1}
+      - PHORGE_GIT_REF=${PHORGE_GIT_REF:-stable}
+      - ARCANIST_GIT_REF=${ARCANIST_GIT_REF:-stable}
       - MYSQL_HOST=mariadb
       - MYSQL_PORT=3306
       - MYSQL_USER=root
-      - MYSQL_PASS=somerootpassword
+      - MYSQL_PASS=${MYSQL_PASS:-supersecr3tpassw0rdfordatabase1}
     ports:
       - '80:80'
     depends_on:
@@ -26,7 +28,7 @@ services:
   mariadb:
     image: 'mariadb:12'
     environment:
-      - MYSQL_ROOT_PASSWORD=somerootpassword
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASS:-supersecr3tpassw0rdfordatabase1}
     ports:
       - '3306:3306'
     command:
