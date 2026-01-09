@@ -205,7 +205,12 @@ class Maniphest(Phabfive):
         }
 
     def _fetch_all_transactions(
-        self, task_phid, need_columns=False, need_priority=False, need_status=False
+        self,
+        task_phid,
+        need_columns=False,
+        need_priority=False,
+        need_status=False,
+        need_comments=False,
     ):
         """
         Fetch all transaction types for a task in a single API call.
@@ -226,20 +231,23 @@ class Maniphest(Phabfive):
             Whether to fetch and parse priority transitions
         need_status : bool
             Whether to fetch and parse status transitions
+        need_comments : bool
+            Whether to fetch and parse comments
 
         Returns
         -------
         dict
-            Dictionary with keys 'columns', 'priority', 'status', each containing
-            a list of transaction dicts with keys:
+            Dictionary with keys 'columns', 'priority', 'status', 'comments',
+            each containing a list of transaction dicts with keys:
             - oldValue: previous value (format depends on transaction type)
             - newValue: new value (format depends on transaction type)
             - dateCreated: timestamp (int)
+            For comments: authorPHID, text, dateCreated
         """
-        result_dict = {"columns": [], "priority": [], "status": []}
+        result_dict = {"columns": [], "priority": [], "status": [], "comments": []}
 
         # Early return if nothing requested
-        if not (need_columns or need_priority or need_status):
+        if not (need_columns or need_priority or need_status or need_comments):
             return result_dict
 
         try:
@@ -332,11 +340,24 @@ class Maniphest(Phabfive):
                     }
                     result_dict["status"].append(transformed)
 
+                # Process comments
+                elif need_comments and trans_type == "core:comment":
+                    comment_text = trans.get("comments", "")
+                    if comment_text:  # Only add non-empty comments
+                        transformed = {
+                            "id": trans.get("transactionID"),
+                            "authorPHID": trans.get("authorPHID"),
+                            "text": comment_text,
+                            "dateCreated": int(trans.get("dateCreated", 0)),
+                        }
+                        result_dict["comments"].append(transformed)
+
             log.debug(
                 f"Fetched transactions for {task_phid} (T{task_id}): "
                 f"{len(result_dict['columns'])} column, "
                 f"{len(result_dict['priority'])} priority, "
-                f"{len(result_dict['status'])} status"
+                f"{len(result_dict['status'])} status, "
+                f"{len(result_dict['comments'])} comments"
             )
 
             return result_dict
@@ -1056,6 +1077,75 @@ class Maniphest(Phabfive):
 
         return transitions
 
+    def _build_comments(self, comment_transactions, task_id):
+        """
+        Build comments list for a task in compact format.
+
+        Parameters
+        ----------
+        comment_transactions : list
+            List of comment transactions with authorPHID, text, dateCreated
+        task_id : int
+            Task ID for building comment references (e.g., T5@93)
+
+        Returns
+        -------
+        list
+            List of formatted comment strings like:
+            "2026-01-09T05:15:20 [admin T5@93] Comment text here..."
+        """
+        if not comment_transactions:
+            return []
+
+        # Collect all unique author PHIDs to resolve in a single API call
+        author_phids = {
+            t.get("authorPHID") for t in comment_transactions if t.get("authorPHID")
+        }
+
+        # Resolve author PHIDs to usernames
+        author_map = {}
+        if author_phids:
+            try:
+                result = self.phab.user.search(constraints={"phids": list(author_phids)})
+                author_map = {
+                    u["phid"]: u["fields"]["username"] for u in result.get("data", [])
+                }
+            except Exception as e:
+                log.warning(f"Failed to resolve author PHIDs: {e}")
+
+        # Sort comments chronologically (oldest first)
+        sorted_comments = sorted(
+            comment_transactions, key=lambda t: t.get("dateCreated", 0)
+        )
+
+        comments = []
+        for trans in sorted_comments:
+            comment_id = trans.get("id", "?")
+            author_phid = trans.get("authorPHID")
+            author_name = author_map.get(author_phid, author_phid or "Unknown")
+            date_created = trans.get("dateCreated")
+            text = trans.get("text", "")
+
+            # Format timestamp
+            timestamp_str = format_timestamp(date_created) if date_created else "Unknown"
+
+            # Format: compact for single-line, block scalar for multi-line
+            # Include comment reference (T5@93) for future edit/remove commands
+            comment_ref = f"T{task_id}@{comment_id}"
+            if "\n" in text:
+                # Multi-line: use block scalar to preserve formatting
+                # Put first line on same line as header
+                lines = text.split("\n")
+                header = f"{timestamp_str} [{author_name} {comment_ref}] {lines[0]}"
+                remaining = "\n".join(lines[1:])
+                full_text = f"{header}\n{remaining}"
+                comments.append(PreservedScalarString(full_text))
+            else:
+                # Single-line: show full text
+                comments.append(f"{timestamp_str} [{author_name} {comment_ref}] {text}")
+
+        return comments
+
     def _build_status_transitions(self, status_transactions):
         """
         Build status transition history data for a task.
@@ -1373,11 +1463,13 @@ class Maniphest(Phabfive):
         task_transitions_map=None,
         priority_transitions_map=None,
         status_transitions_map=None,
+        comments_map=None,
         matching_boards_map=None,
         matching_priority_map=None,
         matching_status_map=None,
         show_history=False,
         show_metadata=False,
+        show_comments=False,
     ):
         """
         Format and display tasks in YAML format.
@@ -1395,6 +1487,8 @@ class Maniphest(Phabfive):
             Mapping of task ID to priority transitions
         status_transitions_map : dict, optional
             Mapping of task ID to status transitions
+        comments_map : dict, optional
+            Mapping of task ID to comments list
         matching_boards_map : dict, optional
             Mapping of task ID to matching board PHIDs
         matching_priority_map : dict, optional
@@ -1405,6 +1499,8 @@ class Maniphest(Phabfive):
             Whether to display transition history
         show_metadata : bool, optional
             Whether to display filter match metadata
+        show_comments : bool, optional
+            Whether to display comments
         """
         # Initialize empty dicts if None
         if task_transitions_map is None:
@@ -1413,6 +1509,8 @@ class Maniphest(Phabfive):
             priority_transitions_map = {}
         if status_transitions_map is None:
             status_transitions_map = {}
+        if comments_map is None:
+            comments_map = {}
         if matching_boards_map is None:
             matching_boards_map = {}
         if matching_priority_map is None:
@@ -1473,6 +1571,14 @@ class Maniphest(Phabfive):
             if boards_data:
                 task_dict["Boards"] = boards_data
 
+            # Add Comments section if show_comments is enabled
+            if show_comments:
+                task_comments = comments_map.get(item["id"], [])
+                if task_comments:
+                    comments_data = self._build_comments(task_comments, item["id"])
+                    if comments_data:
+                        task_dict["Comments"] = comments_data
+
             # Add History section if show_history is enabled
             if show_history:
                 history_data = self._build_history_section(
@@ -1508,7 +1614,9 @@ class Maniphest(Phabfive):
         yaml.width = 4096  # Avoid unwanted line wrapping
         yaml.dump(tasks_list, sys.stdout)
 
-    def task_show(self, task_id, show_history=False, show_metadata=False):
+    def task_show(
+        self, task_id, show_history=False, show_metadata=False, show_comments=False
+    ):
         """
         Show a single Phabricator Maniphest task with optional history and metadata.
 
@@ -1522,6 +1630,8 @@ class Maniphest(Phabfive):
             If True, display column, priority, and status transition history
         show_metadata : bool, optional
             If True, display metadata (mainly useful for debugging, less useful for single task)
+        show_comments : bool, optional
+            If True, display comments on the task
         """
         # Use maniphest.search API to fetch the task
         result = self.phab.maniphest.search(
@@ -1534,22 +1644,24 @@ class Maniphest(Phabfive):
             log.error(f"Task T{task_id} not found")
             return
 
-        # Initialize maps for storing transitions
+        # Initialize maps for storing transitions and comments
         task_transitions_map = {}
         priority_transitions_map = {}
         status_transitions_map = {}
+        comments_map = {}
 
-        # Fetch transition history if requested
-        if show_history:
+        # Fetch transaction data if any transaction-based info is requested
+        if show_history or show_comments:
             task_phid = result_data[0].get("phid")
             if task_phid:
-                log.info(f"Fetching transition history for T{task_id}")
+                log.info(f"Fetching transaction data for T{task_id}")
                 # Fetch all transaction types in a single API call
                 all_fetched_transactions = self._fetch_all_transactions(
                     task_phid,
-                    need_columns=True,
-                    need_priority=True,
-                    need_status=True,
+                    need_columns=show_history,
+                    need_priority=show_history,
+                    need_status=show_history,
+                    need_comments=show_comments,
                 )
                 # Store transactions for history display
                 if all_fetched_transactions.get("columns"):
@@ -1560,6 +1672,8 @@ class Maniphest(Phabfive):
                     ]
                 if all_fetched_transactions.get("status"):
                     status_transitions_map[task_id] = all_fetched_transactions["status"]
+                if all_fetched_transactions.get("comments"):
+                    comments_map[task_id] = all_fetched_transactions["comments"]
 
         # Use shared method to format and display the task
         self._format_and_display_tasks(
@@ -1567,8 +1681,10 @@ class Maniphest(Phabfive):
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
             status_transitions_map=status_transitions_map,
+            comments_map=comments_map,
             show_history=show_history,
             show_metadata=show_metadata,
+            show_comments=show_comments,
         )
 
     def _load_search_from_yaml(self, template_path):
