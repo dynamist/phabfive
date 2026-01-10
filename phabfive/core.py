@@ -144,7 +144,7 @@ class Phabfive:
     def format_direction(self, direction):
         """Format direction indicator based on output mode."""
         if self._is_ascii_enabled():
-            mapping = {"•": "*", "↑": "^", "↓": "v", "→": ">", "←": "<"}
+            mapping = {"•": "-", "↑": "^", "↓": "v", "→": ">", "←": "<"}
             return mapping.get(direction, direction)
         return direction
 
