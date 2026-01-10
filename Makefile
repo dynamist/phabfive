@@ -1,4 +1,4 @@
-.PHONY: help clean cleanpy cleanall cleantox cleanvenv test install up down logs shell image docs format
+.PHONY: help clean cleanpy cleanall cleantox cleanvenv test install up down logs shell image docs format lock upgrade
 
 # Detect container runtime (prefer podman)
 CONTAINER_RUNTIME = $(or \
@@ -28,6 +28,12 @@ docs: ## build and serve documentation
 
 format: ## format code using ruff
 	ruff format .
+
+lock: ## sync uv.lock with pyproject.toml
+	uv lock
+
+upgrade: ## upgrade all dependencies to latest compatible versions
+	uv lock --upgrade
 
 ##@ Cleanup
 
