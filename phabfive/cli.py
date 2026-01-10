@@ -31,6 +31,7 @@ Shortcuts to view Phabricator monograms (example: phabfive T123):
 
 Options:
     --log-level=LEVEL     Set loglevel [default: INFO]
+    --format=FORMAT       Output format: rich (default), tree, or strict [default: rich]
     --ascii=WHEN          Use ASCII instead of Unicode (always/auto/never) [default: auto]
     --hyperlink=WHEN      Enable terminal hyperlinks (always/auto/never) [default: auto]
     -h, --help            Show this help message and exit
@@ -393,22 +394,29 @@ def run(cli_args, sub_args):
 
     # Validate and process output options
     valid_modes = ("always", "auto", "never")
+    valid_formats = ("rich", "tree", "strict")
+    output_format = cli_args.get("--format", "rich")
     ascii_when = cli_args.get("--ascii", "never")
     hyperlink_when = cli_args.get("--hyperlink", "never")
 
+    if output_format not in valid_formats:
+        sys.exit(f"Error: --format must be one of: {', '.join(valid_formats)}")
     if ascii_when not in valid_modes:
         sys.exit(f"Error: --ascii must be one of: {', '.join(valid_modes)}")
     if hyperlink_when not in valid_modes:
         sys.exit(f"Error: --hyperlink must be one of: {', '.join(valid_modes)}")
 
-    # Check mutual exclusivity (only when both explicitly set to always)
+    # Check mutual exclusivity
     if ascii_when == "always" and hyperlink_when == "always":
         sys.exit("Error: --ascii=always and --hyperlink=always are mutually exclusive")
+    if output_format == "strict" and hyperlink_when == "always":
+        sys.exit("Error: --format=strict and --hyperlink=always are mutually exclusive (ruamel.yaml does not support hyperlinks)")
 
     # Set output formatting options
     Phabfive.set_output_options(
         ascii_when=ascii_when,
         hyperlink_when=hyperlink_when,
+        output_format=output_format,
     )
 
     retcode = 0
