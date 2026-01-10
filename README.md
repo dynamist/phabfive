@@ -60,12 +60,16 @@ export PHAB_URL=https://yourserver.com/api/
 
 ```bash
 # Linux/XDG
-echo "PHAB_TOKEN: cli-ABC123" > ~/.config/phabfive.yaml
-echo "PHAB_URL: https://yourserver.com/api/" >> ~/.config/phabfive.yaml
+cat << 'EOF' > ~/.config/phabfive.yaml
+PHAB_TOKEN: cli-ABC123
+PHAB_URL: https://yourserver.com/api/
+EOF
 
 # macOS
-echo "PHAB_TOKEN: cli-ABC123" > ~/Library/Application\ Support/phabfive.yaml
-echo "PHAB_URL: https://yourserver.com/api/" >> ~/Library/Application\ Support/phabfive.yaml
+cat << 'EOF' > ~/Library/Application\ Support/phabfive.yaml
+PHAB_TOKEN: cli-ABC123
+PHAB_URL: https://yourserver.com/api/
+EOF
 
 # Windows - create at: %LOCALAPPDATA%\phabfive\phabfive.yaml
 ```
@@ -93,6 +97,6 @@ See [docs/development.md](docs/development.md) for instructions on setting up yo
 
 ## License
 
-Copyright (c) 2017-2025 Dynamist AB
+Copyright (c) 2017-2026 Dynamist AB
 
 See the LICENSE file provided with the source distribution for full details.
