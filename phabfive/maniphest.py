@@ -2173,6 +2173,20 @@ class Maniphest(Phabfive):
                     for trans in hist_value:
                         console.print(f"      - {trans}")
 
+        # Print Comments section
+        comments = task_dict.get("Comments", [])
+        if comments:
+            console.print("  Comments:")
+            for comment in comments:
+                if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
+                    # Multi-line comment
+                    lines = str(comment).splitlines()
+                    console.print(f"    - {lines[0]}")
+                    for line in lines[1:]:
+                        console.print(f"      {line}")
+                else:
+                    console.print(f"    - {comment}")
+
         # Print Metadata section
         if metadata:
             console.print("  Metadata:")
@@ -2265,6 +2279,20 @@ class Maniphest(Phabfive):
                     for trans in hist_value:
                         hist_type_branch.add(trans)
 
+        # Add Comments section
+        comments = task_dict.get("Comments", [])
+        if comments:
+            comments_branch = tree.add("Comments")
+            for comment in comments:
+                if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
+                    # Truncate multi-line comments in tree view
+                    first_line = str(comment).split("\n")[0]
+                    if len(first_line) > 60:
+                        first_line = first_line[:57] + "..."
+                    comments_branch.add(first_line)
+                else:
+                    comments_branch.add(str(comment))
+
         # Add Metadata section
         if metadata:
             meta_branch = tree.add("Metadata")
@@ -2328,6 +2356,17 @@ class Maniphest(Phabfive):
         # Add History section if present
         if task_dict.get("History"):
             output["History"] = task_dict["History"]
+
+        # Add Comments section if present
+        if task_dict.get("Comments"):
+            # Convert PreservedScalarString to plain strings for strict YAML
+            comments = []
+            for comment in task_dict["Comments"]:
+                if isinstance(comment, PreservedScalarString):
+                    comments.append(str(comment))
+                else:
+                    comments.append(comment)
+            output["Comments"] = comments
 
         # Add Metadata section if present
         if task_dict.get("Metadata"):
