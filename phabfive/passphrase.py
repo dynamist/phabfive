@@ -26,7 +26,9 @@ class Passphrase(Phabfive):
 
     def get_secret(self, ids):
         if not self._validate_identifier(ids):
-            raise PhabfiveDataException(f"Invalid passphrase ID '{ids}'. Expected format: K123")
+            raise PhabfiveDataException(
+                f"Invalid passphrase ID '{ids}'. Expected format: K123"
+            )
 
         ids = ids.replace("K", "")
 
