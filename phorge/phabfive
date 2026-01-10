@@ -1,0 +1,54 @@
+#!/bin/bash
+# Run phabfive in Docker connected to local Phorge instance
+#
+# Usage: ./phorge/phabfive [phabfive args...]
+#
+# Examples:
+#   ./phorge/phabfive user whoami
+#   ./phorge/phabfive paste list
+#   ./phorge/phabfive maniphest search qa
+
+set -e
+
+# Default to local Phorge dev instance credentials
+PHAB_URL="${PHAB_URL:-http://phorge.domain.tld/api/}"
+PHAB_TOKEN="${PHAB_TOKEN:-api-supersecr3tapikeyfordevelop1}"
+
+# Use same hostnames as compose.yml defaults
+PHORGE_HOST="${PHORGE_HOST:-phorge.domain.tld}"
+PHORGE_CDN_HOST="${PHORGE_CDN_HOST:-cdn.domain.tld}"
+
+# Detect container runtime (prefer podman)
+if command -v podman &>/dev/null; then
+    RUNTIME=podman
+elif command -v docker &>/dev/null; then
+    RUNTIME=docker
+else
+    echo "Error: Neither podman nor docker found." >&2
+    exit 1
+fi
+
+# Get the project root (parent of phorge/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Build the image only if it doesn't exist (use 'make image' to force rebuild)
+if ! $RUNTIME image exists phabfive 2>/dev/null && ! $RUNTIME images -q phabfive 2>/dev/null | grep -q .; then
+    echo "Building phabfive image..." >&2
+    $RUNTIME build -f "$PROJECT_ROOT/Dockerfile" -t phabfive "$PROJECT_ROOT" >&2
+fi
+
+# Run phabfive with proper host routing
+# Use -t for TTY if running interactively, otherwise set TERM=dumb to suppress termcap warnings
+TTY_FLAG=""
+if [ -t 0 ]; then
+    TTY_FLAG="-t"
+fi
+
+$RUNTIME run --rm $TTY_FLAG \
+    -e PHAB_TOKEN="$PHAB_TOKEN" \
+    -e PHAB_URL="$PHAB_URL" \
+    -e TERM="${TERM:-dumb}" \
+    --add-host="$PHORGE_HOST":host-gateway \
+    --add-host="$PHORGE_CDN_HOST":host-gateway \
+    phabfive "$@"

@@ -11,7 +11,7 @@ Get from zero to working development environment in 2 steps:
 make install         # or: uv sync --group dev
 
 # 2. Start local Phorge test instance
-make phorge-up
+make up
 ```
 
 ## Installation in a Development Environment
@@ -33,29 +33,32 @@ uv sync --group dev
 uv run phabfive --help
 ```
 
-## Build and Run in a Docker/Podman Image
+## Running phabfive
 
-The project includes Makefile targets for Docker/Podman builds (automatically detects which is available):
+The recommended way to run phabfive during development is with `uv run`:
 
 ```bash
-# Build the image
-make phabfive-build
-
-# Run commands
-make phabfive-run ARGS="--help"
-make phabfive-run ARGS="paste list"
-
-# Run against local Phorge instance
-make phabfive-run-dev ARGS="maniphest search qa"
+# Run phabfive commands directly
+uv run phabfive --help
+uv run phabfive user whoami
+uv run phabfive paste list
+uv run phabfive maniphest search qa
 ```
 
-**Configuration:** The Makefile automatically handles your credentials:
+### Running in Docker
 
-- **Environment variables:** `PHAB_TOKEN` and `PHAB_URL` are passed through if set
+If you need to run phabfive in a container (e.g., for testing the Docker image), use the wrapper script:
 
-- **Config file:** Automatically detected and mounted from OS-specific locations:
-  - macOS: `~/Library/Application Support/phabfive.yaml`
-  - Linux: `~/.config/phabfive.yaml`
+```bash
+# Run against local Phorge instance (auto-configured)
+./phorge/phabfive user whoami
+./phorge/phabfive paste list
+
+# Or build the image manually
+make image
+```
+
+The wrapper script automatically uses the local Phorge credentials and sets up host routing.
 
 ## Run Unit Tests
 

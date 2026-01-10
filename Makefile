@@ -1,4 +1,4 @@
-.PHONY: help clean cleanpy cleanall cleantox cleanvenv test install phorge-down phorge-up phorge-logs phorge-shell phabfive-build phabfive-run phabfive-run-dev docs
+.PHONY: help clean cleanpy cleanall cleantox cleanvenv test install up down logs shell image docs format
 
 # Detect container runtime (prefer podman)
 CONTAINER_RUNTIME = $(or \
@@ -7,25 +7,6 @@ CONTAINER_RUNTIME = $(or \
 )
 
 COMPOSE_FILE := compose.yml
-
-# Phorge URLs (defaults match compose.yml)
-PHORGE_URL ?= http://phorge.domain.tld
-PHORGE_CDN_URL ?= http://cdn.domain.tld
-
-# Extract hostnames from URLs for --add-host
-PHORGE_HOST := $(shell echo "$(PHORGE_URL)" | sed 's|^https\?://||' | sed 's|/.*||')
-PHORGE_CDN_HOST := $(shell echo "$(PHORGE_CDN_URL)" | sed 's|^https\?://||' | sed 's|/.*||')
-
-# Detect host's phabfive config file (OS-specific via appdirs)
-PHABFIVE_HOST_CONFIG := $(shell \
-	if [ -f "$(HOME)/Library/Application Support/phabfive.yaml" ]; then \
-		echo "$(HOME)/Library/Application Support/phabfive.yaml"; \
-	elif [ -f "$(HOME)/.config/phabfive.yaml" ]; then \
-		echo "$(HOME)/.config/phabfive.yaml"; \
-	fi)
-
-# Build mount flag if config file exists
-PHABFIVE_CONFIG_MOUNT := $(if $(PHABFIVE_HOST_CONFIG),-v "$(PHABFIVE_HOST_CONFIG):/root/.config/phabfive.yaml:ro",)
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
@@ -44,6 +25,10 @@ test: install ## run test suite
 docs: ## build and serve documentation
 	uv sync --extra docs
 	uv run mkdocs serve --livereload
+
+format: ## format code using ruff
+	ruff format .
+
 ##@ Cleanup
 
 clean: ## remove temporary files created by build tools
@@ -75,6 +60,9 @@ sdist: clean ## make a source distribution
 bdist: clean ## build a wheel distribution
 	uv build --wheel
 
+image: check-runtime ## build phabfive container image
+	$(CONTAINER_RUNTIME) build -f Dockerfile -t phabfive .
+
 check-runtime: ## Checks runtime and exits if not found
 	@echo "Checking runtime..."
 	@if [ -z "$(CONTAINER_RUNTIME)" ]; then \
@@ -83,12 +71,12 @@ check-runtime: ## Checks runtime and exits if not found
 	fi
 	@$(CONTAINER_RUNTIME) --version
 
-##@ Phorge Testing
+##@ Phorge
 
-phorge-down: check-runtime ## stop and remove phorge containers
+down: check-runtime ## stop and remove phorge containers
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) down
 
-phorge-up: check-runtime ## start phorge (mariadb detached, phorge in foreground)
+up: check-runtime ## start phorge (mariadb detached, phorge in foreground)
 	@echo "Starting mariadb in background..."
 	@$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) up -d mariadb
 	@echo "Waiting for mariadb to be ready..."
@@ -96,30 +84,8 @@ phorge-up: check-runtime ## start phorge (mariadb detached, phorge in foreground
 	@echo "Starting phorge in foreground (logs will be visible)..."
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) up --build phorge
 
-phorge-logs: check-runtime ## view logs from phorge containers
+logs: check-runtime ## view logs from phorge containers
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) logs -f
 
-phorge-shell: check-runtime ## open shell in phorge container
+shell: check-runtime ## open shell in phorge container
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) exec phorge /bin/bash
-
-##@ Docker
-
-phabfive-build: check-runtime ## build phabfive docker image
-	$(CONTAINER_RUNTIME) build -f Dockerfile -t phabfive .
-
-phabfive-run: phabfive-build ## run phabfive in docker container with ARGS="your args here"
-	$(CONTAINER_RUNTIME) run --rm \
-		--env PHAB_TOKEN --env PHAB_URL \
-		$(PHABFIVE_CONFIG_MOUNT) \
-		phabfive $(ARGS)
-
-phabfive-run-dev: phabfive-build ## run phabfive connected to local phorge instance with ARGS="your args here"
-	$(CONTAINER_RUNTIME) run --rm \
-		--env PHAB_TOKEN --env PHAB_URL \
-		--add-host=$(PHORGE_HOST):host-gateway \
-		--add-host=$(PHORGE_CDN_HOST):host-gateway \
-		$(PHABFIVE_CONFIG_MOUNT) \
-		phabfive $(ARGS)
-
-format: ## format code using ruff
-	ruff format .
