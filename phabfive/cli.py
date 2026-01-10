@@ -401,18 +401,18 @@ def run(cli_args, sub_args):
     hyperlink_when = cli_args.get("--hyperlink", "never")
 
     if output_format not in valid_formats:
-        sys.exit(f"Error: --format must be one of: {', '.join(valid_formats)}")
+        sys.exit(f"ERROR - --format must be one of: {', '.join(valid_formats)}")
     if ascii_when not in valid_modes:
-        sys.exit(f"Error: --ascii must be one of: {', '.join(valid_modes)}")
+        sys.exit(f"ERROR - --ascii must be one of: {', '.join(valid_modes)}")
     if hyperlink_when not in valid_modes:
-        sys.exit(f"Error: --hyperlink must be one of: {', '.join(valid_modes)}")
+        sys.exit(f"ERROR - --hyperlink must be one of: {', '.join(valid_modes)}")
 
     # Check mutual exclusivity
     if ascii_when == "always" and hyperlink_when == "always":
-        sys.exit("Error: --ascii=always and --hyperlink=always are mutually exclusive")
+        sys.exit("ERROR - --ascii=always and --hyperlink=always are mutually exclusive")
     if output_format == "strict" and hyperlink_when == "always":
         sys.exit(
-            "Error: --format=strict and --hyperlink=always are mutually exclusive (ruamel.yaml does not support hyperlinks)"
+            "ERROR - --format=strict and --hyperlink=always are mutually exclusive"
         )
 
     # Set output formatting options
