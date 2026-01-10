@@ -3,7 +3,7 @@
 # Simulates one year of realistic project work for RMI GUNNAR secure chip development
 # ~70 tasks with varied priorities, statuses, assignments, and cross-project tags
 #
-# Usage: phabfive maniphest create test-files/mega-2024-simulation.yml
+# Usage: phabfive maniphest create templates/task-create/mega-2024-simulation.yml
 
 variables:
   # Base variables
