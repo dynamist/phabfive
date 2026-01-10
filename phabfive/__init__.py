@@ -31,6 +31,7 @@ def init_logging(log_level):
 
     logging_conf = {
         "version": 1,
+        "disable_existing_loggers": False,
         "root": {
             "level": log_level,
             "handlers": ["console"],

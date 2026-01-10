@@ -7,6 +7,7 @@ import fnmatch
 import itertools
 import json
 import logging
+import sys
 import time
 from collections.abc import Mapping
 from functools import lru_cache
@@ -2021,13 +2022,21 @@ class Maniphest(Phabfive):
         # Display tasks using the appropriate format
         console = self.get_console()
 
-        for task_dict in tasks_list:
-            if self._output_format == "tree":
-                self._display_task_tree(console, task_dict)
-            elif self._output_format == "strict":
-                self._display_task_strict(task_dict)
-            else:  # "rich" (default)
-                self._display_task_yaml(console, task_dict)
+        try:
+            for task_dict in tasks_list:
+                if self._output_format == "tree":
+                    self._display_task_tree(console, task_dict)
+                elif self._output_format == "strict":
+                    self._display_task_strict(task_dict)
+                else:  # "rich" (default)
+                    self._display_task_yaml(console, task_dict)
+        except BrokenPipeError:
+            # Handle pipe closed by consumer (e.g., head, less)
+            # Quietly exit - this is normal behavior
+            sys.stderr.close()
+            sys.exit(0)
+
+        return len(tasks_list)
 
     def _needs_yaml_quoting(self, value):
         """Check if a string value needs YAML quoting.
@@ -2361,7 +2370,7 @@ class Maniphest(Phabfive):
                     comments_map[task_id] = all_fetched_transactions["comments"]
 
         # Use shared method to format and display the task
-        self._format_and_display_tasks(
+        return self._format_and_display_tasks(
             result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
@@ -2923,7 +2932,7 @@ class Maniphest(Phabfive):
                         ]
 
         # Use shared method to format and display tasks
-        self._format_and_display_tasks(
+        return self._format_and_display_tasks(
             result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,

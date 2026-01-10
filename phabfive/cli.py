@@ -8,6 +8,9 @@ import sys
 # 3rd party imports
 from docopt import DocoptExit, Option, docopt, extras
 
+# phabfive imports
+from phabfive.constants import MONOGRAMS
+
 log = logging.getLogger(__name__)
 
 base_args = """
@@ -287,8 +290,6 @@ def parse_cli():
     phabfive.init_logging(cli_args["--log-level"])
 
     argv = [cli_args["<command>"]] + cli_args["<args>"]
-
-    from phabfive.constants import MONOGRAMS
 
     patterns = re.compile("^(?:" + "|".join(MONOGRAMS.values()) + ")")
 
@@ -712,7 +713,15 @@ def run(cli_args, sub_args):
 
             if sub_args.get("show"):
                 # Use new unified task_show() method
-                task_id = int(sub_args["<ticket_id>"][1:])
+                ticket_id = sub_args["<ticket_id>"]
+
+                # Validate ticket ID format using MONOGRAMS pattern
+                maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
+                if not re.match(maniphest_pattern, ticket_id):
+                    log.critical(f"Invalid task ID '{ticket_id}'. Expected format: T123")
+                    return 1
+
+                task_id = int(ticket_id[1:])
 
                 # Handle flags
                 show_history = sub_args.get("--show-history", False)
