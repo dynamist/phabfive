@@ -2338,6 +2338,9 @@ class Maniphest(Phabfive):
             yaml_loader = YAML()
             root_data = yaml_loader.load(stream)
 
+        if dry_run:
+            log.warning("DRY RUN: Tasks will not be created in Phabricator")
+
         # Fetch all users in phabricator, used by subscribers mapping later
         users_query = self.phab.user.search()
         username_to_id_mapping = {
@@ -2531,7 +2534,7 @@ class Maniphest(Phabfive):
 
             return output
 
-        def recurse_commit_transactions(task_config, parent_task_config):
+        def recurse_commit_transactions(task_config, parent_task_config, depth=0):
             """
             This recurse functions purpose is to iterate over all tickets, commit them to phabricator
             and link them to eachother via the ticket hiearchy or explicit parent/subtask links.
@@ -2560,9 +2563,13 @@ class Maniphest(Phabfive):
                 log.debug(transactions_to_commit)
 
                 if dry_run:
-                    log.critical(
-                        "Running with --dry-run, tickets !!WILL NOT BE!! commited to phabricator"
+                    # Extract title from transactions for display
+                    title = next(
+                        (t["value"] for t in transactions_to_commit if t["type"] == "title"),
+                        "<no title>",
                     )
+                    indent = "  " * depth
+                    print(f"{indent}- {title}")
                 else:
                     result = self.phab.maniphest.edit(
                         transactions=transactions_to_commit,
@@ -2579,7 +2586,7 @@ class Maniphest(Phabfive):
 
             if child_tasks:
                 for child_task in child_tasks:
-                    recurse_commit_transactions(child_task, task_config)
+                    recurse_commit_transactions(child_task, task_config, depth + 1)
 
         # Main task recursion logic
         if "tasks" not in root_data:
