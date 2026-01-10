@@ -16,12 +16,14 @@ from phabfive.constants import (
     DEFAULTS,
     CONFIGURABLES,
 )
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException, PhabfiveRemoteException
 
 # 3rd party imports
 import anyconfig
 import appdirs
 from phabricator import Phabricator, APIError
+from rich.console import Console
+from rich.text import Text
 
 
 log = logging.getLogger(__name__)
@@ -32,12 +34,16 @@ class Phabfive:
     # Output formatting options (set by CLI)
     _ascii_when = "auto"
     _hyperlink_when = "auto"
+    _output_format = "rich"
+    # Maximum line width for rich format (to prevent YAML breaking)
+    MAX_LINE_WIDTH = 4096
 
     @classmethod
-    def set_output_options(cls, ascii_when="auto", hyperlink_when="auto"):
+    def set_output_options(cls, ascii_when="auto", hyperlink_when="auto", output_format="rich"):
         """Set global output formatting options."""
         cls._ascii_when = ascii_when
         cls._hyperlink_when = hyperlink_when
+        cls._output_format = output_format
 
     @staticmethod
     def _should_use_ascii():
@@ -132,7 +138,7 @@ class Phabfive:
         return direction
 
     def format_link(self, url, text, show_url=True):
-        """Format URL as hyperlink if enabled, otherwise return text or url.
+        """Format URL as Rich Text with hyperlink if enabled.
 
         Parameters
         ----------
@@ -142,10 +148,53 @@ class Phabfive:
             The visible text for the link
         show_url : bool
             If True and hyperlinks disabled, return url. If False, return text.
+
+        Returns
+        -------
+        Text or str
+            Rich Text object with link styling, or plain string if disabled
         """
         if self._is_hyperlink_enabled():
-            return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
+            t = Text(text)
+            t.stylize(f"link {url}")
+            return t
         return url if show_url else text
+
+    def get_console(self):
+        """Get a Rich Console instance for output."""
+        # Use our hyperlink detection to force terminal mode
+        # This ensures Rich outputs hyperlinks when our detection says the terminal supports them
+        force_terminal = self._is_hyperlink_enabled()
+        no_color = self._ascii_when == "always"
+        # Use large width to prevent soft-wrapping which breaks YAML output
+        return Console(force_terminal=force_terminal, no_color=no_color, width=self.MAX_LINE_WIDTH)
+
+    def check_line_width(self, value, field_name="field"):
+        """Check if a value exceeds the maximum line width for rich format.
+
+        Parameters
+        ----------
+        value : any
+            The value to check (will be converted to string)
+        field_name : str
+            Name of the field for error messages
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the value exceeds MAX_LINE_WIDTH and output format is 'rich'
+        """
+        if self._output_format != "rich":
+            return  # Only applies to rich format
+
+        str_value = str(value) if value is not None else ""
+        # Check each line in case of multi-line values
+        for i, line in enumerate(str_value.split("\n")):
+            if len(line) > self.MAX_LINE_WIDTH:
+                raise PhabfiveDataException(
+                    f"{field_name} line {i+1} exceeds maximum width of {self.MAX_LINE_WIDTH} characters "
+                    f"(length: {len(line)}). Use --format=strict for guaranteed valid YAML output."
+                )
 
     def __init__(self):
         """ """

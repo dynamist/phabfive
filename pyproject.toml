@@ -35,6 +35,7 @@ dependencies = [
     "mkdocs>=1.6.1",
     "phabricator",
     "pyyaml",
+    "rich>=13.0.0",
     "ruamel-yaml>=0.18.16",
 ]
 

@@ -7,17 +7,17 @@ import fnmatch
 import itertools
 import json
 import logging
-import sys
 import time
 from collections.abc import Mapping
 from functools import lru_cache
-from io import StringIO
 from pathlib import Path
 from typing import Optional
 
 from jinja2 import Environment, Template, meta
 
 # 3rd party imports
+from rich.text import Text
+from rich.tree import Tree
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
@@ -2018,94 +2018,280 @@ class Maniphest(Phabfive):
 
             tasks_list.append(task_dict)
 
-        # Output as YAML using ruamel.yaml for proper multi-line formatting
-        print()  # Empty line for separation
+        # Display tasks using the appropriate format
+        console = self.get_console()
+
+        for task_dict in tasks_list:
+            if self._output_format == "tree":
+                self._display_task_tree(console, task_dict)
+            elif self._output_format == "strict":
+                self._display_task_strict(task_dict)
+            else:  # "rich" (default)
+                self._display_task_yaml(console, task_dict)
+
+    def _needs_yaml_quoting(self, value):
+        """Check if a string value needs YAML quoting.
+
+        Values need quoting if they contain YAML special characters
+        that could be misinterpreted.
+        """
+        if not isinstance(value, str):
+            return False
+        # YAML special chars: colon, braces, brackets, backticks, quotes, empty string
+        return value == "" or any(c in value for c in ":{}[]`'\"")
+
+    def _display_task_yaml(self, console, task_dict):
+        """Display a single task in YAML-like format using Rich.
+
+        Parameters
+        ----------
+        console : Console
+            Rich Console instance for output
+        task_dict : dict
+            Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
+        """
+        # Extract internal fields
+        link = task_dict.get("_link")
+        assignee = task_dict.get("_assignee")
+        task_data = task_dict.get("Task", {})
+        boards = task_dict.get("Boards", {})
+        history = task_dict.get("History", {})
+        metadata = task_dict.get("Metadata", {})
+
+        # Print link
+        console.print(Text.assemble("- Link: ", link))
+
+        # Print Task section
+        console.print("  Task:")
+        for key, value in task_data.items():
+            # Check line width before printing
+            self.check_line_width(value, f"Task.{key}")
+
+            if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
+                # Multi-line value
+                console.print(f"    {key}: |-")
+                for line in str(value).splitlines():
+                    console.print(f"      {line}")
+            elif self._needs_yaml_quoting(value):
+                escaped = value.replace("'", "''")
+                console.print(f"    {key}: '{escaped}'")
+            else:
+                console.print(f"    {key}: {value}")
+
+        # Print Assignee
+        if assignee:
+            console.print(Text.assemble("    Assignee: ", assignee))
+
+        # Print Boards with clickable names
+        if boards:
+            console.print("  Boards:")
+            for board_name, board_data in boards.items():
+                project_slug = board_name.lower().replace(" ", "-")
+                board_url = f"{self.url}/tag/{project_slug}/"
+                board_link = self.format_link(board_url, board_name, show_url=False)
+                console.print(Text.assemble("    ", board_link, ":"))
+
+                if isinstance(board_data, dict):
+                    for key, value in board_data.items():
+                        if key.startswith("_"):
+                            continue
+                        if key == "Column":
+                            column_phid = board_data.get("_column_phid", "")
+                            needs_quoting = self._needs_yaml_quoting(value)
+                            if column_phid:
+                                query_url = f"{self.url}/maniphest/?columns={column_phid}"
+                                column_link = self.format_link(query_url, value, show_url=False)
+                                if needs_quoting:
+                                    # When hyperlinks enabled, column_link is Text; when disabled, it's str
+                                    if isinstance(column_link, Text):
+                                        console.print(Text.assemble("      Column: '", column_link, "'"))
+                                    else:
+                                        escaped = column_link.replace("'", "''")
+                                        console.print(f"      Column: '{escaped}'")
+                                else:
+                                    console.print(Text.assemble("      Column: ", column_link))
+                                continue
+                        if self._needs_yaml_quoting(value):
+                            escaped = value.replace("'", "''")
+                            console.print(f"      {key}: '{escaped}'")
+                        else:
+                            console.print(f"      {key}: {value}")
+
+        # Print History section
+        if history:
+            console.print("  History:")
+            for hist_key, hist_value in history.items():
+                if hist_key == "Boards" and isinstance(hist_value, dict):
+                    console.print("    Boards:")
+                    for board_name, transitions in hist_value.items():
+                        console.print(f"      {board_name}:")
+                        for trans in transitions:
+                            console.print(f"        - {trans}")
+                elif isinstance(hist_value, list):
+                    console.print(f"    {hist_key}:")
+                    for trans in hist_value:
+                        console.print(f"      - {trans}")
+
+        # Print Metadata section
+        if metadata:
+            console.print("  Metadata:")
+            for meta_key, meta_value in metadata.items():
+                if isinstance(meta_value, list):
+                    if meta_value:
+                        console.print(f"    {meta_key}:")
+                        for item in meta_value:
+                            console.print(f"      - {item}")
+                    else:
+                        console.print(f"    {meta_key}: []")
+                else:
+                    console.print(f"    {meta_key}: {meta_value}")
+
+    def _display_task_tree(self, console, task_dict):
+        """Display a single task in tree format using Rich Tree.
+
+        Parameters
+        ----------
+        console : Console
+            Rich Console instance for output
+        task_dict : dict
+            Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
+        """
+        # Extract internal fields
+        link = task_dict.get("_link")
+        assignee = task_dict.get("_assignee")
+        task_data = task_dict.get("Task", {})
+        boards = task_dict.get("Boards", {})
+        history = task_dict.get("History", {})
+        metadata = task_dict.get("Metadata", {})
+
+        # Create tree with task link as root
+        tree = Tree(link)
+
+        # Add Task section
+        task_branch = tree.add("Task")
+        for key, value in task_data.items():
+            if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
+                # Truncate multi-line descriptions in tree view
+                first_line = str(value).split("\n")[0]
+                if len(first_line) > 60:
+                    first_line = first_line[:57] + "..."
+                task_branch.add(f"{key}: {first_line}")
+            else:
+                task_branch.add(f"{key}: {value}")
+
+        # Add Assignee
+        if assignee:
+            task_branch.add(Text.assemble("Assignee: ", assignee))
+
+        # Add Boards section
+        if boards:
+            boards_branch = tree.add("Boards")
+            for board_name, board_data in boards.items():
+                project_slug = board_name.lower().replace(" ", "-")
+                board_url = f"{self.url}/tag/{project_slug}/"
+                board_link = self.format_link(board_url, board_name, show_url=False)
+                board_branch = boards_branch.add(board_link)
+
+                if isinstance(board_data, dict):
+                    for key, value in board_data.items():
+                        if key.startswith("_"):
+                            continue
+                        if key == "Column":
+                            column_phid = board_data.get("_column_phid", "")
+                            if column_phid:
+                                query_url = f"{self.url}/maniphest/?columns={column_phid}"
+                                column_link = self.format_link(query_url, value, show_url=False)
+                                board_branch.add(Text.assemble("Column: ", column_link))
+                                continue
+                        board_branch.add(f"{key}: {value}")
+
+        # Add History section
+        if history:
+            history_branch = tree.add("History")
+            for hist_key, hist_value in history.items():
+                if hist_key == "Boards" and isinstance(hist_value, dict):
+                    boards_hist = history_branch.add("Boards")
+                    for board_name, transitions in hist_value.items():
+                        board_hist = boards_hist.add(board_name)
+                        for trans in transitions:
+                            board_hist.add(trans)
+                elif isinstance(hist_value, list):
+                    hist_type_branch = history_branch.add(hist_key)
+                    for trans in hist_value:
+                        hist_type_branch.add(trans)
+
+        # Add Metadata section
+        if metadata:
+            meta_branch = tree.add("Metadata")
+            for meta_key, meta_value in metadata.items():
+                if isinstance(meta_value, list):
+                    if meta_value:
+                        list_branch = meta_branch.add(meta_key)
+                        for item in meta_value:
+                            list_branch.add(str(item))
+                    else:
+                        meta_branch.add(f"{meta_key}: []")
+                else:
+                    meta_branch.add(f"{meta_key}: {meta_value}")
+
+        console.print(tree)
+
+    def _display_task_strict(self, task_dict):
+        """Display task as strict YAML via ruamel.yaml.
+
+        Guaranteed conformant YAML output for piping to yq/jq.
+        No hyperlinks, no Rich formatting.
+
+        Parameters
+        ----------
+        task_dict : dict
+            Task data dictionary with Link, Task, Boards, History, Metadata, etc.
+        """
+        from io import StringIO
 
         yaml = YAML()
         yaml.default_flow_style = False
-        yaml.preserve_quotes = True
-        yaml.width = 4096  # Avoid unwanted line wrapping
 
-        # Print each task, handling hyperlinks specially to avoid YAML escaping
-        for task_dict in tasks_list:
-            # Extract and remove internal fields
-            link = task_dict.pop("_link")
-            task_dict.pop("_url")
-            assignee = task_dict.pop("_assignee", None)
+        # Build clean dict - use _url for the Link (plain URL string)
+        output = {"Link": task_dict.get("_url", "")}
 
-            # Get boards for processing
-            boards = task_dict.get("Boards", {})
+        # Add Task section
+        if task_dict.get("Task"):
+            output["Task"] = {k: v for k, v in task_dict["Task"].items()}
 
-            # Print link directly (bypasses YAML escaping for hyperlinks)
-            print(f"- Link: {link}")
+        # Add Assignee if present (extract plain text from Rich Text if needed)
+        assignee = task_dict.get("_assignee")
+        if assignee is not None:
+            # Convert Rich Text to plain string, or use string directly
+            if isinstance(assignee, Text):
+                output["Assignee"] = assignee.plain
+            else:
+                output["Assignee"] = str(assignee)
 
-            # Print Task section with Assignee handled specially
-            task_data = task_dict.get("Task", {})
-            print("  Task:")
-            for key, value in task_data.items():
-                if isinstance(value, str) and "\n" in value:
-                    # Multi-line value (like Description)
-                    print(f"    {key}: |-")
-                    for desc_line in value.splitlines():
-                        print(f"      {desc_line}")
-                elif isinstance(value, PreservedScalarString):
-                    print(f"    {key}: |-")
-                    for desc_line in str(value).splitlines():
-                        print(f"      {desc_line}")
-                elif isinstance(value, str) and (":" in value or "{" in value or "}" in value or value == ""):
-                    # Quote strings with special YAML characters
-                    escaped = value.replace("'", "''")
-                    print(f"    {key}: '{escaped}'")
+        # Add Boards section without internal keys
+        if task_dict.get("Boards"):
+            boards = {}
+            for board_name, board_data in task_dict["Boards"].items():
+                if isinstance(board_data, dict):
+                    boards[board_name] = {
+                        k: v for k, v in board_data.items()
+                        if not k.startswith("_")
+                    }
                 else:
-                    print(f"    {key}: {value}")
+                    boards[board_name] = board_data
+            output["Boards"] = boards
 
-            # Print Assignee directly (with hyperlink if enabled)
-            if assignee:
-                print(f"    Assignee: {assignee}")
+        # Add History section if present
+        if task_dict.get("History"):
+            output["History"] = task_dict["History"]
 
-            # Remove Task from dict since we printed it
-            task_dict.pop("Task", None)
+        # Add Metadata section if present
+        if task_dict.get("Metadata"):
+            output["Metadata"] = task_dict["Metadata"]
 
-            # Print Boards with clickable names
-            if boards:
-                print("  Boards:")
-                for board_name, board_data in boards.items():
-                    # Create clickable board name (show_url=False keeps name when no hyperlink)
-                    project_slug = board_name.lower().replace(" ", "-")
-                    board_url = f"{self.url}/tag/{project_slug}/"
-                    board_display = self.format_link(board_url, board_name, show_url=False)
-                    print(f"    {board_display}:")
-                    if isinstance(board_data, dict):
-                        for key, value in board_data.items():
-                            # Skip internal fields
-                            if key.startswith("_"):
-                                continue
-                            # Make Column clickable with "View as Query" URL
-                            if key == "Column":
-                                column_phid = board_data.get("_column_phid", "")
-                                if column_phid:
-                                    query_url = f"{self.url}/maniphest/?columns={column_phid}"
-                                    column_display = self.format_link(query_url, value, show_url=False)
-                                    # Quote if column name contains special YAML characters
-                                    if isinstance(value, str) and (":" in value or "{" in value or "}" in value):
-                                        escaped = column_display.replace("'", "''")
-                                        print(f"      {key}: '{escaped}'")
-                                    else:
-                                        print(f"      {key}: {column_display}")
-                                    continue
-                            if isinstance(value, str) and (":" in value or "{" in value or "}" in value):
-                                escaped = value.replace("'", "''")
-                                print(f"      {key}: '{escaped}'")
-                            else:
-                                print(f"      {key}: {value}")
-                task_dict.pop("Boards", None)
-
-            # Print remaining fields as YAML (History, Metadata, etc.)
-            if task_dict:
-                yaml_output = StringIO()
-                yaml.dump(task_dict, yaml_output)
-                for line in yaml_output.getvalue().splitlines():
-                    print(f"  {line}")
+        stream = StringIO()
+        yaml.dump([output], stream)
+        print(stream.getvalue(), end="")
 
     def task_show(
         self, task_id, show_history=False, show_metadata=False, show_comments=False

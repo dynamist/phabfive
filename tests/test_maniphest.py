@@ -1061,6 +1061,476 @@ class TestYAMLOutput:
         assert task2["Task"]["Status"] == "Resolved"
 
 
+class TestYAMLQuoting:
+    """Test that special characters are properly quoted in YAML output."""
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_colon(self, mock_init):
+        """Test that colons trigger quoting."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting("foo:bar") is True
+        assert maniphest._needs_yaml_quoting("http://example.com") is True
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_braces(self, mock_init):
+        """Test that curly braces trigger quoting."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting("{foo}") is True
+        assert maniphest._needs_yaml_quoting("${variable}") is True
+        assert maniphest._needs_yaml_quoting("foo}bar") is True
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_brackets(self, mock_init):
+        """Test that square brackets trigger quoting."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting("[BUG]") is True
+        assert maniphest._needs_yaml_quoting("[FEATURE] Add something") is True
+        assert maniphest._needs_yaml_quoting("foo]bar") is True
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_backticks(self, mock_init):
+        """Test that backticks trigger quoting."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting("`code`") is True
+        assert maniphest._needs_yaml_quoting("Run `make build`") is True
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_single_quotes(self, mock_init):
+        """Test that single quotes trigger quoting."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting("'LOREM'") is True
+        assert maniphest._needs_yaml_quoting("It's working") is True
+        assert maniphest._needs_yaml_quoting("Don't do that") is True
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_double_quotes(self, mock_init):
+        """Test that double quotes trigger quoting."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting('"LOREM"') is True
+        assert maniphest._needs_yaml_quoting('Say "hello"') is True
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_empty_string(self, mock_init):
+        """Test that empty strings trigger quoting."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting("") is True
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_safe_strings(self, mock_init):
+        """Test that safe strings don't trigger quoting."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting("Normal task name") is False
+        assert maniphest._needs_yaml_quoting("Task with numbers 123") is False
+        assert maniphest._needs_yaml_quoting("Task-with-dashes") is False
+        assert maniphest._needs_yaml_quoting("Task_with_underscores") is False
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_needs_yaml_quoting_non_string(self, mock_init):
+        """Test that non-strings return False."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        assert maniphest._needs_yaml_quoting(123) is False
+        assert maniphest._needs_yaml_quoting(None) is False
+        assert maniphest._needs_yaml_quoting(["list"]) is False
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_yaml_output_with_brackets(self, mock_init, capsys):
+        """Test that task names with square brackets produce valid YAML."""
+        from io import StringIO
+
+        from ruamel.yaml import YAML
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.url = "https://phabricator.example.com"
+
+        maniphest.phab = MagicMock()
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [
+                {
+                    "id": 1,
+                    "phid": "PHID-TASK-1",
+                    "fields": {
+                        "name": "[BUG] Something is broken",
+                        "status": {"name": "Open"},
+                        "priority": {"name": "High"},
+                        "description": {"raw": ""},
+                        "dateCreated": 1234567890,
+                        "dateModified": 1234567900,
+                        "dateClosed": None,
+                    },
+                    "attachments": {"columns": {"boards": {}}},
+                },
+            ]
+        }
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        maniphest.task_search(tag="Test Project")
+
+        captured = capsys.readouterr()
+        yaml_output = captured.out
+
+        yaml_parser = YAML()
+        parsed_data = yaml_parser.load(StringIO(yaml_output))
+
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 1
+        assert parsed_data[0]["Task"]["Name"] == "[BUG] Something is broken"
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_yaml_output_with_backticks(self, mock_init, capsys):
+        """Test that task names with backticks produce valid YAML."""
+        from io import StringIO
+
+        from ruamel.yaml import YAML
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.url = "https://phabricator.example.com"
+
+        maniphest.phab = MagicMock()
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [
+                {
+                    "id": 1,
+                    "phid": "PHID-TASK-1",
+                    "fields": {
+                        "name": "Fix `make build` command",
+                        "status": {"name": "Open"},
+                        "priority": {"name": "Normal"},
+                        "description": {"raw": "Run `make test` first"},
+                        "dateCreated": 1234567890,
+                        "dateModified": 1234567900,
+                        "dateClosed": None,
+                    },
+                    "attachments": {"columns": {"boards": {}}},
+                },
+            ]
+        }
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        maniphest.task_search(tag="Test Project")
+
+        captured = capsys.readouterr()
+        yaml_output = captured.out
+
+        yaml_parser = YAML()
+        parsed_data = yaml_parser.load(StringIO(yaml_output))
+
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 1
+        assert parsed_data[0]["Task"]["Name"] == "Fix `make build` command"
+        assert parsed_data[0]["Task"]["Description"] == "Run `make test` first"
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_yaml_output_with_mixed_special_chars(self, mock_init, capsys):
+        """Test task with multiple special character types."""
+        from io import StringIO
+
+        from ruamel.yaml import YAML
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.url = "https://phabricator.example.com"
+
+        maniphest.phab = MagicMock()
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [
+                {
+                    "id": 1,
+                    "phid": "PHID-TASK-1",
+                    "fields": {
+                        "name": "[BUG]: Fix {template} rendering in `parser.py`",
+                        "status": {"name": "Open"},
+                        "priority": {"name": "High"},
+                        "description": {"raw": ""},
+                        "dateCreated": 1234567890,
+                        "dateModified": 1234567900,
+                        "dateClosed": None,
+                    },
+                    "attachments": {"columns": {"boards": {}}},
+                },
+            ]
+        }
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        maniphest.task_search(tag="Test Project")
+
+        captured = capsys.readouterr()
+        yaml_output = captured.out
+
+        yaml_parser = YAML()
+        parsed_data = yaml_parser.load(StringIO(yaml_output))
+
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 1
+        assert (
+            parsed_data[0]["Task"]["Name"]
+            == "[BUG]: Fix {template} rendering in `parser.py`"
+        )
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_yaml_output_with_single_quotes(self, mock_init, capsys):
+        """Test that task names with single quotes produce valid YAML with preserved quotes."""
+        from io import StringIO
+
+        from ruamel.yaml import YAML
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.url = "https://phabricator.example.com"
+
+        maniphest.phab = MagicMock()
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [
+                {
+                    "id": 1,
+                    "phid": "PHID-TASK-1",
+                    "fields": {
+                        "name": "'LOREM'",
+                        "status": {"name": "Open"},
+                        "priority": {"name": "Normal"},
+                        "description": {"raw": ""},
+                        "dateCreated": 1234567890,
+                        "dateModified": 1234567900,
+                        "dateClosed": None,
+                    },
+                    "attachments": {"columns": {"boards": {}}},
+                },
+            ]
+        }
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        maniphest.task_search(tag="Test Project")
+
+        captured = capsys.readouterr()
+        yaml_output = captured.out
+
+        yaml_parser = YAML()
+        parsed_data = yaml_parser.load(StringIO(yaml_output))
+
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 1
+        # Single quotes should be preserved in the parsed value
+        assert parsed_data[0]["Task"]["Name"] == "'LOREM'"
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_yaml_output_with_double_quotes(self, mock_init, capsys):
+        """Test that task names with double quotes produce valid YAML with preserved quotes."""
+        from io import StringIO
+
+        from ruamel.yaml import YAML
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.url = "https://phabricator.example.com"
+
+        maniphest.phab = MagicMock()
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [
+                {
+                    "id": 1,
+                    "phid": "PHID-TASK-1",
+                    "fields": {
+                        "name": '"LOREM"',
+                        "status": {"name": "Open"},
+                        "priority": {"name": "Normal"},
+                        "description": {"raw": ""},
+                        "dateCreated": 1234567890,
+                        "dateModified": 1234567900,
+                        "dateClosed": None,
+                    },
+                    "attachments": {"columns": {"boards": {}}},
+                },
+            ]
+        }
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        maniphest.task_search(tag="Test Project")
+
+        captured = capsys.readouterr()
+        yaml_output = captured.out
+
+        yaml_parser = YAML()
+        parsed_data = yaml_parser.load(StringIO(yaml_output))
+
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 1
+        # Double quotes should be preserved in the parsed value
+        assert parsed_data[0]["Task"]["Name"] == '"LOREM"'
+
+
+class TestStrictFormat:
+    """Test that strict format produces guaranteed valid YAML via ruamel.yaml."""
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_strict_format_output_is_valid_yaml(self, mock_init, capsys):
+        """Test that strict format produces valid YAML."""
+        from io import StringIO
+
+        from phabfive.core import Phabfive
+        from ruamel.yaml import YAML
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.url = "https://phabricator.example.com"
+
+        # Set strict output format
+        Phabfive.set_output_options(output_format="strict")
+
+        maniphest.phab = MagicMock()
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [
+                {
+                    "id": 1,
+                    "phid": "PHID-TASK-1",
+                    "fields": {
+                        "name": "Simple task",
+                        "status": {"name": "Open"},
+                        "priority": {"name": "Normal"},
+                        "description": {"raw": ""},
+                        "dateCreated": 1234567890,
+                        "dateModified": 1234567900,
+                        "dateClosed": None,
+                    },
+                    "attachments": {"columns": {"boards": {}}},
+                },
+            ]
+        }
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        maniphest.task_search(tag="Test Project")
+
+        captured = capsys.readouterr()
+        yaml_output = captured.out
+
+        yaml_parser = YAML()
+        parsed_data = yaml_parser.load(StringIO(yaml_output))
+
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 1
+        assert parsed_data[0]["Task"]["Name"] == "Simple task"
+
+        # Reset to default
+        Phabfive.set_output_options(output_format="rich")
+
+    @patch("phabfive.maniphest.Phabfive.__init__")
+    def test_strict_format_with_special_chars(self, mock_init, capsys):
+        """Test that strict format handles special characters correctly."""
+        from io import StringIO
+
+        from phabfive.core import Phabfive
+        from ruamel.yaml import YAML
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.url = "https://phabricator.example.com"
+
+        # Set strict output format
+        Phabfive.set_output_options(output_format="strict")
+
+        maniphest.phab = MagicMock()
+        mock_project_result = MagicMock()
+        mock_project_result.get.return_value = {
+            "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
+        }
+        maniphest.phab.project.query.return_value = mock_project_result
+
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [
+                {
+                    "id": 1,
+                    "phid": "PHID-TASK-1",
+                    "fields": {
+                        "name": "[BUG]: Fix {template} `code` 'quotes' \"double\"",
+                        "status": {"name": "Open"},
+                        "priority": {"name": "Normal"},
+                        "description": {"raw": ""},
+                        "dateCreated": 1234567890,
+                        "dateModified": 1234567900,
+                        "dateClosed": None,
+                    },
+                    "attachments": {"columns": {"boards": {}}},
+                },
+            ]
+        }
+        mock_response.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        maniphest.task_search(tag="Test Project")
+
+        captured = capsys.readouterr()
+        yaml_output = captured.out
+
+        yaml_parser = YAML()
+        parsed_data = yaml_parser.load(StringIO(yaml_output))
+
+        assert isinstance(parsed_data, list)
+        assert len(parsed_data) == 1
+        # All special characters should be preserved
+        assert parsed_data[0]["Task"]["Name"] == "[BUG]: Fix {template} `code` 'quotes' \"double\""
+
+        # Reset to default
+        Phabfive.set_output_options(output_format="rich")
+
+
 class TestTaskSearchTextQuery:
     """Test suite for free-text search functionality."""
 
