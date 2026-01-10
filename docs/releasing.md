@@ -196,7 +196,7 @@ Go to https://github.com/dynamist/phabfive/releases/new and:
 - Verify you have maintainer/owner permissions on PyPI and TestPyPI
 - Use API tokens (required for `__token__` username)
 - Set up tokens at https://pypi.org/manage/account/token/ and https://test.pypi.org/manage/account/token/
-- Contact current owners (Johan/Henrik) for assistance
+- Contact current owners for assistance
 
 **Version already exists on PyPI:**
 

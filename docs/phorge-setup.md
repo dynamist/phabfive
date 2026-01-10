@@ -16,12 +16,12 @@ Add the following to `/etc/hosts`:
 **2. Start Phorge:**
 
 ```bash
-make phorge-up
+make up
 ```
 
 The Makefile automatically detects whether you have podman or docker installed (preferring podman). It starts MariaDB in the background and Phorge in the foreground, so you can see the logs and the admin password recovery link.
 
-**3. Stop Phorge::** When you are done, press `Ctrl+C`, then run `make phorge-down` to remove the containers.
+**3. Stop Phorge::** When you are done, press `Ctrl+C`, then run `make down` to remove the containers.
 
 ## What Gets Created
 
@@ -68,8 +68,8 @@ The admin user is automatically joined to all projects.
 All settings can be customized via environment variables. Defaults are in `compose.yml` and can be overridden from the command line:
 
 ```bash
-PHORGE_GIT_REF=master make phorge-up
-PHORGE_ADMIN_PASS=mypassword PHORGE_GIT_REF=master make phorge-up
+PHORGE_GIT_REF=master make up
+PHORGE_ADMIN_PASS=mypassword PHORGE_GIT_REF=master make up
 ```
 
 ### Environment Variables
@@ -157,10 +157,10 @@ All operations are idempotent - safe to run multiple times. Container restarts w
 ## Useful Commands
 
 ```bash
-make phorge-up      # Start Phorge (mariadb + phorge)
-make phorge-down    # Stop containers
-make phorge-logs    # View container logs
-make phorge-shell   # Open shell in phorge container
+make up      # Start Phorge (mariadb + phorge)
+make down    # Stop containers
+make logs    # View container logs
+make shell   # Open shell in phorge container
 ```
 
 ## Troubleshooting
@@ -170,7 +170,7 @@ make phorge-shell   # Open shell in phorge container
 The link is displayed in logs when Phorge starts. If you miss it:
 
 ```bash
-make phorge-logs | grep "one-time link"
+make logs | grep "one-time link"
 ```
 
 ### Generate a new recovery link

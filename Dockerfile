@@ -1,5 +1,8 @@
 FROM alpine:3.22
 
+# Install terminfo database for proper terminal support
+RUN apk add --no-cache ncurses-terminfo-base
+
 WORKDIR /app
 
 # Install uv
