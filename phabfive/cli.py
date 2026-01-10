@@ -411,7 +411,9 @@ def run(cli_args, sub_args):
     if ascii_when == "always" and hyperlink_when == "always":
         sys.exit("Error: --ascii=always and --hyperlink=always are mutually exclusive")
     if output_format == "strict" and hyperlink_when == "always":
-        sys.exit("Error: --format=strict and --hyperlink=always are mutually exclusive (ruamel.yaml does not support hyperlinks)")
+        sys.exit(
+            "Error: --format=strict and --hyperlink=always are mutually exclusive (ruamel.yaml does not support hyperlinks)"
+        )
 
     # Set output formatting options
     Phabfive.set_output_options(
@@ -559,16 +561,18 @@ def run(cli_args, sub_args):
                         return retcode
                 else:
                     # Create a single search config from CLI parameters
-                    search_configs = [{
-                        'search': {},
-                        'title': 'Command Line Search',
-                        'description': None
-                    }]
+                    search_configs = [
+                        {
+                            "search": {},
+                            "title": "Command Line Search",
+                            "description": None,
+                        }
+                    ]
 
                 # Helper function to get value with CLI override priority
                 def get_param(cli_key, yaml_params, yaml_key=None, default=None):
                     if yaml_key is None:
-                        yaml_key = cli_key.lstrip('-')
+                        yaml_key = cli_key.lstrip("-")
 
                     # CLI takes precedence over YAML
                     cli_value = sub_args.get(cli_key)
@@ -580,13 +584,16 @@ def run(cli_args, sub_args):
 
                 # Execute each search configuration
                 for i, config in enumerate(search_configs):
-                    yaml_params = config['search']
+                    yaml_params = config["search"]
 
                     # Print search header if multiple searches or if title/description provided
-                    if len(search_configs) > 1 or config['title'] != 'Command Line Search':
+                    if (
+                        len(search_configs) > 1
+                        or config["title"] != "Command Line Search"
+                    ):
                         print(f"\n{'=' * 60}")
                         print(f"🔍 {config['title']}")
-                        if config['description']:
+                        if config["description"]:
                             print(f"📝 {config['description']}")
                         print(f"{'=' * 60}")
 
@@ -595,7 +602,9 @@ def run(cli_args, sub_args):
                     column_pattern = get_param("--column", yaml_params, "column")
                     if column_pattern:
                         try:
-                            transition_patterns = parse_transition_patterns(column_pattern)
+                            transition_patterns = parse_transition_patterns(
+                                column_pattern
+                            )
                         except Exception as e:
                             print(
                                 f"ERROR: Invalid column filter pattern in {config['title']}: {e}",
@@ -608,7 +617,9 @@ def run(cli_args, sub_args):
                     priority_pattern = get_param("--priority", yaml_params, "priority")
                     if priority_pattern:
                         try:
-                            priority_patterns = parse_priority_patterns(priority_pattern)
+                            priority_patterns = parse_priority_patterns(
+                                priority_pattern
+                            )
                         except Exception as e:
                             print(
                                 f"ERROR: Invalid priority filter pattern in {config['title']}: {e}",
@@ -622,8 +633,10 @@ def run(cli_args, sub_args):
                     if status_pattern:
                         try:
                             # Parse status patterns with API-fetched status ordering
-                            status_patterns = maniphest_app.parse_status_patterns_with_api(
-                                status_pattern
+                            status_patterns = (
+                                maniphest_app.parse_status_patterns_with_api(
+                                    status_pattern
+                                )
                             )
                         except Exception as e:
                             print(
@@ -634,23 +647,33 @@ def run(cli_args, sub_args):
                             return retcode
 
                     # Get other parameters with CLI override priority
-                    show_history = get_param("--show-history", yaml_params, "show-history", False)
-                    show_metadata = get_param("--show-metadata", yaml_params, "show-metadata", False)
+                    show_history = get_param(
+                        "--show-history", yaml_params, "show-history", False
+                    )
+                    show_metadata = get_param(
+                        "--show-metadata", yaml_params, "show-metadata", False
+                    )
                     text_query = get_param("<text_query>", yaml_params, "text_query")
                     tag = get_param("--tag", yaml_params, "tag")
-                    created_after = get_param("--created-after", yaml_params, "created-after")
-                    updated_after = get_param("--updated-after", yaml_params, "updated-after")
+                    created_after = get_param(
+                        "--created-after", yaml_params, "created-after"
+                    )
+                    updated_after = get_param(
+                        "--updated-after", yaml_params, "updated-after"
+                    )
 
                     # Check if any search criteria provided, show usage if not
-                    has_criteria = any([
-                        text_query,
-                        tag,
-                        created_after,
-                        updated_after,
-                        transition_patterns,
-                        priority_patterns,
-                        status_patterns,
-                    ])
+                    has_criteria = any(
+                        [
+                            text_query,
+                            tag,
+                            created_after,
+                            updated_after,
+                            transition_patterns,
+                            priority_patterns,
+                            status_patterns,
+                        ]
+                    )
                     if not has_criteria:
                         print("Usage:")
                         print("    phabfive maniphest search [<text_query>] [options]")
@@ -718,7 +741,9 @@ def run(cli_args, sub_args):
                 # Validate ticket ID format using MONOGRAMS pattern
                 maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
                 if not re.match(maniphest_pattern, ticket_id):
-                    log.critical(f"Invalid task ID '{ticket_id}'. Expected format: T123")
+                    log.critical(
+                        f"Invalid task ID '{ticket_id}'. Expected format: T123"
+                    )
                     return 1
 
                 task_id = int(ticket_id[1:])

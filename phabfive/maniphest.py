@@ -249,10 +249,22 @@ class Maniphest(Phabfive):
             - dateCreated: timestamp (int)
             For comments: authorPHID, text, dateCreated
         """
-        result_dict = {"columns": [], "priority": [], "status": [], "assignee": [], "comments": []}
+        result_dict = {
+            "columns": [],
+            "priority": [],
+            "status": [],
+            "assignee": [],
+            "comments": [],
+        }
 
         # Early return if nothing requested
-        if not (need_columns or need_priority or need_status or need_assignee or need_comments):
+        if not (
+            need_columns
+            or need_priority
+            or need_status
+            or need_assignee
+            or need_comments
+        ):
             return result_dict
 
         try:
@@ -1371,7 +1383,7 @@ class Maniphest(Phabfive):
                     elif new_order > old_order:  # Lowered (lower priority)
                         direction = f"[{self.format_direction('↓')}]"
 
-            arrow = self.format_direction('→')
+            arrow = self.format_direction("→")
             transitions.append(
                 f"{timestamp_str} {direction} {old_priority_name} {arrow} {new_priority_name}"
             )
@@ -1407,7 +1419,9 @@ class Maniphest(Phabfive):
         author_map = {}
         if author_phids:
             try:
-                result = self.phab.user.search(constraints={"phids": list(author_phids)})
+                result = self.phab.user.search(
+                    constraints={"phids": list(author_phids)}
+                )
                 author_map = {
                     u["phid"]: u["fields"]["username"] for u in result.get("data", [])
                 }
@@ -1428,7 +1442,9 @@ class Maniphest(Phabfive):
             text = trans.get("text", "")
 
             # Format timestamp
-            timestamp_str = format_timestamp(date_created) if date_created else "Unknown"
+            timestamp_str = (
+                format_timestamp(date_created) if date_created else "Unknown"
+            )
 
             # Format: compact for single-line, block scalar for multi-line
             # Include comment reference (T5@93) for future edit/remove commands
@@ -1500,7 +1516,7 @@ class Maniphest(Phabfive):
                     elif new_order < old_order:  # Lowered (moved backward)
                         direction = f"[{self.format_direction('↓')}]"
 
-            arrow = self.format_direction('→')
+            arrow = self.format_direction("→")
             transitions.append(
                 f"{timestamp_str} {direction} {old_status_name} {arrow} {new_status_name}"
             )
@@ -1561,8 +1577,10 @@ class Maniphest(Phabfive):
             new_name = user_map.get(new_value, "(none)") if new_value else "(none)"
 
             direction = f"[{self.format_direction('•')}]"
-            arrow = self.format_direction('→')
-            transitions.append(f"{timestamp_str} {direction} {old_name} {arrow} {new_name}")
+            arrow = self.format_direction("→")
+            transitions.append(
+                f"{timestamp_str} {direction} {old_name} {arrow} {new_name}"
+            )
 
         return transitions
 
@@ -1626,7 +1644,7 @@ class Maniphest(Phabfive):
                 elif new_seq < old_seq:
                     direction = f"[{self.format_direction('←')}]"
 
-            arrow = self.format_direction('→')
+            arrow = self.format_direction("→")
             transitions_list.append(
                 f"{timestamp_str} {direction} {old_col_name} {arrow} {new_col_name}"
             )
@@ -1914,7 +1932,9 @@ class Maniphest(Phabfive):
 
         owner_map = {}
         if owner_phids:
-            user_result = self.phab.user.search(constraints={"phids": list(owner_phids)})
+            user_result = self.phab.user.search(
+                constraints={"phids": list(owner_phids)}
+            )
             owner_map = {
                 u["phid"]: u["fields"]["username"] for u in user_result.get("data", [])
             }
@@ -1951,7 +1971,9 @@ class Maniphest(Phabfive):
             if owner_phid:
                 username = owner_map.get(owner_phid, owner_phid)
                 user_url = f"{self.url}/p/{username}/"
-                task_dict["_assignee"] = self.format_link(user_url, username, show_url=False)
+                task_dict["_assignee"] = self.format_link(
+                    user_url, username, show_url=False
+                )
             else:
                 task_dict["_assignee"] = "(none)"
 
@@ -2108,17 +2130,27 @@ class Maniphest(Phabfive):
                             column_phid = board_data.get("_column_phid", "")
                             needs_quoting = self._needs_yaml_quoting(value)
                             if column_phid:
-                                query_url = f"{self.url}/maniphest/?columns={column_phid}"
-                                column_link = self.format_link(query_url, value, show_url=False)
+                                query_url = (
+                                    f"{self.url}/maniphest/?columns={column_phid}"
+                                )
+                                column_link = self.format_link(
+                                    query_url, value, show_url=False
+                                )
                                 if needs_quoting:
                                     # When hyperlinks enabled, column_link is Text; when disabled, it's str
                                     if isinstance(column_link, Text):
-                                        console.print(Text.assemble("      Column: '", column_link, "'"))
+                                        console.print(
+                                            Text.assemble(
+                                                "      Column: '", column_link, "'"
+                                            )
+                                        )
                                     else:
                                         escaped = column_link.replace("'", "''")
                                         console.print(f"      Column: '{escaped}'")
                                 else:
-                                    console.print(Text.assemble("      Column: ", column_link))
+                                    console.print(
+                                        Text.assemble("      Column: ", column_link)
+                                    )
                                 continue
                         if self._needs_yaml_quoting(value):
                             escaped = value.replace("'", "''")
@@ -2208,8 +2240,12 @@ class Maniphest(Phabfive):
                         if key == "Column":
                             column_phid = board_data.get("_column_phid", "")
                             if column_phid:
-                                query_url = f"{self.url}/maniphest/?columns={column_phid}"
-                                column_link = self.format_link(query_url, value, show_url=False)
+                                query_url = (
+                                    f"{self.url}/maniphest/?columns={column_phid}"
+                                )
+                                column_link = self.format_link(
+                                    query_url, value, show_url=False
+                                )
                                 board_branch.add(Text.assemble("Column: ", column_link))
                                 continue
                         board_branch.add(f"{key}: {value}")
@@ -2283,8 +2319,7 @@ class Maniphest(Phabfive):
             for board_name, board_data in task_dict["Boards"].items():
                 if isinstance(board_data, dict):
                     boards[board_name] = {
-                        k: v for k, v in board_data.items()
-                        if not k.startswith("_")
+                        k: v for k, v in board_data.items() if not k.startswith("_")
                     }
                 else:
                     boards[board_name] = board_data
@@ -2411,20 +2446,29 @@ class Maniphest(Phabfive):
             raise PhabfiveException(f"Path is not a file: {template_path}")
 
         try:
-            with open(template_file, 'r', encoding='utf-8') as f:
+            with open(template_file, "r", encoding="utf-8") as f:
                 yaml_loader = YAML()
                 # Load all documents from the YAML file
                 documents = list(yaml_loader.load_all(f))
         except Exception as e:
-            raise PhabfiveException(f"Failed to parse template file {template_path}: {e}")
+            raise PhabfiveException(
+                f"Failed to parse template file {template_path}: {e}"
+            )
 
         if not documents:
             raise PhabfiveException("Template file contains no documents")
 
         search_configs = []
         supported_params = {
-            'text_query', 'tag', 'created-after', 'updated-after',
-            'column', 'priority', 'status', 'show-history', 'show-metadata'
+            "text_query",
+            "tag",
+            "created-after",
+            "updated-after",
+            "column",
+            "priority",
+            "status",
+            "show-history",
+            "show-metadata",
         }
 
         for i, data in enumerate(documents):
@@ -2433,7 +2477,7 @@ class Maniphest(Phabfive):
                     f"Document {i + 1} in YAML file must contain a dictionary at root level"
                 )
 
-            search_params = data.get('search', {})
+            search_params = data.get("search", {})
             if not isinstance(search_params, dict):
                 raise PhabfiveException(
                     f"Document {i + 1}: 'search' section must be a dictionary"
@@ -2449,13 +2493,15 @@ class Maniphest(Phabfive):
 
             # Store the search config with optional title and description
             config = {
-                'search': search_params,
-                'title': data.get('title', f"Search {i + 1}"),
-                'description': data.get('description', None)
+                "search": search_params,
+                "title": data.get("title", f"Search {i + 1}"),
+                "description": data.get("description", None),
             }
             search_configs.append(config)
 
-        log.info(f"Loaded {len(search_configs)} search configuration(s) from {template_path}")
+        log.info(
+            f"Loaded {len(search_configs)} search configuration(s) from {template_path}"
+        )
         for i, config in enumerate(search_configs):
             log.debug(f"Search {i + 1} parameters: {config['search']}")
 
@@ -2770,9 +2816,7 @@ class Maniphest(Phabfive):
                 stat_strs = [str(p) for p in status_patterns]
                 filter_desc.append(f"status='{','.join(stat_strs)}'")
             # Note: project_patterns is derived from tag, so not shown separately
-            log.info(
-                f"Filtering {len(result_data)} tasks by {', '.join(filter_desc)}"
-            )
+            log.info(f"Filtering {len(result_data)} tasks by {', '.join(filter_desc)}")
 
             # Add performance warning for large datasets
             if len(result_data) > 50:
@@ -2902,7 +2946,9 @@ class Maniphest(Phabfive):
                     if status_patterns:
                         matching_status_map[item["id"]] = status_matches
 
-            log.info(f"Found {len(filtered_tasks)} matches out of {len(result_data)} tasks in {len(project_phids)} project(s)")
+            log.info(
+                f"Found {len(filtered_tasks)} matches out of {len(result_data)} tasks in {len(project_phids)} project(s)"
+            )
             result_data = filtered_tasks
         elif show_history:
             # Fetch transitions for all tasks when --show-history is used without filtering
@@ -3268,7 +3314,11 @@ class Maniphest(Phabfive):
                 if dry_run:
                     # Extract title from transactions for display
                     title = next(
-                        (t["value"] for t in transactions_to_commit if t["type"] == "title"),
+                        (
+                            t["value"]
+                            for t in transactions_to_commit
+                            if t["type"] == "title"
+                        ),
                         "<no title>",
                     )
                     indent = "  " * depth

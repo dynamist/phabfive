@@ -16,7 +16,11 @@ from phabfive.constants import (
     DEFAULTS,
     CONFIGURABLES,
 )
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException, PhabfiveRemoteException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveRemoteException,
+)
 
 # 3rd party imports
 import anyconfig
@@ -39,7 +43,9 @@ class Phabfive:
     MAX_LINE_WIDTH = 4096
 
     @classmethod
-    def set_output_options(cls, ascii_when="auto", hyperlink_when="auto", output_format="rich"):
+    def set_output_options(
+        cls, ascii_when="auto", hyperlink_when="auto", output_format="rich"
+    ):
         """Set global output formatting options."""
         cls._ascii_when = ascii_when
         cls._hyperlink_when = hyperlink_when
@@ -86,7 +92,12 @@ class Phabfive:
 
         # Known supporting terminal programs
         if term_program in (
-            "iTerm.app", "WezTerm", "vscode", "Hyper", "mintty", "ghostty"
+            "iTerm.app",
+            "WezTerm",
+            "vscode",
+            "Hyper",
+            "mintty",
+            "ghostty",
         ):
             return True
 
@@ -167,7 +178,9 @@ class Phabfive:
         force_terminal = self._is_hyperlink_enabled()
         no_color = self._ascii_when == "always"
         # Use large width to prevent soft-wrapping which breaks YAML output
-        return Console(force_terminal=force_terminal, no_color=no_color, width=self.MAX_LINE_WIDTH)
+        return Console(
+            force_terminal=force_terminal, no_color=no_color, width=self.MAX_LINE_WIDTH
+        )
 
     def check_line_width(self, value, field_name="field"):
         """Check if a value exceeds the maximum line width for rich format.
@@ -192,7 +205,7 @@ class Phabfive:
         for i, line in enumerate(str_value.split("\n")):
             if len(line) > self.MAX_LINE_WIDTH:
                 raise PhabfiveDataException(
-                    f"{field_name} line {i+1} exceeds maximum width of {self.MAX_LINE_WIDTH} characters "
+                    f"{field_name} line {i + 1} exceeds maximum width of {self.MAX_LINE_WIDTH} characters "
                     f"(length: {len(line)}). Use --format=strict for guaranteed valid YAML output."
                 )
 

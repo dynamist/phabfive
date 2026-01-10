@@ -1525,7 +1525,10 @@ class TestStrictFormat:
         assert isinstance(parsed_data, list)
         assert len(parsed_data) == 1
         # All special characters should be preserved
-        assert parsed_data[0]["Task"]["Name"] == "[BUG]: Fix {template} `code` 'quotes' \"double\""
+        assert (
+            parsed_data[0]["Task"]["Name"]
+            == "[BUG]: Fix {template} `code` 'quotes' \"double\""
+        )
 
         # Reset to default
         Phabfive.set_output_options(output_format="rich")
