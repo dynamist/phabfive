@@ -2,6 +2,8 @@
 
 A command line tool to interact with [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https://www.phorge.it/).
 
+![phabfive maniphest show](docs/maniphest-show.png)
+
 ## Features
 
 A summary of the currently supported features:
