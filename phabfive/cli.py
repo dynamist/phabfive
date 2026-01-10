@@ -624,13 +624,11 @@ def run(cli_args, sub_args):
             if sub_args.get("create"):
                 # Check if template mode or CLI mode
                 if sub_args.get("--with"):
-                    # Existing bulk creation from template file
                     maniphest_app.create_from_config(
                         sub_args["--with"],
                         dry_run=sub_args.get("--dry-run", False),
                     )
                 elif sub_args.get("<title>"):
-                    # New CLI-based single task creation
                     result = maniphest_app.create_task_cli(
                         title=sub_args["<title>"],
                         description=sub_args.get("--description"),
@@ -654,11 +652,6 @@ def run(cli_args, sub_args):
                     )
                     retcode = 1
                     return retcode
-
-                maniphest_app.create_from_config(
-                    create_config,
-                    dry_run=sub_args["--dry-run"],
-                )
 
             if sub_args.get("comment"):
                 result = maniphest_app.add_comment(
