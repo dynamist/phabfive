@@ -43,10 +43,11 @@ PEP 440 also allows for post and dev releases if needed, but in general we shoul
 **1. Update Version**
 
 Update the version in `pyproject.toml`:
+
 ```toml
 [project]
 name = "phabfive"
-version = "0.5.0"  # Update this
+version = "0.5.0"  # ← update this
 ```
 
 **2. Update CHANGELOG**
@@ -57,7 +58,21 @@ Add release notes to `CHANGELOG.md` documenting:
 - Breaking changes (if any)
 - Deprecations (if any)
 
-**3. Build Distributions**
+**3. Commit and tag**
+
+Commit the version bump and CHANGELOG.
+
+**Note:** This is an important step!
+
+```bash
+git commit -m"Bump version: 0.5.0rc0 → 0.5.0"
+git push origin
+
+git tag -a v0.5.0 -m "Release version 0.5.0"
+git push origin v0.5.0
+```
+
+**4. Build Distributions**
 
 ```bash
 # Clean previous builds
@@ -73,7 +88,7 @@ ls -lh dist/
 # phabfive-0.5.0-py3-none-any.whl
 ```
 
-**4. Test the Build**
+**5. Test the Build**
 
 Before uploading anywhere, verify the build works locally to catch issues early:
 ```bash
@@ -92,27 +107,19 @@ deactivate
 rm -rf test-env
 ```
 
-**5. Upload to TestPyPI (MANDATORY)**
+**6. Upload to TestPyPI (MANDATORY)**
 
 Before uploading to the main PyPI, you **must** test on TestPyPI to catch any packaging issues:
 
 ```bash
 # Upload to TestPyPI using uv
+export UV_PUBLISH_TOKEN=pypi-ABCDEF # ← token for test.pypi.org -- IMPORTANT
 uv publish --publish-url https://test.pypi.org/legacy/
-
-# You'll be prompted for credentials
 ```
 
 **Note:** Get your TestPyPI API token at https://test.pypi.org/manage/account/token/
 
-Configure authentication by setting `UV_PUBLISH_TOKEN` environment variable or entering credentials interactively.
-
-**Alternative using twine (for explicit control):**
-```bash
-uv tool run twine upload --repository testpypi dist/*
-```
-
-**6. Test Installation from TestPyPI**
+**7. Test Installation from TestPyPI**
 
 Verify the package installs correctly from TestPyPI:
 
@@ -142,30 +149,15 @@ rm -rf test-pypi-env
 
 If everything works, proceed to production upload.
 
-**7. Upload to PyPI**
+**8. Upload to PyPI**
 
 ```bash
 # Upload to production PyPI using uv
+export UV_PUBLISH_TOKEN=pypi-ABCDEF # ← token for pypi.org -- IMPORTANT
 uv publish
-
-# You'll be prompted for credentials
 ```
 
 **Note:** Get your PyPI API token at https://pypi.org/manage/account/token/
-
-Configure authentication by setting `UV_PUBLISH_TOKEN` environment variable or entering credentials interactively.
-
-**Alternative using twine (for explicit control):**
-```bash
-uv tool run twine upload dist/*
-```
-
-**8. Create Git Tag**
-
-```bash
-git tag -a v0.5.0 -m "Release version 0.5.0"
-git push origin v0.5.0
-```
 
 **9. Create GitHub Release**
 
@@ -176,6 +168,27 @@ Go to https://github.com/dynamist/phabfive/releases/new and:
 3. Copy release notes from CHANGELOG
 4. Attach build artifacts (optional)
 5. Publish release
+
+**10. Bump to dev release**
+
+After you published the version it is equally important to bump the source code to a dev release so that your dev and test environments don't think twice if it is running a released version of phabfive or the latest code.
+
+**Note:** This is an important step!
+
+Update the version in `pyproject.toml`:
+
+```toml
+[project]
+name = "phabfive"
+version = "0.6.0-dev.0"  # ← update this
+```
+
+Then commit and push:
+
+```bash
+git commit -m"Bump version: 0.5.0 → 0.6.0-dev.0"
+git push origin
+```
 
 ## Additional Resources
 
