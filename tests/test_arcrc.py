@@ -12,8 +12,18 @@ from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException
 
 
+# Skip marker for tests that require Unix-style permissions
+skip_on_windows = pytest.mark.skipif(
+    os.name == "nt", reason="Windows uses ACLs, not Unix permissions"
+)
+
+
 class TestCheckSecurePermissions:
-    """Tests for the _check_secure_permissions method."""
+    """Tests for the _check_secure_permissions method.
+
+    Note: Most tests in this class are skipped on Windows because Windows
+    uses ACLs instead of Unix-style permissions.
+    """
 
     def setup_method(self):
         """Create a Phabfive instance without initialization for testing."""
@@ -25,6 +35,7 @@ class TestCheckSecurePermissions:
         # Should not raise
         self.phabfive._check_secure_permissions(str(nonexistent))
 
+    @skip_on_windows
     def test_secure_permissions_600(self, tmp_path):
         """Test that 0600 permissions pass."""
         config_file = tmp_path / "config.yaml"
@@ -33,6 +44,7 @@ class TestCheckSecurePermissions:
         # Should not raise
         self.phabfive._check_secure_permissions(str(config_file))
 
+    @skip_on_windows
     def test_secure_permissions_400(self, tmp_path):
         """Test that 0400 permissions pass."""
         config_file = tmp_path / "config.yaml"
@@ -41,6 +53,7 @@ class TestCheckSecurePermissions:
         # Should not raise
         self.phabfive._check_secure_permissions(str(config_file))
 
+    @skip_on_windows
     def test_insecure_permissions_group_read(self, tmp_path):
         """Test that group readable (0640) raises error."""
         config_file = tmp_path / "config.yaml"
@@ -54,6 +67,7 @@ class TestCheckSecurePermissions:
         assert "0o640" in str(exc_info.value)
         assert "chmod 600" in str(exc_info.value)
 
+    @skip_on_windows
     def test_insecure_permissions_world_read(self, tmp_path):
         """Test that world readable (0644) raises error."""
         config_file = tmp_path / "config.yaml"
@@ -66,6 +80,7 @@ class TestCheckSecurePermissions:
         assert "insecure permissions" in str(exc_info.value)
         assert "0o644" in str(exc_info.value)
 
+    @skip_on_windows
     def test_insecure_permissions_group_write(self, tmp_path):
         """Test that group writable (0620) raises error."""
         config_file = tmp_path / "config.yaml"
@@ -77,6 +92,7 @@ class TestCheckSecurePermissions:
 
         assert "insecure permissions" in str(exc_info.value)
 
+    @skip_on_windows
     def test_insecure_permissions_world_execute(self, tmp_path):
         """Test that world executable (0701) raises error."""
         config_file = tmp_path / "config.yaml"
@@ -103,6 +119,7 @@ class TestLoadArcrc:
             result = self.phabfive._load_arcrc({})
         assert result == {}
 
+    @skip_on_windows
     def test_arcrc_insecure_permissions_group_readable(self, tmp_path):
         """Test that .arcrc with group read permission raises error."""
         arcrc_path = tmp_path / ".arcrc"
@@ -116,6 +133,7 @@ class TestLoadArcrc:
         assert "insecure permissions" in str(exc_info.value)
         assert "chmod 600" in str(exc_info.value)
 
+    @skip_on_windows
     def test_arcrc_insecure_permissions_world_readable(self, tmp_path):
         """Test that .arcrc with world read permission raises error."""
         arcrc_path = tmp_path / ".arcrc"

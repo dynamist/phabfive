@@ -268,6 +268,9 @@ class Phabfive:
         """
         Check that a file has secure permissions (not readable by group/others).
 
+        Note: This check is skipped on Windows, which uses ACLs instead of
+        Unix-style permissions.
+
         Parameters
         ----------
         file_path : str
@@ -278,6 +281,10 @@ class Phabfive:
         PhabfiveConfigException
             If the file has insecure permissions (group or others can read)
         """
+        # Skip permission check on Windows (uses ACLs, not Unix permissions)
+        if os.name == "nt":
+            return
+
         if not os.path.exists(file_path):
             return
 
