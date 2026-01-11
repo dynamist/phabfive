@@ -4,8 +4,6 @@
 
 import json
 import os
-import stat
-import tempfile
 from unittest import mock
 
 import pytest
@@ -135,7 +133,7 @@ class TestLoadArcrc:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://example.com/api/": {
+                "https://phorge.example.com/api/": {
                     "token": "cli-abcdefghijklmnopqrstuvwxyz12"
                 }
             }
@@ -146,7 +144,7 @@ class TestLoadArcrc:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://example.com/api/"
+        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
         assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
     def test_arcrc_owner_only_read(self, tmp_path):
@@ -154,7 +152,7 @@ class TestLoadArcrc:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://example.com/api/": {
+                "https://phorge.example.com/api/": {
                     "token": "cli-abcdefghijklmnopqrstuvwxyz12"
                 }
             }
@@ -214,7 +212,7 @@ class TestArcrcSingleHost:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator.example.com/api/": {
+                "https://phorge.example.com/api/": {
                     "token": "cli-abcdefghijklmnopqrstuvwxyz12"
                 }
             }
@@ -225,7 +223,7 @@ class TestArcrcSingleHost:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phabricator.example.com/api/"
+        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
         assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
     def test_single_host_without_token(self, tmp_path):
@@ -233,7 +231,7 @@ class TestArcrcSingleHost:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator.example.com/api/": {}
+                "https://phorge.example.com/api/": {}
             }
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
@@ -242,7 +240,7 @@ class TestArcrcSingleHost:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phabricator.example.com/api/"
+        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
         assert "PHAB_TOKEN" not in result
 
 
@@ -257,10 +255,10 @@ class TestArcrcMultipleHosts:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator-a.example.com/api/": {
+                "https://phorge-a.example.com/api/": {
                     "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
-                "https://phabricator-b.example.com/api/": {
+                "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                 }
             }
@@ -274,18 +272,18 @@ class TestArcrcMultipleHosts:
 
         error_msg = str(exc_info.value)
         assert "Multiple hosts found" in error_msg
-        assert "phabricator-a.example.com" in error_msg
-        assert "phabricator-b.example.com" in error_msg
+        assert "phorge-a.example.com" in error_msg
+        assert "phorge-b.example.com" in error_msg
 
     def test_multiple_hosts_with_matching_phab_url(self, tmp_path):
         """Test that multiple hosts with matching PHAB_URL returns token."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator-a.example.com/api/": {
+                "https://phorge-a.example.com/api/": {
                     "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
-                "https://phabricator-b.example.com/api/": {
+                "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                 }
             }
@@ -293,7 +291,7 @@ class TestArcrcMultipleHosts:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        current_conf = {"PHAB_URL": "https://phabricator-b.example.com/api/"}
+        current_conf = {"PHAB_URL": "https://phorge-b.example.com/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
@@ -307,10 +305,10 @@ class TestArcrcMultipleHosts:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator-a.example.com/api/": {
+                "https://phorge-a.example.com/api/": {
                     "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
-                "https://phabricator-b.example.com/api/": {
+                "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                 }
             }
@@ -330,15 +328,15 @@ class TestArcrcMultipleHosts:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator-a.example.com/api/": {
+                "https://phorge-a.example.com/api/": {
                     "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
-                "https://phabricator-b.example.com/api/": {
+                "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                 }
             },
             "config": {
-                "default": "https://phabricator-b.example.com"
+                "default": "https://phorge-b.example.com"
             }
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
@@ -347,7 +345,7 @@ class TestArcrcMultipleHosts:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phabricator-b.example.com/api/"
+        assert result["PHAB_URL"] == "https://phorge-b.example.com/api/"
         assert result["PHAB_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
     def test_multiple_hosts_with_default_and_phab_url_uses_phab_url(self, tmp_path):
@@ -355,22 +353,22 @@ class TestArcrcMultipleHosts:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator-a.example.com/api/": {
+                "https://phorge-a.example.com/api/": {
                     "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
-                "https://phabricator-b.example.com/api/": {
+                "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                 }
             },
             "config": {
-                "default": "https://phabricator-b.example.com"
+                "default": "https://phorge-b.example.com"
             }
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
         # PHAB_URL set to host A, but default is host B
-        current_conf = {"PHAB_URL": "https://phabricator-a.example.com/api/"}
+        current_conf = {"PHAB_URL": "https://phorge-a.example.com/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
@@ -384,10 +382,10 @@ class TestArcrcMultipleHosts:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator-a.example.com/api/": {
+                "https://phorge-a.example.com/api/": {
                     "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
-                "https://phabricator-b.example.com/api/": {
+                "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                 }
             },
@@ -409,7 +407,7 @@ class TestArcrcMultipleHosts:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://phabricator.example.com/api/": {
+                "https://phorge.example.com/api/": {
                     "token": "cli-abcdefghijklmnopqrstuvwxyz12"
                 },
                 "https://other.example.com/api/": {
@@ -417,7 +415,7 @@ class TestArcrcMultipleHosts:
                 }
             },
             "config": {
-                "default": "https://phabricator.example.com"  # No /api/ suffix
+                "default": "https://phorge.example.com"  # No /api/ suffix
             }
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
@@ -426,7 +424,7 @@ class TestArcrcMultipleHosts:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phabricator.example.com/api/"
+        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
         assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
 
@@ -441,7 +439,7 @@ class TestArcrcUrlMatching:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://example.com/api/": {
+                "https://phorge.example.com/api/": {
                     "token": "cli-abcdefghijklmnopqrstuvwxyz12"
                 }
             }
@@ -450,7 +448,7 @@ class TestArcrcUrlMatching:
         os.chmod(arcrc_path, 0o600)
 
         # PHAB_URL without trailing slash should still match
-        current_conf = {"PHAB_URL": "https://example.com/api"}
+        current_conf = {"PHAB_URL": "https://phorge.example.com/api"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
@@ -462,7 +460,7 @@ class TestArcrcUrlMatching:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://example.com/api": {
+                "https://phorge.example.com/api": {
                     "token": "cli-abcdefghijklmnopqrstuvwxyz12"
                 }
             }
@@ -470,7 +468,7 @@ class TestArcrcUrlMatching:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        current_conf = {"PHAB_URL": "https://example.com/api/"}
+        current_conf = {"PHAB_URL": "https://phorge.example.com/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
@@ -482,7 +480,7 @@ class TestArcrcUrlMatching:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://example.com:8443/api/": {
+                "https://phorge.example.com:8443/api/": {
                     "token": "cli-abcdefghijklmnopqrstuvwxyz12"
                 }
             }
@@ -490,7 +488,7 @@ class TestArcrcUrlMatching:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        current_conf = {"PHAB_URL": "https://example.com:8443/api/"}
+        current_conf = {"PHAB_URL": "https://phorge.example.com:8443/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
@@ -509,7 +507,7 @@ class TestArcrcLegacyFormat:
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
-                "https://example.com/api/": {
+                "https://phorge.example.com/api/": {
                     "user": "someuser",
                     "cert": "some-certificate-string"
                 }
@@ -522,5 +520,5 @@ class TestArcrcLegacyFormat:
             result = self.phabfive._load_arcrc({})
 
         # Should provide URL but not token (cert-based auth not supported)
-        assert result["PHAB_URL"] == "https://example.com/api/"
+        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
         assert "PHAB_TOKEN" not in result

@@ -302,7 +302,7 @@ class Phabfive:
 
             {
                 "hosts": {
-                    "https://phabricator.example.com/api/": {
+                    "https://phorge.example.com/api/": {
                         "token": "cli-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                     }
                 }
@@ -405,7 +405,7 @@ class Phabfive:
                     raise PhabfiveConfigException(
                         f"Multiple hosts found in ~/.arcrc but PHAB_URL is not configured. "
                         f"Please set PHAB_URL to specify which host to use:\n  - {host_list}\n\n"
-                        f"Example: export PHAB_URL=https://your-phabricator.example.com/api/"
+                        f"Example: export PHAB_URL=https://phorge.example.com/api/"
                     )
 
         return result
@@ -529,10 +529,10 @@ class Phabfive:
         Normalizes a URL by removing trailing slashes and ensuring it ends with '/api/'
 
         Handles various input formats:
-        - https://example.com -> https://example.com/api/
-        - https://example.com/ -> https://example.com/api/
-        - https://example.com/api -> https://example.com/api/
-        - https://example.com/api/ -> https://example.com/api/
+        - https://phorge.example.com -> https://phorge.example.com/api/
+        - https://phorge.example.com/ -> https://phorge.example.com/api/
+        - https://phorge.example.com/api -> https://phorge.example.com/api/
+        - https://phorge.example.com/api/ -> https://phorge.example.com/api/
         """
         url = url.rstrip("/")
 
