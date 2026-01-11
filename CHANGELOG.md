@@ -1,3 +1,47 @@
+# 0.5.0 (2026-01-10)
+
+## Prelude
+
+Feature release focused on improved output formatting, enhanced task management, and better user experience. This release introduces multiple output formats, clickable hyperlinks, CLI-based task creation, and search templates.
+
+## Upgrade Notes
+
+* **New dependency:** `rich>=13.0.0` added for enhanced terminal output formatting
+
+## New Features
+
+### Output Formatting
+* **Multiple output formats** - New `--format` option supporting `rich` (default), `tree`, and `strict` modes
+* **Clickable hyperlinks** - Terminal hyperlinks for task IDs, column names, assignees, and board names with `--hyperlink` option
+* **ASCII mode** - Use `--ascii` flag for terminals without Unicode support (uses hyphens instead of bullets)
+
+### Maniphest Enhancements
+* **CLI-based task creation** - Create tasks directly from command line with `maniphest create`
+* **Show task comments** - New `--show-comments` flag to display comments when viewing tasks
+* **Comment shorthand** - Simplified syntax for adding comments to tasks
+* **Assignee display** - Task views now show assignee information and history
+* **YAML search templates** - Define reusable search queries with multi-document YAML support
+* **Enhanced free-text search** - More flexible filtering options for task searches
+
+### Developer Experience
+* **Modernized Phorge environment** - Updated Docker development setup with configurable environment variables
+* **Improved Makefile** - Added `lock` and `upgrade` targets for dependency management
+
+## Bug Fixes
+
+* Fixed comments not displaying in task show output
+* Fixed ASCII bullet character (now uses hyphen instead of asterisk)
+* Fixed input validation and logging configuration issues
+* Improved UX and logging for maniphest search command
+* Enhanced error handling and code clarity
+
+## Other Notes
+
+* Normalized error message format to use "ERROR - " prefix consistently
+* Updated CLI option style from `--option=<style>` to `--option=STYLE` for consistency with docopt conventions
+* Improved test coverage for maniphest task search functionality
+
+
 # 0.4.0 (2025-11-12)
 
 ## Prelude

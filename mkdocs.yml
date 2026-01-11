@@ -6,6 +6,8 @@ repo_url: https://github.com/dynamist/phabfive
 nav:
     - Introduction: 'index.md'
     - Maniphest CLI: 'maniphest-cli.md'
+    - Search Templates: 'search-templates.md'
+    - Creation Templates: 'create-templates.md'
     - Development: 'development.md'
     - Phorge Setup: 'phorge-setup.md'
     - Release Process: 'releasing.md'
