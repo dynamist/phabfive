@@ -2,9 +2,12 @@
 
 # python std lib
 import copy
+import glob
+import json
 import logging
 import os
 import re
+import stat
 from urllib.parse import urlparse
 
 # phabfive imports
@@ -261,6 +264,129 @@ class Phabfive:
         except APIError as e:
             raise PhabfiveRemoteException(e)
 
+    def _check_secure_permissions(self, file_path):
+        """
+        Check that a file has secure permissions (not readable by group/others).
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the file to check
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If the file has insecure permissions (group or others can read)
+        """
+        if not os.path.exists(file_path):
+            return
+
+        file_stat = os.stat(file_path)
+        mode = file_stat.st_mode
+
+        # Check if group or others have any permissions
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            actual_perms = oct(mode & 0o777)
+            raise PhabfiveConfigException(
+                f"{file_path} has insecure permissions ({actual_perms}). "
+                "The file may contain sensitive credentials and should only be readable by you. "
+                f"Please run: chmod 600 {file_path}"
+            )
+
+    def _load_arcrc(self, current_conf):
+        """
+        Load configuration from Arcanist's ~/.arcrc file.
+
+        The .arcrc file is a JSON file with a 'hosts' section containing
+        credentials for one or more Phabricator instances:
+
+            {
+                "hosts": {
+                    "https://phabricator.example.com/api/": {
+                        "token": "cli-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    }
+                }
+            }
+
+        Parameters
+        ----------
+        current_conf : dict
+            The current configuration (used to match PHAB_URL if set)
+
+        Returns
+        -------
+        dict
+            Configuration dict with PHAB_URL and/or PHAB_TOKEN if found
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If .arcrc has insecure permissions or multiple hosts without PHAB_URL
+        """
+        arcrc_path = os.path.expanduser("~/.arcrc")
+
+        if not os.path.exists(arcrc_path):
+            log.debug(f"No .arcrc file found at {arcrc_path}")
+            return {}
+
+        # Security check: ensure file has secure permissions (0600 or stricter)
+        self._check_secure_permissions(arcrc_path)
+
+        log.debug(f"Loading configuration from {arcrc_path}")
+
+        try:
+            with open(arcrc_path, "r") as f:
+                arcrc_data = json.load(f)
+        except json.JSONDecodeError as e:
+            log.warning(f"Failed to parse {arcrc_path}: {e}")
+            return {}
+        except IOError as e:
+            log.warning(f"Failed to read {arcrc_path}: {e}")
+            return {}
+
+        hosts = arcrc_data.get("hosts", {})
+
+        if not hosts:
+            log.debug("No hosts found in .arcrc")
+            return {}
+
+        result = {}
+        current_url = current_conf.get("PHAB_URL", "")
+
+        if current_url:
+            # PHAB_URL is already set, try to find matching token in .arcrc
+            normalized_current = self._normalize_url(current_url)
+
+            for host_uri, host_data in hosts.items():
+                normalized_host = self._normalize_url(host_uri)
+                if normalized_current == normalized_host:
+                    token = host_data.get("token")
+                    if token:
+                        log.debug(f"Found matching token in .arcrc for {host_uri}")
+                        result["PHAB_TOKEN"] = token
+                    break
+        else:
+            # PHAB_URL not set, use .arcrc hosts
+            if len(hosts) == 1:
+                # Single host - use both URL and token
+                host_uri, host_data = next(iter(hosts.items()))
+                token = host_data.get("token")
+
+                log.debug(f"Using single host from .arcrc: {host_uri}")
+                result["PHAB_URL"] = host_uri
+                if token:
+                    result["PHAB_TOKEN"] = token
+            else:
+                # Multiple hosts - error with list
+                host_list = "\n  - ".join(hosts.keys())
+                raise PhabfiveConfigException(
+                    f"Multiple hosts found in ~/.arcrc but PHAB_URL is not configured. "
+                    f"Please set PHAB_URL to specify which host to use:\n  - {host_list}\n\n"
+                    f"Example: export PHAB_URL=https://your-phabricator.example.com/api/"
+                )
+
+        return result
+
     def load_config(self):
         """
         Load configuration from configuration files and environment variables.
@@ -272,7 +398,8 @@ class Phabfive:
           3. `/etc/phabfive.d/*.yaml`
           4. `~/.config/phabfive.yaml`
           5. `~/.config/phabfive.d/*.yaml`
-          6. environment variables
+          6. `~/.arcrc` (Arcanist configuration)
+          7. environment variables
         """
         environ = os.environ.copy()
 
@@ -312,6 +439,7 @@ class Phabfive:
 
         user_conf_file = os.path.join(f"{appdirs.user_config_dir('phabfive')}.yaml")
         log.debug(f"Loading configuration file: {user_conf_file}")
+        self._check_secure_permissions(user_conf_file)
         anyconfig.merge(
             conf,
             {
@@ -330,6 +458,9 @@ class Phabfive:
             f"{appdirs.user_config_dir('phabfive')}.d", "*.yaml"
         )
         log.debug(f"Loading configuration files: {user_conf_dir}")
+        # Check permissions on each file in the user config directory
+        for conf_file in glob.glob(user_conf_dir):
+            self._check_secure_permissions(conf_file)
         anyconfig.merge(
             conf,
             {
@@ -338,6 +469,12 @@ class Phabfive:
                 if key in CONFIGURABLES
             },
         )
+
+        # Load from Arcanist .arcrc file (supports single or multiple hosts)
+        arcrc_conf = self._load_arcrc(conf)
+        if arcrc_conf:
+            log.debug("Merging configuration from ~/.arcrc")
+            anyconfig.merge(conf, arcrc_conf)
 
         log.debug("Loading configuration from environment variables")
         anyconfig.merge(
