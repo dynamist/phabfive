@@ -15,7 +15,7 @@ CONFIGURABLES = ["PHABFIVE_DEBUG", "PHAB_TOKEN", "PHAB_URL"]
 DEFAULTS = {"PHABFIVE_DEBUG": False, "PHAB_TOKEN": "", "PHAB_URL": ""}
 REQUIRED = ["PHAB_TOKEN", "PHAB_URL"]
 VALIDATORS = {
-    "PHAB_URL": "^http(s)?://[a-zA-Z0-9._-]+/api(/)?$",
+    "PHAB_URL": "^http(s)?://[a-zA-Z0-9._-]+(:[0-9]+)?/api(/)?$",
     "PHAB_TOKEN": "^[a-zA-Z0-9-]{32}$",
 }
 VALID_EXAMPLES = {"PHAB_URL": "example: http://127.0.0.1/api/"}
