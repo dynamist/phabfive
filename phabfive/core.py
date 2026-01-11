@@ -377,13 +377,36 @@ class Phabfive:
                 if token:
                     result["PHAB_TOKEN"] = token
             else:
-                # Multiple hosts - error with list
-                host_list = "\n  - ".join(hosts.keys())
-                raise PhabfiveConfigException(
-                    f"Multiple hosts found in ~/.arcrc but PHAB_URL is not configured. "
-                    f"Please set PHAB_URL to specify which host to use:\n  - {host_list}\n\n"
-                    f"Example: export PHAB_URL=https://your-phabricator.example.com/api/"
-                )
+                # Multiple hosts - check for default in config section
+                default_host = arcrc_data.get("config", {}).get("default", "")
+
+                if default_host:
+                    # Normalize the default URL and find matching host
+                    normalized_default = self._normalize_url(default_host)
+
+                    for host_uri, host_data in hosts.items():
+                        normalized_host = self._normalize_url(host_uri)
+                        if normalized_default == normalized_host:
+                            token = host_data.get("token")
+                            log.debug(f"Using default host from .arcrc: {host_uri}")
+                            result["PHAB_URL"] = host_uri
+                            if token:
+                                result["PHAB_TOKEN"] = token
+                            break
+                    else:
+                        # Default didn't match any host
+                        log.warning(
+                            f"Default host '{default_host}' in .arcrc doesn't match any configured host"
+                        )
+
+                if not result:
+                    # No default or default didn't match - error with list
+                    host_list = "\n  - ".join(hosts.keys())
+                    raise PhabfiveConfigException(
+                        f"Multiple hosts found in ~/.arcrc but PHAB_URL is not configured. "
+                        f"Please set PHAB_URL to specify which host to use:\n  - {host_list}\n\n"
+                        f"Example: export PHAB_URL=https://your-phabricator.example.com/api/"
+                    )
 
         return result
 
@@ -504,11 +527,18 @@ class Phabfive:
     def _normalize_url(self, url):
         """
         Normalizes a URL by removing trailing slashes and ensuring it ends with '/api/'
+
+        Handles various input formats:
+        - https://example.com -> https://example.com/api/
+        - https://example.com/ -> https://example.com/api/
+        - https://example.com/api -> https://example.com/api/
+        - https://example.com/api/ -> https://example.com/api/
         """
         url = url.rstrip("/")
-        url += "/"
 
-        if not url.endswith("/api/"):
-            url += "/api/"
+        if not url.endswith("/api"):
+            url += "/api"
+
+        url += "/"
 
         return url

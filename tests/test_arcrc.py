@@ -325,6 +325,110 @@ class TestArcrcMultipleHosts:
 
         assert result == {}
 
+    def test_multiple_hosts_with_default_uses_default(self, tmp_path):
+        """Test that multiple hosts with config.default uses the default host."""
+        arcrc_path = tmp_path / ".arcrc"
+        arcrc_data = {
+            "hosts": {
+                "https://phabricator-a.example.com/api/": {
+                    "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                },
+                "https://phabricator-b.example.com/api/": {
+                    "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
+            },
+            "config": {
+                "default": "https://phabricator-b.example.com"
+            }
+        }
+        arcrc_path.write_text(json.dumps(arcrc_data))
+        os.chmod(arcrc_path, 0o600)
+
+        with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
+            result = self.phabfive._load_arcrc({})
+
+        assert result["PHAB_URL"] == "https://phabricator-b.example.com/api/"
+        assert result["PHAB_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+    def test_multiple_hosts_with_default_and_phab_url_uses_phab_url(self, tmp_path):
+        """Test that PHAB_URL takes precedence over config.default."""
+        arcrc_path = tmp_path / ".arcrc"
+        arcrc_data = {
+            "hosts": {
+                "https://phabricator-a.example.com/api/": {
+                    "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                },
+                "https://phabricator-b.example.com/api/": {
+                    "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
+            },
+            "config": {
+                "default": "https://phabricator-b.example.com"
+            }
+        }
+        arcrc_path.write_text(json.dumps(arcrc_data))
+        os.chmod(arcrc_path, 0o600)
+
+        # PHAB_URL set to host A, but default is host B
+        current_conf = {"PHAB_URL": "https://phabricator-a.example.com/api/"}
+
+        with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
+            result = self.phabfive._load_arcrc(current_conf)
+
+        # Should use host A's token (PHAB_URL takes precedence)
+        assert "PHAB_URL" not in result  # URL already set, not overwritten
+        assert result["PHAB_TOKEN"] == "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+    def test_multiple_hosts_with_invalid_default_raises_error(self, tmp_path):
+        """Test that invalid default (not matching any host) raises error."""
+        arcrc_path = tmp_path / ".arcrc"
+        arcrc_data = {
+            "hosts": {
+                "https://phabricator-a.example.com/api/": {
+                    "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                },
+                "https://phabricator-b.example.com/api/": {
+                    "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
+            },
+            "config": {
+                "default": "https://nonexistent.example.com"
+            }
+        }
+        arcrc_path.write_text(json.dumps(arcrc_data))
+        os.chmod(arcrc_path, 0o600)
+
+        with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
+            with pytest.raises(PhabfiveConfigException) as exc_info:
+                self.phabfive._load_arcrc({})
+
+        assert "Multiple hosts found" in str(exc_info.value)
+
+    def test_multiple_hosts_default_without_api_suffix(self, tmp_path):
+        """Test that default URL without /api/ suffix still matches."""
+        arcrc_path = tmp_path / ".arcrc"
+        arcrc_data = {
+            "hosts": {
+                "https://phabricator.example.com/api/": {
+                    "token": "cli-abcdefghijklmnopqrstuvwxyz12"
+                },
+                "https://other.example.com/api/": {
+                    "token": "cli-99999999999999999999999999999999"
+                }
+            },
+            "config": {
+                "default": "https://phabricator.example.com"  # No /api/ suffix
+            }
+        }
+        arcrc_path.write_text(json.dumps(arcrc_data))
+        os.chmod(arcrc_path, 0o600)
+
+        with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
+            result = self.phabfive._load_arcrc({})
+
+        assert result["PHAB_URL"] == "https://phabricator.example.com/api/"
+        assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
+
 
 class TestArcrcUrlMatching:
     """Tests for URL matching between PHAB_URL and .arcrc hosts."""
