@@ -914,7 +914,7 @@ def run(cli_args, sub_args):
             user_app = user.User()
 
             if sub_args["whoami"]:
-                whoami_data = user_app.get_whoami()
+                whoami_data = user_app.whoami()
                 for key, value in whoami_data.items():
                     print(f"{key}: {value}")
 
@@ -930,7 +930,7 @@ def run(cli_args, sub_args):
                 search_configs = []
                 if sub_args.get("--with"):
                     try:
-                        search_configs = maniphest_app._load_search_from_yaml(
+                        search_configs = maniphest_app._load_search_config(
                             sub_args["--with"]
                         )
                     except Exception as e:
@@ -1076,7 +1076,7 @@ def run(cli_args, sub_args):
             if sub_args.get("create"):
                 # Check if template mode or CLI mode
                 if sub_args.get("--with"):
-                    result = maniphest_app.create_from_config(
+                    result = maniphest_app.create_tasks_from_yaml(
                         sub_args["--with"],
                         dry_run=sub_args.get("--dry-run", False),
                     )
@@ -1085,7 +1085,7 @@ def run(cli_args, sub_args):
                             indent = "  " * task["depth"]
                             print(f"{indent}- {task['title']}")
                 elif sub_args.get("<title>"):
-                    result = maniphest_app.create_task_cli(
+                    result = maniphest_app.create_task(
                         title=sub_args["<title>"],
                         description=sub_args.get("--description"),
                         tags=sub_args.get("--tag"),
@@ -1130,14 +1130,16 @@ def run(cli_args, sub_args):
                     return retcode
 
             if sub_args.get("comment"):
-                result = maniphest_app.add_comment(
+                result = maniphest_app.add_task_comment(
                     sub_args["<ticket_id>"],
                     sub_args["<comment>"],
                 )
 
                 if result[0]:
                     # Query the ticket to fetch the URI for it
-                    _, ticket = maniphest_app.info(int(sub_args["<ticket_id>"][1:]))
+                    _, ticket = maniphest_app.get_task_info(
+                        int(sub_args["<ticket_id>"][1:])
+                    )
                     print(ticket["uri"])
 
             if sub_args.get("show"):

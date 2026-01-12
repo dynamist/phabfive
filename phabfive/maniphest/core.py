@@ -19,8 +19,6 @@ from phabfive.exceptions import (
     PhabfiveException,
     PhabfiveRemoteException,
 )
-from phabfive.project_filters import parse_project_patterns
-
 from phabfive.maniphest.fetchers import (
     fetch_all_transactions,
     fetch_project_names_for_boards,
@@ -42,10 +40,11 @@ from phabfive.maniphest.resolvers import (
     resolve_user_phids,
 )
 from phabfive.maniphest.utils import (
-    days_to_unix,
+    days_ago_to_timestamp,
     render_variables_with_dependency_resolution,
 )
 from phabfive.maniphest.validators import validate_priority, validate_status
+from phabfive.project_filters import parse_project_patterns
 
 log = logging.getLogger(__name__)
 
@@ -314,7 +313,7 @@ class Maniphest(Phabfive):
             show_comments=show_comments,
         )
 
-    def _load_search_from_yaml(self, template_path):
+    def _load_search_config(self, template_path):
         """
         Load search parameters from a YAML file (supports multi-document).
 
@@ -460,9 +459,9 @@ class Maniphest(Phabfive):
         created_after_days = created_after
         updated_after_days = updated_after
         if created_after:
-            created_after = days_to_unix(created_after)
+            created_after = days_ago_to_timestamp(created_after)
         if updated_after:
-            updated_after = days_to_unix(updated_after)
+            updated_after = days_ago_to_timestamp(updated_after)
 
         project_patterns = None
         project_phids = []
@@ -887,7 +886,7 @@ class Maniphest(Phabfive):
             show_metadata=show_metadata,
         )
 
-    def add_comment(self, ticket_identifier, comment_string):
+    def add_task_comment(self, ticket_identifier, comment_string):
         """
         :type ticket_identifier: str
         :type comment_string: str
@@ -899,7 +898,7 @@ class Maniphest(Phabfive):
 
         return (True, result["object"])
 
-    def info(self, task_id):
+    def get_task_info(self, task_id):
         """
         :type task_id: int
         """
@@ -908,7 +907,7 @@ class Maniphest(Phabfive):
 
         return (True, result)
 
-    def create_from_config(self, create_config, dry_run=False):
+    def create_tasks_from_yaml(self, create_config, dry_run=False):
         if not create_config:
             raise PhabfiveException("Must specify a config file path")
 
@@ -1203,7 +1202,7 @@ class Maniphest(Phabfive):
             "created_count": len(dry_run_tasks) if dry_run_tasks else 0,
         }
 
-    def create_task_cli(
+    def create_task(
         self,
         title,
         description=None,
@@ -1322,7 +1321,7 @@ class Maniphest(Phabfive):
 
             # Fetch the task to get the URI
             task_id = task_object["id"]
-            _, task_info = self.info(task_id)
+            _, task_info = self.get_task_info(task_id)
             task_uri = task_info.get("uri", f"{self.url}T{task_id}")
 
             # Extract base URL from task URI for building tag URLs

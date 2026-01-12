@@ -16,7 +16,7 @@ from phabfive.exceptions import PhabfiveDataException
 log = logging.getLogger(__name__)
 
 
-def days_to_unix(days):
+def days_ago_to_timestamp(days):
     """
     Convert days into a UNIX timestamp.
     """
