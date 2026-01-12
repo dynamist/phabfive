@@ -107,10 +107,8 @@ class Paste(Phabfive):
 
         return pastes
 
-    def print_pastes(self, ids=None):
-        """
-        Method used by the Phabfive CLI
-        """
+    def get_pastes_formatted(self, ids=None):
+        """Return list of dicts with 'id' and 'title' keys, sorted by title."""
         if ids:
             constraints = {"ids": self._convert_ids(ids=ids)}
             pastes = self.get_pastes(constraints=constraints)
@@ -121,10 +119,9 @@ class Paste(Phabfive):
             raise PhabfiveDataException("No data or other error")
 
         # sort based on title
-        response = sorted(pastes, key=lambda key: key["fields"]["title"])
+        sorted_pastes = sorted(pastes, key=lambda key: key["fields"]["title"])
 
-        for item in response:
-            paste = item["fields"]["title"]
-            paste_id = f"P{item['id']}"
-
-            print(f"{paste_id} {paste}")
+        return [
+            {"id": f"P{item['id']}", "title": item["fields"]["title"]}
+            for item in sorted_pastes
+        ]
