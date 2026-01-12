@@ -7,7 +7,6 @@ import fnmatch
 import itertools
 import json
 import logging
-import sys
 import time
 from collections.abc import Mapping
 from functools import lru_cache
@@ -17,9 +16,7 @@ from typing import Optional
 from jinja2 import Environment, Template, meta
 
 # 3rd party imports
-from rich.markup import escape
-from rich.text import Text
-from rich.tree import Tree
+
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
@@ -44,31 +41,6 @@ class Maniphest(Phabfive):
     def __init__(self):
         super(Maniphest, self).__init__()
 
-    def _escape(self, content):
-        """
-        Safely escape user-provided content for Rich markup display.
-
-        Rich library treats square brackets [...] as markup syntax. This method
-        escapes user-provided content so literal brackets are displayed correctly
-        without being interpreted as Rich formatting tags.
-
-        Parameters
-        ----------
-        content : any
-            User-provided content to escape (task names, descriptions, comments, etc.)
-
-        Returns
-        -------
-        str or Text
-            Escaped string safe for Rich display, or original Text object if already safe
-        """
-        if content is None:
-            return ""
-        if isinstance(content, Text):
-            # Text objects are already safe Rich objects, don't escape
-            return content
-        return escape(str(content))
-
     def _resolve_project_phids(self, project: str) -> list[str]:
         """
         Resolve project name, hashtag, or wildcard pattern to list of project PHIDs.
@@ -92,82 +64,47 @@ class Maniphest(Phabfive):
             log.error("No project name provided. Use '*' to search all projects.")
             return []
 
-        # Check if wildcard search is needed early to optimize API calls
-        has_wildcard = "*" in project
+        # Fetch all projects from Phabricator regardless of exact match or not to be able to suggest project names
+        log.debug("Fetching all projects from Phabricator")
 
-        # For exact match without wildcard, try direct lookup first (more efficient)
-        if not has_wildcard:
-            log.debug(f"Attempting direct lookup for project '{project}'")
-            try:
-                # project.search with slugs constraint searches all hashtags, not just primary
-                result = self.phab.project.search(constraints={"slugs": [project]})
-                if result.get("data"):
-                    proj = result["data"][0]
-                    phid = proj["phid"]
-                    name = proj["fields"]["name"]
-                    log.debug(f"Found project '{project}' -> '{name}' (PHID: {phid})")
-                    return [phid]
-            except Exception as e:
-                log.debug(f"Direct slug lookup failed: {e}")
-
-            # Also try searching by name in case user provided the display name
-            try:
-                result = self.phab.project.search(constraints={"query": project})
-                for proj in result.get("data", []):
-                    if proj["fields"]["name"].lower() == project.lower():
-                        phid = proj["phid"]
-                        name = proj["fields"]["name"]
-                        log.debug(
-                            f"Found project by name '{project}' -> '{name}' (PHID: {phid})"
-                        )
-                        return [phid]
-            except Exception as e:
-                log.debug(f"Name query lookup failed: {e}")
-
-        # For wildcard searches or when direct lookup fails, fetch all projects with pagination
-        log.debug("Fetching all projects from Phabricator with pagination")
-
+        # Use project.query to get slugs (project.search doesn't return all hashtags)
+        # Note: project.query doesn't support pagination, so we fetch all at once
         slug_to_phid = {}  # Maps each slug/hashtag to its project PHID
         phid_to_primary_name = {}  # Maps PHID to primary project name
 
         try:
-            # Use project.search with pagination (project.query is deprecated and limited to 100)
-            after = None
-            while True:
-                if after:
-                    result = self.phab.project.search(after=after)
-                else:
-                    result = self.phab.project.search()
+            # project.query returns a Result object with 'data' key containing projects
+            projects_result = self.phab.project.query()
+            projects_data = projects_result.get("data", {})
 
-                for proj in result.get("data", []):
-                    phid = proj["phid"]
-                    primary_name = proj["fields"]["name"]
-                    phid_to_primary_name[phid] = primary_name
+            # Process all projects (projects_data is a dict keyed by PHID)
+            for phid, project_data in projects_data.items():
+                primary_name = project_data["name"]
+                phid_to_primary_name[phid] = primary_name
 
-                    # Add the primary name as a searchable slug
-                    slug_to_phid[primary_name] = phid
+                # Always add the primary name as a searchable slug
+                slug_to_phid[primary_name] = phid
 
-                    # Add the slug field if present
-                    slug = proj["fields"].get("slug")
-                    if slug:
-                        slug_to_phid[slug] = phid
-
-                # Check for more pages
-                cursor = result.get("cursor", {})
-                after = cursor.get("after")
-                if not after:
-                    break
+                # Get all slugs (hashtags) for this project and add them too
+                slugs = project_data.get("slugs", [])
+                if slugs:
+                    for slug in slugs:
+                        if slug:
+                            slug_to_phid[slug] = phid
 
         except Exception as e:
             log.error(f"Failed to fetch projects: {e}")
             return []
 
         log.debug(
-            f"Fetched {len(phid_to_primary_name)} total projects with {len(slug_to_phid)} slugs/names from Phabricator"
+            f"Fetched {len(phid_to_primary_name)} total projects with {len(slug_to_phid)} slugs/hashtags from Phabricator"
         )
         # Create case-insensitive lookup mappings for slugs
         lower_slug_to_phid = {slug.lower(): phid for slug, phid in slug_to_phid.items()}
         lower_slug_to_original = {slug.lower(): slug for slug in slug_to_phid.keys()}
+
+        # Check if wildcard search is needed
+        has_wildcard = "*" in project
 
         if has_wildcard:
             if project == "*":
@@ -373,9 +310,9 @@ class Maniphest(Phabfive):
                         old_column_phid = next(iter(from_columns.keys()), None)
 
                     transformed = {
-                        "oldValue": (
-                            [board_phid, old_column_phid] if old_column_phid else None
-                        ),
+                        "oldValue": [board_phid, old_column_phid]
+                        if old_column_phid
+                        else None,
                         "newValue": [board_phid, new_column_phid],
                         "dateCreated": int(trans.get("dateCreated", 0)),
                     }
@@ -539,9 +476,9 @@ class Maniphest(Phabfive):
 
                 # Build transformed transaction
                 transformed = {
-                    "oldValue": (
-                        [board_phid, old_column_phid] if old_column_phid else None
-                    ),
+                    "oldValue": [board_phid, old_column_phid]
+                    if old_column_phid
+                    else None,
                     "newValue": [board_phid, new_column_phid],
                     "dateCreated": int(trans.get("dateCreated", 0)),
                 }
@@ -670,18 +607,6 @@ class Maniphest(Phabfive):
                     "spite": "Spite",
                 },
             }
-
-    def _get_open_statuses(self):
-        """
-        Get list of open status keys from the API.
-
-        Returns
-        -------
-        list
-            List of open status key strings (e.g., ["open"])
-        """
-        api_status = self._get_api_status_map()
-        return api_status.get("openStatuses", ["open"])
 
     def _parse_plus_separated(self, values):
         """
@@ -1347,7 +1272,7 @@ class Maniphest(Phabfive):
         task_phid : str
             Task PHID
         patterns : list
-            List of ColumnPattern objects
+            List of TransitionPattern objects
         board_phids : list
             List of board PHIDs to check (typically the project being searched)
         transactions : dict, optional
@@ -1927,7 +1852,7 @@ class Maniphest(Phabfive):
 
         return metadata
 
-    def _format_and_display_tasks(
+    def _build_task_display_data(
         self,
         result_data,
         task_transitions_map=None,
@@ -1943,10 +1868,10 @@ class Maniphest(Phabfive):
         show_comments=False,
     ):
         """
-        Format and display tasks in YAML format.
+        Build structured task display data from API results.
 
         This method is shared by both task_search() and task_show() commands
-        to ensure consistent output formatting.
+        to ensure consistent data structure.
 
         Parameters
         ----------
@@ -1969,11 +1894,18 @@ class Maniphest(Phabfive):
         matching_status_map : dict, optional
             Mapping of task ID to status match boolean
         show_history : bool, optional
-            Whether to display transition history
+            Whether to include transition history
         show_metadata : bool, optional
-            Whether to display filter match metadata
+            Whether to include filter match metadata
         show_comments : bool, optional
-            Whether to display comments
+            Whether to include comments
+
+        Returns
+        -------
+        dict
+            Dictionary with keys:
+            - tasks: list of task display dicts
+            - project_names: dict mapping PHID to project name
         """
         # Initialize empty dicts if None
         if task_transitions_map is None:
@@ -2114,346 +2046,10 @@ class Maniphest(Phabfive):
 
             tasks_list.append(task_dict)
 
-        # Display tasks using the appropriate format
-        console = self.get_console()
-
-        try:
-            for task_dict in tasks_list:
-                if self._output_format == "tree":
-                    self._display_task_tree(console, task_dict)
-                elif self._output_format == "strict":
-                    self._display_task_strict(task_dict)
-                else:  # "rich" (default)
-                    self._display_task_yaml(console, task_dict)
-        except BrokenPipeError:
-            # Handle pipe closed by consumer (e.g., head, less)
-            # Quietly exit - this is normal behavior
-            sys.stderr.close()
-            sys.exit(0)
-
-        return len(tasks_list)
-
-    def _needs_yaml_quoting(self, value):
-        """Check if a string value needs YAML quoting.
-
-        Values need quoting if they contain YAML special characters
-        that could be misinterpreted.
-        """
-        if not isinstance(value, str):
-            return False
-        # YAML special chars: colon, braces, brackets, backticks, quotes, empty string
-        return value == "" or any(c in value for c in ":{}[]`'\"")
-
-    def _display_task_yaml(self, console, task_dict):
-        """Display a single task in YAML-like format using Rich.
-
-        Parameters
-        ----------
-        console : Console
-            Rich Console instance for output
-        task_dict : dict
-            Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
-        """
-        # Extract internal fields
-        link = task_dict.get("_link")
-        assignee = task_dict.get("_assignee")
-        task_data = task_dict.get("Task", {})
-        boards = task_dict.get("Boards", {})
-        history = task_dict.get("History", {})
-        metadata = task_dict.get("Metadata", {})
-
-        # Print link
-        console.print(Text.assemble("- Link: ", link))
-
-        # Print Task section
-        console.print("  Task:")
-        for key, value in task_data.items():
-            # Check line width before printing
-            self.check_line_width(value, f"Task.{key}")
-
-            if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
-                # Multi-line value
-                console.print(f"    {key}: |-")
-                for line in str(value).splitlines():
-                    console.print(f"      {self._escape(line)}")
-            elif self._needs_yaml_quoting(value):
-                # YAML quote escaping ('' for single quotes) + Rich markup escaping
-                yaml_escaped = str(value).replace("'", "''")
-                console.print(f"    {key}: '{self._escape(yaml_escaped)}'")
-            else:
-                console.print(f"    {key}: {self._escape(value)}")
-
-        # Print Assignee
-        if assignee:
-            console.print(Text.assemble("    Assignee: ", assignee))
-
-        # Print Boards with clickable names
-        if boards:
-            console.print("  Boards:")
-            for board_name, board_data in boards.items():
-                project_slug = board_name.lower().replace(" ", "-")
-                board_url = f"{self.url}/tag/{project_slug}/"
-                board_link = self.format_link(board_url, board_name, show_url=False)
-                console.print(Text.assemble("    ", board_link, ":"))
-
-                if isinstance(board_data, dict):
-                    for key, value in board_data.items():
-                        if key.startswith("_"):
-                            continue
-                        if key == "Column":
-                            column_phid = board_data.get("_column_phid", "")
-                            needs_quoting = self._needs_yaml_quoting(value)
-                            if column_phid:
-                                query_url = (
-                                    f"{self.url}/maniphest/?columns={column_phid}"
-                                )
-                                column_link = self.format_link(
-                                    query_url, value, show_url=False
-                                )
-                                if needs_quoting:
-                                    # When hyperlinks enabled, column_link is Text; when disabled, it's str
-                                    if isinstance(column_link, Text):
-                                        console.print(
-                                            Text.assemble(
-                                                "      Column: '", column_link, "'"
-                                            )
-                                        )
-                                    else:
-                                        # column_link is a string, needs both YAML and Rich escaping
-                                        yaml_escaped = column_link.replace("'", "''")
-                                        console.print(
-                                            f"      Column: '{self._escape(yaml_escaped)}'"
-                                        )
-                                else:
-                                    console.print(
-                                        Text.assemble("      Column: ", column_link)
-                                    )
-                                continue
-                        if self._needs_yaml_quoting(value):
-                            yaml_escaped = str(value).replace("'", "''")
-                            console.print(
-                                f"      {key}: '{self._escape(yaml_escaped)}'"
-                            )
-                        else:
-                            console.print(f"      {key}: {self._escape(value)}")
-
-        # Print History section
-        if history:
-            console.print("  History:")
-            for hist_key, hist_value in history.items():
-                if hist_key == "Boards" and isinstance(hist_value, dict):
-                    console.print("    Boards:")
-                    for board_name, transitions in hist_value.items():
-                        console.print(f"      {self._escape(board_name)}:")
-                        for trans in transitions:
-                            console.print(f"        - {self._escape(trans)}")
-                elif isinstance(hist_value, list):
-                    console.print(f"    {hist_key}:")
-                    for trans in hist_value:
-                        console.print(f"      - {self._escape(trans)}")
-
-        # Print Comments section
-        comments = task_dict.get("Comments", [])
-        if comments:
-            console.print("  Comments:")
-            for comment in comments:
-                if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
-                    # Multi-line comment
-                    lines = str(comment).splitlines()
-                    console.print(f"    - {self._escape(lines[0])}")
-                    for line in lines[1:]:
-                        console.print(f"      {self._escape(line)}")
-                else:
-                    console.print(f"    - {self._escape(comment)}")
-
-        # Print Metadata section
-        if metadata:
-            console.print("  Metadata:")
-            for meta_key, meta_value in metadata.items():
-                if isinstance(meta_value, list):
-                    if meta_value:
-                        console.print(f"    {meta_key}:")
-                        for item in meta_value:
-                            console.print(f"      - {self._escape(item)}")
-                    else:
-                        console.print(f"    {meta_key}: []")
-                else:
-                    console.print(f"    {meta_key}: {self._escape(meta_value)}")
-
-    def _display_task_tree(self, console, task_dict):
-        """Display a single task in tree format using Rich Tree.
-
-        Parameters
-        ----------
-        console : Console
-            Rich Console instance for output
-        task_dict : dict
-            Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
-        """
-        # Extract internal fields
-        link = task_dict.get("_link")
-        assignee = task_dict.get("_assignee")
-        task_data = task_dict.get("Task", {})
-        boards = task_dict.get("Boards", {})
-        history = task_dict.get("History", {})
-        metadata = task_dict.get("Metadata", {})
-
-        # Create tree with task link as root
-        tree = Tree(link)
-
-        # Add Task section
-        task_branch = tree.add("Task")
-        for key, value in task_data.items():
-            if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
-                # Truncate multi-line descriptions in tree view
-                first_line = str(value).split("\n")[0]
-                if len(first_line) > 60:
-                    first_line = first_line[:57] + "..."
-                task_branch.add(f"{key}: {self._escape(first_line)}")
-            else:
-                task_branch.add(f"{key}: {self._escape(value)}")
-
-        # Add Assignee
-        if assignee:
-            task_branch.add(Text.assemble("Assignee: ", assignee))
-
-        # Add Boards section
-        if boards:
-            boards_branch = tree.add("Boards")
-            for board_name, board_data in boards.items():
-                project_slug = board_name.lower().replace(" ", "-")
-                board_url = f"{self.url}/tag/{project_slug}/"
-                board_link = self.format_link(board_url, board_name, show_url=False)
-                board_branch = boards_branch.add(board_link)
-
-                if isinstance(board_data, dict):
-                    for key, value in board_data.items():
-                        if key.startswith("_"):
-                            continue
-                        if key == "Column":
-                            column_phid = board_data.get("_column_phid", "")
-                            if column_phid:
-                                query_url = (
-                                    f"{self.url}/maniphest/?columns={column_phid}"
-                                )
-                                column_link = self.format_link(
-                                    query_url, value, show_url=False
-                                )
-                                board_branch.add(Text.assemble("Column: ", column_link))
-                                continue
-                        board_branch.add(f"{key}: {self._escape(value)}")
-
-        # Add History section
-        if history:
-            history_branch = tree.add("History")
-            for hist_key, hist_value in history.items():
-                if hist_key == "Boards" and isinstance(hist_value, dict):
-                    boards_hist = history_branch.add("Boards")
-                    for board_name, transitions in hist_value.items():
-                        board_hist = boards_hist.add(self._escape(board_name))
-                        for trans in transitions:
-                            board_hist.add(self._escape(trans))
-                elif isinstance(hist_value, list):
-                    hist_type_branch = history_branch.add(hist_key)
-                    for trans in hist_value:
-                        hist_type_branch.add(self._escape(trans))
-
-        # Add Comments section
-        comments = task_dict.get("Comments", [])
-        if comments:
-            comments_branch = tree.add("Comments")
-            for comment in comments:
-                if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
-                    # Truncate multi-line comments in tree view
-                    first_line = str(comment).split("\n")[0]
-                    if len(first_line) > 60:
-                        first_line = first_line[:57] + "..."
-                    comments_branch.add(self._escape(first_line))
-                else:
-                    comments_branch.add(self._escape(str(comment)))
-
-        # Add Metadata section
-        if metadata:
-            meta_branch = tree.add("Metadata")
-            for meta_key, meta_value in metadata.items():
-                if isinstance(meta_value, list):
-                    if meta_value:
-                        list_branch = meta_branch.add(meta_key)
-                        for item in meta_value:
-                            list_branch.add(self._escape(str(item)))
-                    else:
-                        meta_branch.add(f"{meta_key}: []")
-                else:
-                    meta_branch.add(f"{meta_key}: {self._escape(meta_value)}")
-
-        console.print(tree)
-
-    def _display_task_strict(self, task_dict):
-        """Display task as strict YAML via ruamel.yaml.
-
-        Guaranteed conformant YAML output for piping to yq/jq.
-        No hyperlinks, no Rich formatting.
-
-        Parameters
-        ----------
-        task_dict : dict
-            Task data dictionary with Link, Task, Boards, History, Metadata, etc.
-        """
-        from io import StringIO
-
-        yaml = YAML()
-        yaml.default_flow_style = False
-
-        # Build clean dict - use _url for the Link (plain URL string)
-        output = {"Link": task_dict.get("_url", "")}
-
-        # Add Task section
-        if task_dict.get("Task"):
-            output["Task"] = {k: v for k, v in task_dict["Task"].items()}
-
-        # Add Assignee if present (extract plain text from Rich Text if needed)
-        assignee = task_dict.get("_assignee")
-        if assignee is not None:
-            # Convert Rich Text to plain string, or use string directly
-            if isinstance(assignee, Text):
-                output["Assignee"] = assignee.plain
-            else:
-                output["Assignee"] = str(assignee)
-
-        # Add Boards section without internal keys
-        if task_dict.get("Boards"):
-            boards = {}
-            for board_name, board_data in task_dict["Boards"].items():
-                if isinstance(board_data, dict):
-                    boards[board_name] = {
-                        k: v for k, v in board_data.items() if not k.startswith("_")
-                    }
-                else:
-                    boards[board_name] = board_data
-            output["Boards"] = boards
-
-        # Add History section if present
-        if task_dict.get("History"):
-            output["History"] = task_dict["History"]
-
-        # Add Comments section if present
-        if task_dict.get("Comments"):
-            # Convert PreservedScalarString to plain strings for strict YAML
-            comments = []
-            for comment in task_dict["Comments"]:
-                if isinstance(comment, PreservedScalarString):
-                    comments.append(str(comment))
-                else:
-                    comments.append(comment)
-            output["Comments"] = comments
-
-        # Add Metadata section if present
-        if task_dict.get("Metadata"):
-            output["Metadata"] = task_dict["Metadata"]
-
-        stream = StringIO()
-        yaml.dump([output], stream)
-        print(stream.getvalue(), end="")
+        return {
+            "tasks": tasks_list,
+            "project_names": project_phid_to_name,
+        }
 
     def task_show(
         self, task_id, show_history=False, show_metadata=False, show_comments=False
@@ -2522,8 +2118,8 @@ class Maniphest(Phabfive):
                 if all_fetched_transactions.get("comments"):
                     comments_map[task_id] = all_fetched_transactions["comments"]
 
-        # Use shared method to format and display the task
-        return self._format_and_display_tasks(
+        # Use shared method to build task data
+        return self._build_task_display_data(
             result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
@@ -2581,9 +2177,7 @@ class Maniphest(Phabfive):
             "text_query",
             "tag",
             "created-after",
-            "created-before",
             "updated-after",
-            "updated-before",
             "column",
             "priority",
             "status",
@@ -2631,17 +2225,13 @@ class Maniphest(Phabfive):
         self,
         text_query=None,
         tag=None,
-        assigned=None,
         created_after=None,
-        created_before=None,
         updated_after=None,
-        updated_before=None,
-        column_patterns=None,
+        transition_patterns=None,
         priority_patterns=None,
         status_patterns=None,
         show_history=False,
         show_metadata=False,
-        include_closed=False,
     ):
         """
         Search for Phabricator Maniphest tasks with given parameters.
@@ -2654,17 +2244,9 @@ class Maniphest(Phabfive):
                       Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
                       Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
                       If None, no project filtering is applied.
-        assigned      (str, optional): Filter by assignee. Use "@me" to filter tasks assigned to you,
-                      or provide username(s). Comma-separated for OR logic (e.g., "@me,user1,user2").
-        created_after (str|int, optional): Time period for task creation (e.g., "7d", "2w", "1m") or days as int.
-                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
-        created_before (str|int, optional): Tasks created more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
-                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
-        updated_after (str|int, optional): Time period for task updates (e.g., "7d", "2w", "1m") or days as int.
-                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
-        updated_before (str|int, optional): Tasks updated more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
-                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
-        column_patterns (list, optional): List of ColumnPattern objects to filter by.
+        created_after (int, optional): Number of days ago the task was created.
+        updated_after (int, optional): Number of days ago the task was updated.
+        transition_patterns (list, optional): List of TransitionPattern objects to filter by.
                       Filters tasks based on column transitions (from, to, in, been, never, forward, backward).
         priority_patterns (list, optional): List of PriorityPattern objects to filter by.
                       Filters tasks based on priority transitions (from, to, in, been, never, raised, lowered).
@@ -2674,21 +2256,15 @@ class Maniphest(Phabfive):
                       Must be explicitly requested; not auto-enabled by filters.
         show_metadata (bool, optional): If True, display which boards/priorities/statuses matched the filters.
                       Shows MatchedBoards list, MatchedPriority, and MatchedStatus boolean for debugging filter logic.
-        include_closed (bool, optional): If True, include tasks with closed statuses
-                      (resolved, wontfix, invalid, duplicate, spite). Default is False,
-                      which filters out closed tasks at API level. --status filters are additive.
         """
         # Validation - require at least one filter
         has_any_filter = any(
             [
                 text_query,
                 tag,
-                assigned,
                 created_after,
-                created_before,
                 updated_after,
-                updated_before,
-                column_patterns,
+                transition_patterns,
                 priority_patterns,
                 status_patterns,
             ]
@@ -2697,65 +2273,13 @@ class Maniphest(Phabfive):
         if not has_any_filter:
             raise PhabfiveConfigException("No search criteria specified")
 
-        # Convert date filters to Unix timestamps (preserve original values for logging)
-        created_after_original = created_after
-        created_before_original = created_before
-        updated_after_original = updated_after
-        updated_before_original = updated_before
-
+        # Convert date filters to Unix timestamps (preserve original day values for logging)
+        created_after_days = created_after
+        updated_after_days = updated_after
         if created_after:
-            created_after_days = parse_time_with_unit(created_after)
-            created_after = days_to_unix(created_after_days)
-        if created_before:
-            created_before_days = parse_time_with_unit(created_before)
-            created_before = days_to_unix(created_before_days)
+            created_after = days_to_unix(created_after)
         if updated_after:
-            updated_after_days = parse_time_with_unit(updated_after)
-            updated_after = days_to_unix(updated_after_days)
-        if updated_before:
-            updated_before_days = parse_time_with_unit(updated_before)
-            updated_before = days_to_unix(updated_before_days)
-
-        # Resolve assigned filter - convert @me or username(s) to PHID(s)
-        # Supports OR logic with comma-separated values: @me,user1,user2
-        assigned_phids = []
-        if assigned:
-            # Split by comma to support OR logic
-            assignees = [a.strip() for a in assigned.split(",")]
-            resolved_names = []
-
-            for assignee in assignees:
-                if assignee == "@me":
-                    # Get current user's PHID using whoami
-                    try:
-                        whoami = self.phab.user.whoami()
-                        phid = whoami.get("phid")
-                        if phid:
-                            assigned_phids.append(phid)
-                            resolved_names.append(
-                                f"@me ({whoami.get('userName', 'unknown')})"
-                            )
-                        else:
-                            log.error("Failed to get current user's PHID")
-                            return
-                    except Exception as e:
-                        log.error(f"Failed to get current user information: {e}")
-                        return
-                else:
-                    # Resolve username to PHID
-                    phid = self._resolve_user_phid(assignee)
-                    if not phid:
-                        log.error(f"User '{assignee}' not found")
-                        return
-                    assigned_phids.append(phid)
-                    resolved_names.append(assignee)
-
-            if len(assignees) > 1:
-                log.info(
-                    f"Filtering by tasks assigned to any of: {', '.join(resolved_names)}"
-                )
-            else:
-                log.info(f"Filtering by tasks assigned to {resolved_names[0]}")
+            updated_after = days_to_unix(updated_after)
 
         project_patterns = None
         project_phids = []
@@ -2831,30 +2355,16 @@ class Maniphest(Phabfive):
                 log.info("No tag specified, searching across all projects")
             constraints = {}
 
-            # Apply default status filter (exclude closed) unless --all flag is set.
-            # Note: --status filters are additive (applied client-side after API filtering)
-            if not include_closed:
-                open_statuses = self._get_open_statuses()
-                constraints["statuses"] = open_statuses
-                log.info(f"Filtering to open statuses: {open_statuses}")
-
             if text_query:
                 log.info(f"Free-text search: '{text_query}'")
                 # Note: maniphest.search doesn't have a fullText constraint
                 # We use the 'query' constraint which searches titles and descriptions
                 constraints["query"] = text_query
 
-            if assigned_phids:
-                constraints["assigned"] = assigned_phids
-
             if created_after:
                 constraints["createdStart"] = int(created_after)
-            if created_before:
-                constraints["createdEnd"] = int(created_before)
             if updated_after:
                 constraints["modifiedStart"] = int(updated_after)
-            if updated_before:
-                constraints["modifiedEnd"] = int(updated_before)
 
             # Use pagination to fetch all tasks (API returns max 100 per page)
             result_data = []
@@ -2892,25 +2402,13 @@ class Maniphest(Phabfive):
                 for phid in project_phids:
                     constraints = {"projects": [phid]}
 
-                    # Apply default status filter (exclude closed)
-                    if not include_closed:
-                        open_statuses = self._get_open_statuses()
-                        constraints["statuses"] = open_statuses
-
                     if text_query:
                         constraints["query"] = text_query
 
-                    if assigned_phids:
-                        constraints["assigned"] = assigned_phids
-
                     if created_after:
                         constraints["createdStart"] = int(created_after)
-                    if created_before:
-                        constraints["createdEnd"] = int(created_before)
                     if updated_after:
                         constraints["modifiedStart"] = int(updated_after)
-                    if updated_before:
-                        constraints["modifiedEnd"] = int(updated_before)
 
                     # Use pagination for each project (API returns max 100 per page)
                     after = None
@@ -2949,25 +2447,13 @@ class Maniphest(Phabfive):
                 # Single project
                 constraints = {"projects": project_phids}
 
-                # Apply default status filter (exclude closed)
-                if not include_closed:
-                    open_statuses = self._get_open_statuses()
-                    constraints["statuses"] = open_statuses
-
                 if text_query:
                     constraints["query"] = text_query
 
-                if assigned_phids:
-                    constraints["assigned"] = assigned_phids
-
                 if created_after:
                     constraints["createdStart"] = int(created_after)
-                if created_before:
-                    constraints["createdEnd"] = int(created_before)
                 if updated_after:
                     constraints["modifiedStart"] = int(updated_after)
-                if updated_before:
-                    constraints["modifiedEnd"] = int(updated_before)
 
                 # Use pagination to fetch all tasks (API returns max 100 per page)
                 result_data = []
@@ -3014,27 +2500,28 @@ class Maniphest(Phabfive):
 
         # Determine which transaction types are needed before the loop
         # This allows us to fetch once per task instead of multiple times
-        need_columns = bool(column_patterns) or show_history
+        need_columns = bool(transition_patterns) or show_history
         need_priority = bool(priority_patterns) or show_history
         need_status = bool(status_patterns) or show_history
 
         # Apply transition filtering if patterns specified
-        if column_patterns or priority_patterns or status_patterns or project_patterns:
+        if (
+            transition_patterns
+            or priority_patterns
+            or status_patterns
+            or project_patterns
+        ):
             filter_desc = []
             if text_query:
                 filter_desc.append(f"query='{text_query}'")
             if tag:
                 filter_desc.append(f"tag='{tag}'")
             if created_after:
-                filter_desc.append(f"created-after={created_after_original}")
-            if created_before:
-                filter_desc.append(f"created-before={created_before_original}")
+                filter_desc.append(f"created-after={created_after_days}d")
             if updated_after:
-                filter_desc.append(f"updated-after={updated_after_original}")
-            if updated_before:
-                filter_desc.append(f"updated-before={updated_before_original}")
-            if column_patterns:
-                col_strs = [str(p) for p in column_patterns]
+                filter_desc.append(f"updated-after={updated_after_days}d")
+            if transition_patterns:
+                col_strs = [str(p) for p in transition_patterns]
                 filter_desc.append(f"column='{','.join(col_strs)}'")
             if priority_patterns:
                 pri_strs = [str(p) for p in priority_patterns]
@@ -3077,7 +2564,7 @@ class Maniphest(Phabfive):
                 all_transitions = []
                 matching_board_phids = set()
 
-                if column_patterns:
+                if transition_patterns:
                     # Determine which boards this specific task is on
                     current_task_boards = search_board_phids
 
@@ -3097,7 +2584,7 @@ class Maniphest(Phabfive):
                         self._task_matches_any_pattern(
                             item,
                             task_phid,
-                            column_patterns,
+                            transition_patterns,
                             current_task_boards,
                             transactions=all_fetched_transactions,
                         )
@@ -3204,8 +2691,8 @@ class Maniphest(Phabfive):
                             "status"
                         ]
 
-        # Use shared method to format and display tasks
-        return self._format_and_display_tasks(
+        # Use shared method to build task data
+        return self._build_task_display_data(
             result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
@@ -3216,70 +2703,6 @@ class Maniphest(Phabfive):
             show_history=show_history,
             show_metadata=show_metadata,
         )
-
-    def _display_task_transitions(self, task_phid):
-        """
-        Fetch and display transition history for a single task.
-
-        Parameters
-        ----------
-        task_phid : str
-            Task PHID (e.g., "PHID-TASK-...")
-        """
-        # Fetch column transitions using consolidated method
-        all_transactions = self._fetch_all_transactions(
-            task_phid, need_columns=True, need_priority=False
-        )
-        transactions = all_transactions.get("columns", [])
-
-        if not transactions:
-            print("\nNo workboard transitions found.")
-            return
-
-        # Extract board PHIDs from transactions
-        board_phids = set()
-        for trans in transactions:
-            if trans.get("newValue") and len(trans["newValue"]) > 0:
-                board_phids.add(trans["newValue"][0])
-
-        # Display transitions for each board
-        print("\nBoards:")
-        for board_phid in board_phids:
-            # Filter transactions to this board
-            board_transactions = [
-                t
-                for t in transactions
-                if t.get("newValue")
-                and len(t["newValue"]) > 0
-                and t["newValue"][0] == board_phid
-            ]
-
-            if board_transactions:
-                # Get column info for this board
-                column_info = self._get_column_info(board_phid)
-
-                # Get board name if possible
-                try:
-                    project_info = self.phab.project.search(
-                        constraints={"phids": [board_phid]}
-                    )
-                    if project_info.get("data"):
-                        board_name = project_info["data"][0]["fields"].get(
-                            "name", "Unknown"
-                        )
-                        print(f"  {board_name}:")
-                        print("    Transitions:")
-                except Exception as e:
-                    log.debug(f"Could not fetch board name: {e}")
-                    print("  Unknown:")
-                    print("    Transitions:")
-
-                # Print the transitions
-                transitions_list = self._build_column_transitions(
-                    board_transactions, column_info
-                )
-                for transition in transitions_list:
-                    print(f"      - {transition}")
 
     def add_comment(self, ticket_identifier, comment_string):
         """
@@ -3510,6 +2933,9 @@ class Maniphest(Phabfive):
 
             return output
 
+        # List to collect dry-run tasks (nonlocal to be accessible in nested function)
+        dry_run_tasks = []
+
         def recurse_commit_transactions(task_config, parent_task_config, depth=0):
             """
             This recurse functions purpose is to iterate over all tickets, commit them to phabricator
@@ -3518,6 +2944,8 @@ class Maniphest(Phabfive):
             task_config is the current task to create and the parent_task_config is if we have a tree
             of tickets defined in our config file.
             """
+            nonlocal dry_run_tasks
+
             log.debug("\n -- Commiting task")
             log.debug(json.dumps(task_config, indent=2))
             log.debug(" ** parent block")
@@ -3548,8 +2976,7 @@ class Maniphest(Phabfive):
                         ),
                         "<no title>",
                     )
-                    indent = "  " * depth
-                    print(f"{indent}- {title}")
+                    dry_run_tasks.append({"depth": depth, "title": title})
                 else:
                     result = self.phab.maniphest.edit(
                         transactions=transactions_to_commit,
@@ -3588,6 +3015,12 @@ class Maniphest(Phabfive):
 
         # Always start with a blank parent
         recurse_commit_transactions(parsed_root_data, None)
+
+        # Return dry-run data if in dry-run mode
+        if dry_run:
+            return {"dry_run": True, "tasks": dry_run_tasks}
+
+        return {"dry_run": False, "created_count": len(dry_run_tasks) if dry_run_tasks else 0}
 
     def create_task_cli(
         self,
@@ -3636,9 +3069,7 @@ class Maniphest(Phabfive):
         """
         # Parse plus-separated values (supports both repeat option and plus syntax)
         parsed_tags = self._parse_plus_separated(tags) if tags else []
-        parsed_subscribers = (
-            self._parse_plus_separated(subscribers) if subscribers else []
-        )
+        parsed_subscribers = self._parse_plus_separated(subscribers) if subscribers else []
 
         # Build transactions list
         transactions = []
@@ -3687,25 +3118,19 @@ class Maniphest(Phabfive):
                     {"type": "subscribers.set", "value": subscriber_phids}
                 )
 
-        # Dry run - display what would be created
+        # Dry run - return what would be created
         if dry_run:
             log.info("Dry run mode - task would be created with these transactions:")
-            print("\n--- DRY RUN ---")
-            print(f"Title: {title}")
-            if description:
-                print(f"Description: {description}")
-            if priority:
-                print(f"Priority: {priority}")
-            if status:
-                print(f"Status: {status}")
-            if assignee:
-                print(f"Assignee: {assignee}")
-            if parsed_tags:
-                print(f"Tags: {', '.join(parsed_tags)}")
-            if parsed_subscribers:
-                print(f"Subscribers: {', '.join(parsed_subscribers)}")
-            print("--- END DRY RUN ---\n")
-            return None
+            return {
+                "dry_run": True,
+                "title": title,
+                "description": description,
+                "priority": priority,
+                "status": status,
+                "assignee": assignee,
+                "tags": parsed_tags,
+                "subscribers": parsed_subscribers,
+            }
 
         # Create the task via API
         try:
@@ -3730,109 +3155,6 @@ class Maniphest(Phabfive):
             }
         except Exception as e:
             raise PhabfiveRemoteException(f"Failed to create task: {e}")
-
-
-def parse_time_with_unit(time_value):
-    """
-    Parse time value with optional unit suffix.
-
-    Supports the following time units:
-    - h: hours
-    - d: days (default when no unit specified)
-    - w: weeks (7 days)
-    - m: months (30 days)
-    - y: years (365 days)
-
-    Parameters
-    ----------
-    time_value : str, int, float, or None
-        Time value with optional unit suffix.
-        Examples: "1w", "2m", "7d", "7", 7
-
-    Returns
-    -------
-    float or None
-        Number of days as a float, or None if input is None.
-
-    Raises
-    ------
-    ValueError
-        If the format is invalid or the unit is not recognized.
-
-    Examples
-    --------
-    >>> parse_time_with_unit("1w")
-    7.0
-    >>> parse_time_with_unit("2m")
-    60.0
-    >>> parse_time_with_unit("7")
-    7.0
-    >>> parse_time_with_unit(7)
-    7.0
-    >>> parse_time_with_unit("1h")
-    0.041666666666666664
-    """
-    if time_value is None:
-        return None
-
-    # Convert to string for parsing
-    time_str = str(time_value).strip()
-
-    if not time_str:
-        raise ValueError("Time value cannot be empty")
-
-    # Define unit conversions to days
-    unit_to_days = {
-        "h": 1 / 24,  # hours to days
-        "d": 1,  # days
-        "w": 7,  # weeks to days
-        "m": 30,  # months to days (approximate)
-        "y": 365,  # years to days (approximate)
-    }
-
-    # Try to parse as a plain number first (backward compatibility)
-    try:
-        # If it's just a number, treat as days
-        days = float(time_str)
-        if days < 0:
-            raise ValueError(f"Time value cannot be negative: '{time_value}'")
-        return days
-    except ValueError as e:
-        # If it's a negative value error, re-raise it
-        if "cannot be negative" in str(e):
-            raise
-        # Not a plain number, try to parse with unit suffix
-        pass
-
-    # Extract numeric part and unit suffix
-    import re
-
-    match = re.match(r"^(-?[0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]+)$", time_str)
-    if not match:
-        raise ValueError(
-            f"Invalid time format: '{time_value}'. "
-            f"Expected format: NUMBER[UNIT] where UNIT is one of: h, d, w, m, y. "
-            f"Examples: '7d', '1w', '2m', '1y', '12h', or just '7' (defaults to days)"
-        )
-
-    numeric_part = match.group(1)
-    unit = match.group(2).lower()
-
-    if unit not in unit_to_days:
-        valid_units = ", ".join(sorted(unit_to_days.keys()))
-        raise ValueError(f"Invalid time unit: '{unit}'. Valid units are: {valid_units}")
-
-    try:
-        numeric_value = float(numeric_part)
-    except ValueError:
-        raise ValueError(f"Invalid numeric value: '{numeric_part}'")
-
-    if numeric_value < 0:
-        raise ValueError(f"Time value cannot be negative: '{time_value}'")
-
-    # Convert to days
-    days = numeric_value * unit_to_days[unit]
-    return days
 
 
 def days_to_unix(days):
