@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # python std lib
+import logging
 import re
 
 # phabfive imports
@@ -16,6 +17,9 @@ from phabfive.exceptions import PhabfiveDataException, PhabfiveConfigException
 
 # 3rd party imports
 from phabricator import APIError
+
+
+log = logging.getLogger(__name__)
 
 
 class Diffusion(Phabfive):
@@ -216,8 +220,7 @@ class Diffusion(Phabfive):
                 display_off = "never"
                 io_read_only = "read"
                 repository_exist = True
-                # TODO: never print in lib; if it exists then do nothing
-                print(f"'{repository_name}' exist")
+                log.info(f"Repository '{repository_name}' exists, updating URIs")
                 # Existing repo PHID. Will be used further down to create new uri
                 repository_phid = repo["phid"]
                 # Amount of uris the repo has
@@ -343,22 +346,11 @@ class Diffusion(Phabfive):
 
         return uris
 
-    # TODO: the URIs should be sorted when printed
-    def print_uri(self, repo, clone_uri):
-        """
-        Method used by the Phabfive CLI
-
-        :type repo: str
-        :type clone_uri: bool
-        """
+    def get_uris_formatted(self, repo, clone_uri=False):
+        """Return list of URI strings for a repository."""
         if self._validate_identifier(repo):
             repo = repo.replace("R", "")
-            uris = self.get_uris(repo_id=repo, clone_uri=clone_uri)
-        else:
-            uris = self.get_uris(repo_id=repo, clone_uri=clone_uri)
-
-        for uri in uris:
-            print(uri)
+        return self.get_uris(repo_id=repo, clone_uri=clone_uri)
 
     def get_repositories(self, query_key=None, attachments=None, constraints=None):
         """
@@ -414,13 +406,11 @@ class Diffusion(Phabfive):
                     f"Repository '{repo_shortname}' is not a valid repository"
                 )
 
-    def print_repositories(self, status=None, url=False):
-        """
-        Method used by the Phabfive CLI
-        """
+    def get_repositories_formatted(self, status=None, include_url=False):
+        """Return list of repository dicts with 'name' and optionally 'urls' keys."""
         status = status or REPO_STATUS_CHOICES
 
-        repos = self.get_repositories(attachments={"uris": url})
+        repos = self.get_repositories(attachments={"uris": include_url})
 
         if not repos:
             raise PhabfiveDataException("No data or other error")
@@ -434,39 +424,31 @@ class Diffusion(Phabfive):
             key=lambda key: key["fields"]["name"],
         )
 
-        if url:
-            for repo in repos:
+        result = []
+        for repo in repos:
+            entry = {"name": repo["fields"].get("name", "")}
+            if include_url:
                 uris = repo["attachments"]["uris"]["uris"]
-
-                # filter based on visibility
-                repo_urls = [
+                entry["urls"] = [
                     uri["fields"]["uri"]["effective"]
                     for uri in uris
                     if uri["fields"]["display"]["effective"] == "always"
                 ]
+            result.append(entry)
 
-                print(", ".join(repo_urls))
-        else:
-            for repo in repos:
-                repo_name = repo["fields"].get("name", "")
-                print(repo_name)
+        return result
 
-    def print_branches(self, repo):
-        """
-        Method used by the Phabfive CLI
-        """
+    def get_branches_formatted(self, repo):
+        """Return sorted list of branch names for a repository."""
         if self._validate_identifier(repo):
             repo = repo.replace("R", "")
             branches = self.get_branches(repo_id=repo)
         else:
             branches = self.get_branches(repo_shortname=repo)
 
-        branch_names = sorted(
+        return sorted(
             branch["shortName"] for branch in branches if branch["refType"] == "branch"
         )
-
-        for branch_name in branch_names:
-            print(branch_name)
 
     def _resolve_shortname_to_id(self, shortname):
         repos = self.get_repositories()
