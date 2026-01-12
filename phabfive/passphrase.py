@@ -57,7 +57,7 @@ class Passphrase(Phabfive):
 
         if no_api_access:
             raise PhabfiveDataException(
-                api_access_value.get("noAPIAccess"),
+                f"Access denied, visit {self.url}/K{ids} to allow Conduit",
             )
 
         # Extract and return the secret value
