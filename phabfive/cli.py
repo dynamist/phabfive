@@ -86,7 +86,9 @@ def display_task_rich(console, task_dict, phabfive_instance):
         for board_name, board_data in boards.items():
             project_slug = board_name.lower().replace(" ", "-")
             board_url = f"{phabfive_instance.url}/tag/{project_slug}/"
-            board_link = phabfive_instance.format_link(board_url, board_name, show_url=False)
+            board_link = phabfive_instance.format_link(
+                board_url, board_name, show_url=False
+            )
             console.print(Text.assemble("    ", board_link, ":"))
 
             if isinstance(board_data, dict):
@@ -97,9 +99,7 @@ def display_task_rich(console, task_dict, phabfive_instance):
                         column_phid = board_data.get("_column_phid", "")
                         needs_quoting = _needs_yaml_quoting(value)
                         if column_phid:
-                            query_url = (
-                                f"{phabfive_instance.url}/maniphest/?columns={column_phid}"
-                            )
+                            query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}"
                             column_link = phabfive_instance.format_link(
                                 query_url, value, show_url=False
                             )
@@ -214,7 +214,9 @@ def display_task_tree(console, task_dict, phabfive_instance):
         for board_name, board_data in boards.items():
             project_slug = board_name.lower().replace(" ", "-")
             board_url = f"{phabfive_instance.url}/tag/{project_slug}/"
-            board_link = phabfive_instance.format_link(board_url, board_name, show_url=False)
+            board_link = phabfive_instance.format_link(
+                board_url, board_name, show_url=False
+            )
             board_branch = boards_branch.add(board_link)
 
             if isinstance(board_data, dict):
@@ -224,9 +226,7 @@ def display_task_tree(console, task_dict, phabfive_instance):
                     if key == "Column":
                         column_phid = board_data.get("_column_phid", "")
                         if column_phid:
-                            query_url = (
-                                f"{phabfive_instance.url}/maniphest/?columns={column_phid}"
-                            )
+                            query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}"
                             column_link = phabfive_instance.format_link(
                                 query_url, value, show_url=False
                             )
@@ -376,6 +376,7 @@ def display_tasks(result, output_format, phabfive_instance):
         # Quietly exit - this is normal behavior
         sys.stderr.close()
         sys.exit(0)
+
 
 base_args = """
 Usage:
@@ -1110,7 +1111,9 @@ def run(cli_args, sub_args):
                             if result.get("tags"):
                                 print(f"Tags: {', '.join(result['tags'])}")
                             if result.get("subscribers"):
-                                print(f"Subscribers: {', '.join(result['subscribers'])}")
+                                print(
+                                    f"Subscribers: {', '.join(result['subscribers'])}"
+                                )
                             print("--- END DRY RUN ---\n")
                         else:
                             print(result["uri"])

@@ -12,13 +12,13 @@ from phabfive.exceptions import (
 )
 
 # phabfive imports
-from phabfive.maniphest import (
-    Maniphest,
-    _build_dependency_graph,
-    _detect_circular_dependencies,
-    _extract_variable_dependencies,
-    _render_variables_with_dependency_resolution,
-    _topological_sort,
+from phabfive.maniphest import Maniphest
+from phabfive.maniphest.utils import (
+    build_dependency_graph,
+    detect_circular_dependencies,
+    extract_variable_dependencies,
+    topological_sort,
+    render_variables_with_dependency_resolution,
 )
 from phabfive.maniphest_transitions import (
     TransitionPattern,
@@ -29,28 +29,28 @@ from phabfive.maniphest_transitions import (
 
 class TestExtractVariableDependencies:
     def test_simple_variable_reference(self):
-        result = _extract_variable_dependencies("{{ foo }}")
+        result = extract_variable_dependencies("{{ foo }}")
         assert result == {"foo"}
 
     def test_multiple_variables(self):
-        result = _extract_variable_dependencies("{{ foo }} and {{ bar }}")
+        result = extract_variable_dependencies("{{ foo }} and {{ bar }}")
         assert result == {"foo", "bar"}
 
     def test_variable_with_filter(self):
-        result = _extract_variable_dependencies("{{ foo | upper }}")
+        result = extract_variable_dependencies("{{ foo | upper }}")
         assert result == {"foo"}
 
     def test_variable_with_expression(self):
-        result = _extract_variable_dependencies("{{ foo + bar }}")
+        result = extract_variable_dependencies("{{ foo + bar }}")
         assert result == {"foo", "bar"}
 
     def test_no_variables(self):
-        result = _extract_variable_dependencies("plain text")
+        result = extract_variable_dependencies("plain text")
         assert result == set()
 
     def test_invalid_template(self):
         # Invalid syntax should return empty set with warning
-        result = _extract_variable_dependencies("{{ unclosed")
+        result = extract_variable_dependencies("{{ unclosed")
         assert result == set()
 
 
@@ -61,7 +61,7 @@ class TestBuildDependencyGraph:
             "b": "{{ a }}",
             "c": "{{ b }}",
         }
-        graph = _build_dependency_graph(variables)
+        graph = build_dependency_graph(variables)
         assert graph == {
             "a": set(),
             "b": {"a"},
@@ -74,7 +74,7 @@ class TestBuildDependencyGraph:
             "b": "value_b",
             "c": "{{ a }} and {{ b }}",
         }
-        graph = _build_dependency_graph(variables)
+        graph = build_dependency_graph(variables)
         assert graph == {
             "a": set(),
             "b": set(),
@@ -87,7 +87,7 @@ class TestBuildDependencyGraph:
             "b": ["list"],
             "c": "{{ a }}",
         }
-        graph = _build_dependency_graph(variables)
+        graph = build_dependency_graph(variables)
         assert graph == {
             "a": set(),
             "b": set(),
@@ -98,14 +98,14 @@ class TestBuildDependencyGraph:
         variables = {
             "a": "{{ nonexistent }}",
         }
-        graph = _build_dependency_graph(variables)
+        graph = build_dependency_graph(variables)
         assert graph == {
             "a": set(),  # nonexistent is filtered out
         }
 
     def test_empty_variables(self):
         variables = {}
-        graph = _build_dependency_graph(variables)
+        graph = build_dependency_graph(variables)
         assert graph == {}
 
 
@@ -116,7 +116,7 @@ class TestDetectCircularDependencies:
             "b": {"a"},
             "c": {"b"},
         }
-        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        has_cycle, cycle_path = detect_circular_dependencies(graph)
         assert has_cycle is False
         assert cycle_path == []
 
@@ -125,7 +125,7 @@ class TestDetectCircularDependencies:
             "a": {"b"},
             "b": {"a"},
         }
-        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        has_cycle, cycle_path = detect_circular_dependencies(graph)
         assert has_cycle is True
         assert len(cycle_path) > 0
         # Cycle should contain both nodes
@@ -136,7 +136,7 @@ class TestDetectCircularDependencies:
         graph = {
             "a": {"a"},
         }
-        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        has_cycle, cycle_path = detect_circular_dependencies(graph)
         assert has_cycle is True
         assert "a" in cycle_path
 
@@ -146,7 +146,7 @@ class TestDetectCircularDependencies:
             "b": {"c"},
             "c": {"a"},
         }
-        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        has_cycle, cycle_path = detect_circular_dependencies(graph)
         assert has_cycle is True
         assert len(cycle_path) > 0
         # All three nodes should be in the cycle
@@ -161,7 +161,7 @@ class TestDetectCircularDependencies:
             "c": {"d"},
             "d": {"a"},
         }
-        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        has_cycle, cycle_path = detect_circular_dependencies(graph)
         assert has_cycle is True
         assert len(cycle_path) >= 4
 
@@ -172,7 +172,7 @@ class TestDetectCircularDependencies:
             "c": set(),
             "d": {"c"},
         }
-        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        has_cycle, cycle_path = detect_circular_dependencies(graph)
         assert has_cycle is False
         assert cycle_path == []
 
@@ -183,7 +183,7 @@ class TestDetectCircularDependencies:
             "c": {"d"},
             "d": {"c"},
         }
-        has_cycle, cycle_path = _detect_circular_dependencies(graph)
+        has_cycle, cycle_path = detect_circular_dependencies(graph)
         assert has_cycle is True
         # Cycle should contain c and d
         assert "c" in cycle_path
@@ -197,7 +197,7 @@ class TestTopologicalSort:
             "b": set(),
             "c": set(),
         }
-        result = _topological_sort(graph)
+        result = topological_sort(graph)
         # All variables should be present
         assert set(result) == {"a", "b", "c"}
 
@@ -207,7 +207,7 @@ class TestTopologicalSort:
             "b": {"a"},
             "c": {"b"},
         }
-        result = _topological_sort(graph)
+        result = topological_sort(graph)
         # a must come before b, b must come before c
         assert result.index("a") < result.index("b")
         assert result.index("b") < result.index("c")
@@ -219,7 +219,7 @@ class TestTopologicalSort:
             "c": {"a"},
             "d": {"b", "c"},
         }
-        result = _topological_sort(graph)
+        result = topological_sort(graph)
         # a must come before b, c, and d
         assert result.index("a") < result.index("b")
         assert result.index("a") < result.index("c")
@@ -235,7 +235,7 @@ class TestTopologicalSort:
             "c": set(),
             "d": {"c"},
         }
-        result = _topological_sort(graph)
+        result = topological_sort(graph)
         # Within each chain, order must be preserved
         assert result.index("a") < result.index("b")
         assert result.index("c") < result.index("d")
@@ -248,7 +248,7 @@ class TestTopologicalSort:
             "leaf1": {"branch1"},
             "leaf2": {"branch1", "branch2"},
         }
-        result = _topological_sort(graph)
+        result = topological_sort(graph)
         # root must come first
         assert result.index("root") < result.index("branch1")
         assert result.index("root") < result.index("branch2")
@@ -264,7 +264,7 @@ class TestRenderVariablesWithDependencyResolution:
             "name": "John",
             "greeting": "Hello {{ name }}",
         }
-        result = _render_variables_with_dependency_resolution(variables)
+        result = render_variables_with_dependency_resolution(variables)
         assert result["name"] == "John"
         assert result["greeting"] == "Hello John"
 
@@ -275,7 +275,7 @@ class TestRenderVariablesWithDependencyResolution:
             "level2": "{{ level1 }}!",
             "level3": "Message: {{ level2 }}",
         }
-        result = _render_variables_with_dependency_resolution(variables)
+        result = render_variables_with_dependency_resolution(variables)
         assert result["base"] == "world"
         assert result["level1"] == "Hello world"
         assert result["level2"] == "Hello world!"
@@ -287,7 +287,7 @@ class TestRenderVariablesWithDependencyResolution:
             "z_greeting": "Hello {{ a_name }}",
             "a_name": "Alice",
         }
-        result = _render_variables_with_dependency_resolution(variables)
+        result = render_variables_with_dependency_resolution(variables)
         assert result["a_name"] == "Alice"
         assert result["z_greeting"] == "Hello Alice"
 
@@ -297,7 +297,7 @@ class TestRenderVariablesWithDependencyResolution:
             "list": [1, 2, 3],
             "text": "plain",
         }
-        result = _render_variables_with_dependency_resolution(variables)
+        result = render_variables_with_dependency_resolution(variables)
         assert result["num"] == 42
         assert result["list"] == [1, 2, 3]
         assert result["text"] == "plain"
@@ -308,7 +308,7 @@ class TestRenderVariablesWithDependencyResolution:
             "b": "{{ a }}",
         }
         with pytest.raises(PhabfiveDataException) as exc_info:
-            _render_variables_with_dependency_resolution(variables)
+            render_variables_with_dependency_resolution(variables)
         assert "Circular reference" in str(exc_info.value)
 
     def test_self_reference_raises_exception(self):
@@ -316,7 +316,7 @@ class TestRenderVariablesWithDependencyResolution:
             "a": "{{ a }}",
         }
         with pytest.raises(PhabfiveDataException) as exc_info:
-            _render_variables_with_dependency_resolution(variables)
+            render_variables_with_dependency_resolution(variables)
         assert "Circular reference" in str(exc_info.value)
 
     def test_indirect_circular_reference_raises_exception(self):
@@ -326,7 +326,7 @@ class TestRenderVariablesWithDependencyResolution:
             "c": "{{ a }}",
         }
         with pytest.raises(PhabfiveDataException) as exc_info:
-            _render_variables_with_dependency_resolution(variables)
+            render_variables_with_dependency_resolution(variables)
         assert "Circular reference" in str(exc_info.value)
         # Error message should show the cycle path
         error_msg = str(exc_info.value)
@@ -343,7 +343,7 @@ class TestRenderVariablesWithDependencyResolution:
             "port": 443,
             "full_address": "{{ base_url }}:{{ port }}",
         }
-        result = _render_variables_with_dependency_resolution(variables)
+        result = render_variables_with_dependency_resolution(variables)
         assert result["env"] == "production"
         assert result["domain"] == "example.com"
         assert result["protocol"] == "https"
@@ -355,7 +355,7 @@ class TestRenderVariablesWithDependencyResolution:
 
 
 class TestFetchProjectNamesForBoards:
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_fetch_project_names(self, mock_init):
         mock_init.return_value = None
         maniphest = Maniphest()
@@ -384,7 +384,7 @@ class TestFetchProjectNamesForBoards:
         result = maniphest._fetch_project_names_for_boards(tasks_data)
         assert result == {"PHID-PROJ-123": "Project A", "PHID-PROJ-456": "Project B"}
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_fetch_project_names_with_list_boards(self, mock_init):
         """Test handling when boards is a list (empty or non-empty)."""
         mock_init.return_value = None
@@ -409,7 +409,7 @@ class TestFetchProjectNamesForBoards:
 class TestBuildTaskBoards:
     """Test that _build_task_boards creates correct data structures."""
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_build_with_empty_project_names(self, mock_init):
         mock_init.return_value = None
         maniphest = Maniphest()
@@ -422,7 +422,7 @@ class TestBuildTaskBoards:
         assert "Unknown" in result
         assert result["Unknown"]["Column"] == "Backlog"  # First column only
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_build_with_project_names(self, mock_init):
         mock_init.return_value = None
         maniphest = Maniphest()
@@ -436,7 +436,7 @@ class TestBuildTaskBoards:
         assert "Project A" in result
         assert result["Project A"]["Column"] == "Backlog"
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_build_with_list_boards(self, mock_init):
         """Test that list boards format returns empty dict."""
         mock_init.return_value = None
@@ -448,7 +448,7 @@ class TestBuildTaskBoards:
         # Should return empty dict
         assert result == {}
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_build_with_list_boards_single_project(self, mock_init):
         """Test that list boards format returns empty dict."""
         mock_init.return_value = None
@@ -751,7 +751,7 @@ class TestTransitionPatternMatching:
 class TestTransitionFilteringIntegration:
     """Integration tests for the full transition filtering workflow."""
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_full_filtering_workflow(self, mock_init):
         """Test the complete flow: search -> fetch transitions -> filter -> display."""
         mock_init.return_value = None
@@ -947,7 +947,7 @@ class TestTransitionFilteringIntegration:
 class TestYAMLOutput:
     """Test that YAML output is properly formatted and parsable."""
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_yaml_output_is_parsable(self, mock_init, capsys):
         """Test that task_search generates valid YAML output."""
         from io import StringIO
@@ -1023,8 +1023,13 @@ class TestYAMLOutput:
         mock_response.get.return_value = {"after": None}
         maniphest.phab.maniphest.search.return_value = mock_response
 
-        # Call task_search
-        maniphest.task_search(tag="Test Project")
+        # Call task_search to get data
+        result = maniphest.task_search(tag="Test Project")
+
+        # Use display_tasks to render output
+        from phabfive.cli import display_tasks
+
+        display_tasks(result, "rich", maniphest)
 
         # Capture output
         captured = capsys.readouterr()
@@ -1064,84 +1069,75 @@ class TestYAMLOutput:
 class TestYAMLQuoting:
     """Test that special characters are properly quoted in YAML output."""
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_colon(self, mock_init):
+    def test_needs_yaml_quoting_colon(self):
         """Test that colons trigger quoting."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting("foo:bar") is True
-        assert maniphest._needs_yaml_quoting("http://example.com") is True
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_braces(self, mock_init):
+        assert _needs_yaml_quoting("foo:bar") is True
+        assert _needs_yaml_quoting("http://example.com") is True
+
+    def test_needs_yaml_quoting_braces(self):
         """Test that curly braces trigger quoting."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting("{foo}") is True
-        assert maniphest._needs_yaml_quoting("${variable}") is True
-        assert maniphest._needs_yaml_quoting("foo}bar") is True
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_brackets(self, mock_init):
+        assert _needs_yaml_quoting("{foo}") is True
+        assert _needs_yaml_quoting("${variable}") is True
+        assert _needs_yaml_quoting("foo}bar") is True
+
+    def test_needs_yaml_quoting_brackets(self):
         """Test that square brackets trigger quoting."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting("[BUG]") is True
-        assert maniphest._needs_yaml_quoting("[FEATURE] Add something") is True
-        assert maniphest._needs_yaml_quoting("foo]bar") is True
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_backticks(self, mock_init):
+        assert _needs_yaml_quoting("[BUG]") is True
+        assert _needs_yaml_quoting("[FEATURE] Add something") is True
+        assert _needs_yaml_quoting("foo]bar") is True
+
+    def test_needs_yaml_quoting_backticks(self):
         """Test that backticks trigger quoting."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting("`code`") is True
-        assert maniphest._needs_yaml_quoting("Run `make build`") is True
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_single_quotes(self, mock_init):
+        assert _needs_yaml_quoting("`code`") is True
+        assert _needs_yaml_quoting("Run `make build`") is True
+
+    def test_needs_yaml_quoting_single_quotes(self):
         """Test that single quotes trigger quoting."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting("'LOREM'") is True
-        assert maniphest._needs_yaml_quoting("It's working") is True
-        assert maniphest._needs_yaml_quoting("Don't do that") is True
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_double_quotes(self, mock_init):
+        assert _needs_yaml_quoting("'LOREM'") is True
+        assert _needs_yaml_quoting("It's working") is True
+        assert _needs_yaml_quoting("Don't do that") is True
+
+    def test_needs_yaml_quoting_double_quotes(self):
         """Test that double quotes trigger quoting."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting('"LOREM"') is True
-        assert maniphest._needs_yaml_quoting('Say "hello"') is True
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_empty_string(self, mock_init):
+        assert _needs_yaml_quoting('"LOREM"') is True
+        assert _needs_yaml_quoting('Say "hello"') is True
+
+    def test_needs_yaml_quoting_empty_string(self):
         """Test that empty strings trigger quoting."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting("") is True
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_safe_strings(self, mock_init):
+        assert _needs_yaml_quoting("") is True
+
+    def test_needs_yaml_quoting_safe_strings(self):
         """Test that safe strings don't trigger quoting."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting("Normal task name") is False
-        assert maniphest._needs_yaml_quoting("Task with numbers 123") is False
-        assert maniphest._needs_yaml_quoting("Task-with-dashes") is False
-        assert maniphest._needs_yaml_quoting("Task_with_underscores") is False
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
-    def test_needs_yaml_quoting_non_string(self, mock_init):
+        assert _needs_yaml_quoting("Normal task name") is False
+        assert _needs_yaml_quoting("Task with numbers 123") is False
+        assert _needs_yaml_quoting("Task-with-dashes") is False
+        assert _needs_yaml_quoting("Task_with_underscores") is False
+
+    def test_needs_yaml_quoting_non_string(self):
         """Test that non-strings return False."""
-        mock_init.return_value = None
-        maniphest = Maniphest()
-        assert maniphest._needs_yaml_quoting(123) is False
-        assert maniphest._needs_yaml_quoting(None) is False
-        assert maniphest._needs_yaml_quoting(["list"]) is False
+        from phabfive.cli import _needs_yaml_quoting
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+        assert _needs_yaml_quoting(123) is False
+        assert _needs_yaml_quoting(None) is False
+        assert _needs_yaml_quoting(["list"]) is False
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_yaml_output_with_brackets(self, mock_init, capsys):
         """Test that task names with square brackets produce valid YAML."""
         from io import StringIO
@@ -1181,7 +1177,11 @@ class TestYAMLQuoting:
         mock_response.get.return_value = {"after": None}
         maniphest.phab.maniphest.search.return_value = mock_response
 
-        maniphest.task_search(tag="Test Project")
+        result = maniphest.task_search(tag="Test Project")
+
+        from phabfive.cli import display_tasks
+
+        display_tasks(result, "rich", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1193,7 +1193,7 @@ class TestYAMLQuoting:
         assert len(parsed_data) == 1
         assert parsed_data[0]["Task"]["Name"] == "[BUG] Something is broken"
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_yaml_output_with_backticks(self, mock_init, capsys):
         """Test that task names with backticks produce valid YAML."""
         from io import StringIO
@@ -1233,7 +1233,11 @@ class TestYAMLQuoting:
         mock_response.get.return_value = {"after": None}
         maniphest.phab.maniphest.search.return_value = mock_response
 
-        maniphest.task_search(tag="Test Project")
+        result = maniphest.task_search(tag="Test Project")
+
+        from phabfive.cli import display_tasks
+
+        display_tasks(result, "rich", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1246,7 +1250,7 @@ class TestYAMLQuoting:
         assert parsed_data[0]["Task"]["Name"] == "Fix `make build` command"
         assert parsed_data[0]["Task"]["Description"] == "Run `make test` first"
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_yaml_output_with_mixed_special_chars(self, mock_init, capsys):
         """Test task with multiple special character types."""
         from io import StringIO
@@ -1286,7 +1290,11 @@ class TestYAMLQuoting:
         mock_response.get.return_value = {"after": None}
         maniphest.phab.maniphest.search.return_value = mock_response
 
-        maniphest.task_search(tag="Test Project")
+        result = maniphest.task_search(tag="Test Project")
+
+        from phabfive.cli import display_tasks
+
+        display_tasks(result, "rich", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1301,7 +1309,7 @@ class TestYAMLQuoting:
             == "[BUG]: Fix {template} rendering in `parser.py`"
         )
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_yaml_output_with_single_quotes(self, mock_init, capsys):
         """Test that task names with single quotes produce valid YAML with preserved quotes."""
         from io import StringIO
@@ -1341,7 +1349,11 @@ class TestYAMLQuoting:
         mock_response.get.return_value = {"after": None}
         maniphest.phab.maniphest.search.return_value = mock_response
 
-        maniphest.task_search(tag="Test Project")
+        result = maniphest.task_search(tag="Test Project")
+
+        from phabfive.cli import display_tasks
+
+        display_tasks(result, "rich", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1354,7 +1366,7 @@ class TestYAMLQuoting:
         # Single quotes should be preserved in the parsed value
         assert parsed_data[0]["Task"]["Name"] == "'LOREM'"
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_yaml_output_with_double_quotes(self, mock_init, capsys):
         """Test that task names with double quotes produce valid YAML with preserved quotes."""
         from io import StringIO
@@ -1394,7 +1406,11 @@ class TestYAMLQuoting:
         mock_response.get.return_value = {"after": None}
         maniphest.phab.maniphest.search.return_value = mock_response
 
-        maniphest.task_search(tag="Test Project")
+        result = maniphest.task_search(tag="Test Project")
+
+        from phabfive.cli import display_tasks
+
+        display_tasks(result, "rich", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1411,7 +1427,7 @@ class TestYAMLQuoting:
 class TestStrictFormat:
     """Test that strict format produces guaranteed valid YAML via ruamel.yaml."""
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_strict_format_output_is_valid_yaml(self, mock_init, capsys):
         """Test that strict format produces valid YAML."""
         from io import StringIO
@@ -1455,7 +1471,11 @@ class TestStrictFormat:
         mock_response.get.return_value = {"after": None}
         maniphest.phab.maniphest.search.return_value = mock_response
 
-        maniphest.task_search(tag="Test Project")
+        result = maniphest.task_search(tag="Test Project")
+
+        from phabfive.cli import display_tasks
+
+        display_tasks(result, "rich", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1470,7 +1490,7 @@ class TestStrictFormat:
         # Reset to default
         Phabfive.set_output_options(output_format="rich")
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_strict_format_with_special_chars(self, mock_init, capsys):
         """Test that strict format handles special characters correctly."""
         from io import StringIO
@@ -1514,7 +1534,11 @@ class TestStrictFormat:
         mock_response.get.return_value = {"after": None}
         maniphest.phab.maniphest.search.return_value = mock_response
 
-        maniphest.task_search(tag="Test Project")
+        result = maniphest.task_search(tag="Test Project")
+
+        from phabfive.cli import display_tasks
+
+        display_tasks(result, "rich", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1537,7 +1561,7 @@ class TestStrictFormat:
 class TestTaskSearchTextQuery:
     """Test suite for free-text search functionality."""
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_with_text_query_only(self, mock_init, capsys):
         """Test searching with only a free-text query."""
         mock_init.return_value = None
@@ -1569,7 +1593,7 @@ class TestTaskSearchTextQuery:
         # Should NOT have projects constraint
         assert "projects" not in constraints
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_with_tag_only(self, mock_init, capsys):
         """Test searching with only --tag option (backward compat)."""
         mock_init.return_value = None
@@ -1608,7 +1632,7 @@ class TestTaskSearchTextQuery:
         # Should NOT have query constraint
         assert "query" not in constraints
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_with_text_and_tag(self, mock_init, capsys):
         """Test searching with both text query and tag filter."""
         mock_init.return_value = None
@@ -1646,7 +1670,7 @@ class TestTaskSearchTextQuery:
         assert "projects" in constraints
         assert constraints["projects"] == ["PHID-PROJ-123"]
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_requires_at_least_one_filter(self, mock_init, capsys):
         """Test that search without any filters raises an exception."""
         mock_init.return_value = None
@@ -1660,7 +1684,7 @@ class TestTaskSearchTextQuery:
         # Verify the error message contains helpful information
         assert "No search criteria specified" in str(exc_info.value)
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_with_text_and_date_filters(self, mock_init, capsys):
         """Test text search with date filters."""
         mock_init.return_value = None
@@ -1695,7 +1719,7 @@ class TestTaskSearchTextQuery:
         assert isinstance(constraints["createdStart"], int)
         assert isinstance(constraints["modifiedStart"], int)
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_tag_supports_wildcards(self, mock_init, capsys):
         """Test that --tag option supports wildcard patterns."""
         mock_init.return_value = None
@@ -1731,7 +1755,7 @@ class TestTaskSearchTextQuery:
         # With 2 matching projects, should make 2 calls
         assert maniphest.phab.maniphest.search.call_count >= 2
 
-    @patch("phabfive.maniphest.Phabfive.__init__")
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_tag_supports_and_or_logic(self, mock_init, capsys):
         """Test that --tag option supports AND/OR pattern logic."""
         mock_init.return_value = None
