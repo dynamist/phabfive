@@ -4,14 +4,378 @@
 import logging
 import re
 import sys
+from io import StringIO
 
 # 3rd party imports
 from docopt import DocoptExit, Option, docopt, extras
+from rich.text import Text
+from rich.tree import Tree
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import PreservedScalarString
 
 # phabfive imports
 from phabfive.constants import MONOGRAMS
 
 log = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Maniphest Display Functions
+# =============================================================================
+
+
+def _needs_yaml_quoting(value):
+    """Check if a string value needs YAML quoting.
+
+    Values need quoting if they contain YAML special characters
+    that could be misinterpreted.
+    """
+    if not isinstance(value, str):
+        return False
+    # YAML special chars: colon, braces, brackets, backticks, quotes, empty string
+    return value == "" or any(c in value for c in ":{}[]`'\"")
+
+
+def display_task_rich(console, task_dict, phabfive_instance):
+    """Display a single task in YAML-like format using Rich.
+
+    Parameters
+    ----------
+    console : Console
+        Rich Console instance for output
+    task_dict : dict
+        Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
+    phabfive_instance : Phabfive
+        Instance to access format_link() and url
+    """
+    # Extract internal fields
+    link = task_dict.get("_link")
+    assignee = task_dict.get("_assignee")
+    task_data = task_dict.get("Task", {})
+    boards = task_dict.get("Boards", {})
+    history = task_dict.get("History", {})
+    metadata = task_dict.get("Metadata", {})
+
+    # Print link
+    console.print(Text.assemble("- Link: ", link))
+
+    # Print Task section
+    console.print("  Task:")
+    for key, value in task_data.items():
+        # Check line width before printing
+        phabfive_instance.check_line_width(value, f"Task.{key}")
+
+        if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
+            # Multi-line value
+            console.print(f"    {key}: |-")
+            for line in str(value).splitlines():
+                console.print(f"      {line}")
+        elif _needs_yaml_quoting(value):
+            escaped = value.replace("'", "''")
+            console.print(f"    {key}: '{escaped}'")
+        else:
+            console.print(f"    {key}: {value}")
+
+    # Print Assignee
+    if assignee:
+        console.print(Text.assemble("    Assignee: ", assignee))
+
+    # Print Boards with clickable names
+    if boards:
+        console.print("  Boards:")
+        for board_name, board_data in boards.items():
+            project_slug = board_name.lower().replace(" ", "-")
+            board_url = f"{phabfive_instance.url}/tag/{project_slug}/"
+            board_link = phabfive_instance.format_link(board_url, board_name, show_url=False)
+            console.print(Text.assemble("    ", board_link, ":"))
+
+            if isinstance(board_data, dict):
+                for key, value in board_data.items():
+                    if key.startswith("_"):
+                        continue
+                    if key == "Column":
+                        column_phid = board_data.get("_column_phid", "")
+                        needs_quoting = _needs_yaml_quoting(value)
+                        if column_phid:
+                            query_url = (
+                                f"{phabfive_instance.url}/maniphest/?columns={column_phid}"
+                            )
+                            column_link = phabfive_instance.format_link(
+                                query_url, value, show_url=False
+                            )
+                            if needs_quoting:
+                                # When hyperlinks enabled, column_link is Text; when disabled, it's str
+                                if isinstance(column_link, Text):
+                                    console.print(
+                                        Text.assemble(
+                                            "      Column: '", column_link, "'"
+                                        )
+                                    )
+                                else:
+                                    escaped = column_link.replace("'", "''")
+                                    console.print(f"      Column: '{escaped}'")
+                            else:
+                                console.print(
+                                    Text.assemble("      Column: ", column_link)
+                                )
+                            continue
+                    if _needs_yaml_quoting(value):
+                        escaped = value.replace("'", "''")
+                        console.print(f"      {key}: '{escaped}'")
+                    else:
+                        console.print(f"      {key}: {value}")
+
+    # Print History section
+    if history:
+        console.print("  History:")
+        for hist_key, hist_value in history.items():
+            if hist_key == "Boards" and isinstance(hist_value, dict):
+                console.print("    Boards:")
+                for board_name, transitions in hist_value.items():
+                    console.print(f"      {board_name}:")
+                    for trans in transitions:
+                        console.print(f"        - {trans}")
+            elif isinstance(hist_value, list):
+                console.print(f"    {hist_key}:")
+                for trans in hist_value:
+                    console.print(f"      - {trans}")
+
+    # Print Comments section
+    comments = task_dict.get("Comments", [])
+    if comments:
+        console.print("  Comments:")
+        for comment in comments:
+            if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
+                # Multi-line comment
+                lines = str(comment).splitlines()
+                console.print(f"    - {lines[0]}")
+                for line in lines[1:]:
+                    console.print(f"      {line}")
+            else:
+                console.print(f"    - {comment}")
+
+    # Print Metadata section
+    if metadata:
+        console.print("  Metadata:")
+        for meta_key, meta_value in metadata.items():
+            if isinstance(meta_value, list):
+                if meta_value:
+                    console.print(f"    {meta_key}:")
+                    for item in meta_value:
+                        console.print(f"      - {item}")
+                else:
+                    console.print(f"    {meta_key}: []")
+            else:
+                console.print(f"    {meta_key}: {meta_value}")
+
+
+def display_task_tree(console, task_dict, phabfive_instance):
+    """Display a single task in tree format using Rich Tree.
+
+    Parameters
+    ----------
+    console : Console
+        Rich Console instance for output
+    task_dict : dict
+        Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
+    phabfive_instance : Phabfive
+        Instance to access format_link() and url
+    """
+    # Extract internal fields
+    link = task_dict.get("_link")
+    assignee = task_dict.get("_assignee")
+    task_data = task_dict.get("Task", {})
+    boards = task_dict.get("Boards", {})
+    history = task_dict.get("History", {})
+    metadata = task_dict.get("Metadata", {})
+
+    # Create tree with task link as root
+    tree = Tree(link)
+
+    # Add Task section
+    task_branch = tree.add("Task")
+    for key, value in task_data.items():
+        if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
+            # Truncate multi-line descriptions in tree view
+            first_line = str(value).split("\n")[0]
+            if len(first_line) > 60:
+                first_line = first_line[:57] + "..."
+            task_branch.add(f"{key}: {first_line}")
+        else:
+            task_branch.add(f"{key}: {value}")
+
+    # Add Assignee
+    if assignee:
+        task_branch.add(Text.assemble("Assignee: ", assignee))
+
+    # Add Boards section
+    if boards:
+        boards_branch = tree.add("Boards")
+        for board_name, board_data in boards.items():
+            project_slug = board_name.lower().replace(" ", "-")
+            board_url = f"{phabfive_instance.url}/tag/{project_slug}/"
+            board_link = phabfive_instance.format_link(board_url, board_name, show_url=False)
+            board_branch = boards_branch.add(board_link)
+
+            if isinstance(board_data, dict):
+                for key, value in board_data.items():
+                    if key.startswith("_"):
+                        continue
+                    if key == "Column":
+                        column_phid = board_data.get("_column_phid", "")
+                        if column_phid:
+                            query_url = (
+                                f"{phabfive_instance.url}/maniphest/?columns={column_phid}"
+                            )
+                            column_link = phabfive_instance.format_link(
+                                query_url, value, show_url=False
+                            )
+                            board_branch.add(Text.assemble("Column: ", column_link))
+                            continue
+                    board_branch.add(f"{key}: {value}")
+
+    # Add History section
+    if history:
+        history_branch = tree.add("History")
+        for hist_key, hist_value in history.items():
+            if hist_key == "Boards" and isinstance(hist_value, dict):
+                boards_hist = history_branch.add("Boards")
+                for board_name, transitions in hist_value.items():
+                    board_hist = boards_hist.add(board_name)
+                    for trans in transitions:
+                        board_hist.add(trans)
+            elif isinstance(hist_value, list):
+                hist_type_branch = history_branch.add(hist_key)
+                for trans in hist_value:
+                    hist_type_branch.add(trans)
+
+    # Add Comments section
+    comments = task_dict.get("Comments", [])
+    if comments:
+        comments_branch = tree.add("Comments")
+        for comment in comments:
+            if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
+                # Truncate multi-line comments in tree view
+                first_line = str(comment).split("\n")[0]
+                if len(first_line) > 60:
+                    first_line = first_line[:57] + "..."
+                comments_branch.add(first_line)
+            else:
+                comments_branch.add(str(comment))
+
+    # Add Metadata section
+    if metadata:
+        meta_branch = tree.add("Metadata")
+        for meta_key, meta_value in metadata.items():
+            if isinstance(meta_value, list):
+                if meta_value:
+                    list_branch = meta_branch.add(meta_key)
+                    for item in meta_value:
+                        list_branch.add(str(item))
+                else:
+                    meta_branch.add(f"{meta_key}: []")
+            else:
+                meta_branch.add(f"{meta_key}: {meta_value}")
+
+    console.print(tree)
+
+
+def display_task_strict(task_dict):
+    """Display task as strict YAML via ruamel.yaml.
+
+    Guaranteed conformant YAML output for piping to yq/jq.
+    No hyperlinks, no Rich formatting.
+
+    Parameters
+    ----------
+    task_dict : dict
+        Task data dictionary with Link, Task, Boards, History, Metadata, etc.
+    """
+    yaml = YAML()
+    yaml.default_flow_style = False
+
+    # Build clean dict - use _url for the Link (plain URL string)
+    output = {"Link": task_dict.get("_url", "")}
+
+    # Add Task section
+    if task_dict.get("Task"):
+        output["Task"] = {k: v for k, v in task_dict["Task"].items()}
+
+    # Add Assignee if present (extract plain text from Rich Text if needed)
+    assignee = task_dict.get("_assignee")
+    if assignee is not None:
+        # Convert Rich Text to plain string, or use string directly
+        if isinstance(assignee, Text):
+            output["Assignee"] = assignee.plain
+        else:
+            output["Assignee"] = str(assignee)
+
+    # Add Boards section without internal keys
+    if task_dict.get("Boards"):
+        boards = {}
+        for board_name, board_data in task_dict["Boards"].items():
+            if isinstance(board_data, dict):
+                boards[board_name] = {
+                    k: v for k, v in board_data.items() if not k.startswith("_")
+                }
+            else:
+                boards[board_name] = board_data
+        output["Boards"] = boards
+
+    # Add History section if present
+    if task_dict.get("History"):
+        output["History"] = task_dict["History"]
+
+    # Add Comments section if present
+    if task_dict.get("Comments"):
+        # Convert PreservedScalarString to plain strings for strict YAML
+        comments = []
+        for comment in task_dict["Comments"]:
+            if isinstance(comment, PreservedScalarString):
+                comments.append(str(comment))
+            else:
+                comments.append(comment)
+        output["Comments"] = comments
+
+    # Add Metadata section if present
+    if task_dict.get("Metadata"):
+        output["Metadata"] = task_dict["Metadata"]
+
+    stream = StringIO()
+    yaml.dump([output], stream)
+    print(stream.getvalue(), end="")
+
+
+def display_tasks(result, output_format, phabfive_instance):
+    """Display task search/show results in the specified format.
+
+    Parameters
+    ----------
+    result : dict
+        Result from task_search() or task_show() containing 'tasks' list
+    output_format : str
+        One of 'rich', 'tree', or 'strict'
+    phabfive_instance : Phabfive
+        Instance to access formatting helpers
+    """
+    if not result or not result.get("tasks"):
+        return
+
+    console = phabfive_instance.get_console()
+
+    try:
+        for task_dict in result["tasks"]:
+            if output_format == "tree":
+                display_task_tree(console, task_dict, phabfive_instance)
+            elif output_format == "strict":
+                display_task_strict(task_dict)
+            else:  # "rich" (default)
+                display_task_rich(console, task_dict, phabfive_instance)
+    except BrokenPipeError:
+        # Handle pipe closed by consumer (e.g., head, less)
+        # Quietly exit - this is normal behavior
+        sys.stderr.close()
+        sys.exit(0)
 
 base_args = """
 Usage:
@@ -427,7 +791,8 @@ def run(cli_args, sub_args):
     try:
         if cli_args["<command>"] == "passphrase":
             passphrase_app = passphrase.Passphrase()
-            passphrase_app.print_secret(sub_args["<id>"])
+            secret = passphrase_app.get_secret(sub_args["<id>"])
+            print(secret)
 
         if cli_args["<command>"] == "diffusion":
             diffusion_app = diffusion.Diffusion()
@@ -441,9 +806,14 @@ def run(cli_args, sub_args):
                     else:  # default value
                         status = ["active"]
 
-                    diffusion_app.print_repositories(
-                        status=status, url=sub_args["--url"]
+                    repos = diffusion_app.get_repositories_formatted(
+                        status=status, include_url=sub_args["--url"]
                     )
+                    for repo in repos:
+                        if sub_args["--url"]:
+                            print(", ".join(repo["urls"]))
+                        else:
+                            print(repo["name"])
                 elif sub_args["create"]:
                     diffusion_app.create_repository(name=sub_args["<name>"])
             elif sub_args["uri"]:
@@ -464,10 +834,12 @@ def run(cli_args, sub_args):
                     )
                     print(created_uri)
                 elif sub_args["list"]:
-                    diffusion_app.print_uri(
+                    uris = diffusion_app.get_uris_formatted(
                         repo=sub_args["<repo>"],
                         clone_uri=sub_args["--clone"],
                     )
+                    for uri in uris:
+                        print(uri)
                 elif sub_args["edit"]:
                     object_id = diffusion_app.get_object_identifier(
                         repo_name=sub_args["<repo>"],
@@ -504,13 +876,17 @@ def run(cli_args, sub_args):
                     if result:
                         print("OK")
             elif sub_args["branch"] and sub_args["list"]:
-                diffusion_app.print_branches(repo=sub_args["<repo>"])
+                branches = diffusion_app.get_branches_formatted(repo=sub_args["<repo>"])
+                for branch_name in branches:
+                    print(branch_name)
 
         if cli_args["<command>"] == "paste":
             paste_app = paste.Paste()
 
             if sub_args["list"]:
-                paste_app.print_pastes()
+                pastes = paste_app.get_pastes_formatted()
+                for p in pastes:
+                    print(f"{p['id']} {p['title']}")
             elif sub_args["create"]:
                 tags_list = None
                 subscribers_list = None
@@ -529,13 +905,17 @@ def run(cli_args, sub_args):
                 )
             elif sub_args["show"]:
                 if sub_args["<ids>"]:
-                    paste_app.print_pastes(ids=sub_args["<ids>"])
+                    pastes = paste_app.get_pastes_formatted(ids=sub_args["<ids>"])
+                    for p in pastes:
+                        print(f"{p['id']} {p['title']}")
 
         if cli_args["<command>"] == "user":
             user_app = user.User()
 
             if sub_args["whoami"]:
-                user_app.print_whoami()
+                whoami_data = user_app.get_whoami()
+                for key, value in whoami_data.items():
+                    print(f"{key}: {value}")
 
         if cli_args["<command>"] == "repl":
             repl_app = repl.Repl()
@@ -679,7 +1059,7 @@ def run(cli_args, sub_args):
                         print("    phabfive maniphest search [<text_query>] [options]")
                         return retcode
 
-                    maniphest_app.task_search(
+                    result = maniphest_app.task_search(
                         text_query=text_query,
                         tag=tag,
                         created_after=created_after,
@@ -690,14 +1070,19 @@ def run(cli_args, sub_args):
                         show_history=show_history,
                         show_metadata=show_metadata,
                     )
+                    display_tasks(result, output_format, maniphest_app)
 
             if sub_args.get("create"):
                 # Check if template mode or CLI mode
                 if sub_args.get("--with"):
-                    maniphest_app.create_from_config(
+                    result = maniphest_app.create_from_config(
                         sub_args["--with"],
                         dry_run=sub_args.get("--dry-run", False),
                     )
+                    if result and result.get("dry_run"):
+                        for task in result["tasks"]:
+                            indent = "  " * task["depth"]
+                            print(f"{indent}- {task['title']}")
                 elif sub_args.get("<title>"):
                     result = maniphest_app.create_task_cli(
                         title=sub_args["<title>"],
@@ -710,11 +1095,29 @@ def run(cli_args, sub_args):
                         dry_run=sub_args.get("--dry-run", False),
                     )
                     if result:
-                        print(result["uri"])
-                        # Print clickable tag URLs if any tags were added
-                        if result.get("tag_slugs"):
-                            for slug in result["tag_slugs"]:
-                                print(f"{result['base_url']}/tag/{slug}/")
+                        if result.get("dry_run"):
+                            # Display dry-run output
+                            print("\n--- DRY RUN ---")
+                            print(f"Title: {result['title']}")
+                            if result.get("description"):
+                                print(f"Description: {result['description']}")
+                            if result.get("priority"):
+                                print(f"Priority: {result['priority']}")
+                            if result.get("status"):
+                                print(f"Status: {result['status']}")
+                            if result.get("assignee"):
+                                print(f"Assignee: {result['assignee']}")
+                            if result.get("tags"):
+                                print(f"Tags: {', '.join(result['tags'])}")
+                            if result.get("subscribers"):
+                                print(f"Subscribers: {', '.join(result['subscribers'])}")
+                            print("--- END DRY RUN ---\n")
+                        else:
+                            print(result["uri"])
+                            # Print clickable tag URLs if any tags were added
+                            if result.get("tag_slugs"):
+                                for slug in result["tag_slugs"]:
+                                    print(f"{result['base_url']}/tag/{slug}/")
                 else:
                     print(
                         "ERROR: Must provide either a title or --with=TEMPLATE",
@@ -753,12 +1156,13 @@ def run(cli_args, sub_args):
                 show_metadata = sub_args.get("--show-metadata", False)
                 show_comments = sub_args.get("--show-comments", False)
 
-                maniphest_app.task_show(
+                result = maniphest_app.task_show(
                     task_id,
                     show_history=show_history,
                     show_metadata=show_metadata,
                     show_comments=show_comments,
                 )
+                display_tasks(result, output_format, maniphest_app)
     except PhabfiveException as e:
         # Catch all types of phabricator base exceptions
         log.critical(str(e))

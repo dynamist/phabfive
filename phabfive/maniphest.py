@@ -7,7 +7,6 @@ import fnmatch
 import itertools
 import json
 import logging
-import sys
 import time
 from collections.abc import Mapping
 from functools import lru_cache
@@ -17,8 +16,7 @@ from typing import Optional
 from jinja2 import Environment, Template, meta
 
 # 3rd party imports
-from rich.text import Text
-from rich.tree import Tree
+
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
@@ -1854,7 +1852,7 @@ class Maniphest(Phabfive):
 
         return metadata
 
-    def _format_and_display_tasks(
+    def _build_task_display_data(
         self,
         result_data,
         task_transitions_map=None,
@@ -1870,10 +1868,10 @@ class Maniphest(Phabfive):
         show_comments=False,
     ):
         """
-        Format and display tasks in YAML format.
+        Build structured task display data from API results.
 
         This method is shared by both task_search() and task_show() commands
-        to ensure consistent output formatting.
+        to ensure consistent data structure.
 
         Parameters
         ----------
@@ -1896,11 +1894,18 @@ class Maniphest(Phabfive):
         matching_status_map : dict, optional
             Mapping of task ID to status match boolean
         show_history : bool, optional
-            Whether to display transition history
+            Whether to include transition history
         show_metadata : bool, optional
-            Whether to display filter match metadata
+            Whether to include filter match metadata
         show_comments : bool, optional
-            Whether to display comments
+            Whether to include comments
+
+        Returns
+        -------
+        dict
+            Dictionary with keys:
+            - tasks: list of task display dicts
+            - project_names: dict mapping PHID to project name
         """
         # Initialize empty dicts if None
         if task_transitions_map is None:
@@ -2041,340 +2046,10 @@ class Maniphest(Phabfive):
 
             tasks_list.append(task_dict)
 
-        # Display tasks using the appropriate format
-        console = self.get_console()
-
-        try:
-            for task_dict in tasks_list:
-                if self._output_format == "tree":
-                    self._display_task_tree(console, task_dict)
-                elif self._output_format == "strict":
-                    self._display_task_strict(task_dict)
-                else:  # "rich" (default)
-                    self._display_task_yaml(console, task_dict)
-        except BrokenPipeError:
-            # Handle pipe closed by consumer (e.g., head, less)
-            # Quietly exit - this is normal behavior
-            sys.stderr.close()
-            sys.exit(0)
-
-        return len(tasks_list)
-
-    def _needs_yaml_quoting(self, value):
-        """Check if a string value needs YAML quoting.
-
-        Values need quoting if they contain YAML special characters
-        that could be misinterpreted.
-        """
-        if not isinstance(value, str):
-            return False
-        # YAML special chars: colon, braces, brackets, backticks, quotes, empty string
-        return value == "" or any(c in value for c in ":{}[]`'\"")
-
-    def _display_task_yaml(self, console, task_dict):
-        """Display a single task in YAML-like format using Rich.
-
-        Parameters
-        ----------
-        console : Console
-            Rich Console instance for output
-        task_dict : dict
-            Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
-        """
-        # Extract internal fields
-        link = task_dict.get("_link")
-        assignee = task_dict.get("_assignee")
-        task_data = task_dict.get("Task", {})
-        boards = task_dict.get("Boards", {})
-        history = task_dict.get("History", {})
-        metadata = task_dict.get("Metadata", {})
-
-        # Print link
-        console.print(Text.assemble("- Link: ", link))
-
-        # Print Task section
-        console.print("  Task:")
-        for key, value in task_data.items():
-            # Check line width before printing
-            self.check_line_width(value, f"Task.{key}")
-
-            if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
-                # Multi-line value
-                console.print(f"    {key}: |-")
-                for line in str(value).splitlines():
-                    console.print(f"      {line}")
-            elif self._needs_yaml_quoting(value):
-                escaped = value.replace("'", "''")
-                console.print(f"    {key}: '{escaped}'")
-            else:
-                console.print(f"    {key}: {value}")
-
-        # Print Assignee
-        if assignee:
-            console.print(Text.assemble("    Assignee: ", assignee))
-
-        # Print Boards with clickable names
-        if boards:
-            console.print("  Boards:")
-            for board_name, board_data in boards.items():
-                project_slug = board_name.lower().replace(" ", "-")
-                board_url = f"{self.url}/tag/{project_slug}/"
-                board_link = self.format_link(board_url, board_name, show_url=False)
-                console.print(Text.assemble("    ", board_link, ":"))
-
-                if isinstance(board_data, dict):
-                    for key, value in board_data.items():
-                        if key.startswith("_"):
-                            continue
-                        if key == "Column":
-                            column_phid = board_data.get("_column_phid", "")
-                            needs_quoting = self._needs_yaml_quoting(value)
-                            if column_phid:
-                                query_url = (
-                                    f"{self.url}/maniphest/?columns={column_phid}"
-                                )
-                                column_link = self.format_link(
-                                    query_url, value, show_url=False
-                                )
-                                if needs_quoting:
-                                    # When hyperlinks enabled, column_link is Text; when disabled, it's str
-                                    if isinstance(column_link, Text):
-                                        console.print(
-                                            Text.assemble(
-                                                "      Column: '", column_link, "'"
-                                            )
-                                        )
-                                    else:
-                                        escaped = column_link.replace("'", "''")
-                                        console.print(f"      Column: '{escaped}'")
-                                else:
-                                    console.print(
-                                        Text.assemble("      Column: ", column_link)
-                                    )
-                                continue
-                        if self._needs_yaml_quoting(value):
-                            escaped = value.replace("'", "''")
-                            console.print(f"      {key}: '{escaped}'")
-                        else:
-                            console.print(f"      {key}: {value}")
-
-        # Print History section
-        if history:
-            console.print("  History:")
-            for hist_key, hist_value in history.items():
-                if hist_key == "Boards" and isinstance(hist_value, dict):
-                    console.print("    Boards:")
-                    for board_name, transitions in hist_value.items():
-                        console.print(f"      {board_name}:")
-                        for trans in transitions:
-                            console.print(f"        - {trans}")
-                elif isinstance(hist_value, list):
-                    console.print(f"    {hist_key}:")
-                    for trans in hist_value:
-                        console.print(f"      - {trans}")
-
-        # Print Comments section
-        comments = task_dict.get("Comments", [])
-        if comments:
-            console.print("  Comments:")
-            for comment in comments:
-                if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
-                    # Multi-line comment
-                    lines = str(comment).splitlines()
-                    console.print(f"    - {lines[0]}")
-                    for line in lines[1:]:
-                        console.print(f"      {line}")
-                else:
-                    console.print(f"    - {comment}")
-
-        # Print Metadata section
-        if metadata:
-            console.print("  Metadata:")
-            for meta_key, meta_value in metadata.items():
-                if isinstance(meta_value, list):
-                    if meta_value:
-                        console.print(f"    {meta_key}:")
-                        for item in meta_value:
-                            console.print(f"      - {item}")
-                    else:
-                        console.print(f"    {meta_key}: []")
-                else:
-                    console.print(f"    {meta_key}: {meta_value}")
-
-    def _display_task_tree(self, console, task_dict):
-        """Display a single task in tree format using Rich Tree.
-
-        Parameters
-        ----------
-        console : Console
-            Rich Console instance for output
-        task_dict : dict
-            Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
-        """
-        # Extract internal fields
-        link = task_dict.get("_link")
-        assignee = task_dict.get("_assignee")
-        task_data = task_dict.get("Task", {})
-        boards = task_dict.get("Boards", {})
-        history = task_dict.get("History", {})
-        metadata = task_dict.get("Metadata", {})
-
-        # Create tree with task link as root
-        tree = Tree(link)
-
-        # Add Task section
-        task_branch = tree.add("Task")
-        for key, value in task_data.items():
-            if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
-                # Truncate multi-line descriptions in tree view
-                first_line = str(value).split("\n")[0]
-                if len(first_line) > 60:
-                    first_line = first_line[:57] + "..."
-                task_branch.add(f"{key}: {first_line}")
-            else:
-                task_branch.add(f"{key}: {value}")
-
-        # Add Assignee
-        if assignee:
-            task_branch.add(Text.assemble("Assignee: ", assignee))
-
-        # Add Boards section
-        if boards:
-            boards_branch = tree.add("Boards")
-            for board_name, board_data in boards.items():
-                project_slug = board_name.lower().replace(" ", "-")
-                board_url = f"{self.url}/tag/{project_slug}/"
-                board_link = self.format_link(board_url, board_name, show_url=False)
-                board_branch = boards_branch.add(board_link)
-
-                if isinstance(board_data, dict):
-                    for key, value in board_data.items():
-                        if key.startswith("_"):
-                            continue
-                        if key == "Column":
-                            column_phid = board_data.get("_column_phid", "")
-                            if column_phid:
-                                query_url = (
-                                    f"{self.url}/maniphest/?columns={column_phid}"
-                                )
-                                column_link = self.format_link(
-                                    query_url, value, show_url=False
-                                )
-                                board_branch.add(Text.assemble("Column: ", column_link))
-                                continue
-                        board_branch.add(f"{key}: {value}")
-
-        # Add History section
-        if history:
-            history_branch = tree.add("History")
-            for hist_key, hist_value in history.items():
-                if hist_key == "Boards" and isinstance(hist_value, dict):
-                    boards_hist = history_branch.add("Boards")
-                    for board_name, transitions in hist_value.items():
-                        board_hist = boards_hist.add(board_name)
-                        for trans in transitions:
-                            board_hist.add(trans)
-                elif isinstance(hist_value, list):
-                    hist_type_branch = history_branch.add(hist_key)
-                    for trans in hist_value:
-                        hist_type_branch.add(trans)
-
-        # Add Comments section
-        comments = task_dict.get("Comments", [])
-        if comments:
-            comments_branch = tree.add("Comments")
-            for comment in comments:
-                if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
-                    # Truncate multi-line comments in tree view
-                    first_line = str(comment).split("\n")[0]
-                    if len(first_line) > 60:
-                        first_line = first_line[:57] + "..."
-                    comments_branch.add(first_line)
-                else:
-                    comments_branch.add(str(comment))
-
-        # Add Metadata section
-        if metadata:
-            meta_branch = tree.add("Metadata")
-            for meta_key, meta_value in metadata.items():
-                if isinstance(meta_value, list):
-                    if meta_value:
-                        list_branch = meta_branch.add(meta_key)
-                        for item in meta_value:
-                            list_branch.add(str(item))
-                    else:
-                        meta_branch.add(f"{meta_key}: []")
-                else:
-                    meta_branch.add(f"{meta_key}: {meta_value}")
-
-        console.print(tree)
-
-    def _display_task_strict(self, task_dict):
-        """Display task as strict YAML via ruamel.yaml.
-
-        Guaranteed conformant YAML output for piping to yq/jq.
-        No hyperlinks, no Rich formatting.
-
-        Parameters
-        ----------
-        task_dict : dict
-            Task data dictionary with Link, Task, Boards, History, Metadata, etc.
-        """
-        from io import StringIO
-
-        yaml = YAML()
-        yaml.default_flow_style = False
-
-        # Build clean dict - use _url for the Link (plain URL string)
-        output = {"Link": task_dict.get("_url", "")}
-
-        # Add Task section
-        if task_dict.get("Task"):
-            output["Task"] = {k: v for k, v in task_dict["Task"].items()}
-
-        # Add Assignee if present (extract plain text from Rich Text if needed)
-        assignee = task_dict.get("_assignee")
-        if assignee is not None:
-            # Convert Rich Text to plain string, or use string directly
-            if isinstance(assignee, Text):
-                output["Assignee"] = assignee.plain
-            else:
-                output["Assignee"] = str(assignee)
-
-        # Add Boards section without internal keys
-        if task_dict.get("Boards"):
-            boards = {}
-            for board_name, board_data in task_dict["Boards"].items():
-                if isinstance(board_data, dict):
-                    boards[board_name] = {
-                        k: v for k, v in board_data.items() if not k.startswith("_")
-                    }
-                else:
-                    boards[board_name] = board_data
-            output["Boards"] = boards
-
-        # Add History section if present
-        if task_dict.get("History"):
-            output["History"] = task_dict["History"]
-
-        # Add Comments section if present
-        if task_dict.get("Comments"):
-            # Convert PreservedScalarString to plain strings for strict YAML
-            comments = []
-            for comment in task_dict["Comments"]:
-                if isinstance(comment, PreservedScalarString):
-                    comments.append(str(comment))
-                else:
-                    comments.append(comment)
-            output["Comments"] = comments
-
-        # Add Metadata section if present
-        if task_dict.get("Metadata"):
-            output["Metadata"] = task_dict["Metadata"]
-
-        stream = StringIO()
-        yaml.dump([output], stream)
-        print(stream.getvalue(), end="")
+        return {
+            "tasks": tasks_list,
+            "project_names": project_phid_to_name,
+        }
 
     def task_show(
         self, task_id, show_history=False, show_metadata=False, show_comments=False
@@ -2443,8 +2118,8 @@ class Maniphest(Phabfive):
                 if all_fetched_transactions.get("comments"):
                     comments_map[task_id] = all_fetched_transactions["comments"]
 
-        # Use shared method to format and display the task
-        return self._format_and_display_tasks(
+        # Use shared method to build task data
+        return self._build_task_display_data(
             result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
@@ -3016,8 +2691,8 @@ class Maniphest(Phabfive):
                             "status"
                         ]
 
-        # Use shared method to format and display tasks
-        return self._format_and_display_tasks(
+        # Use shared method to build task data
+        return self._build_task_display_data(
             result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
@@ -3028,70 +2703,6 @@ class Maniphest(Phabfive):
             show_history=show_history,
             show_metadata=show_metadata,
         )
-
-    def _display_task_transitions(self, task_phid):
-        """
-        Fetch and display transition history for a single task.
-
-        Parameters
-        ----------
-        task_phid : str
-            Task PHID (e.g., "PHID-TASK-...")
-        """
-        # Fetch column transitions using consolidated method
-        all_transactions = self._fetch_all_transactions(
-            task_phid, need_columns=True, need_priority=False
-        )
-        transactions = all_transactions.get("columns", [])
-
-        if not transactions:
-            print("\nNo workboard transitions found.")
-            return
-
-        # Extract board PHIDs from transactions
-        board_phids = set()
-        for trans in transactions:
-            if trans.get("newValue") and len(trans["newValue"]) > 0:
-                board_phids.add(trans["newValue"][0])
-
-        # Display transitions for each board
-        print("\nBoards:")
-        for board_phid in board_phids:
-            # Filter transactions to this board
-            board_transactions = [
-                t
-                for t in transactions
-                if t.get("newValue")
-                and len(t["newValue"]) > 0
-                and t["newValue"][0] == board_phid
-            ]
-
-            if board_transactions:
-                # Get column info for this board
-                column_info = self._get_column_info(board_phid)
-
-                # Get board name if possible
-                try:
-                    project_info = self.phab.project.search(
-                        constraints={"phids": [board_phid]}
-                    )
-                    if project_info.get("data"):
-                        board_name = project_info["data"][0]["fields"].get(
-                            "name", "Unknown"
-                        )
-                        print(f"  {board_name}:")
-                        print("    Transitions:")
-                except Exception as e:
-                    log.debug(f"Could not fetch board name: {e}")
-                    print("  Unknown:")
-                    print("    Transitions:")
-
-                # Print the transitions
-                transitions_list = self._build_column_transitions(
-                    board_transactions, column_info
-                )
-                for transition in transitions_list:
-                    print(f"      - {transition}")
 
     def add_comment(self, ticket_identifier, comment_string):
         """
@@ -3322,6 +2933,9 @@ class Maniphest(Phabfive):
 
             return output
 
+        # List to collect dry-run tasks (nonlocal to be accessible in nested function)
+        dry_run_tasks = []
+
         def recurse_commit_transactions(task_config, parent_task_config, depth=0):
             """
             This recurse functions purpose is to iterate over all tickets, commit them to phabricator
@@ -3330,6 +2944,8 @@ class Maniphest(Phabfive):
             task_config is the current task to create and the parent_task_config is if we have a tree
             of tickets defined in our config file.
             """
+            nonlocal dry_run_tasks
+
             log.debug("\n -- Commiting task")
             log.debug(json.dumps(task_config, indent=2))
             log.debug(" ** parent block")
@@ -3360,8 +2976,7 @@ class Maniphest(Phabfive):
                         ),
                         "<no title>",
                     )
-                    indent = "  " * depth
-                    print(f"{indent}- {title}")
+                    dry_run_tasks.append({"depth": depth, "title": title})
                 else:
                     result = self.phab.maniphest.edit(
                         transactions=transactions_to_commit,
@@ -3400,6 +3015,12 @@ class Maniphest(Phabfive):
 
         # Always start with a blank parent
         recurse_commit_transactions(parsed_root_data, None)
+
+        # Return dry-run data if in dry-run mode
+        if dry_run:
+            return {"dry_run": True, "tasks": dry_run_tasks}
+
+        return {"dry_run": False, "created_count": len(dry_run_tasks) if dry_run_tasks else 0}
 
     def create_task_cli(
         self,
@@ -3497,25 +3118,19 @@ class Maniphest(Phabfive):
                     {"type": "subscribers.set", "value": subscriber_phids}
                 )
 
-        # Dry run - display what would be created
+        # Dry run - return what would be created
         if dry_run:
             log.info("Dry run mode - task would be created with these transactions:")
-            print("\n--- DRY RUN ---")
-            print(f"Title: {title}")
-            if description:
-                print(f"Description: {description}")
-            if priority:
-                print(f"Priority: {priority}")
-            if status:
-                print(f"Status: {status}")
-            if assignee:
-                print(f"Assignee: {assignee}")
-            if parsed_tags:
-                print(f"Tags: {', '.join(parsed_tags)}")
-            if parsed_subscribers:
-                print(f"Subscribers: {', '.join(parsed_subscribers)}")
-            print("--- END DRY RUN ---\n")
-            return None
+            return {
+                "dry_run": True,
+                "title": title,
+                "description": description,
+                "priority": priority,
+                "status": status,
+                "assignee": assignee,
+                "tags": parsed_tags,
+                "subscribers": parsed_subscribers,
+            }
 
         # Create the task via API
         try:

@@ -60,12 +60,10 @@ class Passphrase(Phabfive):
                 api_access_value.get("noAPIAccess"),
             )
 
-        return response["data"]
-
-    def print_secret(self, ids):
-        secret = self.get_secret(ids)
-
-        for value in secret.values():
+        # Extract and return the secret value
+        for value in response["data"].values():
             for secret_type, secret_value in value["material"].items():
                 if secret_type == "password":  # nosec-B105
-                    print(secret_value)
+                    return secret_value
+
+        raise PhabfiveDataException(f"No password found in K{ids}")
