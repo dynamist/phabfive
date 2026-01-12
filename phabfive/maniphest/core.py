@@ -1121,8 +1121,6 @@ class Maniphest(Phabfive):
             task_config is the current task to create and the parent_task_config is if we have a tree
             of tickets defined in our config file.
             """
-            nonlocal dry_run_tasks
-
             log.debug("\n -- Commiting task")
             log.debug(json.dumps(task_config, indent=2))
             log.debug(" ** parent block")
