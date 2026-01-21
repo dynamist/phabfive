@@ -16,7 +16,8 @@ VALID_COLUMN_KEYWORDS = ["backward", "forward"]
 # Valid direction modifiers for "from" patterns
 VALID_COLUMN_DIRECTIONS = ["forward", "backward"]
 
-class TransitionPattern:
+
+class ColumnPattern:
     """
     Represents a single transition pattern with AND conditions.
 
@@ -361,9 +362,9 @@ def _parse_single_condition(condition_str):
     return result
 
 
-def parse_transition_patterns(patterns_str):
+def parse_column_patterns(patterns_str):
     """
-    Parse transition pattern string into list of TransitionPattern objects.
+    Parse transition pattern string into list of ColumnPattern objects.
 
     Supports:
     - Comma (,) for OR logic between patterns
@@ -377,7 +378,7 @@ def parse_transition_patterns(patterns_str):
     Returns
     -------
     list
-        List of TransitionPattern objects
+        List of ColumnPattern objects
 
     Raises
     ------
@@ -386,11 +387,11 @@ def parse_transition_patterns(patterns_str):
 
     Examples
     --------
-    >>> parse_transition_patterns("from:A:forward")
-    [TransitionPattern([{"type": "from", "column": "A", "direction": "forward"}])]
+    >>> parse_column_patterns("from:A:forward")
+    [ColumnPattern([{"type": "from", "column": "A", "direction": "forward"}])]
 
-    >>> parse_transition_patterns("from:A+in:B,to:C")
-    [TransitionPattern([from:A, in:B]), TransitionPattern([to:C])]
+    >>> parse_column_patterns("from:A+in:B,to:C")
+    [ColumnPattern([from:A, in:B]), ColumnPattern([to:C])]
     """
     if not patterns_str or not patterns_str.strip():
         raise PhabfiveException("Empty transition pattern")
@@ -419,7 +420,7 @@ def parse_transition_patterns(patterns_str):
             conditions.append(condition)
 
         if conditions:
-            patterns.append(TransitionPattern(conditions))
+            patterns.append(ColumnPattern(conditions))
 
     if not patterns:
         raise PhabfiveException("No valid transition patterns found")
