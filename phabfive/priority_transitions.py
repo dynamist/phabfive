@@ -8,6 +8,14 @@ from phabfive.exceptions import PhabfiveException
 
 log = logging.getLogger(__name__)
 
+# Valid condition types for priority patterns
+# Types that require a priority value (e.g., "in:High")
+VALID_PRIORITY_CONDITION_TYPES = ["from", "to", "in", "been", "never"]
+# Special keywords that don't require a value
+VALID_PRIORITY_KEYWORDS = ["raised", "lowered"]
+# Valid direction modifiers for "from" patterns
+VALID_PRIORITY_DIRECTIONS = ["raised", "lowered"]
+
 # Priority ordering for comparison and sorting
 # Lower number = higher/more urgent priority
 # Used to determine if priority was "raised" (decreased number) or "lowered" (increased number)
@@ -280,28 +288,29 @@ def _parse_single_condition(condition_str):
         condition_str = condition_str[4:].strip()  # Strip "not:" prefix
 
     # Special keywords without parameters
-    if condition_str == "raised":
-        result = {"type": "raised"}
-        if negated:
-            result["negated"] = True
-        return result
-    elif condition_str == "lowered":
-        result = {"type": "lowered"}
+    if condition_str in VALID_PRIORITY_KEYWORDS:
+        result = {"type": condition_str}
         if negated:
             result["negated"] = True
         return result
 
     # Patterns with parameters: type:value or type:value:direction
     if ":" not in condition_str:
-        raise PhabfiveException(f"Invalid priority condition syntax: '{condition_str}'")
+        all_types = VALID_PRIORITY_CONDITION_TYPES + VALID_PRIORITY_KEYWORDS
+        raise PhabfiveException(
+            f"Invalid priority condition syntax: '{condition_str}'. "
+            f"Expected format: TYPE:PRIORITY (e.g., 'in:High', 'not:in:Normal'). "
+            f"Valid types: {', '.join(all_types)}"
+        )
 
     parts = condition_str.split(":", 2)  # Split into max 3 parts
     condition_type = parts[0].strip()
 
-    if condition_type not in ["from", "to", "in", "been", "never"]:
+    if condition_type not in VALID_PRIORITY_CONDITION_TYPES:
+        all_types = VALID_PRIORITY_CONDITION_TYPES + VALID_PRIORITY_KEYWORDS
         raise PhabfiveException(
             f"Invalid priority condition type: '{condition_type}'. "
-            f"Valid types: from, to, in, been, never, raised, lowered"
+            f"Valid types: {', '.join(all_types)}"
         )
 
     if len(parts) < 2:
@@ -322,9 +331,10 @@ def _parse_single_condition(condition_str):
                 f"Direction modifier only allowed for 'from' patterns, got: '{condition_str}'"
             )
         direction = parts[2].strip()
-        if direction not in ["raised", "lowered"]:
+        if direction not in VALID_PRIORITY_DIRECTIONS:
             raise PhabfiveException(
-                f"Invalid direction: '{direction}'. Must be 'raised' or 'lowered'"
+                f"Invalid direction: '{direction}'. "
+                f"Valid directions: {', '.join(VALID_PRIORITY_DIRECTIONS)}"
             )
         result["direction"] = direction
 
