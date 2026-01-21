@@ -390,7 +390,7 @@ def run(cli_args, sub_args):
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.core import Phabfive
     from phabfive.exceptions import PhabfiveException
-    from phabfive.maniphest_transitions import parse_transition_patterns
+    from phabfive.column_transitions import parse_column_patterns
     from phabfive.priority_transitions import parse_priority_patterns
 
     # Validate and process output options
@@ -598,11 +598,11 @@ def run(cli_args, sub_args):
                         print(f"{'=' * 60}")
 
                     # Parse filter patterns with CLI override priority
-                    transition_patterns = None
+                    column_patterns = None
                     column_pattern = get_param("--column", yaml_params, "column")
                     if column_pattern:
                         try:
-                            transition_patterns = parse_transition_patterns(
+                            column_patterns = parse_column_patterns(
                                 column_pattern
                             )
                         except Exception as e:
@@ -669,7 +669,7 @@ def run(cli_args, sub_args):
                             tag,
                             created_after,
                             updated_after,
-                            transition_patterns,
+                            column_patterns,
                             priority_patterns,
                             status_patterns,
                         ]
@@ -684,7 +684,7 @@ def run(cli_args, sub_args):
                         tag=tag,
                         created_after=created_after,
                         updated_after=updated_after,
-                        transition_patterns=transition_patterns,
+                        column_patterns=column_patterns,
                         priority_patterns=priority_patterns,
                         status_patterns=status_patterns,
                         show_history=show_history,

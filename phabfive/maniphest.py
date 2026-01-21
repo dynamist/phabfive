@@ -1274,7 +1274,7 @@ class Maniphest(Phabfive):
         task_phid : str
             Task PHID
         patterns : list
-            List of TransitionPattern objects
+            List of ColumnPattern objects
         board_phids : list
             List of board PHIDs to check (typically the project being searched)
         transactions : dict, optional
@@ -2552,7 +2552,7 @@ class Maniphest(Phabfive):
         tag=None,
         created_after=None,
         updated_after=None,
-        transition_patterns=None,
+        column_patterns=None,
         priority_patterns=None,
         status_patterns=None,
         show_history=False,
@@ -2571,7 +2571,7 @@ class Maniphest(Phabfive):
                       If None, no project filtering is applied.
         created_after (int, optional): Number of days ago the task was created.
         updated_after (int, optional): Number of days ago the task was updated.
-        transition_patterns (list, optional): List of TransitionPattern objects to filter by.
+        column_patterns (list, optional): List of ColumnPattern objects to filter by.
                       Filters tasks based on column transitions (from, to, in, been, never, forward, backward).
         priority_patterns (list, optional): List of PriorityPattern objects to filter by.
                       Filters tasks based on priority transitions (from, to, in, been, never, raised, lowered).
@@ -2589,7 +2589,7 @@ class Maniphest(Phabfive):
                 tag,
                 created_after,
                 updated_after,
-                transition_patterns,
+                column_patterns,
                 priority_patterns,
                 status_patterns,
             ]
@@ -2825,13 +2825,13 @@ class Maniphest(Phabfive):
 
         # Determine which transaction types are needed before the loop
         # This allows us to fetch once per task instead of multiple times
-        need_columns = bool(transition_patterns) or show_history
+        need_columns = bool(column_patterns) or show_history
         need_priority = bool(priority_patterns) or show_history
         need_status = bool(status_patterns) or show_history
 
         # Apply transition filtering if patterns specified
         if (
-            transition_patterns
+            column_patterns
             or priority_patterns
             or status_patterns
             or project_patterns
@@ -2845,8 +2845,8 @@ class Maniphest(Phabfive):
                 filter_desc.append(f"created-after={created_after_days}d")
             if updated_after:
                 filter_desc.append(f"updated-after={updated_after_days}d")
-            if transition_patterns:
-                col_strs = [str(p) for p in transition_patterns]
+            if column_patterns:
+                col_strs = [str(p) for p in column_patterns]
                 filter_desc.append(f"column='{','.join(col_strs)}'")
             if priority_patterns:
                 pri_strs = [str(p) for p in priority_patterns]
@@ -2889,7 +2889,7 @@ class Maniphest(Phabfive):
                 all_transitions = []
                 matching_board_phids = set()
 
-                if transition_patterns:
+                if column_patterns:
                     # Determine which boards this specific task is on
                     current_task_boards = search_board_phids
 
@@ -2909,7 +2909,7 @@ class Maniphest(Phabfive):
                         self._task_matches_any_pattern(
                             item,
                             task_phid,
-                            transition_patterns,
+                            column_patterns,
                             current_task_boards,
                             transactions=all_fetched_transactions,
                         )

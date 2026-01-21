@@ -20,10 +20,10 @@ from phabfive.maniphest import (
     _render_variables_with_dependency_resolution,
     _topological_sort,
 )
-from phabfive.maniphest_transitions import (
-    TransitionPattern,
+from phabfive.column_transitions import (
+    ColumnPattern,
     _parse_single_condition,
-    parse_transition_patterns,
+    parse_column_patterns,
 )
 
 
@@ -501,12 +501,12 @@ class TestParseSingleCondition:
     def test_invalid_type(self):
         with pytest.raises(PhabfiveException) as exc:
             _parse_single_condition("invalid:Column")
-        assert "Invalid transition condition type" in str(exc.value)
+        assert "Invalid column condition type" in str(exc.value)
 
     def test_missing_colon(self):
         with pytest.raises(PhabfiveException) as exc:
             _parse_single_condition("notavalidpattern")
-        assert "Invalid transition condition syntax" in str(exc.value)
+        assert "Invalid column condition syntax" in str(exc.value)
 
     def test_empty_column_name(self):
         with pytest.raises(PhabfiveException) as exc:
@@ -553,15 +553,15 @@ class TestParseSingleCondition:
         assert result == {"type": "forward", "negated": True}
 
 
-class TestParseTransitionPatterns:
+class TestParseColumnPatterns:
     def test_single_simple_pattern(self):
-        patterns = parse_transition_patterns("backward")
+        patterns = parse_column_patterns("backward")
         assert len(patterns) == 1
         assert len(patterns[0].conditions) == 1
         assert patterns[0].conditions[0]["type"] == "backward"
 
     def test_single_from_pattern(self):
-        patterns = parse_transition_patterns("from:In Progress:forward")
+        patterns = parse_column_patterns("from:In Progress:forward")
         assert len(patterns) == 1
         assert patterns[0].conditions[0] == {
             "type": "from",
@@ -570,20 +570,20 @@ class TestParseTransitionPatterns:
         }
 
     def test_or_patterns_with_comma(self):
-        patterns = parse_transition_patterns("backward,to:Done")
+        patterns = parse_column_patterns("backward,to:Done")
         assert len(patterns) == 2
         assert patterns[0].conditions[0]["type"] == "backward"
         assert patterns[1].conditions[0] == {"type": "to", "column": "Done"}
 
     def test_and_patterns_with_plus(self):
-        patterns = parse_transition_patterns("from:In Progress+in:Done")
+        patterns = parse_column_patterns("from:In Progress+in:Done")
         assert len(patterns) == 1
         assert len(patterns[0].conditions) == 2
         assert patterns[0].conditions[0] == {"type": "from", "column": "In Progress"}
         assert patterns[0].conditions[1] == {"type": "in", "column": "Done"}
 
     def test_complex_or_and_combination(self):
-        patterns = parse_transition_patterns("from:A:forward+in:B,to:C")
+        patterns = parse_column_patterns("from:A:forward+in:B,to:C")
         assert len(patterns) == 2
         # First pattern: from:A:forward AND in:B
         assert len(patterns[0].conditions) == 2
@@ -592,17 +592,17 @@ class TestParseTransitionPatterns:
 
     def test_empty_pattern_error(self):
         with pytest.raises(PhabfiveException) as exc:
-            parse_transition_patterns("")
+            parse_column_patterns("")
         assert "Empty transition pattern" in str(exc.value)
 
     def test_whitespace_handling(self):
-        patterns = parse_transition_patterns(" from:A , to:B ")
+        patterns = parse_column_patterns(" from:A , to:B ")
         assert len(patterns) == 2
 
 
-class TestTransitionPatternMatching:
+class TestColumnPatternMatching:
     def test_matches_backward(self):
-        pattern = TransitionPattern([{"type": "backward"}])
+        pattern = ColumnPattern([{"type": "backward"}])
 
         # Transaction with backward movement (sequence 2 -> 1)
         transactions = [
@@ -619,7 +619,7 @@ class TestTransitionPatternMatching:
         assert pattern.matches(transactions, None, column_info) is True
 
     def test_matches_forward(self):
-        pattern = TransitionPattern([{"type": "forward"}])
+        pattern = ColumnPattern([{"type": "forward"}])
 
         # Transaction with forward movement (sequence 1 -> 2)
         transactions = [
@@ -636,7 +636,7 @@ class TestTransitionPatternMatching:
         assert pattern.matches(transactions, None, column_info) is True
 
     def test_matches_from_forward_direction(self):
-        pattern = TransitionPattern(
+        pattern = ColumnPattern(
             [{"type": "from", "column": "Backlog", "direction": "forward"}]
         )
 
@@ -654,13 +654,13 @@ class TestTransitionPatternMatching:
         assert pattern.matches(transactions, None, column_info) is True
 
     def test_matches_in(self):
-        pattern = TransitionPattern([{"type": "in", "column": "Blocked"}])
+        pattern = ColumnPattern([{"type": "in", "column": "Blocked"}])
 
         assert pattern.matches([], "Blocked", {}) is True
         assert pattern.matches([], "Done", {}) is False
 
     def test_matches_to(self):
-        pattern = TransitionPattern([{"type": "to", "column": "Done"}])
+        pattern = ColumnPattern([{"type": "to", "column": "Done"}])
 
         transactions = [
             {
@@ -676,7 +676,7 @@ class TestTransitionPatternMatching:
         assert pattern.matches(transactions, None, column_info) is True
 
     def test_matches_been(self):
-        pattern = TransitionPattern([{"type": "been", "column": "Blocked"}])
+        pattern = ColumnPattern([{"type": "been", "column": "Blocked"}])
 
         transactions = [
             {
@@ -692,7 +692,7 @@ class TestTransitionPatternMatching:
         assert pattern.matches(transactions, None, column_info) is True
 
     def test_matches_never(self):
-        pattern = TransitionPattern([{"type": "never", "column": "Blocked"}])
+        pattern = ColumnPattern([{"type": "never", "column": "Blocked"}])
 
         transactions = [
             {
@@ -709,7 +709,7 @@ class TestTransitionPatternMatching:
 
     def test_matches_and_conditions(self):
         # Pattern with AND: from:A AND in:B
-        pattern = TransitionPattern(
+        pattern = ColumnPattern(
             [
                 {"type": "from", "column": "In Progress"},
                 {"type": "in", "column": "Done"},
@@ -732,7 +732,7 @@ class TestTransitionPatternMatching:
         assert pattern.matches(transactions, "Blocked", column_info) is False
 
     def test_no_match(self):
-        pattern = TransitionPattern([{"type": "to", "column": "Done"}])
+        pattern = ColumnPattern([{"type": "to", "column": "Done"}])
 
         transactions = [
             {
@@ -748,8 +748,8 @@ class TestTransitionPatternMatching:
         assert pattern.matches(transactions, None, column_info) is False
 
 
-class TestTransitionFilteringIntegration:
-    """Integration tests for the full transition filtering workflow."""
+class TestColumnFilteringIntegration:
+    """Integration tests for the full column filtering workflow."""
 
     @patch("phabfive.maniphest.Phabfive.__init__")
     def test_full_filtering_workflow(self, mock_init):
@@ -888,7 +888,7 @@ class TestTransitionFilteringIntegration:
         }
 
         # Parse transition pattern: find tasks with backward movement
-        patterns = parse_transition_patterns("backward")
+        patterns = parse_column_patterns("backward")
 
         # Verify pattern parsing
         assert len(patterns) == 1
