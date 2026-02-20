@@ -18,6 +18,7 @@ Usage:
     phabfive [options] <command> [<args> ...]
 
 Available phabfive commands are:
+    edit         Edit Phabricator objects (auto-detects type from monogram)
     passphrase   The passphrase app
     diffusion    The diffusion app
     maniphest    The maniphest app
@@ -51,6 +52,44 @@ Options:
     -h, --help   Show this help message and exit
 
 """  # nosec-B105
+
+sub_edit_args = """
+Usage:
+    phabfive edit [<object_id>] [options]
+
+Arguments:
+    <object_id>          Object to edit (e.g., T123, K456, P789).
+                        Auto-detects type from monogram.
+                        If omitted, reads YAML from stdin (auto-detected when piped).
+
+Options:
+    --priority=PRIORITY  Set priority: unbreak, high, normal, low, wish, raise, lower
+    --status=STATUS      Set status: open, resolved, wontfix, invalid, duplicate, etc.
+    --tag=BOARD          Specify board context for --column (also adds task to board if needed)
+    --column=COLUMN      Set column on board, or use forward/backward for directional navigation
+    --assign=USER        Set assignee (username)
+    --comment=TEXT       Add comment with changes
+    --dry-run            Show changes without applying them
+    -h, --help           Show this help message and exit
+
+Input Modes (auto-detected):
+    - If <object_id> provided: Edit single object
+    - If stdin is piped: Edit multiple objects from YAML stream (no flag needed!)
+    - If neither: Error
+
+Examples:
+    # Edit single task
+    phabfive edit T123 --priority=raise --status=resolved
+
+    # Pipe search results (auto-detects stdin, no flag needed!)
+    phabfive maniphest search --tag "Backend" | phabfive edit --column=Done
+
+    # Multi-board handling
+    phabfive maniphest search --assigned=@me | phabfive edit --tag="Sprint 42" --column=Done
+
+    # Directional navigation
+    phabfive edit T123 --tag="Sprint" --column=forward --comment="Moving forward"
+"""
 
 sub_diffusion_args = """
 Usage:
@@ -335,6 +374,8 @@ def parse_cli():
                 sub_args = docopt(sub_maniphest_show_args, argv=argv)
         else:
             sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)  # nosec-B307
+    elif cli_args["<command>"] == "edit":
+        sub_args = docopt(sub_edit_args, argv=argv)
     elif cli_args["<command>"] == "passphrase":
         sub_args = docopt(sub_passphrase_args, argv=argv)
     elif cli_args["<command>"] == "diffusion":
@@ -390,7 +431,7 @@ def run(cli_args, sub_args):
     Execute the CLI
     """
     # Local imports required due to logging limitation
-    from phabfive import diffusion, maniphest, passphrase, paste, repl, user
+    from phabfive import diffusion, edit, maniphest, passphrase, paste, repl, user
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.core import Phabfive
     from phabfive.exceptions import PhabfiveException
@@ -436,6 +477,20 @@ def run(cli_args, sub_args):
     retcode = 0
 
     try:
+        if cli_args["<command>"] == "edit":
+            edit_app = edit.Edit()
+            retcode = edit_app.edit_objects(
+                object_id=sub_args.get("<object_id>"),
+                priority=sub_args.get("--priority"),
+                status=sub_args.get("--status"),
+                tag=sub_args.get("--tag"),
+                column=sub_args.get("--column"),
+                assign=sub_args.get("--assign"),
+                comment=sub_args.get("--comment"),
+                dry_run=sub_args.get("--dry-run", False)
+            )
+            return retcode
+
         if cli_args["<command>"] == "passphrase":
             passphrase_app = passphrase.Passphrase()
             passphrase_app.print_secret(sub_args["<id>"])
