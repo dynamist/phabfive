@@ -82,7 +82,7 @@ EOF
 phabfive passphrase K123
 phabfive paste list
 phabfive maniphest search "migration tasks" --tag myproject
-phabfive maniphest search --tag myproject --updated-after=7
+phabfive maniphest search --tag myproject --updated-after=1w
 ```
 
 ## Documentation

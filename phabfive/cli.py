@@ -197,10 +197,10 @@ Options:
                           Supports: "*" (all projects), "prefix*" (starts with),
                           "*suffix" (ends with), "*contains*" (contains text).
                           Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
-    --created-after=N      Tasks created within the last N days
-    --created-before=N     Tasks created more than N days ago
-    --updated-after=N      Tasks updated within the last N days
-    --updated-before=N     Tasks updated more than N days ago
+    --created-after=TIME   Tasks created within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
+    --created-before=TIME  Tasks created more than TIME ago (e.g., 1h, 7d, 2w, 1m, 1y)
+    --updated-after=TIME   Tasks updated within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
+    --updated-before=TIME  Tasks updated more than TIME ago (e.g., 1h, 7d, 2w, 1m, 1y)
     --column=PATTERNS      Filter tasks by column transitions (comma=OR, plus=AND).
                            Automatically displays transition history.
                              from:COLUMN[:direction]  - Moved from COLUMN
@@ -257,10 +257,11 @@ Examples:
 
     # Tag search (project/workboard filtering)
     phabfive maniphest search --tag Developer-Experience
-    phabfive maniphest search --tag Developer-Experience --updated-after 7
+    phabfive maniphest search --tag Developer-Experience --updated-after 1w
 
-    # Combined search
-    phabfive maniphest search OpenStack --tag System-Board --updated-after 7
+    # Combined search with time units
+    phabfive maniphest search OpenStack --tag System-Board --updated-after 2w
+    phabfive maniphest search --tag Backend --created-after 1m --updated-after 7d
 
     # Using YAML templates
     phabfive maniphest search --with templates/task-search/tasks-resolved-but-not-in-done.yaml

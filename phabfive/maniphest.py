@@ -2573,10 +2573,14 @@ class Maniphest(Phabfive):
                       Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
                       Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
                       If None, no project filtering is applied.
-        created_after (int, optional): Number of days ago the task was created.
-        created_before (int, optional): Tasks created more than N days ago.
-        updated_after (int, optional): Number of days ago the task was updated.
-        updated_before (int, optional): Tasks updated more than N days ago.
+        created_after (str|int, optional): Time period for task creation (e.g., "7d", "2w", "1m") or days as int.
+                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        created_before (str|int, optional): Tasks created more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
+                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        updated_after (str|int, optional): Time period for task updates (e.g., "7d", "2w", "1m") or days as int.
+                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        updated_before (str|int, optional): Tasks updated more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
+                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
         column_patterns (list, optional): List of ColumnPattern objects to filter by.
                       Filters tasks based on column transitions (from, to, in, been, never, forward, backward).
         priority_patterns (list, optional): List of PriorityPattern objects to filter by.
@@ -2606,19 +2610,24 @@ class Maniphest(Phabfive):
         if not has_any_filter:
             raise PhabfiveConfigException("No search criteria specified")
 
-        # Convert date filters to Unix timestamps (preserve original day values for logging)
-        created_after_days = created_after
-        created_before_days = created_before
-        updated_after_days = updated_after
-        updated_before_days = updated_before
+        # Convert date filters to Unix timestamps (preserve original values for logging)
+        created_after_original = created_after
+        created_before_original = created_before
+        updated_after_original = updated_after
+        updated_before_original = updated_before
+
         if created_after:
-            created_after = days_to_unix(created_after)
+            created_after_days = parse_time_with_unit(created_after)
+            created_after = days_to_unix(created_after_days)
         if created_before:
-            created_before = days_to_unix(created_before)
+            created_before_days = parse_time_with_unit(created_before)
+            created_before = days_to_unix(created_before_days)
         if updated_after:
-            updated_after = days_to_unix(updated_after)
+            updated_after_days = parse_time_with_unit(updated_after)
+            updated_after = days_to_unix(updated_after_days)
         if updated_before:
-            updated_before = days_to_unix(updated_before)
+            updated_before_days = parse_time_with_unit(updated_before)
+            updated_before = days_to_unix(updated_before_days)
 
         project_patterns = None
         project_phids = []
@@ -2868,13 +2877,13 @@ class Maniphest(Phabfive):
             if tag:
                 filter_desc.append(f"tag='{tag}'")
             if created_after:
-                filter_desc.append(f"created-after={created_after_days}d")
+                filter_desc.append(f"created-after={created_after_original}")
             if created_before:
-                filter_desc.append(f"created-before={created_before_days}d")
+                filter_desc.append(f"created-before={created_before_original}")
             if updated_after:
-                filter_desc.append(f"updated-after={updated_after_days}d")
+                filter_desc.append(f"updated-after={updated_after_original}")
             if updated_before:
-                filter_desc.append(f"updated-before={updated_before_days}d")
+                filter_desc.append(f"updated-before={updated_before_original}")
             if column_patterns:
                 col_strs = [str(p) for p in column_patterns]
                 filter_desc.append(f"column='{','.join(col_strs)}'")
@@ -3570,6 +3579,111 @@ class Maniphest(Phabfive):
             }
         except Exception as e:
             raise PhabfiveRemoteException(f"Failed to create task: {e}")
+
+
+def parse_time_with_unit(time_value):
+    """
+    Parse time value with optional unit suffix.
+
+    Supports the following time units:
+    - h: hours
+    - d: days (default when no unit specified)
+    - w: weeks (7 days)
+    - m: months (30 days)
+    - y: years (365 days)
+
+    Parameters
+    ----------
+    time_value : str, int, float, or None
+        Time value with optional unit suffix.
+        Examples: "1w", "2m", "7d", "7", 7
+
+    Returns
+    -------
+    float or None
+        Number of days as a float, or None if input is None.
+
+    Raises
+    ------
+    ValueError
+        If the format is invalid or the unit is not recognized.
+
+    Examples
+    --------
+    >>> parse_time_with_unit("1w")
+    7.0
+    >>> parse_time_with_unit("2m")
+    60.0
+    >>> parse_time_with_unit("7")
+    7.0
+    >>> parse_time_with_unit(7)
+    7.0
+    >>> parse_time_with_unit("1h")
+    0.041666666666666664
+    """
+    if time_value is None:
+        return None
+
+    # Convert to string for parsing
+    time_str = str(time_value).strip()
+
+    if not time_str:
+        raise ValueError("Time value cannot be empty")
+
+    # Define unit conversions to days
+    unit_to_days = {
+        "h": 1 / 24,  # hours to days
+        "d": 1,  # days
+        "w": 7,  # weeks to days
+        "m": 30,  # months to days (approximate)
+        "y": 365,  # years to days (approximate)
+    }
+
+    # Try to parse as a plain number first (backward compatibility)
+    try:
+        # If it's just a number, treat as days
+        days = float(time_str)
+        if days < 0:
+            raise ValueError(f"Time value cannot be negative: '{time_value}'")
+        return days
+    except ValueError as e:
+        # If it's a negative value error, re-raise it
+        if "cannot be negative" in str(e):
+            raise
+        # Not a plain number, try to parse with unit suffix
+        pass
+
+    # Extract numeric part and unit suffix
+    import re
+
+    match = re.match(r"^(-?[0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]+)$", time_str)
+    if not match:
+        raise ValueError(
+            f"Invalid time format: '{time_value}'. "
+            f"Expected format: NUMBER[UNIT] where UNIT is one of: h, d, w, m, y. "
+            f"Examples: '7d', '1w', '2m', '1y', '12h', or just '7' (defaults to days)"
+        )
+
+    numeric_part = match.group(1)
+    unit = match.group(2).lower()
+
+    if unit not in unit_to_days:
+        valid_units = ", ".join(sorted(unit_to_days.keys()))
+        raise ValueError(
+            f"Invalid time unit: '{unit}'. Valid units are: {valid_units}"
+        )
+
+    try:
+        numeric_value = float(numeric_part)
+    except ValueError:
+        raise ValueError(f"Invalid numeric value: '{numeric_part}'")
+
+    if numeric_value < 0:
+        raise ValueError(f"Time value cannot be negative: '{time_value}'")
+
+    # Convert to days
+    days = numeric_value * unit_to_days[unit]
+    return days
 
 
 def days_to_unix(days):
