@@ -3759,66 +3759,40 @@ class Maniphest(Phabfive):
                 )
 
             # Find current position
-            current_seq = None
-            for col in column_info:
-                if col["phid"] == current_column_phid:
-                    current_seq = col["sequence"]
-                    break
-
-            if current_seq is None:
+            current_info = column_info.get(current_column_phid)
+            if not current_info:
                 raise ValueError("Could not determine current column position")
 
-            # Navigate
-            sorted_cols = sorted(column_info, key=lambda x: x["sequence"])
+            current_seq = current_info["sequence"]
+
+            # Navigate by sorting columns by sequence
+            sorted_cols = sorted(column_info.items(), key=lambda x: x[1]["sequence"])
 
             if column_name.lower() == "forward":
-                for col in sorted_cols:
-                    if col["sequence"] > current_seq:
-                        return col["phid"]
+                for col_phid, col_data in sorted_cols:
+                    if col_data["sequence"] > current_seq:
+                        return col_phid
                 # Already at end, stay
                 return current_column_phid
 
             else:  # backward
-                for col in reversed(sorted_cols):
-                    if col["sequence"] < current_seq:
-                        return col["phid"]
+                for col_phid, col_data in reversed(sorted_cols):
+                    if col_data["sequence"] < current_seq:
+                        return col_phid
                 # Already at start, stay
                 return current_column_phid
 
         else:
-            # Exact column name
-            for col in column_info:
-                if col["name"].lower() == column_name.lower():
-                    return col["phid"]
+            # Exact column name - search by name
+            for col_phid, col_data in column_info.items():
+                if col_data["name"].lower() == column_name.lower():
+                    return col_phid
 
             # Not found
-            available = [col["name"] for col in column_info]
+            available = [col_data["name"] for col_data in column_info.values()]
             raise ValueError(
                 f"Column '{column_name}' not found on board. Available: {available}"
             )
-
-    def _get_column_info(self, board_phid):
-        """Get column information for a board.
-
-        Args:
-            board_phid (str): Board (project) PHID
-
-        Returns:
-            list: List of dicts with keys: phid, name, sequence
-        """
-        result = self.phab.project.column.search(
-            constraints={"projects": [board_phid]}
-        )
-
-        columns = []
-        for col_data in result["data"]:
-            columns.append({
-                "phid": col_data["phid"],
-                "name": col_data["fields"]["name"],
-                "sequence": col_data["fields"].get("sequence", 0),
-            })
-
-        return columns
 
     def _resolve_user_phid(self, username):
         """Resolve username to user PHID.

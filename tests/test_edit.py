@@ -176,11 +176,11 @@ class TestColumnNavigation:
         m = Maniphest()
 
         # Mock column info
-        columns = [
-            {"phid": "PHID-PCOL-1", "name": "Backlog", "sequence": 0},
-            {"phid": "PHID-PCOL-2", "name": "In Progress", "sequence": 1},
-            {"phid": "PHID-PCOL-3", "name": "Done", "sequence": 2},
-        ]
+        columns = {
+            "PHID-PCOL-1": {"name": "Backlog", "sequence": 0},
+            "PHID-PCOL-2": {"name": "In Progress", "sequence": 1},
+            "PHID-PCOL-3": {"name": "Done", "sequence": 2},
+        }
 
         task_data = {
             "attachments": {
@@ -204,11 +204,11 @@ class TestColumnNavigation:
 
         m = Maniphest()
 
-        columns = [
-            {"phid": "PHID-PCOL-1", "name": "Backlog", "sequence": 0},
-            {"phid": "PHID-PCOL-2", "name": "In Progress", "sequence": 1},
-            {"phid": "PHID-PCOL-3", "name": "Done", "sequence": 2},
-        ]
+        columns = {
+            "PHID-PCOL-1": {"name": "Backlog", "sequence": 0},
+            "PHID-PCOL-2": {"name": "In Progress", "sequence": 1},
+            "PHID-PCOL-3": {"name": "Done", "sequence": 2},
+        }
 
         task_data = {
             "attachments": {
@@ -232,10 +232,10 @@ class TestColumnNavigation:
 
         m = Maniphest()
 
-        columns = [
-            {"phid": "PHID-PCOL-1", "name": "Backlog", "sequence": 0},
-            {"phid": "PHID-PCOL-2", "name": "Done", "sequence": 1},
-        ]
+        columns = {
+            "PHID-PCOL-1": {"name": "Backlog", "sequence": 0},
+            "PHID-PCOL-2": {"name": "Done", "sequence": 1},
+        }
 
         task_data = {
             "attachments": {
@@ -259,10 +259,10 @@ class TestColumnNavigation:
 
         m = Maniphest()
 
-        columns = [
-            {"phid": "PHID-PCOL-1", "name": "Backlog", "sequence": 0},
-            {"phid": "PHID-PCOL-2", "name": "Done", "sequence": 1},
-        ]
+        columns = {
+            "PHID-PCOL-1": {"name": "Backlog", "sequence": 0},
+            "PHID-PCOL-2": {"name": "Done", "sequence": 1},
+        }
 
         task_data = {
             "attachments": {
@@ -286,11 +286,11 @@ class TestColumnNavigation:
 
         m = Maniphest()
 
-        columns = [
-            {"phid": "PHID-PCOL-1", "name": "Backlog", "sequence": 0},
-            {"phid": "PHID-PCOL-2", "name": "In Progress", "sequence": 1},
-            {"phid": "PHID-PCOL-3", "name": "Done", "sequence": 2},
-        ]
+        columns = {
+            "PHID-PCOL-1": {"name": "Backlog", "sequence": 0},
+            "PHID-PCOL-2": {"name": "In Progress", "sequence": 1},
+            "PHID-PCOL-3": {"name": "Done", "sequence": 2},
+        }
 
         task_data = {
             "attachments": {
@@ -314,9 +314,9 @@ class TestColumnNavigation:
 
         m = Maniphest()
 
-        columns = [
-            {"phid": "PHID-PCOL-1", "name": "In Progress", "sequence": 0},
-        ]
+        columns = {
+            "PHID-PCOL-1": {"name": "In Progress", "sequence": 0},
+        }
 
         task_data = {
             "attachments": {
@@ -340,9 +340,9 @@ class TestColumnNavigation:
 
         m = Maniphest()
 
-        columns = [
-            {"phid": "PHID-PCOL-1", "name": "Backlog", "sequence": 0},
-        ]
+        columns = {
+            "PHID-PCOL-1": {"name": "Backlog", "sequence": 0},
+        }
 
         task_data = {
             "attachments": {
