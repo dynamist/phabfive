@@ -149,7 +149,7 @@ Usage:
     phabfive maniphest create --with=TEMPLATE [options]
 
 Arguments:
-    <title>              Task title (for CLI mode)
+    <title>                 Task title (for CLI mode)
 
 Options:
     --with=TEMPLATE         Load task creation template from YAML file (bulk mode)
@@ -189,17 +189,18 @@ Usage:
     phabfive maniphest search [<text_query>] [options]
 
 Arguments:
-     <text_query>         Optional free-text search in task title/description.
-                         If omitted, you must provide at least one filter option.
+     <text_query>          Optional free-text search in task title/description.
+                           If omitted, you must provide at least one filter option.
 
 Options:
-    --with=TEMPLATE      Load search parameters from a YAML template file.
-                          Command-line options will override YAML values.
+    --with=TEMPLATE        Load search parameters from a YAML template file.
+                           Command-line options will override YAML values.
     --tag=PATTERN          Filter by project/workboard tag (supports OR/AND logic and wildcards).
-                          Supports: "*" (all projects), "prefix*" (starts with),
-                          "*suffix" (ends with), "*contains*" (contains text).
-                          Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
-    --assigned=USER        Filter by assignee. Use "@me" for tasks assigned to you.
+                           Supports: "*" (all projects), "prefix*" (starts with),
+                           "*suffix" (ends with), "*contains*" (contains text).
+                           Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
+    --assigned=USER        Filter by assignee. Use "@me" for yourself, or provide username(s).
+                           Comma-separated for OR logic (e.g., @me,user1,user2).
     --created-after=TIME   Tasks created within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
     --created-before=TIME  Tasks created more than TIME ago (e.g., 1h, 7d, 2w, 1m, 1y)
     --updated-after=TIME   Tasks updated within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
@@ -249,9 +250,9 @@ Options:
                               from:Open:raised
                               not:in:Resolved+raised
                               in:Open,been:Resolved
-     --show-history         Display column, priority, and status transition history
-     --show-metadata        Display filter match metadata (which boards/priority/status matched)
-     -h, --help             Show this help message and exit
+     --show-history        Display column, priority, and status transition history
+     --show-metadata       Display filter match metadata (which boards/priority/status matched)
+     -h, --help            Show this help message and exit
 
 Examples:
     # Free-text search
@@ -262,9 +263,10 @@ Examples:
     phabfive maniphest search --tag Developer-Experience
     phabfive maniphest search --tag Developer-Experience --updated-after 1w
 
-    # Assigned to me
+    # Assigned to me or specific users
     phabfive maniphest search --assigned @me
     phabfive maniphest search --assigned @me --tag MyProject
+    phabfive maniphest search --assigned @me,user1 --tag dynatron --status 'not:in:Resolved'
 
     # Combined search with time units
     phabfive maniphest search OpenStack --tag System-Board --updated-after 2w
