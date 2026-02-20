@@ -2552,6 +2552,7 @@ class Maniphest(Phabfive):
         self,
         text_query=None,
         tag=None,
+        assigned=None,
         created_after=None,
         created_before=None,
         updated_after=None,
@@ -2573,6 +2574,8 @@ class Maniphest(Phabfive):
                       Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
                       Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
                       If None, no project filtering is applied.
+        assigned      (str, optional): Filter by assignee. Use "@me" to filter tasks assigned to you,
+                      or provide a username.
         created_after (int, optional): Number of days ago the task was created.
         created_before (int, optional): Tasks created more than N days ago.
         updated_after (int, optional): Number of days ago the task was updated.
@@ -2593,6 +2596,7 @@ class Maniphest(Phabfive):
             [
                 text_query,
                 tag,
+                assigned,
                 created_after,
                 created_before,
                 updated_after,
@@ -2619,6 +2623,30 @@ class Maniphest(Phabfive):
             updated_after = days_to_unix(updated_after)
         if updated_before:
             updated_before = days_to_unix(updated_before)
+
+        # Resolve assigned filter - convert @me or username to PHID
+        assigned_phid = None
+        if assigned:
+            if assigned == "@me":
+                # Get current user's PHID using whoami
+                try:
+                    whoami = self.phab.user.whoami()
+                    assigned_phid = whoami.get("phid")
+                    if assigned_phid:
+                        log.info(f"Filtering by tasks assigned to @me ({whoami.get('userName', 'unknown')})")
+                    else:
+                        log.error("Failed to get current user's PHID")
+                        return
+                except Exception as e:
+                    log.error(f"Failed to get current user information: {e}")
+                    return
+            else:
+                # Resolve username to PHID
+                assigned_phid = self._resolve_user_phid(assigned)
+                if not assigned_phid:
+                    log.error(f"User '{assigned}' not found")
+                    return
+                log.info(f"Filtering by tasks assigned to {assigned}")
 
         project_patterns = None
         project_phids = []
@@ -2700,6 +2728,9 @@ class Maniphest(Phabfive):
                 # We use the 'query' constraint which searches titles and descriptions
                 constraints["query"] = text_query
 
+            if assigned_phid:
+                constraints["assigned"] = [assigned_phid]
+
             if created_after:
                 constraints["createdStart"] = int(created_after)
             if created_before:
@@ -2747,6 +2778,9 @@ class Maniphest(Phabfive):
 
                     if text_query:
                         constraints["query"] = text_query
+
+                    if assigned_phid:
+                        constraints["assigned"] = [assigned_phid]
 
                     if created_after:
                         constraints["createdStart"] = int(created_after)
@@ -2796,6 +2830,9 @@ class Maniphest(Phabfive):
 
                 if text_query:
                     constraints["query"] = text_query
+
+                if assigned_phid:
+                    constraints["assigned"] = [assigned_phid]
 
                 if created_after:
                     constraints["createdStart"] = int(created_after)
