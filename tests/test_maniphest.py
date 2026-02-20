@@ -19,6 +19,7 @@ from phabfive.maniphest import (
     _extract_variable_dependencies,
     _render_variables_with_dependency_resolution,
     _topological_sort,
+    parse_time_with_unit,
 )
 from phabfive.column_transitions import (
     ColumnPattern,
@@ -1766,3 +1767,117 @@ class TestTaskSearchTextQuery:
         assert maniphest.phab.maniphest.search.called
         # Should make multiple calls for OR logic
         assert maniphest.phab.maniphest.search.call_count >= 2
+
+
+class TestParseTimeWithUnit:
+    """Test the parse_time_with_unit function."""
+
+    def test_parse_none(self):
+        """Test that None input returns None."""
+        assert parse_time_with_unit(None) is None
+
+    def test_parse_plain_integer(self):
+        """Test parsing plain integer (backward compatibility)."""
+        assert parse_time_with_unit(7) == 7.0
+        assert parse_time_with_unit(1) == 1.0
+        assert parse_time_with_unit(30) == 30.0
+
+    def test_parse_plain_string_number(self):
+        """Test parsing plain string number (backward compatibility)."""
+        assert parse_time_with_unit("7") == 7.0
+        assert parse_time_with_unit("1") == 1.0
+        assert parse_time_with_unit("30") == 30.0
+
+    def test_parse_hours(self):
+        """Test parsing hours."""
+        # 1 hour = 1/24 days
+        assert parse_time_with_unit("1h") == pytest.approx(1 / 24)
+        # 24 hours = 1 day
+        assert parse_time_with_unit("24h") == pytest.approx(1.0)
+        # 12 hours = 0.5 days
+        assert parse_time_with_unit("12h") == pytest.approx(0.5)
+
+    def test_parse_days_with_unit(self):
+        """Test parsing days with explicit 'd' unit."""
+        assert parse_time_with_unit("1d") == 1.0
+        assert parse_time_with_unit("7d") == 7.0
+        assert parse_time_with_unit("30d") == 30.0
+
+    def test_parse_weeks(self):
+        """Test parsing weeks."""
+        assert parse_time_with_unit("1w") == 7.0
+        assert parse_time_with_unit("2w") == 14.0
+        assert parse_time_with_unit("4w") == 28.0
+
+    def test_parse_months(self):
+        """Test parsing months (30 days)."""
+        assert parse_time_with_unit("1m") == 30.0
+        assert parse_time_with_unit("2m") == 60.0
+        assert parse_time_with_unit("6m") == 180.0
+
+    def test_parse_years(self):
+        """Test parsing years (365 days)."""
+        assert parse_time_with_unit("1y") == 365.0
+        assert parse_time_with_unit("2y") == 730.0
+
+    def test_parse_float_values(self):
+        """Test parsing float values."""
+        assert parse_time_with_unit("1.5w") == 10.5
+        assert parse_time_with_unit("0.5m") == 15.0
+        assert parse_time_with_unit("2.5d") == 2.5
+
+    def test_parse_with_whitespace(self):
+        """Test parsing with whitespace between number and unit."""
+        assert parse_time_with_unit("1 w") == 7.0
+        assert parse_time_with_unit("2  m") == 60.0
+        assert parse_time_with_unit("  7d  ") == 7.0
+
+    def test_parse_case_insensitive(self):
+        """Test that units are case insensitive."""
+        assert parse_time_with_unit("1W") == 7.0
+        assert parse_time_with_unit("1M") == 30.0
+        assert parse_time_with_unit("1Y") == 365.0
+        assert parse_time_with_unit("1D") == 1.0
+        assert parse_time_with_unit("1H") == pytest.approx(1 / 24)
+
+    def test_parse_zero(self):
+        """Test parsing zero values."""
+        assert parse_time_with_unit(0) == 0.0
+        assert parse_time_with_unit("0") == 0.0
+        assert parse_time_with_unit("0d") == 0.0
+        assert parse_time_with_unit("0w") == 0.0
+
+    def test_invalid_empty_string(self):
+        """Test that empty string raises ValueError."""
+        with pytest.raises(ValueError, match="Time value cannot be empty"):
+            parse_time_with_unit("")
+        with pytest.raises(ValueError, match="Time value cannot be empty"):
+            parse_time_with_unit("   ")
+
+    def test_invalid_unit(self):
+        """Test that invalid unit raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid time unit: 'x'"):
+            parse_time_with_unit("5x")
+        with pytest.raises(ValueError, match="Invalid time unit: 'days'"):
+            parse_time_with_unit("5days")
+
+    def test_invalid_format(self):
+        """Test that invalid format raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid time format"):
+            parse_time_with_unit("abc")
+        with pytest.raises(ValueError, match="Invalid time format"):
+            parse_time_with_unit("w1")
+        with pytest.raises(ValueError, match="Invalid time format"):
+            parse_time_with_unit("1.2.3d")
+
+    def test_negative_value(self):
+        """Test that negative values raise ValueError."""
+        with pytest.raises(ValueError, match="Time value cannot be negative"):
+            parse_time_with_unit("-1d")
+        with pytest.raises(ValueError, match="Time value cannot be negative"):
+            parse_time_with_unit("-5w")
+
+    def test_examples_from_issue(self):
+        """Test examples from GitHub issue #105."""
+        # The issue specifically mentions --updated-after=1w
+        assert parse_time_with_unit("1w") == 7.0

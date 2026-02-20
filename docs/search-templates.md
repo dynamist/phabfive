@@ -63,8 +63,8 @@ search:
   status: "in:Open"
   column: "in:In Progress"
   priority: "in:High"
-  created-after: 7
-  updated-after: 7
+  created-after: "1w"  # Time units: h, d, w, m, y (or use numbers for days)
+  updated-after: "1w"
   show-history: true
   show-metadata: false
 
@@ -88,7 +88,7 @@ description: "What this search does"
 search:
   tag: "project-name"
   status: "in:Resolved"
-  updated-after: 7
+  updated-after: "1w"  # Can also use plain numbers: 7 (defaults to days)
 
 ---
 # Add more searches with --- separators
@@ -98,13 +98,19 @@ search:
 
 - `text_query`: Free-text search in task title/description
 - `tag`: Project/workboard filtering with wildcards and logic
-- `created-after`: Tasks created within N days
-- `updated-after`: Tasks updated within N days
+- `created-after`: Tasks created within TIME (e.g., `"1w"`, `"2m"`, or `7` for days)
+- `created-before`: Tasks created more than TIME ago (e.g., `"1w"`, `"2m"`, or `7` for days)
+- `updated-after`: Tasks updated within TIME (e.g., `"1w"`, `"2m"`, or `7` for days)
+- `updated-before`: Tasks updated more than TIME ago (e.g., `"1w"`, `"2m"`, or `7` for days)
 - `column`: Column transition patterns
 - `priority`: Priority transition patterns
 - `status`: Status transition patterns
 - `show-history`: Display transition history (true/false)
 - `show-metadata`: Display filter match metadata (true/false)
+
+**Time Unit Support:**
+All date filters support time units: `h` (hours), `d` (days), `w` (weeks), `m` (months), `y` (years).
+Examples: `"12h"`, `"1w"`, `"2m"`, `"1y"`. Plain numbers default to days.
 
 ## Creating Your Own Templates
 
