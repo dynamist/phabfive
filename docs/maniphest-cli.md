@@ -472,7 +472,10 @@ Transition patterns use a query language with AND/OR logic:
 | `forward` | Task had any forward movement | `forward` |
 | `not:PATTERN` | Negates any pattern above | `not:in:Done`, `not:backward` |
 
-**Negation Prefix `not:`**: Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+**Negation Prefix `not:`**
+
+Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+
 - `not:in:Done` - Tasks NOT currently in Done
 - `not:from:Backlog` - Tasks that didn't move from Backlog
 - `not:backward` - Tasks that haven't moved backward
@@ -644,7 +647,10 @@ Common use cases include:
 | `lowered` | Task had any priority decrease | `lowered` |
 | `not:PATTERN` | Negates any pattern above | `not:in:High`, `not:raised` |
 
-**Negation Prefix `not:`**: Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+**Negation Prefix `not:`**
+
+Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+
 - `not:in:High` - Tasks NOT currently at High priority
 - `not:raised` - Tasks whose priority hasn't been raised
 - `not:been:Unbreak Now!` - Tasks never at Unbreak Now! (equivalent to `never:Unbreak Now!`)
@@ -758,7 +764,10 @@ Common use cases include:
 | `lowered` | Task had any status regression | `lowered` |
 | `not:PATTERN` | Negates any pattern above | `not:in:Open`, `not:raised` |
 
-**Negation Prefix `not:`**: Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+**Negation Prefix `not:`**
+
+Any pattern can be prefixed with `not:` to negate its meaning. This is a general negation operator that works with all pattern types. For example:
+
 - `not:in:Open` - Tasks NOT currently Open
 - `not:raised` - Tasks whose status hasn't progressed
 - `not:been:Resolved` - Tasks never been Resolved (equivalent to `never:Resolved`)
