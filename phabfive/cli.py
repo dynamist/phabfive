@@ -199,6 +199,8 @@ Options:
                           Supports: "*" (all projects), "prefix*" (starts with),
                           "*suffix" (ends with), "*contains*" (contains text).
                           Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
+    --assigned=USER        Filter by assignee. Use "@me" for yourself, or provide username(s).
+                          Comma-separated for OR logic (e.g., @me,user1,user2).
     --created-after=N      Tasks created within the last N days
     --created-before=N     Tasks created more than N days ago
     --updated-after=N      Tasks updated within the last N days
@@ -260,6 +262,11 @@ Examples:
     # Tag search (project/workboard filtering)
     phabfive maniphest search --tag Developer-Experience
     phabfive maniphest search --tag Developer-Experience --updated-after 7
+
+    # Assigned to me or specific users
+    phabfive maniphest search --assigned @me
+    phabfive maniphest search --assigned @me --tag MyProject
+    phabfive maniphest search --assigned @me,user1 --tag dynatron --status 'not:in:Resolved'
 
     # Combined search
     phabfive maniphest search OpenStack --tag System-Board --updated-after 7
@@ -666,6 +673,7 @@ def run(cli_args, sub_args):
                     )
                     text_query = get_param("<text_query>", yaml_params, "text_query")
                     tag = get_param("--tag", yaml_params, "tag")
+                    assigned = get_param("--assigned", yaml_params, "assigned")
                     created_after = get_param(
                         "--created-after", yaml_params, "created-after"
                     )
@@ -684,6 +692,7 @@ def run(cli_args, sub_args):
                         [
                             text_query,
                             tag,
+                            assigned,
                             created_after,
                             updated_after,
                             column_patterns,
@@ -699,6 +708,7 @@ def run(cli_args, sub_args):
                     maniphest_app.task_search(
                         text_query=text_query,
                         tag=tag,
+                        assigned=assigned,
                         created_after=created_after,
                         created_before=created_before,
                         updated_after=updated_after,

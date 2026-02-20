@@ -2552,6 +2552,7 @@ class Maniphest(Phabfive):
         self,
         text_query=None,
         tag=None,
+        assigned=None,
         created_after=None,
         created_before=None,
         updated_after=None,
@@ -2573,6 +2574,8 @@ class Maniphest(Phabfive):
                       Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
                       Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
                       If None, no project filtering is applied.
+        assigned      (str, optional): Filter by assignee. Use "@me" to filter tasks assigned to you,
+                      or provide username(s). Comma-separated for OR logic (e.g., "@me,user1,user2").
         created_after (int, optional): Number of days ago the task was created.
         created_before (int, optional): Tasks created more than N days ago.
         updated_after (int, optional): Number of days ago the task was updated.
@@ -2593,6 +2596,7 @@ class Maniphest(Phabfive):
             [
                 text_query,
                 tag,
+                assigned,
                 created_after,
                 created_before,
                 updated_after,
@@ -2619,6 +2623,43 @@ class Maniphest(Phabfive):
             updated_after = days_to_unix(updated_after)
         if updated_before:
             updated_before = days_to_unix(updated_before)
+
+        # Resolve assigned filter - convert @me or username(s) to PHID(s)
+        # Supports OR logic with comma-separated values: @me,user1,user2
+        assigned_phids = []
+        if assigned:
+            # Split by comma to support OR logic
+            assignees = [a.strip() for a in assigned.split(",")]
+            resolved_names = []
+
+            for assignee in assignees:
+                if assignee == "@me":
+                    # Get current user's PHID using whoami
+                    try:
+                        whoami = self.phab.user.whoami()
+                        phid = whoami.get("phid")
+                        if phid:
+                            assigned_phids.append(phid)
+                            resolved_names.append(f"@me ({whoami.get('userName', 'unknown')})")
+                        else:
+                            log.error("Failed to get current user's PHID")
+                            return
+                    except Exception as e:
+                        log.error(f"Failed to get current user information: {e}")
+                        return
+                else:
+                    # Resolve username to PHID
+                    phid = self._resolve_user_phid(assignee)
+                    if not phid:
+                        log.error(f"User '{assignee}' not found")
+                        return
+                    assigned_phids.append(phid)
+                    resolved_names.append(assignee)
+
+            if len(assignees) > 1:
+                log.info(f"Filtering by tasks assigned to any of: {', '.join(resolved_names)}")
+            else:
+                log.info(f"Filtering by tasks assigned to {resolved_names[0]}")
 
         project_patterns = None
         project_phids = []
@@ -2700,6 +2741,9 @@ class Maniphest(Phabfive):
                 # We use the 'query' constraint which searches titles and descriptions
                 constraints["query"] = text_query
 
+            if assigned_phids:
+                constraints["assigned"] = assigned_phids
+
             if created_after:
                 constraints["createdStart"] = int(created_after)
             if created_before:
@@ -2747,6 +2791,9 @@ class Maniphest(Phabfive):
 
                     if text_query:
                         constraints["query"] = text_query
+
+                    if assigned_phids:
+                        constraints["assigned"] = assigned_phids
 
                     if created_after:
                         constraints["createdStart"] = int(created_after)
@@ -2796,6 +2843,9 @@ class Maniphest(Phabfive):
 
                 if text_query:
                     constraints["query"] = text_query
+
+                if assigned_phids:
+                    constraints["assigned"] = assigned_phids
 
                 if created_after:
                     constraints["createdStart"] = int(created_after)
