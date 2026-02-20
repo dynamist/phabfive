@@ -199,7 +199,8 @@ Options:
                           Supports: "*" (all projects), "prefix*" (starts with),
                           "*suffix" (ends with), "*contains*" (contains text).
                           Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
-    --assigned=USER        Filter by assignee. Use "@me" for tasks assigned to you.
+    --assigned=USER        Filter by assignee. Use "@me" for yourself, or provide username(s).
+                          Comma-separated for OR logic (e.g., @me,user1,user2).
     --created-after=N      Tasks created within the last N days
     --created-before=N     Tasks created more than N days ago
     --updated-after=N      Tasks updated within the last N days
@@ -262,9 +263,10 @@ Examples:
     phabfive maniphest search --tag Developer-Experience
     phabfive maniphest search --tag Developer-Experience --updated-after 7
 
-    # Assigned to me
+    # Assigned to me or specific users
     phabfive maniphest search --assigned @me
     phabfive maniphest search --assigned @me --tag MyProject
+    phabfive maniphest search --assigned @me,user1 --tag dynatron --status 'not:in:Resolved'
 
     # Combined search
     phabfive maniphest search OpenStack --tag System-Board --updated-after 7
