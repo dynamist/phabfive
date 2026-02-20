@@ -199,6 +199,7 @@ Options:
                           Supports: "*" (all projects), "prefix*" (starts with),
                           "*suffix" (ends with), "*contains*" (contains text).
                           Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
+    --assigned=USER        Filter by assignee. Use "@me" for tasks assigned to you.
     --created-after=TIME   Tasks created within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
     --created-before=TIME  Tasks created more than TIME ago (e.g., 1h, 7d, 2w, 1m, 1y)
     --updated-after=TIME   Tasks updated within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
@@ -260,6 +261,10 @@ Examples:
     # Tag search (project/workboard filtering)
     phabfive maniphest search --tag Developer-Experience
     phabfive maniphest search --tag Developer-Experience --updated-after 1w
+
+    # Assigned to me
+    phabfive maniphest search --assigned @me
+    phabfive maniphest search --assigned @me --tag MyProject
 
     # Combined search with time units
     phabfive maniphest search OpenStack --tag System-Board --updated-after 2w
@@ -667,6 +672,7 @@ def run(cli_args, sub_args):
                     )
                     text_query = get_param("<text_query>", yaml_params, "text_query")
                     tag = get_param("--tag", yaml_params, "tag")
+                    assigned = get_param("--assigned", yaml_params, "assigned")
                     created_after = get_param(
                         "--created-after", yaml_params, "created-after"
                     )
@@ -685,6 +691,7 @@ def run(cli_args, sub_args):
                         [
                             text_query,
                             tag,
+                            assigned,
                             created_after,
                             updated_after,
                             column_patterns,
@@ -700,6 +707,7 @@ def run(cli_args, sub_args):
                     maniphest_app.task_search(
                         text_query=text_query,
                         tag=tag,
+                        assigned=assigned,
                         created_after=created_after,
                         created_before=created_before,
                         updated_after=updated_after,
