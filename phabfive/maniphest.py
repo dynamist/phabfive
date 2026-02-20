@@ -3571,6 +3571,270 @@ class Maniphest(Phabfive):
         except Exception as e:
             raise PhabfiveRemoteException(f"Failed to create task: {e}")
 
+    def _get_task_data(self, task_id):
+        """Fetch task data with all necessary attachments for editing.
+
+        Args:
+            task_id (str): Numeric task ID (e.g., "123")
+
+        Returns:
+            dict: Task data from API with attachments
+
+        Raises:
+            Exception: If task not found or API error
+        """
+        result = self.phab.maniphest.search(
+            constraints={"ids": [int(task_id)]},
+            attachments={"columns": True, "projects": True}
+        )
+
+        if not result["data"]:
+            raise ValueError(f"Task T{task_id} not found")
+
+        return result["data"][0]
+
+    def edit_task_by_id(
+        self,
+        task_id,
+        priority=None,
+        status=None,
+        board_phid=None,
+        column=None,
+        assign=None,
+        comment=None,
+        dry_run=False,
+    ):
+        """Edit a task by ID.
+
+        Args:
+            task_id (str): Numeric task ID (e.g., "123")
+            priority (str): Priority to set or "raise"/"lower"
+            status (str): Status to set
+            board_phid (str): Board PHID for column context
+            column (str): Column name or "forward"/"backward"
+            assign (str): Username to assign
+            comment (str): Comment to add
+            dry_run (bool): Show changes without applying
+
+        Raises:
+            Exception: On validation or API errors
+        """
+        # Fetch current task state
+        task_data = self._get_task_data(task_id)
+        current_priority = task_data["fields"]["priority"]["value"]
+        current_status = task_data["fields"]["status"]["value"]
+
+        transactions = []
+
+        # Handle priority
+        if priority:
+            if priority.lower() in ("raise", "lower"):
+                new_priority = self._navigate_priority(current_priority, priority.lower())
+            else:
+                new_priority = self._validate_priority(priority)
+
+            if new_priority != current_priority:
+                transactions.append({"type": "priority", "value": new_priority})
+
+        # Handle status
+        if status:
+            validated_status = self._validate_status(status)
+            if validated_status != current_status:
+                transactions.append({"type": "status", "value": validated_status})
+
+        # Handle column
+        if column and board_phid:
+            column_phid = self._navigate_column(task_id, task_data, column, board_phid)
+            if column_phid:
+                # Also need to add task to board if not already on it
+                task_projects = [p["phid"] for p in task_data["attachments"]["projects"]["projectPHIDs"]]
+                if board_phid not in task_projects:
+                    transactions.append({"type": "projects.add", "value": [board_phid]})
+                transactions.append({"type": "column", "value": [column_phid]})
+
+        # Handle assignee
+        if assign:
+            user_phid = self._resolve_user_phid(assign)
+            current_owner = task_data["fields"]["ownerPHID"]
+            if user_phid != current_owner:
+                transactions.append({"type": "owner", "value": user_phid})
+
+        # Handle comment
+        if comment:
+            transactions.append({"type": "comment", "value": comment})
+
+        if not transactions:
+            log.info(f"No changes to apply for T{task_id}")
+            return
+
+        if dry_run:
+            print(f"[DRY RUN] Would apply to T{task_id}:")
+            for txn in transactions:
+                print(f"  - {txn['type']}: {txn['value']}")
+            return
+
+        # Apply transactions
+        self.phab.maniphest.edit(
+            objectIdentifier=f"T{task_id}", transactions=transactions
+        )
+
+    def _navigate_priority(self, current_priority, direction):
+        """Navigate priority up or down, skipping Triage.
+
+        Priority ladder (skipping Triage):
+        Wish(0) → Low(25) → Normal(50) → High(80) → Unbreak(100)
+        Triage(90) is excluded and can only be set explicitly.
+
+        Args:
+            current_priority (int): Current priority value
+            direction (str): "raise" or "lower"
+
+        Returns:
+            str: New priority key (e.g., "high")
+        """
+        # Priority ladder excluding Triage
+        ladder = [
+            (0, "wish"),
+            (25, "low"),
+            (50, "normal"),
+            (80, "high"),
+            (100, "unbreak"),
+        ]
+
+        # Find current position (if on Triage, treat as if on High for raise, Normal for lower)
+        if current_priority == 90:  # Triage
+            current_priority = 80 if direction == "raise" else 50
+
+        current_idx = None
+        for idx, (val, key) in enumerate(ladder):
+            if val == current_priority:
+                current_idx = idx
+                break
+
+        if current_idx is None:
+            # Unknown priority, default to normal
+            return "normal"
+
+        if direction == "raise":
+            new_idx = min(current_idx + 1, len(ladder) - 1)
+        else:  # lower
+            new_idx = max(current_idx - 1, 0)
+
+        return ladder[new_idx][1]
+
+    def _navigate_column(self, task_id, task_data, column_name, board_phid):
+        """Navigate to a column by name or direction.
+
+        Args:
+            task_id (str): Task ID for error messages
+            task_data (dict): Current task data
+            column_name (str): Column name or "forward"/"backward"
+            board_phid (str): Board PHID
+
+        Returns:
+            str: Column PHID or None if no change
+
+        Raises:
+            ValueError: If column not found or navigation invalid
+        """
+        # Get column info for the board
+        column_info = self._get_column_info(board_phid)
+
+        if column_name.lower() == "forward" or column_name.lower() == "backward":
+            # Get current column on this board
+            current_column_phid = None
+            boards = task_data.get("attachments", {}).get("columns", {}).get("boards", {})
+            if board_phid in boards:
+                columns = boards[board_phid].get("columns", [])
+                if columns:
+                    current_column_phid = columns[0]["phid"]
+
+            if not current_column_phid:
+                raise ValueError(
+                    f"Task T{task_id} is not currently in any column on this board"
+                )
+
+            # Find current position
+            current_seq = None
+            for col in column_info:
+                if col["phid"] == current_column_phid:
+                    current_seq = col["sequence"]
+                    break
+
+            if current_seq is None:
+                raise ValueError("Could not determine current column position")
+
+            # Navigate
+            sorted_cols = sorted(column_info, key=lambda x: x["sequence"])
+
+            if column_name.lower() == "forward":
+                for col in sorted_cols:
+                    if col["sequence"] > current_seq:
+                        return col["phid"]
+                # Already at end, stay
+                return current_column_phid
+
+            else:  # backward
+                for col in reversed(sorted_cols):
+                    if col["sequence"] < current_seq:
+                        return col["phid"]
+                # Already at start, stay
+                return current_column_phid
+
+        else:
+            # Exact column name
+            for col in column_info:
+                if col["name"].lower() == column_name.lower():
+                    return col["phid"]
+
+            # Not found
+            available = [col["name"] for col in column_info]
+            raise ValueError(
+                f"Column '{column_name}' not found on board. Available: {available}"
+            )
+
+    def _get_column_info(self, board_phid):
+        """Get column information for a board.
+
+        Args:
+            board_phid (str): Board (project) PHID
+
+        Returns:
+            list: List of dicts with keys: phid, name, sequence
+        """
+        result = self.phab.project.column.search(
+            constraints={"projects": [board_phid]}
+        )
+
+        columns = []
+        for col_data in result["data"]:
+            columns.append({
+                "phid": col_data["phid"],
+                "name": col_data["fields"]["name"],
+                "sequence": col_data["fields"].get("sequence", 0),
+            })
+
+        return columns
+
+    def _resolve_user_phid(self, username):
+        """Resolve username to user PHID.
+
+        Args:
+            username (str): Username
+
+        Returns:
+            str: User PHID
+
+        Raises:
+            ValueError: If user not found
+        """
+        result = self.phab.user.search(constraints={"usernames": [username]})
+
+        if not result["data"]:
+            raise ValueError(f"User not found: {username}")
+
+        return result["data"][0]["phid"]
+
 
 def days_to_unix(days):
     """
