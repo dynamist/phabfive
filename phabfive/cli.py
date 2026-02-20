@@ -773,5 +773,9 @@ def cli_entrypoint():
 
     try:
         sys.exit(run(cli_args, sub_args))
+    except KeyboardInterrupt:
+        # Handle Ctrl+C gracefully
+        print("\nOperation cancelled by user.", file=sys.stderr)
+        sys.exit(130)  # Standard Unix exit code for SIGINT (128 + 2)
     except Exception:
         raise
