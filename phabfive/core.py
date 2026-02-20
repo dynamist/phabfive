@@ -128,6 +128,22 @@ class Phabfive:
 
         return False
 
+    @staticmethod
+    def _get_auto_format():
+        """Determine default output format based on whether stdout is a TTY.
+
+        Returns:
+            str: "rich" if stdout is a terminal, "strict" if piped/redirected
+        """
+        import sys
+
+        # If output is piped or redirected, use strict format for machine processing
+        if not sys.stdout.isatty():
+            return "strict"
+
+        # If output is to a terminal, use rich format for human readability
+        return "rich"
+
     def _is_ascii_enabled(self):
         """Check if ASCII mode is currently enabled."""
         if self._ascii_when == "always":

@@ -34,7 +34,9 @@ Shortcuts to view Phabricator monograms (example: phabfive T123):
 
 Options:
     --log-level=LEVEL     Set loglevel [default: INFO]
-    --format=FORMAT       Output format: rich (default), tree, or strict [default: rich]
+    --format=FORMAT       Output format: rich, tree, or strict. Auto-detects based on TTY:
+                          terminal=rich (colored/formatted), piped=strict (pure YAML).
+                          Explicitly specify to override auto-detection.
     --ascii=WHEN          Use ASCII instead of Unicode (always/auto/never) [default: auto]
     --hyperlink=WHEN      Enable terminal hyperlinks (always/auto/never) [default: auto]
     -h, --help            Show this help message and exit
@@ -398,7 +400,14 @@ def run(cli_args, sub_args):
     # Validate and process output options
     valid_modes = ("always", "auto", "never")
     valid_formats = ("rich", "tree", "strict")
-    output_format = cli_args.get("--format", "rich")
+
+    # Auto-detect format based on TTY if not explicitly specified
+    format_arg = cli_args.get("--format")
+    if format_arg is None:
+        output_format = Phabfive._get_auto_format()
+    else:
+        output_format = format_arg
+
     ascii_when = cli_args.get("--ascii", "never")
     hyperlink_when = cli_args.get("--hyperlink", "never")
 
