@@ -215,7 +215,7 @@ phabfive maniphest search "migration" --tag "Database" --column="in:In Progress"
 ```
 
 !!! important
-    **Validation:** At least one filter is required (text query, --tag, --created-after, --updated-after, --column, --priority, or --status) to prevent accidentally querying all tasks.
+    **Validation:** At least one filter is required (text query, --tag, --created-after, --created-before, --updated-after, --updated-before, --column, --priority, or --status) to prevent accidentally querying all tasks.
 
 ### Advanced Project Filtering
 
@@ -375,7 +375,7 @@ phabfive maniphest search --tag "Product*+Security" \
 **Performance Considerations**:
 - Specific project names are faster than wildcards
 - Wildcards like `"*"` (all projects) may take longer for large instances
-- Combine with date filters (`--created-after`, `--updated-after`) to narrow results
+- Combine with date filters (`--created-after`, `--created-before`, `--updated-after`, `--updated-before`) to narrow results
 
 **Debugging Patterns**:
 If a pattern doesn't return expected results:
@@ -402,18 +402,37 @@ If a pattern doesn't return expected results:
 
 ### Date Filtering
 
-Filter tasks by creation or modification date:
+Filter tasks by creation or modification date using both "after" (within the last N days) and "before" (more than N days ago) filters:
 
 ```bash
 # Tasks created in the last 7 days (in a specific project)
 phabfive maniphest search --tag "My Project" --created-after=7
 
+# Tasks created more than 30 days ago (older tasks)
+phabfive maniphest search --tag "My Project" --created-before=30
+
 # Tasks updated in the last 3 days (across all projects)
 phabfive maniphest search --updated-after=3
 
-# Combine both filters with free-text search
+# Tasks updated more than 7 days ago (stale tasks)
+phabfive maniphest search --tag "My Project" --updated-before=7
+
+# Combine both filters to create date ranges
+# Tasks created between 7 and 30 days ago
+phabfive maniphest search --tag "My Project" --created-after=30 --created-before=7
+
+# Combine with free-text search
 phabfive maniphest search "migration" --created-after=30 --updated-after=7
+
+# Find stale high-priority tasks
+phabfive maniphest search --tag "My Project" --updated-before=14 --priority="in:High"
 ```
+
+**Date Filter Options:**
+- `--created-after=N`: Tasks created within the last N days
+- `--created-before=N`: Tasks created more than N days ago
+- `--updated-after=N`: Tasks updated within the last N days
+- `--updated-before=N`: Tasks updated more than N days ago
 
 ## Filtering Tasks
 
@@ -931,7 +950,7 @@ phabfive maniphest search --tag "Sprint 42" \
 ### Performance
 
 - Filtering requires fetching task history, which may be slower for large result sets
-- Consider combining with date filters (`--created-after`, `--updated-after`) to narrow results
+- Consider combining with date filters (`--created-after`, `--created-before`, `--updated-after`, `--updated-before`) to narrow results
 - Use specific project names rather than wildcards when possible
 
 ### Debugging Patterns

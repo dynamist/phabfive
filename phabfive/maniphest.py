@@ -2502,7 +2502,9 @@ class Maniphest(Phabfive):
             "text_query",
             "tag",
             "created-after",
+            "created-before",
             "updated-after",
+            "updated-before",
             "column",
             "priority",
             "status",
@@ -2551,7 +2553,9 @@ class Maniphest(Phabfive):
         text_query=None,
         tag=None,
         created_after=None,
+        created_before=None,
         updated_after=None,
+        updated_before=None,
         column_patterns=None,
         priority_patterns=None,
         status_patterns=None,
@@ -2570,7 +2574,9 @@ class Maniphest(Phabfive):
                       Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
                       If None, no project filtering is applied.
         created_after (int, optional): Number of days ago the task was created.
+        created_before (int, optional): Tasks created more than N days ago.
         updated_after (int, optional): Number of days ago the task was updated.
+        updated_before (int, optional): Tasks updated more than N days ago.
         column_patterns (list, optional): List of ColumnPattern objects to filter by.
                       Filters tasks based on column transitions (from, to, in, been, never, forward, backward).
         priority_patterns (list, optional): List of PriorityPattern objects to filter by.
@@ -2588,7 +2594,9 @@ class Maniphest(Phabfive):
                 text_query,
                 tag,
                 created_after,
+                created_before,
                 updated_after,
+                updated_before,
                 column_patterns,
                 priority_patterns,
                 status_patterns,
@@ -2600,11 +2608,17 @@ class Maniphest(Phabfive):
 
         # Convert date filters to Unix timestamps (preserve original day values for logging)
         created_after_days = created_after
+        created_before_days = created_before
         updated_after_days = updated_after
+        updated_before_days = updated_before
         if created_after:
             created_after = days_to_unix(created_after)
+        if created_before:
+            created_before = days_to_unix(created_before)
         if updated_after:
             updated_after = days_to_unix(updated_after)
+        if updated_before:
+            updated_before = days_to_unix(updated_before)
 
         project_patterns = None
         project_phids = []
@@ -2688,8 +2702,12 @@ class Maniphest(Phabfive):
 
             if created_after:
                 constraints["createdStart"] = int(created_after)
+            if created_before:
+                constraints["createdEnd"] = int(created_before)
             if updated_after:
                 constraints["modifiedStart"] = int(updated_after)
+            if updated_before:
+                constraints["modifiedEnd"] = int(updated_before)
 
             # Use pagination to fetch all tasks (API returns max 100 per page)
             result_data = []
@@ -2732,8 +2750,12 @@ class Maniphest(Phabfive):
 
                     if created_after:
                         constraints["createdStart"] = int(created_after)
+                    if created_before:
+                        constraints["createdEnd"] = int(created_before)
                     if updated_after:
                         constraints["modifiedStart"] = int(updated_after)
+                    if updated_before:
+                        constraints["modifiedEnd"] = int(updated_before)
 
                     # Use pagination for each project (API returns max 100 per page)
                     after = None
@@ -2777,8 +2799,12 @@ class Maniphest(Phabfive):
 
                 if created_after:
                     constraints["createdStart"] = int(created_after)
+                if created_before:
+                    constraints["createdEnd"] = int(created_before)
                 if updated_after:
                     constraints["modifiedStart"] = int(updated_after)
+                if updated_before:
+                    constraints["modifiedEnd"] = int(updated_before)
 
                 # Use pagination to fetch all tasks (API returns max 100 per page)
                 result_data = []
@@ -2843,8 +2869,12 @@ class Maniphest(Phabfive):
                 filter_desc.append(f"tag='{tag}'")
             if created_after:
                 filter_desc.append(f"created-after={created_after_days}d")
+            if created_before:
+                filter_desc.append(f"created-before={created_before_days}d")
             if updated_after:
                 filter_desc.append(f"updated-after={updated_after_days}d")
+            if updated_before:
+                filter_desc.append(f"updated-before={updated_before_days}d")
             if column_patterns:
                 col_strs = [str(p) for p in column_patterns]
                 filter_desc.append(f"column='{','.join(col_strs)}'")

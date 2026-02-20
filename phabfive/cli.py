@@ -198,7 +198,9 @@ Options:
                           "*suffix" (ends with), "*contains*" (contains text).
                           Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
     --created-after=N      Tasks created within the last N days
+    --created-before=N     Tasks created more than N days ago
     --updated-after=N      Tasks updated within the last N days
+    --updated-before=N     Tasks updated more than N days ago
     --column=PATTERNS      Filter tasks by column transitions (comma=OR, plus=AND).
                            Automatically displays transition history.
                              from:COLUMN[:direction]  - Moved from COLUMN
@@ -658,8 +660,14 @@ def run(cli_args, sub_args):
                     created_after = get_param(
                         "--created-after", yaml_params, "created-after"
                     )
+                    created_before = get_param(
+                        "--created-before", yaml_params, "created-before"
+                    )
                     updated_after = get_param(
                         "--updated-after", yaml_params, "updated-after"
+                    )
+                    updated_before = get_param(
+                        "--updated-before", yaml_params, "updated-before"
                     )
 
                     # Check if any search criteria provided, show usage if not
@@ -683,7 +691,9 @@ def run(cli_args, sub_args):
                         text_query=text_query,
                         tag=tag,
                         created_after=created_after,
+                        created_before=created_before,
                         updated_after=updated_after,
+                        updated_before=updated_before,
                         column_patterns=column_patterns,
                         priority_patterns=priority_patterns,
                         status_patterns=status_patterns,
