@@ -12,7 +12,8 @@ A summary of the currently supported features:
 - **Diffusion** - List repositories, get branches, clone URIs, add repositories, manage URIs
 - **Paste** - List, get, and add pastes
 - **User** - Get information about the logged-in user
-- **Maniphest** - Add comments, show task details, create tasks from templates
+- **Maniphest** - Add comments, show task details, create tasks from templates, search with advanced filters
+- **Edit** - Edit tasks with auto-detection, batch operations, and smart board/column navigation
 
 For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/).
 
@@ -79,10 +80,17 @@ EOF
 ### 3. Use phabfive
 
 ```bash
+# Get secrets and list pastes
 phabfive passphrase K123
 phabfive paste list
+
+# Search and edit tasks
 phabfive maniphest search "migration tasks" --tag myproject
 phabfive maniphest search --tag myproject --updated-after=7
+
+# Edit tasks individually or in batch
+phabfive edit T123 --priority=high --status=resolved
+phabfive maniphest search --assigned=@me | phabfive edit --column=Done
 ```
 
 ## Documentation
