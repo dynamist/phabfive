@@ -10,7 +10,8 @@ Phabfive currently supports the following Phabricator/Phorge applications:
 - **Diffusion** - List repositories, get branches, clone URIs, add repositories, manage URIs
 - **Paste** - List, get, and add code pastes
 - **User** - Get information about the logged-in user
-- **Maniphest** - Add comments, show task details, create tasks from templates, and search with advanced project filtering and transition filtering
+- **Maniphest** - Add comments, show task details, create tasks from templates, search with advanced project filtering and transition filtering, and edit tasks with batch operations
+- **Edit** - Unified interface for editing objects with auto-detection, batch processing, and smart board/column handling
 
 ## Getting Started
 
@@ -44,6 +45,7 @@ For detailed setup instructions, see the [README](https://github.com/dynamist/ph
 ### CLI Reference
 
 - **[Maniphest CLI](maniphest-cli.md)** - Complete guide to task management, including advanced transition filtering
+- **[Edit CLI](edit-cli.md)** - Unified editing interface with auto-detection, batch operations, and directional navigation
 
 ### Development
 
