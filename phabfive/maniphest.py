@@ -3701,9 +3701,13 @@ class Maniphest(Phabfive):
             (100, "unbreak"),
         ]
 
-        # Find current position (if on Triage, treat as if on High for raise, Normal for lower)
+        # Special handling for Triage (90) - it sits between High and Unbreak
+        # but is excluded from raise/lower navigation
         if current_priority == 90:  # Triage
-            current_priority = 80 if direction == "raise" else 50
+            if direction == "raise":
+                return "unbreak"  # Skip directly to Unbreak
+            else:  # lower
+                return "high"  # Skip directly to High
 
         current_idx = None
         for idx, (val, key) in enumerate(ladder):
