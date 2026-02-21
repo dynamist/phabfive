@@ -17,6 +17,7 @@ from typing import Optional
 from jinja2 import Environment, Template, meta
 
 # 3rd party imports
+from rich.markup import escape
 from rich.text import Text
 from rich.tree import Tree
 from ruamel.yaml import YAML
@@ -42,6 +43,31 @@ log = logging.getLogger(__name__)
 class Maniphest(Phabfive):
     def __init__(self):
         super(Maniphest, self).__init__()
+
+    def _escape(self, content):
+        """
+        Safely escape user-provided content for Rich markup display.
+
+        Rich library treats square brackets [...] as markup syntax. This method
+        escapes user-provided content so literal brackets are displayed correctly
+        without being interpreted as Rich formatting tags.
+
+        Parameters
+        ----------
+        content : any
+            User-provided content to escape (task names, descriptions, comments, etc.)
+
+        Returns
+        -------
+        str or Text
+            Escaped string safe for Rich display, or original Text object if already safe
+        """
+        if content is None:
+            return ""
+        if isinstance(content, Text):
+            # Text objects are already safe Rich objects, don't escape
+            return content
+        return escape(str(content))
 
     def _resolve_project_phids(self, project: str) -> list[str]:
         """
@@ -2102,12 +2128,13 @@ class Maniphest(Phabfive):
                 # Multi-line value
                 console.print(f"    {key}: |-")
                 for line in str(value).splitlines():
-                    console.print(f"      {line}")
+                    console.print(f"      {self._escape(line)}")
             elif self._needs_yaml_quoting(value):
-                escaped = value.replace("'", "''")
-                console.print(f"    {key}: '{escaped}'")
+                # YAML quote escaping ('' for single quotes) + Rich markup escaping
+                yaml_escaped = str(value).replace("'", "''")
+                console.print(f"    {key}: '{self._escape(yaml_escaped)}'")
             else:
-                console.print(f"    {key}: {value}")
+                console.print(f"    {key}: {self._escape(value)}")
 
         # Print Assignee
         if assignee:
@@ -2145,18 +2172,19 @@ class Maniphest(Phabfive):
                                             )
                                         )
                                     else:
-                                        escaped = column_link.replace("'", "''")
-                                        console.print(f"      Column: '{escaped}'")
+                                        # column_link is a string, needs both YAML and Rich escaping
+                                        yaml_escaped = column_link.replace("'", "''")
+                                        console.print(f"      Column: '{self._escape(yaml_escaped)}'")
                                 else:
                                     console.print(
                                         Text.assemble("      Column: ", column_link)
                                     )
                                 continue
                         if self._needs_yaml_quoting(value):
-                            escaped = value.replace("'", "''")
-                            console.print(f"      {key}: '{escaped}'")
+                            yaml_escaped = str(value).replace("'", "''")
+                            console.print(f"      {key}: '{self._escape(yaml_escaped)}'")
                         else:
-                            console.print(f"      {key}: {value}")
+                            console.print(f"      {key}: {self._escape(value)}")
 
         # Print History section
         if history:
@@ -2165,13 +2193,13 @@ class Maniphest(Phabfive):
                 if hist_key == "Boards" and isinstance(hist_value, dict):
                     console.print("    Boards:")
                     for board_name, transitions in hist_value.items():
-                        console.print(f"      {board_name}:")
+                        console.print(f"      {self._escape(board_name)}:")
                         for trans in transitions:
-                            console.print(f"        - {trans}")
+                            console.print(f"        - {self._escape(trans)}")
                 elif isinstance(hist_value, list):
                     console.print(f"    {hist_key}:")
                     for trans in hist_value:
-                        console.print(f"      - {trans}")
+                        console.print(f"      - {self._escape(trans)}")
 
         # Print Comments section
         comments = task_dict.get("Comments", [])
@@ -2181,11 +2209,11 @@ class Maniphest(Phabfive):
                 if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
                     # Multi-line comment
                     lines = str(comment).splitlines()
-                    console.print(f"    - {lines[0]}")
+                    console.print(f"    - {self._escape(lines[0])}")
                     for line in lines[1:]:
-                        console.print(f"      {line}")
+                        console.print(f"      {self._escape(line)}")
                 else:
-                    console.print(f"    - {comment}")
+                    console.print(f"    - {self._escape(comment)}")
 
         # Print Metadata section
         if metadata:
@@ -2195,11 +2223,11 @@ class Maniphest(Phabfive):
                     if meta_value:
                         console.print(f"    {meta_key}:")
                         for item in meta_value:
-                            console.print(f"      - {item}")
+                            console.print(f"      - {self._escape(item)}")
                     else:
                         console.print(f"    {meta_key}: []")
                 else:
-                    console.print(f"    {meta_key}: {meta_value}")
+                    console.print(f"    {meta_key}: {self._escape(meta_value)}")
 
     def _display_task_tree(self, console, task_dict):
         """Display a single task in tree format using Rich Tree.
@@ -2230,9 +2258,9 @@ class Maniphest(Phabfive):
                 first_line = str(value).split("\n")[0]
                 if len(first_line) > 60:
                     first_line = first_line[:57] + "..."
-                task_branch.add(f"{key}: {first_line}")
+                task_branch.add(f"{key}: {self._escape(first_line)}")
             else:
-                task_branch.add(f"{key}: {value}")
+                task_branch.add(f"{key}: {self._escape(value)}")
 
         # Add Assignee
         if assignee:
@@ -2262,7 +2290,7 @@ class Maniphest(Phabfive):
                                 )
                                 board_branch.add(Text.assemble("Column: ", column_link))
                                 continue
-                        board_branch.add(f"{key}: {value}")
+                        board_branch.add(f"{key}: {self._escape(value)}")
 
         # Add History section
         if history:
@@ -2271,13 +2299,13 @@ class Maniphest(Phabfive):
                 if hist_key == "Boards" and isinstance(hist_value, dict):
                     boards_hist = history_branch.add("Boards")
                     for board_name, transitions in hist_value.items():
-                        board_hist = boards_hist.add(board_name)
+                        board_hist = boards_hist.add(self._escape(board_name))
                         for trans in transitions:
-                            board_hist.add(trans)
+                            board_hist.add(self._escape(trans))
                 elif isinstance(hist_value, list):
                     hist_type_branch = history_branch.add(hist_key)
                     for trans in hist_value:
-                        hist_type_branch.add(trans)
+                        hist_type_branch.add(self._escape(trans))
 
         # Add Comments section
         comments = task_dict.get("Comments", [])
@@ -2289,9 +2317,9 @@ class Maniphest(Phabfive):
                     first_line = str(comment).split("\n")[0]
                     if len(first_line) > 60:
                         first_line = first_line[:57] + "..."
-                    comments_branch.add(first_line)
+                    comments_branch.add(self._escape(first_line))
                 else:
-                    comments_branch.add(str(comment))
+                    comments_branch.add(self._escape(str(comment)))
 
         # Add Metadata section
         if metadata:
@@ -2301,11 +2329,11 @@ class Maniphest(Phabfive):
                     if meta_value:
                         list_branch = meta_branch.add(meta_key)
                         for item in meta_value:
-                            list_branch.add(str(item))
+                            list_branch.add(self._escape(str(item)))
                     else:
                         meta_branch.add(f"{meta_key}: []")
                 else:
-                    meta_branch.add(f"{meta_key}: {meta_value}")
+                    meta_branch.add(f"{meta_key}: {self._escape(meta_value)}")
 
         console.print(tree)
 
