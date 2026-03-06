@@ -1,0 +1,90 @@
+---
+exclude: |
+  (?x)
+  # You don't usually want a bot to modify your legal texts
+  (LICENSE.*|COPYING.*)
+
+default_language_version:
+  python: python3.10
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-ast
+      - id: check-builtin-literals
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: check-executables-have-shebangs
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-xml
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: debug-statements
+        exclude: phabfive/repl.py
+      - id: destroyed-symlinks
+      - id: detect-aws-credentials
+        args: [--allow-missing-credentials]
+      - id: detect-private-key
+      - id: end-of-file-fixer
+        exclude: |
+          (?x)
+          .drawio.svg|
+          WHEEL
+      # - id: fix-byte-order-marker
+      # - id: fix-encoding-pragma
+      # - id: forbid-new-submodules
+      - id: mixed-line-ending
+      - id: requirements-txt-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+        exclude: .patch
+
+  # TODO https://dynamist.phacility.com/T1911
+  # - repo: https://github.com/google/yapf
+  #   rev: v0.40.1
+  #   hooks:
+  #   - id: yapf
+
+  # - repo: https://github.com/pre-commit/pygrep-hooks
+  #   rev: v1.10.0
+  #   hooks:
+  #     - id: python-check-blanket-noqa
+  #     - id: python-check-blanket-type-ignore
+  #     - id: python-use-type-annotations
+  #     - id: python-no-eval
+  #     # - id: text-unicode-replacement-char
+
+  # TODO https://dynamist.phacility.com/T1912
+  # - repo: https://github.com/astral-sh/ruff-pre-commit
+  #   rev: v0.4.10
+  #   hooks:
+  #     - id: ruff
+  #     - id: ruff-format
+
+  # - repo: https://github.com/ansible/ansible-lint.git
+  #   rev: v6.19.0
+  #   hooks:
+  #     - id: ansible-lint
+  #       name: Ansible Lint
+  #       language_version: python3.10
+
+  # - repo: https://github.com/jackdewinter/pymarkdown.git
+  #   rev: v0.9.13.3
+  #   hooks:
+  #     - id: pymarkdown
+  #       name: Markdown Lint
+  #       args:
+  #         - scan
+  #         - README.md
+
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.32.0
+    hooks:
+      - id: yamllint
+        name: YAML Lint
