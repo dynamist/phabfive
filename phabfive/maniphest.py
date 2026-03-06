@@ -92,47 +92,82 @@ class Maniphest(Phabfive):
             log.error("No project name provided. Use '*' to search all projects.")
             return []
 
-        # Fetch all projects from Phabricator regardless of exact match or not to be able to suggest project names
-        log.debug("Fetching all projects from Phabricator")
+        # Check if wildcard search is needed early to optimize API calls
+        has_wildcard = "*" in project
 
-        # Use project.query to get slugs (project.search doesn't return all hashtags)
-        # Note: project.query doesn't support pagination, so we fetch all at once
+        # For exact match without wildcard, try direct lookup first (more efficient)
+        if not has_wildcard:
+            log.debug(f"Attempting direct lookup for project '{project}'")
+            try:
+                # project.search with slugs constraint searches all hashtags, not just primary
+                result = self.phab.project.search(constraints={"slugs": [project]})
+                if result.get("data"):
+                    proj = result["data"][0]
+                    phid = proj["phid"]
+                    name = proj["fields"]["name"]
+                    log.debug(f"Found project '{project}' -> '{name}' (PHID: {phid})")
+                    return [phid]
+            except Exception as e:
+                log.debug(f"Direct slug lookup failed: {e}")
+
+            # Also try searching by name in case user provided the display name
+            try:
+                result = self.phab.project.search(constraints={"query": project})
+                for proj in result.get("data", []):
+                    if proj["fields"]["name"].lower() == project.lower():
+                        phid = proj["phid"]
+                        name = proj["fields"]["name"]
+                        log.debug(
+                            f"Found project by name '{project}' -> '{name}' (PHID: {phid})"
+                        )
+                        return [phid]
+            except Exception as e:
+                log.debug(f"Name query lookup failed: {e}")
+
+        # For wildcard searches or when direct lookup fails, fetch all projects with pagination
+        log.debug("Fetching all projects from Phabricator with pagination")
+
         slug_to_phid = {}  # Maps each slug/hashtag to its project PHID
         phid_to_primary_name = {}  # Maps PHID to primary project name
 
         try:
-            # project.query returns a Result object with 'data' key containing projects
-            projects_result = self.phab.project.query()
-            projects_data = projects_result.get("data", {})
+            # Use project.search with pagination (project.query is deprecated and limited to 100)
+            after = None
+            while True:
+                if after:
+                    result = self.phab.project.search(after=after)
+                else:
+                    result = self.phab.project.search()
 
-            # Process all projects (projects_data is a dict keyed by PHID)
-            for phid, project_data in projects_data.items():
-                primary_name = project_data["name"]
-                phid_to_primary_name[phid] = primary_name
+                for proj in result.get("data", []):
+                    phid = proj["phid"]
+                    primary_name = proj["fields"]["name"]
+                    phid_to_primary_name[phid] = primary_name
 
-                # Always add the primary name as a searchable slug
-                slug_to_phid[primary_name] = phid
+                    # Add the primary name as a searchable slug
+                    slug_to_phid[primary_name] = phid
 
-                # Get all slugs (hashtags) for this project and add them too
-                slugs = project_data.get("slugs", [])
-                if slugs:
-                    for slug in slugs:
-                        if slug:
-                            slug_to_phid[slug] = phid
+                    # Add the slug field if present
+                    slug = proj["fields"].get("slug")
+                    if slug:
+                        slug_to_phid[slug] = phid
+
+                # Check for more pages
+                cursor = result.get("cursor", {})
+                after = cursor.get("after")
+                if not after:
+                    break
 
         except Exception as e:
             log.error(f"Failed to fetch projects: {e}")
             return []
 
         log.debug(
-            f"Fetched {len(phid_to_primary_name)} total projects with {len(slug_to_phid)} slugs/hashtags from Phabricator"
+            f"Fetched {len(phid_to_primary_name)} total projects with {len(slug_to_phid)} slugs/names from Phabricator"
         )
         # Create case-insensitive lookup mappings for slugs
         lower_slug_to_phid = {slug.lower(): phid for slug, phid in slug_to_phid.items()}
         lower_slug_to_original = {slug.lower(): slug for slug in slug_to_phid.keys()}
-
-        # Check if wildcard search is needed
-        has_wildcard = "*" in project
 
         if has_wildcard:
             if project == "*":
@@ -338,9 +373,9 @@ class Maniphest(Phabfive):
                         old_column_phid = next(iter(from_columns.keys()), None)
 
                     transformed = {
-                        "oldValue": [board_phid, old_column_phid]
-                        if old_column_phid
-                        else None,
+                        "oldValue": (
+                            [board_phid, old_column_phid] if old_column_phid else None
+                        ),
                         "newValue": [board_phid, new_column_phid],
                         "dateCreated": int(trans.get("dateCreated", 0)),
                     }
@@ -504,9 +539,9 @@ class Maniphest(Phabfive):
 
                 # Build transformed transaction
                 transformed = {
-                    "oldValue": [board_phid, old_column_phid]
-                    if old_column_phid
-                    else None,
+                    "oldValue": (
+                        [board_phid, old_column_phid] if old_column_phid else None
+                    ),
                     "newValue": [board_phid, new_column_phid],
                     "dateCreated": int(trans.get("dateCreated", 0)),
                 }
@@ -2186,7 +2221,9 @@ class Maniphest(Phabfive):
                                     else:
                                         # column_link is a string, needs both YAML and Rich escaping
                                         yaml_escaped = column_link.replace("'", "''")
-                                        console.print(f"      Column: '{self._escape(yaml_escaped)}'")
+                                        console.print(
+                                            f"      Column: '{self._escape(yaml_escaped)}'"
+                                        )
                                 else:
                                     console.print(
                                         Text.assemble("      Column: ", column_link)
@@ -2194,7 +2231,9 @@ class Maniphest(Phabfive):
                                 continue
                         if self._needs_yaml_quoting(value):
                             yaml_escaped = str(value).replace("'", "''")
-                            console.print(f"      {key}: '{self._escape(yaml_escaped)}'")
+                            console.print(
+                                f"      {key}: '{self._escape(yaml_escaped)}'"
+                            )
                         else:
                             console.print(f"      {key}: {self._escape(value)}")
 
@@ -2693,7 +2732,9 @@ class Maniphest(Phabfive):
                         phid = whoami.get("phid")
                         if phid:
                             assigned_phids.append(phid)
-                            resolved_names.append(f"@me ({whoami.get('userName', 'unknown')})")
+                            resolved_names.append(
+                                f"@me ({whoami.get('userName', 'unknown')})"
+                            )
                         else:
                             log.error("Failed to get current user's PHID")
                             return
@@ -2710,7 +2751,9 @@ class Maniphest(Phabfive):
                     resolved_names.append(assignee)
 
             if len(assignees) > 1:
-                log.info(f"Filtering by tasks assigned to any of: {', '.join(resolved_names)}")
+                log.info(
+                    f"Filtering by tasks assigned to any of: {', '.join(resolved_names)}"
+                )
             else:
                 log.info(f"Filtering by tasks assigned to {resolved_names[0]}")
 
@@ -2976,12 +3019,7 @@ class Maniphest(Phabfive):
         need_status = bool(status_patterns) or show_history
 
         # Apply transition filtering if patterns specified
-        if (
-            column_patterns
-            or priority_patterns
-            or status_patterns
-            or project_patterns
-        ):
+        if column_patterns or priority_patterns or status_patterns or project_patterns:
             filter_desc = []
             if text_query:
                 filter_desc.append(f"query='{text_query}'")
@@ -3598,7 +3636,9 @@ class Maniphest(Phabfive):
         """
         # Parse plus-separated values (supports both repeat option and plus syntax)
         parsed_tags = self._parse_plus_separated(tags) if tags else []
-        parsed_subscribers = self._parse_plus_separated(subscribers) if subscribers else []
+        parsed_subscribers = (
+            self._parse_plus_separated(subscribers) if subscribers else []
+        )
 
         # Build transactions list
         transactions = []
@@ -3780,9 +3820,7 @@ def parse_time_with_unit(time_value):
 
     if unit not in unit_to_days:
         valid_units = ", ".join(sorted(unit_to_days.keys()))
-        raise ValueError(
-            f"Invalid time unit: '{unit}'. Valid units are: {valid_units}"
-        )
+        raise ValueError(f"Invalid time unit: '{unit}'. Valid units are: {valid_units}")
 
     try:
         numeric_value = float(numeric_part)
