@@ -441,8 +441,6 @@ class TestStdinAutoDetection:
 
         # Mock stdin as not a TTY (piped)
         with mock.patch('sys.stdin.isatty', return_value=False):
-            # Mock stdin content
-            yaml_content = "Link: https://example.com/T123\nTask:\n  Name: Test"
             with mock.patch('sys.stdin', mock.MagicMock()):
                 with mock.patch.object(edit_app, '_parse_yaml_from_stdin', return_value=[]):
                     # Should try to read from stdin

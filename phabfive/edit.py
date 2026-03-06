@@ -209,7 +209,7 @@ class Edit(Phabfive):
         suggestions.append("")
 
         for boards, task_ids in errors_by_boards.items():
-            board_list = sorted(list(boards))
+            board_list = sorted(boards)
             board_str = " + ".join(board_list)
             task_str = "\\n".join([f"T{tid}" for tid in task_ids])
 

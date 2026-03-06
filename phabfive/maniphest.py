@@ -3742,6 +3742,8 @@ class Maniphest(Phabfive):
         # Handle assignee
         if assign:
             user_phid = self._resolve_user_phid(assign)
+            if not user_phid:
+                raise ValueError(f"User not found: {assign}")
             current_owner = task_data["fields"]["ownerPHID"]
             if user_phid != current_owner:
                 transactions.append({"type": "owner", "value": user_phid})
@@ -3880,25 +3882,6 @@ class Maniphest(Phabfive):
             raise ValueError(
                 f"Column '{column_name}' not found on board. Available: {available}"
             )
-
-    def _resolve_user_phid(self, username):
-        """Resolve username to user PHID.
-
-        Args:
-            username (str): Username
-
-        Returns:
-            str: User PHID
-
-        Raises:
-            ValueError: If user not found
-        """
-        result = self.phab.user.search(constraints={"usernames": [username]})
-
-        if not result["data"]:
-            raise ValueError(f"User not found: {username}")
-
-        return result["data"][0]["phid"]
 
 
 def parse_time_with_unit(time_value):
