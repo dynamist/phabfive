@@ -41,6 +41,7 @@ from phabfive.maniphest.resolvers import (
 )
 from phabfive.maniphest.utils import (
     days_ago_to_timestamp,
+    parse_time_with_unit,
     render_variables_with_dependency_resolution,
 )
 from phabfive.maniphest.validators import validate_priority, validate_status
@@ -62,6 +63,18 @@ class Maniphest(Phabfive):
     def _parse_plus_separated(self, values):
         """Parse plus-separated values from CLI options."""
         return parse_plus_separated(values)
+
+    def _get_open_statuses(self):
+        """
+        Get list of open status keys from the API.
+
+        Returns
+        -------
+        list
+            List of open status key strings (e.g., ["open"])
+        """
+        api_status = self._get_api_status_map()
+        return api_status.get("openStatuses", ["open"])
 
     def _validate_priority(self, priority):
         """Validate and normalize priority value."""
@@ -407,13 +420,17 @@ class Maniphest(Phabfive):
         self,
         text_query=None,
         tag=None,
+        assigned=None,
         created_after=None,
+        created_before=None,
         updated_after=None,
-        transition_patterns=None,
+        updated_before=None,
+        column_patterns=None,
         priority_patterns=None,
         status_patterns=None,
         show_history=False,
         show_metadata=False,
+        include_closed=False,
     ):
         """
         Search for Phabricator Maniphest tasks with given parameters.
@@ -426,9 +443,17 @@ class Maniphest(Phabfive):
                       Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
                       Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
                       If None, no project filtering is applied.
-        created_after (int, optional): Number of days ago the task was created.
-        updated_after (int, optional): Number of days ago the task was updated.
-        transition_patterns (list, optional): List of TransitionPattern objects to filter by.
+        assigned      (str, optional): Filter by assignee. Use "@me" to filter tasks assigned to you,
+                      or provide username(s). Comma-separated for OR logic (e.g., "@me,user1,user2").
+        created_after (str|int, optional): Time period for task creation (e.g., "7d", "2w", "1m") or days as int.
+                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        created_before (str|int, optional): Tasks created more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
+                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        updated_after (str|int, optional): Time period for task updates (e.g., "7d", "2w", "1m") or days as int.
+                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        updated_before (str|int, optional): Tasks updated more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
+                      Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        column_patterns (list, optional): List of ColumnPattern objects to filter by.
                       Filters tasks based on column transitions (from, to, in, been, never, forward, backward).
         priority_patterns (list, optional): List of PriorityPattern objects to filter by.
                       Filters tasks based on priority transitions (from, to, in, been, never, raised, lowered).
@@ -438,15 +463,21 @@ class Maniphest(Phabfive):
                       Must be explicitly requested; not auto-enabled by filters.
         show_metadata (bool, optional): If True, display which boards/priorities/statuses matched the filters.
                       Shows MatchedBoards list, MatchedPriority, and MatchedStatus boolean for debugging filter logic.
+        include_closed (bool, optional): If True, include tasks with closed statuses
+                      (resolved, wontfix, invalid, duplicate, spite). Default is False,
+                      which filters out closed tasks at API level. --status filters are additive.
         """
         # Validation - require at least one filter
         has_any_filter = any(
             [
                 text_query,
                 tag,
+                assigned,
                 created_after,
+                created_before,
                 updated_after,
-                transition_patterns,
+                updated_before,
+                column_patterns,
                 priority_patterns,
                 status_patterns,
             ]
@@ -455,13 +486,65 @@ class Maniphest(Phabfive):
         if not has_any_filter:
             raise PhabfiveConfigException("No search criteria specified")
 
-        # Convert date filters to Unix timestamps (preserve original day values for logging)
-        created_after_days = created_after
-        updated_after_days = updated_after
+        # Convert date filters to Unix timestamps (preserve original values for logging)
+        created_after_original = created_after
+        created_before_original = created_before
+        updated_after_original = updated_after
+        updated_before_original = updated_before
+
         if created_after:
-            created_after = days_ago_to_timestamp(created_after)
+            created_after_days = parse_time_with_unit(created_after)
+            created_after = days_ago_to_timestamp(created_after_days)
+        if created_before:
+            created_before_days = parse_time_with_unit(created_before)
+            created_before = days_ago_to_timestamp(created_before_days)
         if updated_after:
-            updated_after = days_ago_to_timestamp(updated_after)
+            updated_after_days = parse_time_with_unit(updated_after)
+            updated_after = days_ago_to_timestamp(updated_after_days)
+        if updated_before:
+            updated_before_days = parse_time_with_unit(updated_before)
+            updated_before = days_ago_to_timestamp(updated_before_days)
+
+        # Resolve assigned filter - convert @me or username(s) to PHID(s)
+        # Supports OR logic with comma-separated values: @me,user1,user2
+        assigned_phids = []
+        if assigned:
+            # Split by comma to support OR logic
+            assignees = [a.strip() for a in assigned.split(",")]
+            resolved_names = []
+
+            for assignee in assignees:
+                if assignee == "@me":
+                    # Get current user's PHID using whoami
+                    try:
+                        whoami = self.phab.user.whoami()
+                        phid = whoami.get("phid")
+                        if phid:
+                            assigned_phids.append(phid)
+                            resolved_names.append(
+                                f"@me ({whoami.get('userName', 'unknown')})"
+                            )
+                        else:
+                            log.error("Failed to get current user's PHID")
+                            return {"tasks": [], "project_names": {}}
+                    except Exception as e:
+                        log.error(f"Failed to get current user information: {e}")
+                        return {"tasks": [], "project_names": {}}
+                else:
+                    # Resolve username to PHID
+                    phid = self._resolve_user_phid(assignee)
+                    if not phid:
+                        log.error(f"User '{assignee}' not found")
+                        return {"tasks": [], "project_names": {}}
+                    assigned_phids.append(phid)
+                    resolved_names.append(assignee)
+
+            if len(assignees) > 1:
+                log.info(
+                    f"Filtering by tasks assigned to any of: {', '.join(resolved_names)}"
+                )
+            else:
+                log.info(f"Filtering by tasks assigned to {resolved_names[0]}")
 
         project_patterns = None
         project_phids = []
@@ -537,16 +620,28 @@ class Maniphest(Phabfive):
                 log.info("No tag specified, searching across all projects")
             constraints = {}
 
+            if not include_closed:
+                open_statuses = self._get_open_statuses()
+                constraints["statuses"] = open_statuses
+                log.info(f"Filtering to open statuses: {open_statuses}")
+
             if text_query:
                 log.info(f"Free-text search: '{text_query}'")
                 # Note: maniphest.search doesn't have a fullText constraint
                 # We use the 'query' constraint which searches titles and descriptions
                 constraints["query"] = text_query
 
+            if assigned_phids:
+                constraints["assigned"] = assigned_phids
+
             if created_after:
                 constraints["createdStart"] = int(created_after)
+            if created_before:
+                constraints["createdEnd"] = int(created_before)
             if updated_after:
                 constraints["modifiedStart"] = int(updated_after)
+            if updated_before:
+                constraints["modifiedEnd"] = int(updated_before)
 
             # Use pagination to fetch all tasks (API returns max 100 per page)
             result_data = []
@@ -584,13 +679,24 @@ class Maniphest(Phabfive):
                 for phid in project_phids:
                     constraints = {"projects": [phid]}
 
+                    if not include_closed:
+                        open_statuses = self._get_open_statuses()
+                        constraints["statuses"] = open_statuses
+
                     if text_query:
                         constraints["query"] = text_query
 
+                    if assigned_phids:
+                        constraints["assigned"] = assigned_phids
+
                     if created_after:
                         constraints["createdStart"] = int(created_after)
+                    if created_before:
+                        constraints["createdEnd"] = int(created_before)
                     if updated_after:
                         constraints["modifiedStart"] = int(updated_after)
+                    if updated_before:
+                        constraints["modifiedEnd"] = int(updated_before)
 
                     # Use pagination for each project (API returns max 100 per page)
                     after = None
@@ -629,13 +735,24 @@ class Maniphest(Phabfive):
                 # Single project
                 constraints = {"projects": project_phids}
 
+                if not include_closed:
+                    open_statuses = self._get_open_statuses()
+                    constraints["statuses"] = open_statuses
+
                 if text_query:
                     constraints["query"] = text_query
 
+                if assigned_phids:
+                    constraints["assigned"] = assigned_phids
+
                 if created_after:
                     constraints["createdStart"] = int(created_after)
+                if created_before:
+                    constraints["createdEnd"] = int(created_before)
                 if updated_after:
                     constraints["modifiedStart"] = int(updated_after)
+                if updated_before:
+                    constraints["modifiedEnd"] = int(updated_before)
 
                 # Use pagination to fetch all tasks (API returns max 100 per page)
                 result_data = []
@@ -682,13 +799,13 @@ class Maniphest(Phabfive):
 
         # Determine which transaction types are needed before the loop
         # This allows us to fetch once per task instead of multiple times
-        need_columns = bool(transition_patterns) or show_history
+        need_columns = bool(column_patterns) or show_history
         need_priority = bool(priority_patterns) or show_history
         need_status = bool(status_patterns) or show_history
 
         # Apply transition filtering if patterns specified
         if (
-            transition_patterns
+            column_patterns
             or priority_patterns
             or status_patterns
             or project_patterns
@@ -699,11 +816,15 @@ class Maniphest(Phabfive):
             if tag:
                 filter_desc.append(f"tag='{tag}'")
             if created_after:
-                filter_desc.append(f"created-after={created_after_days}d")
+                filter_desc.append(f"created-after={created_after_original}")
+            if created_before:
+                filter_desc.append(f"created-before={created_before_original}")
             if updated_after:
-                filter_desc.append(f"updated-after={updated_after_days}d")
-            if transition_patterns:
-                col_strs = [str(p) for p in transition_patterns]
+                filter_desc.append(f"updated-after={updated_after_original}")
+            if updated_before:
+                filter_desc.append(f"updated-before={updated_before_original}")
+            if column_patterns:
+                col_strs = [str(p) for p in column_patterns]
                 filter_desc.append(f"column='{','.join(col_strs)}'")
             if priority_patterns:
                 pri_strs = [str(p) for p in priority_patterns]
@@ -746,7 +867,7 @@ class Maniphest(Phabfive):
                 all_transitions = []
                 matching_board_phids = set()
 
-                if transition_patterns:
+                if column_patterns:
                     # Determine which boards this specific task is on
                     current_task_boards = search_board_phids
 
@@ -766,7 +887,7 @@ class Maniphest(Phabfive):
                         self._task_matches_any_pattern(
                             item,
                             task_phid,
-                            transition_patterns,
+                            column_patterns,
                             current_task_boards,
                             transactions=all_fetched_transactions,
                         )
