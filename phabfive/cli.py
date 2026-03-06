@@ -99,7 +99,7 @@ def display_task_rich(console, task_dict, phabfive_instance):
                         column_phid = board_data.get("_column_phid", "")
                         needs_quoting = _needs_yaml_quoting(value)
                         if column_phid:
-                            query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}"
+                            query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}&statuses=open()"
                             column_link = phabfive_instance.format_link(
                                 query_url, value, show_url=False
                             )
@@ -226,7 +226,7 @@ def display_task_tree(console, task_dict, phabfive_instance):
                     if key == "Column":
                         column_phid = board_data.get("_column_phid", "")
                         if column_phid:
-                            query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}"
+                            query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}&statuses=open()"
                             column_link = phabfive_instance.format_link(
                                 query_url, value, show_url=False
                             )
