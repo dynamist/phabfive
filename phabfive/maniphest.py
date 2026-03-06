@@ -636,6 +636,18 @@ class Maniphest(Phabfive):
                 },
             }
 
+    def _get_open_statuses(self):
+        """
+        Get list of open status keys from the API.
+
+        Returns
+        -------
+        list
+            List of open status key strings (e.g., ["open"])
+        """
+        api_status = self._get_api_status_map()
+        return api_status.get("openStatuses", ["open"])
+
     def _parse_plus_separated(self, values):
         """
         Parse plus-separated values from CLI options.
@@ -2590,6 +2602,7 @@ class Maniphest(Phabfive):
         status_patterns=None,
         show_history=False,
         show_metadata=False,
+        include_closed=False,
     ):
         """
         Search for Phabricator Maniphest tasks with given parameters.
@@ -2622,6 +2635,9 @@ class Maniphest(Phabfive):
                       Must be explicitly requested; not auto-enabled by filters.
         show_metadata (bool, optional): If True, display which boards/priorities/statuses matched the filters.
                       Shows MatchedBoards list, MatchedPriority, and MatchedStatus boolean for debugging filter logic.
+        include_closed (bool, optional): If True, include tasks with closed statuses
+                      (resolved, wontfix, invalid, duplicate, spite). Default is False,
+                      which filters out closed tasks at API level. --status filters are additive.
         """
         # Validation - require at least one filter
         has_any_filter = any(
@@ -2772,6 +2788,13 @@ class Maniphest(Phabfive):
                 log.info("No tag specified, searching across all projects")
             constraints = {}
 
+            # Apply default status filter (exclude closed) unless --all flag is set.
+            # Note: --status filters are additive (applied client-side after API filtering)
+            if not include_closed:
+                open_statuses = self._get_open_statuses()
+                constraints["statuses"] = open_statuses
+                log.info(f"Filtering to open statuses: {open_statuses}")
+
             if text_query:
                 log.info(f"Free-text search: '{text_query}'")
                 # Note: maniphest.search doesn't have a fullText constraint
@@ -2826,6 +2849,11 @@ class Maniphest(Phabfive):
                 for phid in project_phids:
                     constraints = {"projects": [phid]}
 
+                    # Apply default status filter (exclude closed)
+                    if not include_closed:
+                        open_statuses = self._get_open_statuses()
+                        constraints["statuses"] = open_statuses
+
                     if text_query:
                         constraints["query"] = text_query
 
@@ -2877,6 +2905,11 @@ class Maniphest(Phabfive):
             else:
                 # Single project
                 constraints = {"projects": project_phids}
+
+                # Apply default status filter (exclude closed)
+                if not include_closed:
+                    open_statuses = self._get_open_statuses()
+                    constraints["statuses"] = open_statuses
 
                 if text_query:
                     constraints["query"] = text_query

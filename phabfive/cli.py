@@ -205,6 +205,8 @@ Options:
     --created-before=TIME  Tasks created more than TIME ago (e.g., 1h, 7d, 2w, 1m, 1y)
     --updated-after=TIME   Tasks updated within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
     --updated-before=TIME  Tasks updated more than TIME ago (e.g., 1h, 7d, 2w, 1m, 1y)
+    --all                  Include closed tasks (resolved, wontfix, invalid, etc).
+                           By default, search excludes closed tasks.
     --column=PATTERNS      Filter tasks by column transitions (comma=OR, plus=AND).
                            Automatically displays transition history.
                              from:COLUMN[:direction]  - Moved from COLUMN
@@ -687,6 +689,7 @@ def run(cli_args, sub_args):
                     updated_before = get_param(
                         "--updated-before", yaml_params, "updated-before"
                     )
+                    include_closed = get_param("--all", yaml_params, "all", False)
 
                     # Check if any search criteria provided, show usage if not
                     has_criteria = any(
@@ -719,6 +722,7 @@ def run(cli_args, sub_args):
                         status_patterns=status_patterns,
                         show_history=show_history,
                         show_metadata=show_metadata,
+                        include_closed=include_closed,
                     )
 
             if sub_args.get("create"):
