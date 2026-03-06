@@ -5,6 +5,7 @@
 import datetime
 import json
 import logging
+import re
 import time
 from collections.abc import Mapping
 from typing import Optional
@@ -30,6 +31,107 @@ def format_timestamp(timestamp):
     """
     dt = datetime.datetime.fromtimestamp(timestamp)
     return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def parse_time_with_unit(time_value):
+    """
+    Parse time value with optional unit suffix.
+
+    Supports the following time units:
+    - h: hours
+    - d: days (default when no unit specified)
+    - w: weeks (7 days)
+    - m: months (30 days)
+    - y: years (365 days)
+
+    Parameters
+    ----------
+    time_value : str, int, float, or None
+        Time value with optional unit suffix.
+        Examples: "1w", "2m", "7d", "7", 7
+
+    Returns
+    -------
+    float or None
+        Number of days as a float, or None if input is None.
+
+    Raises
+    ------
+    ValueError
+        If the format is invalid or the unit is not recognized.
+
+    Examples
+    --------
+    >>> parse_time_with_unit("1w")
+    7.0
+    >>> parse_time_with_unit("2m")
+    60.0
+    >>> parse_time_with_unit("7")
+    7.0
+    >>> parse_time_with_unit(7)
+    7.0
+    >>> parse_time_with_unit("1h")
+    0.041666666666666664
+    """
+    if time_value is None:
+        return None
+
+    # Convert to string for parsing
+    time_str = str(time_value).strip()
+
+    if not time_str:
+        raise ValueError("Time value cannot be empty")
+
+    # Define unit conversions to days
+    unit_to_days = {
+        "h": 1 / 24,  # hours to days
+        "d": 1,  # days
+        "w": 7,  # weeks to days
+        "m": 30,  # months to days (approximate)
+        "y": 365,  # years to days (approximate)
+    }
+
+    # Try to parse as a plain number first (backward compatibility)
+    try:
+        # If it's just a number, treat as days
+        days = float(time_str)
+        if days < 0:
+            raise ValueError(f"Time value cannot be negative: '{time_value}'")
+        return days
+    except ValueError as e:
+        # If it's a negative value error, re-raise it
+        if "cannot be negative" in str(e):
+            raise
+        # Not a plain number, try to parse with unit suffix
+        pass
+
+    # Extract numeric part and unit suffix
+    match = re.match(r"^(-?[0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]+)$", time_str)
+    if not match:
+        raise ValueError(
+            f"Invalid time format: '{time_value}'. "
+            f"Expected format: NUMBER[UNIT] where UNIT is one of: h, d, w, m, y. "
+            f"Examples: '7d', '1w', '2m', '1y', '12h', or just '7' (defaults to days)"
+        )
+
+    numeric_part = match.group(1)
+    unit = match.group(2).lower()
+
+    if unit not in unit_to_days:
+        valid_units = ", ".join(sorted(unit_to_days.keys()))
+        raise ValueError(f"Invalid time unit: '{unit}'. Valid units are: {valid_units}")
+
+    try:
+        numeric_value = float(numeric_part)
+    except ValueError:
+        raise ValueError(f"Invalid numeric value: '{numeric_part}'")
+
+    if numeric_value < 0:
+        raise ValueError(f"Time value cannot be negative: '{time_value}'")
+
+    # Convert to days
+    days = numeric_value * unit_to_days[unit]
+    return days
 
 
 def extract_variable_dependencies(template_str: str) -> set[str]:
