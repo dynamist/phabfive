@@ -2,6 +2,7 @@
 
 # python std lib
 import logging
+import os
 import re
 import sys
 from io import StringIO
@@ -1210,6 +1211,18 @@ def run(cli_args, sub_args):
 
 def cli_entrypoint():
     """Used by setup.py to create a cli entrypoint script."""
+    # Check if current working directory exists
+    # This must be done before importing modules that use os.getcwd()
+    try:
+        os.getcwd()
+    except FileNotFoundError:
+        print(
+            "ERROR: Current working directory no longer exists.\n"
+            "Please change to an existing directory and try again.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     cli_args, sub_args = parse_cli()
 
     try:
