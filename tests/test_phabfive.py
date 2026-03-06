@@ -28,7 +28,7 @@ class TestAutoFormatDetection:
         """Test auto-format returns 'rich' when stdout is a TTY."""
         from phabfive.core import Phabfive
 
-        with mock.patch('sys.stdout.isatty', return_value=True):
+        with mock.patch("sys.stdout.isatty", return_value=True):
             result = Phabfive._get_auto_format()
             assert result == "rich"
 
@@ -36,6 +36,6 @@ class TestAutoFormatDetection:
         """Test auto-format returns 'strict' when stdout is piped/redirected."""
         from phabfive.core import Phabfive
 
-        with mock.patch('sys.stdout.isatty', return_value=False):
+        with mock.patch("sys.stdout.isatty", return_value=False):
             result = Phabfive._get_auto_format()
             assert result == "strict"

@@ -1004,9 +1004,7 @@ def run(cli_args, sub_args):
                     column_pattern = get_param("--column", yaml_params, "column")
                     if column_pattern:
                         try:
-                            column_patterns = parse_column_patterns(
-                                column_pattern
-                            )
+                            column_patterns = parse_column_patterns(column_pattern)
                         except Exception as e:
                             print(
                                 f"ERROR: Invalid column filter pattern in {config['title']}: {e}",

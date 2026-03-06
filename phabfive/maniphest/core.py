@@ -804,12 +804,7 @@ class Maniphest(Phabfive):
         need_status = bool(status_patterns) or show_history
 
         # Apply transition filtering if patterns specified
-        if (
-            column_patterns
-            or priority_patterns
-            or status_patterns
-            or project_patterns
-        ):
+        if column_patterns or priority_patterns or status_patterns or project_patterns:
             filter_desc = []
             if text_query:
                 filter_desc.append(f"query='{text_query}'")

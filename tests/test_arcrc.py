@@ -115,7 +115,9 @@ class TestLoadArcrc:
 
     def test_arcrc_not_found(self, tmp_path):
         """Test that missing .arcrc returns empty dict."""
-        with mock.patch.object(os.path, "expanduser", return_value=str(tmp_path / ".arcrc")):
+        with mock.patch.object(
+            os.path, "expanduser", return_value=str(tmp_path / ".arcrc")
+        ):
             result = self.phabfive._load_arcrc({})
         assert result == {}
 
@@ -247,11 +249,7 @@ class TestArcrcSingleHost:
     def test_single_host_without_token(self, tmp_path):
         """Test that single host without token only provides URL."""
         arcrc_path = tmp_path / ".arcrc"
-        arcrc_data = {
-            "hosts": {
-                "https://phorge.example.com/api/": {}
-            }
-        }
+        arcrc_data = {"hosts": {"https://phorge.example.com/api/": {}}}
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
@@ -278,7 +276,7 @@ class TestArcrcMultipleHosts:
                 },
                 "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                }
+                },
             }
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
@@ -303,7 +301,7 @@ class TestArcrcMultipleHosts:
                 },
                 "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                }
+                },
             }
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
@@ -328,7 +326,7 @@ class TestArcrcMultipleHosts:
                 },
                 "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                }
+                },
             }
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
@@ -351,11 +349,9 @@ class TestArcrcMultipleHosts:
                 },
                 "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                }
+                },
             },
-            "config": {
-                "default": "https://phorge-b.example.com"
-            }
+            "config": {"default": "https://phorge-b.example.com"},
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
@@ -376,11 +372,9 @@ class TestArcrcMultipleHosts:
                 },
                 "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                }
+                },
             },
-            "config": {
-                "default": "https://phorge-b.example.com"
-            }
+            "config": {"default": "https://phorge-b.example.com"},
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
@@ -405,11 +399,9 @@ class TestArcrcMultipleHosts:
                 },
                 "https://phorge-b.example.com/api/": {
                     "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                }
+                },
             },
-            "config": {
-                "default": "https://nonexistent.example.com"
-            }
+            "config": {"default": "https://nonexistent.example.com"},
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
@@ -430,11 +422,11 @@ class TestArcrcMultipleHosts:
                 },
                 "https://other.example.com/api/": {
                     "token": "cli-99999999999999999999999999999999"
-                }
+                },
             },
             "config": {
                 "default": "https://phorge.example.com"  # No /api/ suffix
-            }
+            },
         }
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
@@ -527,7 +519,7 @@ class TestArcrcLegacyFormat:
             "hosts": {
                 "https://phorge.example.com/api/": {
                     "user": "someuser",
-                    "cert": "some-certificate-string"
+                    "cert": "some-certificate-string",
                 }
             }
         }
