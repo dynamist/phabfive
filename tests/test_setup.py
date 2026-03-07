@@ -62,13 +62,13 @@ class TestOfferSetupOnError:
     """Tests for offer_setup_on_error function."""
 
     def test_non_interactive_shows_hint(self, capsys):
-        """Test that non-interactive mode shows hint about phabfive setup."""
+        """Test that non-interactive mode shows hint about phabfive user setup."""
         with mock.patch("sys.stdin.isatty", return_value=False):
             result = offer_setup_on_error("PHAB_TOKEN is not configured")
 
         assert result is False
         captured = capsys.readouterr()
-        assert "phabfive setup" in captured.err
+        assert "phabfive user setup" in captured.err
         assert "PHAB_TOKEN is not configured" in captured.err
 
     def test_non_interactive_returns_false(self):
