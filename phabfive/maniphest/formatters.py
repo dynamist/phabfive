@@ -31,7 +31,7 @@ def build_priority_transitions(priority_transactions, format_direction_func):
     if not priority_transactions:
         return []
 
-    from phabfive.priority_transitions import get_priority_order
+    from phabfive.transitions import get_priority_order
 
     # Sort transitions chronologically (oldest first) for better readability
     sorted_transactions = sorted(
@@ -166,7 +166,7 @@ def build_status_transitions(
     if not status_transactions:
         return []
 
-    from phabfive.status_transitions import get_status_order
+    from phabfive.transitions import get_status_order
 
     # Sort transitions chronologically (oldest first) for better readability
     sorted_transactions = sorted(

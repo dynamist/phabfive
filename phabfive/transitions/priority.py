@@ -1,10 +1,20 @@
 # -*- coding: utf-8 -*-
 
-# python std lib
+"""
+Priority transition pattern matching for task priorities.
+
+This module provides pattern matching for task priority changes,
+supporting conditions like 'from:High', 'to:Normal', 'in:Low', 'raised', 'lowered'.
+"""
+
 import logging
 
-# phabfive imports
-from phabfive.exceptions import PhabfiveException
+from phabfive.transitions.base import (
+    parse_condition_parts,
+    parse_direction,
+    parse_negation_prefix,
+    split_pattern_groups,
+)
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +112,6 @@ class PriorityPattern:
         bool
             True if all conditions match, False otherwise
         """
-        # All conditions must match for the pattern to match
         for condition in self.conditions:
             if not self._matches_condition(
                 condition, priority_transactions, current_priority
@@ -114,7 +123,6 @@ class PriorityPattern:
         """Check if a single condition matches."""
         condition_type = condition.get("type")
 
-        # Determine the match result based on condition type
         if condition_type == "from":
             result = self._matches_from(condition, priority_transactions)
         elif condition_type == "to":
@@ -133,7 +141,6 @@ class PriorityPattern:
             log.warning(f"Unknown condition type: {condition_type}")
             result = False
 
-        # Apply negation if the condition has the "not:" prefix
         if condition.get("negated"):
             result = not result
 
@@ -142,7 +149,7 @@ class PriorityPattern:
     def _matches_from(self, condition, priority_transactions):
         """Match 'from:PRIORITY[:direction]' pattern."""
         target_priority = condition.get("priority")
-        direction = condition.get("direction")  # None, "raised", or "lowered"
+        direction = condition.get("direction")
 
         for trans in priority_transactions:
             old_value = trans.get("oldValue")
@@ -151,13 +158,10 @@ class PriorityPattern:
             if old_value is None or new_value is None:
                 continue
 
-            # Check if old priority matches target (case-insensitive)
             if old_value.lower() == target_priority.lower():
-                # If no direction specified, it's a match
                 if direction is None:
                     return True
 
-                # Check direction
                 old_order = get_priority_order(old_value)
                 new_order = get_priority_order(new_value)
 
@@ -199,7 +203,6 @@ class PriorityPattern:
             old_value = trans.get("oldValue")
             new_value = trans.get("newValue")
 
-            # Check both old and new values
             for value in [old_value, new_value]:
                 if value and value.lower() == target_priority.lower():
                     return True
@@ -214,12 +217,11 @@ class PriorityPattern:
             old_value = trans.get("oldValue")
             new_value = trans.get("newValue")
 
-            # Check both old and new values
             for value in [old_value, new_value]:
                 if value and value.lower() == target_priority.lower():
-                    return False  # Found the priority, so it's not "never"
+                    return False
 
-        return True  # Never found the priority
+        return True
 
     def _matches_raised(self, priority_transactions):
         """Match 'raised' pattern - any priority increase (lower number = higher priority)."""
@@ -234,7 +236,7 @@ class PriorityPattern:
             new_order = get_priority_order(new_value)
 
             if old_order is not None and new_order is not None:
-                if new_order < old_order:  # Lower number = higher priority
+                if new_order < old_order:
                     return True
 
         return False
@@ -252,7 +254,7 @@ class PriorityPattern:
             new_order = get_priority_order(new_value)
 
             if old_order is not None and new_order is not None:
-                if new_order > old_order:  # Higher number = lower priority
+                if new_order > old_order:
                     return True
 
         return False
@@ -279,66 +281,29 @@ def _parse_single_condition(condition_str):
     PhabfiveException
         If condition syntax is invalid
     """
-    condition_str = condition_str.strip()
+    negated, condition_str = parse_negation_prefix(condition_str)
 
-    # Check for not: prefix
-    negated = False
-    if condition_str.startswith("not:"):
-        negated = True
-        condition_str = condition_str[4:].strip()  # Strip "not:" prefix
+    parts_info = parse_condition_parts(
+        condition_str,
+        VALID_PRIORITY_CONDITION_TYPES,
+        VALID_PRIORITY_KEYWORDS,
+        "priority",
+    )
 
-    # Special keywords without parameters
-    if condition_str in VALID_PRIORITY_KEYWORDS:
-        result = {"type": condition_str}
+    if parts_info.get("is_keyword"):
+        result = {"type": parts_info["type"]}
         if negated:
             result["negated"] = True
         return result
 
-    # Patterns with parameters: type:value or type:value:direction
-    if ":" not in condition_str:
-        all_types = VALID_PRIORITY_CONDITION_TYPES + VALID_PRIORITY_KEYWORDS
-        raise PhabfiveException(
-            f"Invalid priority condition syntax: '{condition_str}'. "
-            f"Expected format: TYPE:PRIORITY (e.g., 'in:High', 'not:in:Normal'). "
-            f"Valid types: {', '.join(all_types)}"
-        )
+    result = {"type": parts_info["type"], "priority": parts_info["value"]}
 
-    parts = condition_str.split(":", 2)  # Split into max 3 parts
-    condition_type = parts[0].strip()
-
-    if condition_type not in VALID_PRIORITY_CONDITION_TYPES:
-        all_types = VALID_PRIORITY_CONDITION_TYPES + VALID_PRIORITY_KEYWORDS
-        raise PhabfiveException(
-            f"Invalid priority condition type: '{condition_type}'. "
-            f"Valid types: {', '.join(all_types)}"
-        )
-
-    if len(parts) < 2:
-        raise PhabfiveException(
-            f"Missing priority name for condition: '{condition_str}'"
-        )
-
-    priority_name = parts[1].strip()
-    if not priority_name:
-        raise PhabfiveException(f"Empty priority name in condition: '{condition_str}'")
-
-    result = {"type": condition_type, "priority": priority_name}
-
-    # Handle optional direction for 'from' patterns
-    if len(parts) == 3:
-        if condition_type != "from":
-            raise PhabfiveException(
-                f"Direction modifier only allowed for 'from' patterns, got: '{condition_str}'"
-            )
-        direction = parts[2].strip()
-        if direction not in VALID_PRIORITY_DIRECTIONS:
-            raise PhabfiveException(
-                f"Invalid direction: '{direction}'. "
-                f"Valid directions: {', '.join(VALID_PRIORITY_DIRECTIONS)}"
-            )
+    direction = parse_direction(
+        parts_info, condition_str, VALID_PRIORITY_DIRECTIONS, "priority"
+    )
+    if direction:
         result["direction"] = direction
 
-    # Add negated flag if not: prefix was present
     if negated:
         result["negated"] = True
 
@@ -376,36 +341,11 @@ def parse_priority_patterns(patterns_str):
     >>> parse_priority_patterns("from:High+in:Normal,to:Low")
     [PriorityPattern([from:High, in:Normal]), PriorityPattern([to:Low])]
     """
-    if not patterns_str or not patterns_str.strip():
-        raise PhabfiveException("Empty priority pattern")
+    groups = split_pattern_groups(patterns_str, "priority")
 
     patterns = []
-
-    # Split by comma for OR groups
-    or_groups = patterns_str.split(",")
-
-    for or_group in or_groups:
-        or_group = or_group.strip()
-        if not or_group:
-            continue
-
-        conditions = []
-
-        # Split by plus for AND conditions
-        and_parts = or_group.split("+")
-
-        for and_part in and_parts:
-            and_part = and_part.strip()
-            if not and_part:
-                continue
-
-            condition = _parse_single_condition(and_part)
-            conditions.append(condition)
-
-        if conditions:
-            patterns.append(PriorityPattern(conditions))
-
-    if not patterns:
-        raise PhabfiveException("No valid priority patterns found")
+    for and_conditions in groups:
+        conditions = [_parse_single_condition(cond) for cond in and_conditions]
+        patterns.append(PriorityPattern(conditions))
 
     return patterns

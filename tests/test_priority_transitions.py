@@ -4,13 +4,13 @@
 import pytest
 
 # phabfive imports
-from phabfive.priority_transitions import (
+from phabfive.transitions import (
     PriorityPattern,
-    _parse_single_condition,
     parse_priority_patterns,
     get_priority_order,
     PRIORITY_ORDER,
 )
+from phabfive.transitions.priority import _parse_single_condition
 from phabfive.exceptions import PhabfiveException
 
 

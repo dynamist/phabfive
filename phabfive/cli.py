@@ -799,8 +799,7 @@ def run(cli_args, sub_args):
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.core import Phabfive
     from phabfive.exceptions import PhabfiveException
-    from phabfive.column_transitions import parse_column_patterns
-    from phabfive.priority_transitions import parse_priority_patterns
+    from phabfive.transitions import parse_column_patterns, parse_priority_patterns
 
     # Validate and process output options
     valid_modes = ("always", "auto", "never")

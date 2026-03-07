@@ -1,10 +1,20 @@
 # -*- coding: utf-8 -*-
 
-# python std lib
+"""
+Column transition pattern matching for workboard columns.
+
+This module provides pattern matching for task movements between workboard columns,
+supporting conditions like 'from:Inbox', 'to:Done', 'in:Blocked', 'backward', 'forward'.
+"""
+
 import logging
 
-# phabfive imports
-from phabfive.exceptions import PhabfiveException
+from phabfive.transitions.base import (
+    parse_condition_parts,
+    parse_direction,
+    parse_negation_prefix,
+    split_pattern_groups,
+)
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +82,6 @@ class ColumnPattern:
         bool
             True if all conditions match, False otherwise
         """
-        # All conditions must match for the pattern to match
         for condition in self.conditions:
             if not self._matches_condition(
                 condition, task_transactions, current_column, column_info
@@ -86,7 +95,6 @@ class ColumnPattern:
         """Check if a single condition matches."""
         condition_type = condition.get("type")
 
-        # Determine the match result based on condition type
         if condition_type == "from":
             result = self._matches_from(condition, task_transactions, column_info)
         elif condition_type == "to":
@@ -105,7 +113,6 @@ class ColumnPattern:
             log.warning(f"Unknown condition type: {condition_type}")
             result = False
 
-        # Apply negation if the condition has the "not:" prefix
         if condition.get("negated"):
             result = not result
 
@@ -114,7 +121,7 @@ class ColumnPattern:
     def _matches_from(self, condition, task_transactions, column_info):
         """Match 'from:COLUMN[:direction]' pattern."""
         target_column = condition.get("column")
-        direction = condition.get("direction")  # None, "forward", or "backward"
+        direction = condition.get("direction")
 
         for trans in task_transactions:
             old_value = trans.get("oldValue")
@@ -123,7 +130,6 @@ class ColumnPattern:
             if not old_value or not new_value:
                 continue
 
-            # oldValue/newValue format: [boardPHID, columnPHID]
             old_column_phid = old_value[1] if len(old_value) > 1 else None
             new_column_phid = new_value[1] if len(new_value) > 1 else None
 
@@ -136,13 +142,10 @@ class ColumnPattern:
             if not old_col_info:
                 continue
 
-            # Check if old column matches target
             if old_col_info["name"] == target_column:
-                # If no direction specified, it's a match
                 if direction is None:
                     return True
 
-                # Check direction
                 if new_col_info:
                     if (
                         direction == "forward"
@@ -190,7 +193,6 @@ class ColumnPattern:
             old_value = trans.get("oldValue")
             new_value = trans.get("newValue")
 
-            # Check both old and new values
             for value in [old_value, new_value]:
                 if not value:
                     continue
@@ -213,7 +215,6 @@ class ColumnPattern:
             old_value = trans.get("oldValue")
             new_value = trans.get("newValue")
 
-            # Check both old and new values
             for value in [old_value, new_value]:
                 if not value:
                     continue
@@ -224,9 +225,9 @@ class ColumnPattern:
 
                 col_info = column_info.get(column_phid)
                 if col_info and col_info["name"] == target_column:
-                    return False  # Found the column, so it's not "never"
+                    return False
 
-        return True  # Never found the column
+        return True
 
     def _matches_backward(self, task_transactions, column_info):
         """Match 'backward' pattern - any backward movement."""
@@ -298,64 +299,29 @@ def _parse_single_condition(condition_str):
     PhabfiveException
         If condition syntax is invalid
     """
-    condition_str = condition_str.strip()
+    negated, condition_str = parse_negation_prefix(condition_str)
 
-    # Check for not: prefix
-    negated = False
-    if condition_str.startswith("not:"):
-        negated = True
-        condition_str = condition_str[4:].strip()  # Strip "not:" prefix
+    parts_info = parse_condition_parts(
+        condition_str,
+        VALID_COLUMN_CONDITION_TYPES,
+        VALID_COLUMN_KEYWORDS,
+        "column",
+    )
 
-    # Special keywords without parameters
-    if condition_str in VALID_COLUMN_KEYWORDS:
-        result = {"type": condition_str}
+    if parts_info.get("is_keyword"):
+        result = {"type": parts_info["type"]}
         if negated:
             result["negated"] = True
         return result
 
-    # Patterns with parameters: type:value or type:value:direction
-    if ":" not in condition_str:
-        all_types = VALID_COLUMN_CONDITION_TYPES + VALID_COLUMN_KEYWORDS
-        raise PhabfiveException(
-            f"Invalid column condition syntax: '{condition_str}'. "
-            f"Expected format: TYPE:COLUMN (e.g., 'in:Inbox', 'not:in:Done'). "
-            f"Valid types: {', '.join(all_types)}"
-        )
+    result = {"type": parts_info["type"], "column": parts_info["value"]}
 
-    parts = condition_str.split(":", 2)  # Split into max 3 parts
-    condition_type = parts[0].strip()
-
-    if condition_type not in VALID_COLUMN_CONDITION_TYPES:
-        all_types = VALID_COLUMN_CONDITION_TYPES + VALID_COLUMN_KEYWORDS
-        raise PhabfiveException(
-            f"Invalid column condition type: '{condition_type}'. "
-            f"Valid types: {', '.join(all_types)}"
-        )
-
-    if len(parts) < 2:
-        raise PhabfiveException(f"Missing column name for condition: '{condition_str}'")
-
-    column_name = parts[1].strip()
-    if not column_name:
-        raise PhabfiveException(f"Empty column name in condition: '{condition_str}'")
-
-    result = {"type": condition_type, "column": column_name}
-
-    # Handle optional direction for 'from' patterns
-    if len(parts) == 3:
-        if condition_type != "from":
-            raise PhabfiveException(
-                f"Direction modifier only allowed for 'from' patterns, got: '{condition_str}'"
-            )
-        direction = parts[2].strip()
-        if direction not in VALID_COLUMN_DIRECTIONS:
-            raise PhabfiveException(
-                f"Invalid direction: '{direction}'. "
-                f"Valid directions: {', '.join(VALID_COLUMN_DIRECTIONS)}"
-            )
+    direction = parse_direction(
+        parts_info, condition_str, VALID_COLUMN_DIRECTIONS, "column"
+    )
+    if direction:
         result["direction"] = direction
 
-    # Add negated flag if not: prefix was present
     if negated:
         result["negated"] = True
 
@@ -393,36 +359,11 @@ def parse_column_patterns(patterns_str):
     >>> parse_column_patterns("from:A+in:B,to:C")
     [ColumnPattern([from:A, in:B]), ColumnPattern([to:C])]
     """
-    if not patterns_str or not patterns_str.strip():
-        raise PhabfiveException("Empty transition pattern")
+    groups = split_pattern_groups(patterns_str, "transition")
 
     patterns = []
-
-    # Split by comma for OR groups
-    or_groups = patterns_str.split(",")
-
-    for or_group in or_groups:
-        or_group = or_group.strip()
-        if not or_group:
-            continue
-
-        conditions = []
-
-        # Split by plus for AND conditions
-        and_parts = or_group.split("+")
-
-        for and_part in and_parts:
-            and_part = and_part.strip()
-            if not and_part:
-                continue
-
-            condition = _parse_single_condition(and_part)
-            conditions.append(condition)
-
-        if conditions:
-            patterns.append(ColumnPattern(conditions))
-
-    if not patterns:
-        raise PhabfiveException("No valid transition patterns found")
+    for and_conditions in groups:
+        conditions = [_parse_single_condition(cond) for cond in and_conditions]
+        patterns.append(ColumnPattern(conditions))
 
     return patterns
