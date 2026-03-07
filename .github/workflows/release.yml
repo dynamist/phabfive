@@ -127,6 +127,7 @@ jobs:
   publish-pypi:
     name: Publish to PyPI
     needs: build
+    if: ${{ !contains(github.ref_name, '-rc') }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -145,7 +146,8 @@ jobs:
 
   github-release:
     name: Create GitHub Release
-    needs: [publish-pypi, build-executables]
+    needs: [build, publish-pypi, build-executables]
+    if: ${{ always() && needs.build.result == 'success' && needs.build-executables.result == 'success' && (needs.publish-pypi.result == 'success' || needs.publish-pypi.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
