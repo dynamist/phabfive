@@ -1644,7 +1644,15 @@ class TestTaskSearchTextQuery:
             "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
         }
 
-        # Mock project resolution
+        # Mock project.search for direct lookup optimization
+        # The result needs to have .get("data") return a list of projects
+        maniphest.phab.project.search.return_value = {
+            "data": [
+                {"phid": "PHID-PROJ-123", "fields": {"name": "MyProject", "slug": "myproject"}}
+            ]
+        }
+
+        # Mock project.query as fallback (shouldn't be called with direct lookup)
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {
@@ -1689,7 +1697,15 @@ class TestTaskSearchTextQuery:
             "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
         }
 
-        # Mock project resolution
+        # Mock project.search for direct lookup optimization
+        # The result needs to have .get("data") return a list of projects
+        maniphest.phab.project.search.return_value = {
+            "data": [
+                {"phid": "PHID-PROJ-123", "fields": {"name": "MyProject", "slug": "myproject"}}
+            ]
+        }
+
+        # Mock project.query as fallback (shouldn't be called with direct lookup)
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {
@@ -1836,7 +1852,29 @@ class TestTaskSearchTextQuery:
             "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
         }
 
-        # Mock project resolution
+        # Mock project.search for direct lookup optimization
+        # Returns different results based on the slug being searched
+        def project_search_side_effect(**kwargs):
+            constraints = kwargs.get("constraints", {})
+            slugs = constraints.get("slugs", [])
+            if slugs and "ProjectA" in slugs[0]:
+                return {
+                    "data": [
+                        {"phid": "PHID-PROJ-A", "fields": {"name": "ProjectA", "slug": "projecta"}}
+                    ]
+                }
+            elif slugs and "ProjectB" in slugs[0]:
+                return {
+                    "data": [
+                        {"phid": "PHID-PROJ-B", "fields": {"name": "ProjectB", "slug": "projectb"}}
+                    ]
+                }
+            else:
+                return {"data": []}
+
+        maniphest.phab.project.search.side_effect = project_search_side_effect
+
+        # Mock project.query as fallback
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-A": {
@@ -1861,5 +1899,5 @@ class TestTaskSearchTextQuery:
 
         # Verify API was called (implementation fetches both projects)
         assert maniphest.phab.maniphest.search.called
-        # Should make multiple calls for OR logic
+        # Should make multiple calls for OR logic (2 projects = 2 calls)
         assert maniphest.phab.maniphest.search.call_count >= 2
