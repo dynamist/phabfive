@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "phabfive"
 version = "0.7.0-dev.0"
-description = "A command line tool to interact with Phabricator"
+description = "CLI for Phabricator and Phorge - built for humans and AI agents"
 readme = "README.md"
 license = {text = "Apache License 2.0"}
 authors = [

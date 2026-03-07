@@ -1,6 +1,6 @@
 # phabfive
 
-A command line tool to interact with [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https://www.phorge.it/).
+CLI for [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https://we.phorge.it/) - built for humans and AI agents.
 
 ![phabfive maniphest show](docs/maniphest-show.png)
 
