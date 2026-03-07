@@ -957,9 +957,15 @@ class TestYAMLOutput:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
 
         # Mock the phab API
         maniphest.phab = MagicMock()
+
+        # Mock phid.lookup to return space info for default space filtering
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
 
         # Mock project.query to return a project with slugs
         mock_project_result = MagicMock()
@@ -1147,8 +1153,12 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
@@ -1203,8 +1213,12 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
@@ -1260,8 +1274,12 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
@@ -1319,8 +1337,12 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
@@ -1376,8 +1398,12 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
@@ -1438,11 +1464,15 @@ class TestStrictFormat:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
 
         # Set strict output format
         Phabfive.set_output_options(output_format="strict")
 
         maniphest.phab = MagicMock()
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
@@ -1501,11 +1531,15 @@ class TestStrictFormat:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
 
         # Set strict output format
         Phabfive.set_output_options(output_format="strict")
 
         maniphest.phab = MagicMock()
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
             "PHID-PROJ-123": {"name": "Test Project", "slugs": []}
@@ -1568,6 +1602,12 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+
+        # Mock phid.lookup for space resolution
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
 
         # Mock the API response
         mock_response = MagicMock()
@@ -1600,6 +1640,12 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+
+        # Mock phid.lookup for space resolution
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
 
         # Mock project resolution
         mock_project_result = MagicMock()
@@ -1639,6 +1685,12 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+
+        # Mock phid.lookup for space resolution
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
 
         # Mock project resolution
         mock_project_result = MagicMock()
@@ -1676,6 +1728,12 @@ class TestTaskSearchTextQuery:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+
+        # Mock phid.lookup for space resolution
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
 
         # Call with no filters - should raise exception
         with pytest.raises(PhabfiveConfigException) as exc_info:
@@ -1691,6 +1749,12 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+
+        # Mock phid.lookup for space resolution
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
 
         # Mock the API response
         mock_response = MagicMock()
@@ -1726,6 +1790,12 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+
+        # Mock phid.lookup for space resolution
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
 
         # Mock project resolution with wildcard match
         mock_project_result = MagicMock()
@@ -1762,6 +1832,12 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+
+        # Mock phid.lookup for space resolution
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+        }
 
         # Mock project resolution
         mock_project_result = MagicMock()
