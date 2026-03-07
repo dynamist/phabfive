@@ -77,9 +77,25 @@ git push origin v0.6.0
 
 This triggers the GitHub Actions workflow which will:
 
-1. Build the package
-2. Publish to PyPI using trusted publishing
-3. Create GitHub Release with auto-generated notes and artifacts
+1. Build the Python package (wheel and sdist)
+2. Build standalone executables for 6 platforms:
+   - Linux (AMD64, ARM64)
+   - macOS (AMD64, ARM64)
+   - Windows (AMD64, ARM64)
+3. Sign executables with [Sigstore](https://www.sigstore.dev/) (keyless OIDC signing)
+4. Publish to PyPI using trusted publishing
+5. Create GitHub Release with auto-generated notes and all artifacts
+
+**Testing with RC tags:** Tags containing `-rc` (e.g., `v0.7.0-rc.1`) will skip PyPI publishing but still build executables and create a GitHub Release. Useful for testing the release process.
+
+**Verifying signatures:** Users can verify downloaded executables with [cosign](https://docs.sigstore.dev/):
+
+```bash
+cosign verify-blob phabfive-linux-amd64 \
+  --bundle phabfive-linux-amd64.sigstore.json \
+  --certificate-identity-regexp="https://github.com/dynamist/phabfive" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+```
 
 **5. Bump to Dev Version**
 

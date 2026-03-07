@@ -68,3 +68,22 @@ Version is defined only in `pyproject.toml`. Access it via:
 from importlib.metadata import version
 version("phabfive")
 ```
+
+## Release Workflow
+
+Releases are triggered by pushing a git tag matching `v*`:
+
+```bash
+git tag -a v0.7.0 -m "Release v0.7.0"
+git push origin v0.7.0
+```
+
+**Artifacts produced:**
+- Python wheel and sdist → PyPI
+- Standalone executables for 6 platforms → GitHub Releases:
+  - `phabfive-linux-amd64`, `phabfive-linux-arm64`
+  - `phabfive-macos-amd64`, `phabfive-macos-arm64`
+  - `phabfive-windows-amd64.exe`, `phabfive-windows-arm64.exe`
+- Sigstore signatures (`.sigstore.json`) for all executables except Windows ARM64
+
+**RC tags** (containing `-rc`) skip PyPI but still build executables and create GitHub releases.
