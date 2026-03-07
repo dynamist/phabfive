@@ -11,6 +11,24 @@ class OutputFormat(str, Enum):
     json = "json"  # Machine-readable JSON
 
 
+class AutoOption(str, Enum):
+    """Auto-detect option for --ascii and --hyperlink."""
+
+    always = "always"
+    auto = "auto"
+    never = "never"
+
+
+class LogLevel(str, Enum):
+    """Log level options."""
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+
 # https://secure.phabricator.com/w/object_name_prefixes/
 MONOGRAMS = {
     "diffusion": "R[0-9]+",
@@ -69,12 +87,14 @@ TICKET_PRIORITY_LOW = "low"
 TICKET_PRIORITY_WISH = "wish"
 
 __all__ = [
+    "AutoOption",
     "CONFIG_EXAMPLES",
     "CONFIGURABLES",
     "DEFAULTS",
     "DISPLAY_CHOICES",
     "IO_NEW_URI_CHOICES",
     "COMMENTS_SUPPORTED",
+    "LogLevel",
     "MONOGRAM_SHORTCUT",
     "MONOGRAMS",
     "OutputFormat",
