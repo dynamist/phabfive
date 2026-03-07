@@ -149,7 +149,9 @@ def resolve_project_phids(phab, project: str) -> list[str]:
                 break
 
             offset += page_size
-            log.debug(f"Fetched {len(projects_data)} projects so far, fetching next page...")
+            log.debug(
+                f"Fetched {len(projects_data)} projects so far, fetching next page..."
+            )
 
         # Process all projects (projects_data is a dict keyed by PHID)
         for phid, project_data in projects_data.items():

@@ -123,9 +123,7 @@ class SetupWizard:
                 f"as [bold]{username}[/bold].\n"
             )
 
-            if not Confirm.ask(
-                "Do you want to reconfigure phabfive?", default=False
-            ):
+            if not Confirm.ask("Do you want to reconfigure phabfive?", default=False):
                 self.console.print("Setup cancelled.\n")
                 return False
 

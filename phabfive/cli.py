@@ -772,7 +772,12 @@ def parse_cli():
             else:
                 sub_args = docopt(sub_maniphest_show_args, argv=argv)
         else:
-            sub_args = docopt(eval("sub_{app}_args".format(app=app)), argv=argv)  # nosec-B307
+            sub_args = docopt({
+                "passphrase": sub_passphrase_args,
+                "diffusion": sub_diffusion_args,
+                "paste": sub_paste_args,
+                "user": sub_user_args,
+            }[app], argv=argv)
     elif cli_args["<command>"] == "passphrase":
         sub_args = docopt(sub_passphrase_args, argv=argv)
     elif cli_args["<command>"] == "diffusion":

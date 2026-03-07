@@ -30,7 +30,9 @@ def parse_negation_prefix(condition_str):
     return False, condition_str
 
 
-def parse_condition_parts(condition_str, valid_condition_types, valid_keywords, entity_name):
+def parse_condition_parts(
+    condition_str, valid_condition_types, valid_keywords, entity_name
+):
     """
     Parse a condition string into its component parts.
 
@@ -99,9 +101,7 @@ def parse_condition_parts(condition_str, valid_condition_types, valid_keywords, 
     }
 
 
-def parse_direction(
-    parts_info, condition_str, valid_directions, entity_name
-):
+def parse_direction(parts_info, condition_str, valid_directions, entity_name):
     """
     Parse optional direction from condition parts.
 

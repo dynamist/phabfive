@@ -10,9 +10,19 @@ from phabfive import passphrase
 from phabfive.constants import IO_NEW_URI_CHOICES, DISPLAY_CHOICES
 from phabfive.core import Phabfive
 from phabfive.diffusion.fetchers import fetch_branches, fetch_repositories, fetch_uris
-from phabfive.diffusion.formatters import format_branches, format_repositories, format_uris
-from phabfive.diffusion.resolvers import resolve_object_identifier, resolve_shortname_to_id
-from phabfive.diffusion.validators import validate_credential_type, validate_repo_identifier
+from phabfive.diffusion.formatters import (
+    format_branches,
+    format_repositories,
+    format_uris,
+)
+from phabfive.diffusion.resolvers import (
+    resolve_object_identifier,
+    resolve_shortname_to_id,
+)
+from phabfive.diffusion.validators import (
+    validate_credential_type,
+    validate_repo_identifier,
+)
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 
 log = logging.getLogger(__name__)
