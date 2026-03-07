@@ -1260,8 +1260,8 @@ def run(cli_args, sub_args):
         from phabfive.setup import offer_setup_on_error
 
         if offer_setup_on_error(str(e)):
-            # Setup succeeded, retry the original command
-            return run(cli_args, sub_args)
+            # Setup succeeded - connection verified
+            return 0
         retcode = 1
     except PhabfiveException as e:
         # Catch all types of phabricator base exceptions
