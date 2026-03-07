@@ -1,3 +1,54 @@
+# 0.6.0 (2026-03-07)
+
+## Prelude
+
+This release brings significant internal refactoring, new search filters, and automated release infrastructure. The codebase has been restructured with maniphest, diffusion, and transitions modules converted to package structure for better maintainability.
+
+## Upgrade Notes
+
+* **Breaking change:** Closed tasks are now hidden by default in `maniphest search`. Use `--all` to include closed tasks.
+
+## New Features
+
+### Search Enhancements
+* **Space filtering** - New `--space` flag for filtering tasks by Phabricator Space
+* **Assignee filtering** - New `--assigned` filter with `@me` shortcut and OR logic support (comma-separated values)
+* **Date range filters** - New `--created-before` and `--updated-before` filters
+* **Time unit support** - Date filters now accept time units (h, d, w, m, y) e.g., `--created-after 2d`
+* **Auto-detect strict format** - `--format=strict` is automatically enabled when output is piped (#131)
+
+### Configuration
+* **Arcanist support** - Added support for reading configuration from `.arcrc` files
+* **IPv6 and port support** - `PHAB_URL` validation now accepts IPv6 addresses and port numbers
+
+### User Experience
+* **Syntax hints** - Helpful hints displayed for invalid `--status`, `--priority`, and `--column` values
+
+## Bug Fixes
+
+* Fix project lookup failing when more than 100 projects exist (#140)
+* Fix Rich markup issues with square brackets in user content
+* Handle deleted working directory gracefully
+* Handle KeyboardInterrupt gracefully in CLI
+* Improve Conduit access denied error message for passphrase
+* Fix formatting issues on readthedocs.io
+* Skip permission checks on Windows
+
+## Refactoring
+
+* Convert maniphest module to package structure
+* Convert diffusion module to package structure
+* Consolidate transition modules into package
+* Move display logic from library to CLI layer
+* Improve method naming across modules
+* Rename TransitionPattern to ColumnPattern for consistency
+
+## Other Notes
+
+* Added GitHub Actions workflow for automated PyPI releases using trusted publishing (OIDC)
+* Applied ruff formatting across codebase
+
+
 # 0.5.0 (2026-01-10)
 
 ## Prelude

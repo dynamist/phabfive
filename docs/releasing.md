@@ -20,9 +20,83 @@ We follow basic [SemVer](https://semver.org/) versioning with extensions defined
 
 PEP 440 also allows for post and dev releases if needed, but in general we should only publish stable regular SemVer releases.
 
-## Building a Release
+## Automated Release (Recommended)
 
-### Prerequisites
+Starting with v0.6.0, releases are automated via GitHub Actions using PyPI trusted publishing (OIDC).
+
+### One-Time Setup
+
+#### 1. Configure PyPI Trusted Publisher
+
+On [pypi.org](https://pypi.org):
+
+1. Go to **Manage** > **phabfive** > **Publishing**
+2. Add trusted publisher with:
+   - **Owner**: `dynamist`
+   - **Repository**: `phabfive`
+   - **Workflow**: `release.yml`
+   - **Environment**: `pypi`
+
+#### 2. Create GitHub Environment
+
+In repository **Settings** > **Environments**:
+
+1. Create environment named `pypi`
+2. (Optional) Add protection rules requiring reviewer approval
+
+### Release Steps
+
+**1. Update Version**
+
+Update the version in `pyproject.toml`:
+
+```toml
+[project]
+name = "phabfive"
+version = "0.6.0"  # ← update this
+```
+
+**2. Update CHANGELOG**
+
+Add release notes to `CHANGELOG.md`.
+
+**3. Commit and Push**
+
+```bash
+git add pyproject.toml CHANGELOG.md
+git commit -m "Release v0.6.0"
+git push origin master
+```
+
+**4. Create and Push Tag**
+
+```bash
+git tag -a v0.6.0 -m "Release v0.6.0"
+git push origin v0.6.0
+```
+
+This triggers the GitHub Actions workflow which will:
+
+1. Build the package
+2. Publish to PyPI using trusted publishing
+3. Create GitHub Release with auto-generated notes and artifacts
+
+**5. Bump to Dev Version**
+
+```bash
+# Edit pyproject.toml to "0.7.0-dev.0"
+git add pyproject.toml
+git commit -m "Bump version to 0.7.0-dev.0"
+git push origin master
+```
+
+## Manual Release (Legacy)
+
+If you cannot use the automated workflow (e.g., trusted publishing not configured), follow these manual steps.
+
+### Building a Release
+
+#### Prerequisites
 
 1. **PyPI Account & Permissions**
    - You must be an **owner** or **maintainer** for phabfive on PyPI
@@ -38,7 +112,7 @@ PEP 440 also allows for post and dev releases if needed, but in general we shoul
    uv sync --group dev
 ```
 
-### Release Steps
+#### Release Steps
 
 **1. Update Version**
 
@@ -190,13 +264,13 @@ git commit -m"Bump version: 0.5.0 → 0.6.0-dev.0"
 git push origin
 ```
 
-## Additional Resources
+### Additional Resources
 
 - [Python Packaging User Guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/)
 - [PyPI Project Page](https://pypi.org/project/phabfive/)
 - [GitHub Releases](https://github.com/dynamist/phabfive/releases)
 
-## Troubleshooting
+### Troubleshooting
 
 **Build fails:**
 
