@@ -143,7 +143,7 @@ app.add_typer(diffusion_app, name="diffusion")
 app.add_typer(paste_app, name="paste")
 app.add_typer(user_app, name="user")
 app.add_typer(maniphest_app, name="maniphest")
-app.add_typer(repl_app, name="repl")
+app.add_typer(repl_app, name="repl", hidden=True)
 
 
 def cli_entrypoint() -> None:
