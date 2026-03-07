@@ -53,7 +53,7 @@ jobs:
             asset_name: phabfive-linux-amd64
           - os: macos
             arch: amd64
-            runner: macos-13
+            runner: macos-14
             artifact_name: phabfive
             asset_name: phabfive-macos-amd64
           - os: windows
@@ -77,11 +77,13 @@ jobs:
             runner: windows-11-arm
             artifact_name: phabfive.exe
             asset_name: phabfive-windows-arm64.exe
+            skip_signing: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Cosign
+        if: ${{ !matrix.skip_signing }}
         uses: sigstore/cosign-installer@v3
 
       - name: Set up Python
@@ -96,6 +98,7 @@ jobs:
           pip install .
 
       - name: Build executable
+        shell: bash
         run: |
           pyinstaller --onefile --name phabfive phabfive/cli.py \
             --collect-data rich \
@@ -110,6 +113,7 @@ jobs:
         run: mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
 
       - name: Sign executable with Sigstore
+        if: ${{ !matrix.skip_signing }}
         shell: bash
         run: |
           cosign sign-blob dist/${{ matrix.asset_name }} \
@@ -117,12 +121,20 @@ jobs:
             --yes
 
       - name: Upload executable and signature
+        if: ${{ !matrix.skip_signing }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
           path: |
             dist/${{ matrix.asset_name }}
             dist/${{ matrix.asset_name }}.sigstore.json
+
+      - name: Upload executable (unsigned)
+        if: ${{ matrix.skip_signing }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
 
   publish-pypi:
     name: Publish to PyPI
