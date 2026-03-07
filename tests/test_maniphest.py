@@ -961,7 +961,12 @@ class TestYAMLOutput:
 
         # Mock phid.lookup to return space info for default space filtering
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
 
         # Mock project.query to return a project with slugs
@@ -1030,7 +1035,7 @@ class TestYAMLOutput:
         result = maniphest.task_search(tag="Test Project")
 
         # Use display_tasks to render output
-        from phabfive.cli import display_tasks
+        from phabfive.display import display_tasks
 
         display_tasks(result, "rich", maniphest)
 
@@ -1074,14 +1079,14 @@ class TestYAMLQuoting:
 
     def test_needs_yaml_quoting_colon(self):
         """Test that colons trigger quoting."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting("foo:bar") is True
         assert _needs_yaml_quoting("http://example.com") is True
 
     def test_needs_yaml_quoting_braces(self):
         """Test that curly braces trigger quoting."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting("{foo}") is True
         assert _needs_yaml_quoting("${variable}") is True
@@ -1089,7 +1094,7 @@ class TestYAMLQuoting:
 
     def test_needs_yaml_quoting_brackets(self):
         """Test that square brackets trigger quoting."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting("[BUG]") is True
         assert _needs_yaml_quoting("[FEATURE] Add something") is True
@@ -1097,14 +1102,14 @@ class TestYAMLQuoting:
 
     def test_needs_yaml_quoting_backticks(self):
         """Test that backticks trigger quoting."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting("`code`") is True
         assert _needs_yaml_quoting("Run `make build`") is True
 
     def test_needs_yaml_quoting_single_quotes(self):
         """Test that single quotes trigger quoting."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting("'LOREM'") is True
         assert _needs_yaml_quoting("It's working") is True
@@ -1112,20 +1117,20 @@ class TestYAMLQuoting:
 
     def test_needs_yaml_quoting_double_quotes(self):
         """Test that double quotes trigger quoting."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting('"LOREM"') is True
         assert _needs_yaml_quoting('Say "hello"') is True
 
     def test_needs_yaml_quoting_empty_string(self):
         """Test that empty strings trigger quoting."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting("") is True
 
     def test_needs_yaml_quoting_safe_strings(self):
         """Test that safe strings don't trigger quoting."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting("Normal task name") is False
         assert _needs_yaml_quoting("Task with numbers 123") is False
@@ -1134,7 +1139,7 @@ class TestYAMLQuoting:
 
     def test_needs_yaml_quoting_non_string(self):
         """Test that non-strings return False."""
-        from phabfive.cli import _needs_yaml_quoting
+        from phabfive.display import _needs_yaml_quoting
 
         assert _needs_yaml_quoting(123) is False
         assert _needs_yaml_quoting(None) is False
@@ -1154,7 +1159,12 @@ class TestYAMLQuoting:
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
@@ -1186,7 +1196,7 @@ class TestYAMLQuoting:
 
         result = maniphest.task_search(tag="Test Project")
 
-        from phabfive.cli import display_tasks
+        from phabfive.display import display_tasks
 
         display_tasks(result, "rich", maniphest)
 
@@ -1214,7 +1224,12 @@ class TestYAMLQuoting:
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
@@ -1246,7 +1261,7 @@ class TestYAMLQuoting:
 
         result = maniphest.task_search(tag="Test Project")
 
-        from phabfive.cli import display_tasks
+        from phabfive.display import display_tasks
 
         display_tasks(result, "rich", maniphest)
 
@@ -1275,7 +1290,12 @@ class TestYAMLQuoting:
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
@@ -1307,7 +1327,7 @@ class TestYAMLQuoting:
 
         result = maniphest.task_search(tag="Test Project")
 
-        from phabfive.cli import display_tasks
+        from phabfive.display import display_tasks
 
         display_tasks(result, "rich", maniphest)
 
@@ -1338,7 +1358,12 @@ class TestYAMLQuoting:
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
@@ -1370,7 +1395,7 @@ class TestYAMLQuoting:
 
         result = maniphest.task_search(tag="Test Project")
 
-        from phabfive.cli import display_tasks
+        from phabfive.display import display_tasks
 
         display_tasks(result, "rich", maniphest)
 
@@ -1399,7 +1424,12 @@ class TestYAMLQuoting:
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
@@ -1431,7 +1461,7 @@ class TestYAMLQuoting:
 
         result = maniphest.task_search(tag="Test Project")
 
-        from phabfive.cli import display_tasks
+        from phabfive.display import display_tasks
 
         display_tasks(result, "rich", maniphest)
 
@@ -1468,7 +1498,12 @@ class TestStrictFormat:
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
@@ -1500,7 +1535,7 @@ class TestStrictFormat:
 
         result = maniphest.task_search(tag="Test Project")
 
-        from phabfive.cli import display_tasks
+        from phabfive.display import display_tasks
 
         display_tasks(result, "rich", maniphest)
 
@@ -1535,7 +1570,12 @@ class TestStrictFormat:
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
         mock_project_result = MagicMock()
         mock_project_result.get.return_value = {
@@ -1567,7 +1607,7 @@ class TestStrictFormat:
 
         result = maniphest.task_search(tag="Test Project")
 
-        from phabfive.cli import display_tasks
+        from phabfive.display import display_tasks
 
         display_tasks(result, "rich", maniphest)
 
@@ -1603,7 +1643,12 @@ class TestTaskSearchTextQuery:
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
 
         # Mock the API response
@@ -1641,14 +1686,22 @@ class TestTaskSearchTextQuery:
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
 
         # Mock project.search for direct lookup optimization
         # The result needs to have .get("data") return a list of projects
         maniphest.phab.project.search.return_value = {
             "data": [
-                {"phid": "PHID-PROJ-123", "fields": {"name": "MyProject", "slug": "myproject"}}
+                {
+                    "phid": "PHID-PROJ-123",
+                    "fields": {"name": "MyProject", "slug": "myproject"},
+                }
             ]
         }
 
@@ -1694,14 +1747,22 @@ class TestTaskSearchTextQuery:
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
 
         # Mock project.search for direct lookup optimization
         # The result needs to have .get("data") return a list of projects
         maniphest.phab.project.search.return_value = {
             "data": [
-                {"phid": "PHID-PROJ-123", "fields": {"name": "MyProject", "slug": "myproject"}}
+                {
+                    "phid": "PHID-PROJ-123",
+                    "fields": {"name": "MyProject", "slug": "myproject"},
+                }
             ]
         }
 
@@ -1745,7 +1806,12 @@ class TestTaskSearchTextQuery:
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
 
         # Call with no filters - should raise exception
@@ -1766,7 +1832,12 @@ class TestTaskSearchTextQuery:
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
 
         # Mock the API response
@@ -1807,7 +1878,12 @@ class TestTaskSearchTextQuery:
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
 
         # Mock project resolution with wildcard match
@@ -1849,7 +1925,12 @@ class TestTaskSearchTextQuery:
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
-            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global", "uri": "/S1"}
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
         }
 
         # Mock project.search for direct lookup optimization
@@ -1860,13 +1941,19 @@ class TestTaskSearchTextQuery:
             if slugs and "ProjectA" in slugs[0]:
                 return {
                     "data": [
-                        {"phid": "PHID-PROJ-A", "fields": {"name": "ProjectA", "slug": "projecta"}}
+                        {
+                            "phid": "PHID-PROJ-A",
+                            "fields": {"name": "ProjectA", "slug": "projecta"},
+                        }
                     ]
                 }
             elif slugs and "ProjectB" in slugs[0]:
                 return {
                     "data": [
-                        {"phid": "PHID-PROJ-B", "fields": {"name": "ProjectB", "slug": "projectb"}}
+                        {
+                            "phid": "PHID-PROJ-B",
+                            "fields": {"name": "ProjectB", "slug": "projectb"},
+                        }
                     ]
                 }
             else:
