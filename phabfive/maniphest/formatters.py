@@ -652,6 +652,28 @@ def build_task_display_data(
             u["phid"]: u["fields"]["username"] for u in user_result.get("data", [])
         }
 
+    # Collect and resolve space PHIDs to space names
+    space_phids = set()
+    for item in result_data:
+        space_phid = item.get("fields", {}).get("spacePHID")
+        if space_phid:
+            space_phids.add(space_phid)
+
+    space_map = {}  # Maps PHID to {"name": ..., "uri": ...}
+    if space_phids:
+        try:
+            # Use phid.query to resolve space PHIDs to names and URIs
+            space_result = phab.phid.query(phids=list(space_phids))
+            space_map = {
+                phid: {
+                    "name": data.get("name", phid),
+                    "uri": data.get("uri", ""),
+                }
+                for phid, data in space_result.items()
+            }
+        except Exception as e:
+            log.warning(f"Failed to resolve space PHIDs: {e}")
+
     # Build YAML data structure
     tasks_list = []
 
@@ -678,6 +700,21 @@ def build_task_display_data(
 
         # Priority
         task_data["Priority"] = fields.get("priority", {}).get("name", "Unknown")
+
+        # Space - store as clickable link (only if task is in a non-default space)
+        space_phid = fields.get("spacePHID")
+        if space_phid and space_phid in space_map:
+            space_info = space_map[space_phid]
+            space_name = space_info["name"]
+            space_uri = space_info["uri"]
+            # Use the URI from phid.query which gives us the monogram URL (e.g., /S9)
+            if space_uri:
+                task_dict["_space"] = format_link_func(
+                    space_uri, space_name, show_url=False
+                )
+            else:
+                # Fallback if no URI available
+                task_dict["_space"] = space_name
 
         # Assignee - store separately for direct printing (hyperlink support)
         owner_phid = fields.get("ownerPHID")

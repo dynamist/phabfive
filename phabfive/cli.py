@@ -52,6 +52,7 @@ def display_task_rich(console, task_dict, phabfive_instance):
     # Extract internal fields
     link = task_dict.get("_link")
     assignee = task_dict.get("_assignee")
+    space = task_dict.get("_space")
     task_data = task_dict.get("Task", {})
     boards = task_dict.get("Boards", {})
     history = task_dict.get("History", {})
@@ -80,6 +81,10 @@ def display_task_rich(console, task_dict, phabfive_instance):
     # Print Assignee
     if assignee:
         console.print(Text.assemble("    Assignee: ", assignee))
+
+    # Print Space with clickable link
+    if space:
+        console.print(Text.assemble("    Space: ", space))
 
     # Print Boards with clickable names
     if boards:
@@ -185,6 +190,7 @@ def display_task_tree(console, task_dict, phabfive_instance):
     # Extract internal fields
     link = task_dict.get("_link")
     assignee = task_dict.get("_assignee")
+    space = task_dict.get("_space")
     task_data = task_dict.get("Task", {})
     boards = task_dict.get("Boards", {})
     history = task_dict.get("History", {})
@@ -208,6 +214,10 @@ def display_task_tree(console, task_dict, phabfive_instance):
     # Add Assignee
     if assignee:
         task_branch.add(Text.assemble("Assignee: ", assignee))
+
+    # Add Space
+    if space:
+        task_branch.add(Text.assemble("Space: ", space))
 
     # Add Boards section
     if boards:
@@ -310,6 +320,15 @@ def display_task_strict(task_dict):
             output["Assignee"] = assignee.plain
         else:
             output["Assignee"] = str(assignee)
+
+    # Add Space if present (extract plain text from Rich Text if needed)
+    space = task_dict.get("_space")
+    if space is not None:
+        # Convert Rich Text to plain string, or use string directly
+        if isinstance(space, Text):
+            output["Space"] = space.plain
+        else:
+            output["Space"] = str(space)
 
     # Add Boards section without internal keys
     if task_dict.get("Boards"):
@@ -567,6 +586,10 @@ Options:
                            Filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND).
     --assigned=USER        Filter by assignee. Use "@me" for yourself, or provide username(s).
                            Comma-separated for OR logic (e.g., @me,user1,user2).
+    --space=PATTERN        Filter by Space (supports wildcards like --tag).
+                           Default: Global space only.
+                           Supports: "*" (all spaces), "S*" (starts with S),
+                           "*Public*" (contains), or comma-separated "S1,S9".
     --created-after=TIME   Tasks created within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
     --created-before=TIME  Tasks created more than TIME ago (e.g., 1h, 7d, 2w, 1m, 1y)
     --updated-after=TIME   Tasks updated within the last TIME (e.g., 1h, 7d, 2w, 1m, 1y)
@@ -635,6 +658,12 @@ Examples:
     phabfive maniphest search --assigned @me
     phabfive maniphest search --assigned @me --tag MyProject
     phabfive maniphest search --assigned @me,user1 --tag dynatron --status 'not:in:Resolved'
+
+    # Filter by Space (default: Global space only)
+    phabfive maniphest search --tag MyProject                    # Global space only
+    phabfive maniphest search --space=* --tag MyProject          # All spaces
+    phabfive maniphest search --space S1 --tag MyProject         # Specific space
+    phabfive maniphest search --space S1,S9 --assigned @me       # Multiple spaces
 
     # Combined search with time units
     phabfive maniphest search OpenStack --tag System-Board --updated-after 2w
@@ -1057,6 +1086,7 @@ def run(cli_args, sub_args):
                     text_query = get_param("<text_query>", yaml_params, "text_query")
                     tag = get_param("--tag", yaml_params, "tag")
                     assigned = get_param("--assigned", yaml_params, "assigned")
+                    space = get_param("--space", yaml_params, "space")
                     created_after = get_param(
                         "--created-after", yaml_params, "created-after"
                     )
@@ -1077,6 +1107,7 @@ def run(cli_args, sub_args):
                             text_query,
                             tag,
                             assigned,
+                            space,
                             created_after,
                             updated_after,
                             column_patterns,
@@ -1093,6 +1124,7 @@ def run(cli_args, sub_args):
                         text_query=text_query,
                         tag=tag,
                         assigned=assigned,
+                        space=space,
                         created_after=created_after,
                         created_before=created_before,
                         updated_after=updated_after,
