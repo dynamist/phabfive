@@ -8,10 +8,10 @@ import pytest
 
 
 def test_import_version():
-    try:
-        from phabfive import __version__  # noqa
-    except ImportError:
-        pytest.fail("Unexpected ImportError")
+    from importlib.metadata import version
+
+    pkg_version = version("phabfive")
+    assert pkg_version is not None
 
 
 def test_import_phabfive():

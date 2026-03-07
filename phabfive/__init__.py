@@ -5,11 +5,6 @@ import logging
 import logging.config
 import sys
 
-__author__ = "Rickard Eriksson"
-__email__ = "rickard@dynamist.se"
-__version__ = "0.4.0"
-__url__ = "https://github.com/dynamist/phabfive"
-
 
 def init_logging(log_level):
     """
