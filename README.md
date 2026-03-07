@@ -58,6 +58,18 @@ phabfive maniphest search "migration tasks" --tag myproject
 phabfive maniphest search --tag myproject --updated-after=1w
 ```
 
+## Shell Completion
+
+Enable tab completion for bash, zsh, or fish:
+
+```bash
+phabfive --install-completion bash
+phabfive --install-completion zsh
+phabfive --install-completion fish
+```
+
+After installation, restart your shell or source your profile.
+
 <details>
 <summary>Manual configuration (advanced)</summary>
 
