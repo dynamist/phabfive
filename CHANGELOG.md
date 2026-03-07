@@ -1,3 +1,33 @@
+# 0.7.0 (2026-03-07)
+
+## Prelude
+
+This release adds interactive first-run configuration, standalone executables for all major platforms, and improved developer experience with Sigstore-signed releases.
+
+## New Features
+
+### Interactive Setup
+* **First-run configuration** - New `phabfive user setup` command guides users through initial configuration with interactive prompts
+* **Secure token input** - API token input is masked with dots for security
+* **Smart reconfiguration** - Warns before overwriting existing working configuration
+
+### Release Artifacts
+* **Standalone executables** - Pre-built binaries for Linux, macOS, and Windows (AMD64 and ARM64)
+* **Sigstore signing** - All executables are cryptographically signed for verification
+* **RC tag support** - Release candidates skip PyPI for testing the release process
+
+## Bug Fixes
+
+* Fix Rich markup escaping for square brackets in user content
+* Fix project lookup failing when more than 100 projects exist
+
+## Other Notes
+
+* Version now sourced solely from `pyproject.toml` using `importlib.metadata`
+* Added `AGENTS.md` for AI coding agent guidance
+* Removed unused `__author__`, `__email__`, `__url__` module attributes
+
+
 # 0.6.0 (2026-03-07)
 
 ## Prelude
