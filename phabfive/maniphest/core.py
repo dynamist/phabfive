@@ -584,7 +584,7 @@ class Maniphest(Phabfive):
                 space_phids = list(dict.fromkeys(space_phids))
 
                 log.warning(
-                    f"Filtering to default space(s): {default_space}. "
+                    f"Filtering to space(s): {default_space}. "
                     "Tasks in other spaces are excluded. "
                     "Use --space='*' to include all spaces."
                 )
