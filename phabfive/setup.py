@@ -99,12 +99,52 @@ class SetupWizard:
         self.phab_url = ""
         self.phab_token = ""
 
+    def _check_existing_config(self) -> bool:
+        """Check if there's an existing working configuration.
+
+        If a working config exists, warn the user and ask for confirmation.
+
+        Returns:
+            bool: True to proceed with setup, False to abort
+        """
+        try:
+            from phabfive.core import Phabfive
+
+            # Try to create a Phabfive instance - this validates config and connection
+            phabfive = Phabfive()
+            whoami = phabfive.phab.user.whoami()
+            username = whoami.get("userName", "unknown")
+
+            self.console.print(
+                "\n[yellow]Warning:[/yellow] A working configuration already exists."
+            )
+            self.console.print(
+                f"Currently connected to [bold]{phabfive.conf['PHAB_URL']}[/bold] "
+                f"as [bold]{username}[/bold].\n"
+            )
+
+            if not Confirm.ask(
+                "Do you want to reconfigure phabfive?", default=False
+            ):
+                self.console.print("Setup cancelled.\n")
+                return False
+
+            return True
+
+        except Exception:
+            # No valid config or connection failed - proceed with setup
+            return True
+
     def run(self) -> bool:
         """Run the interactive setup wizard.
 
         Returns:
             bool: True if setup completed successfully, False otherwise
         """
+        # Check for existing working configuration
+        if not self._check_existing_config():
+            return False
+
         self._print_header()
 
         # Step 1: Get URL
