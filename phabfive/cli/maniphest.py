@@ -57,8 +57,9 @@ def _setup_output_options(ctx: typer.Context):
 def _display_tasks(result, output_format, maniphest_instance):
     """Display task search/show results in the specified format."""
     from phabfive.display import (
+        display_task_json,
         display_task_rich,
-        display_task_strict,
+        display_task_yaml,
         display_task_tree,
     )
 
@@ -71,8 +72,10 @@ def _display_tasks(result, output_format, maniphest_instance):
         for task_dict in result["tasks"]:
             if output_format == "tree":
                 display_task_tree(console, task_dict, maniphest_instance)
-            elif output_format == "strict":
-                display_task_strict(task_dict)
+            elif output_format in ("yaml", "strict"):
+                display_task_yaml(task_dict)
+            elif output_format == "json":
+                display_task_json(task_dict)
             else:  # "rich" (default)
                 display_task_rich(console, task_dict, maniphest_instance)
     except BrokenPipeError:

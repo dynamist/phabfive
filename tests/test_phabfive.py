@@ -33,9 +33,9 @@ class TestAutoFormatDetection:
             assert result == "rich"
 
     def test_get_auto_format_piped(self):
-        """Test auto-format returns 'strict' when stdout is piped/redirected."""
+        """Test auto-format returns 'yaml' when stdout is piped/redirected."""
         from phabfive.core import Phabfive
 
         with mock.patch("sys.stdout.isatty", return_value=False):
             result = Phabfive._get_auto_format()
-            assert result == "strict"
+            assert result == "yaml"

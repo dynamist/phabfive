@@ -65,17 +65,20 @@ Required: `PHAB_TOKEN` and `PHAB_URL` (via environment or config file)
 
 ## AI Agent Usage
 
-Use `--format=strict` for machine-readable YAML output:
+Use `--format=yaml` or `--format=json` for machine-readable output:
 
 ```bash
 # Get task details as YAML
-phabfive --format=strict T123
+phabfive --format=yaml T123
+
+# Get task details as JSON
+phabfive --format=json T123
 
 # Search tasks with structured output
-phabfive --format=strict maniphest search --tag=projectname
+phabfive --format=json maniphest search --tag=projectname
 
-# Pipe to yq for JSON conversion
-phabfive --format=strict T123 | yq -o json
+# Pipe JSON to jq
+phabfive --format=json T123 | jq '.Task.Title'
 ```
 
 ## Version Management
