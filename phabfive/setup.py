@@ -13,6 +13,79 @@ from ruamel.yaml import YAML
 
 from phabfive.constants import VALIDATORS
 
+
+def _read_password_with_dots(prompt: str = "") -> str:
+    """Read password input showing dots for each character typed.
+
+    Args:
+        prompt: The prompt to display before input
+
+    Returns:
+        The password string entered by the user
+    """
+    if prompt:
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+
+    password = []
+
+    if os.name == "nt":
+        # Windows implementation using msvcrt
+        import msvcrt
+
+        while True:
+            char = msvcrt.getwch()
+            if char in ("\r", "\n"):
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                break
+            elif char == "\x03":  # Ctrl+C
+                raise KeyboardInterrupt
+            elif char == "\x08":  # Backspace
+                if password:
+                    password.pop()
+                    # Erase the dot: move back, write space, move back
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+            else:
+                password.append(char)
+                sys.stdout.write("\u2022")  # bullet dot
+                sys.stdout.flush()
+    else:
+        # Unix implementation using termios
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            while True:
+                char = sys.stdin.read(1)
+                if char in ("\r", "\n"):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    break
+                elif char == "\x03":  # Ctrl+C
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    raise KeyboardInterrupt
+                elif char == "\x7f" or char == "\x08":  # Backspace/Delete
+                    if password:
+                        password.pop()
+                        # Erase the dot: move back, write space, move back
+                        sys.stdout.write("\b \b")
+                        sys.stdout.flush()
+                elif char >= " ":  # Printable characters only
+                    password.append(char)
+                    sys.stdout.write("\u2022")  # bullet dot
+                    sys.stdout.flush()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    return "".join(password)
+
+
 log = logging.getLogger(__name__)
 
 
@@ -108,7 +181,7 @@ class SetupWizard:
         self.console.print("  3. Copy the token (starts with 'cli-')\n")
 
         while True:
-            token = Prompt.ask("Enter your API token", password=True)
+            token = _read_password_with_dots("Enter your API token: ")
 
             if not token:
                 self.console.print("[red]Token cannot be empty[/red]")
@@ -208,9 +281,9 @@ class SetupWizard:
             self.console.print(
                 "[green]File permissions set to 0600 (owner read/write only)[/green]"
             )
-        self.console.print(
-            "\n[bold]You can now use phabfive. Try:[/bold] phabfive user whoami\n"
-        )
+        self.console.print("\n[bold]Example commands:[/bold]")
+        self.console.print("  phabfive user whoami")
+        self.console.print("  phabfive maniphest search --assigned @me\n")
 
     def _normalize_url(self, url: str) -> str:
         """Normalize URL to end with /api/."""
