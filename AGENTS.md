@@ -63,6 +63,21 @@ Complex features use a consistent subpackage structure:
 ### Configuration
 Required: `PHAB_TOKEN` and `PHAB_URL` (via environment or config file)
 
+## AI Agent Usage
+
+Use `--format=strict` for machine-readable YAML output:
+
+```bash
+# Get task details as YAML
+phabfive --format=strict T123
+
+# Search tasks with structured output
+phabfive --format=strict maniphest search --tag=projectname
+
+# Pipe to yq for JSON conversion
+phabfive --format=strict T123 | yq -o json
+```
+
 ## Version Management
 
 Version is defined only in `pyproject.toml`. Access it via:
