@@ -4,12 +4,12 @@
 import pytest
 
 # phabfive imports
-from phabfive.status_transitions import (
+from phabfive.transitions import (
     StatusPattern,
-    _parse_single_condition,
     parse_status_patterns,
     get_status_order,
 )
+from phabfive.transitions.status import _parse_single_condition
 from phabfive.exceptions import PhabfiveException
 
 

@@ -20,11 +20,8 @@ from phabfive.maniphest.utils import (
     topological_sort,
     render_variables_with_dependency_resolution,
 )
-from phabfive.column_transitions import (
-    ColumnPattern,
-    _parse_single_condition,
-    parse_column_patterns,
-)
+from phabfive.transitions import ColumnPattern, parse_column_patterns
+from phabfive.transitions.column import _parse_single_condition
 
 
 class TestExtractVariableDependencies:

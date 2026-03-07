@@ -241,7 +241,7 @@ class Maniphest(Phabfive):
         PhabfiveException
             If pattern syntax is invalid
         """
-        from phabfive.status_transitions import parse_status_patterns
+        from phabfive.transitions import parse_status_patterns
 
         api_response = self._get_api_status_map()
         return parse_status_patterns(patterns_str, api_response)
