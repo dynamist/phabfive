@@ -409,8 +409,7 @@ Available phabfive commands are:
     maniphest    The maniphest app
     paste        The paste app
     repl         Enter a REPL with API access
-    setup        Configure phabfive (first-run wizard)
-    user         Information on users
+    user         Information on users, setup wizard
 
 Shortcuts to view Phabricator monograms (example: phabfive T123):
 
@@ -491,9 +490,12 @@ Paste Create Options:
 sub_user_args = """
 Usage:
     phabfive user whoami [options]
+    phabfive user setup [options]
 
 Options:
     -h, --help   Show this help message and exit
+
+The setup command configures phabfive with your Phabricator URL and API token.
 """
 
 sub_repl_args = """
@@ -502,16 +504,6 @@ Usage:
 
 Options:
     -h, --help  Show this help message and exit
-"""
-
-sub_setup_args = """
-Usage:
-    phabfive setup [options]
-
-Options:
-    -h, --help   Show this help message and exit
-
-Configure phabfive by setting up your Phabricator URL and API token.
 """
 
 sub_maniphest_base_args = """
@@ -764,8 +756,6 @@ def parse_cli():
         sub_args = docopt(sub_user_args, argv=argv)
     elif cli_args["<command>"] == "repl":
         sub_args = docopt(sub_repl_args, argv=argv)
-    elif cli_args["<command>"] == "setup":
-        sub_args = docopt(sub_setup_args, argv=argv)
     elif cli_args["<command>"] == "maniphest":
         # Determine which maniphest subcommand is being called
         maniphest_subcmd = None
@@ -856,13 +846,6 @@ def run(cli_args, sub_args):
     retcode = 0
 
     try:
-        # Handle setup command first - it doesn't require existing configuration
-        if cli_args["<command>"] == "setup":
-            from phabfive.setup import SetupWizard
-
-            wizard = SetupWizard()
-            return 0 if wizard.run() else 1
-
         if cli_args["<command>"] == "passphrase":
             passphrase_app = passphrase.Passphrase()
             secret = passphrase_app.get_secret(sub_args["<id>"])
@@ -984,6 +967,13 @@ def run(cli_args, sub_args):
                         print(f"{p['id']} {p['title']}")
 
         if cli_args["<command>"] == "user":
+            # Handle setup first - it doesn't require existing configuration
+            if sub_args.get("setup"):
+                from phabfive.setup import SetupWizard
+
+                wizard = SetupWizard()
+                return 0 if wizard.run() else 1
+
             user_app = user.User()
 
             if sub_args["whoami"]:

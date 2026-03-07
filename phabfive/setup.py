@@ -306,7 +306,7 @@ def offer_setup_on_error(error_message: str) -> bool:
     # Only offer interactive setup if stdin is a TTY
     if not sys.stdin.isatty():
         print(f"CRITICAL - {error_message}", file=sys.stderr)
-        print("\nTo configure interactively, run: phabfive setup", file=sys.stderr)
+        print("\nTo configure interactively, run: phabfive user setup", file=sys.stderr)
         return False
 
     console = Console()
