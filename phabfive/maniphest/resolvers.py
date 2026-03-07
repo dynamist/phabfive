@@ -359,3 +359,137 @@ def resolve_project_phids_for_create(phab, project_names):
         raise PhabfiveConfigException(f"Project(s) not found: {', '.join(not_found)}")
 
     return {"phids": phids, "slugs": slugs}
+
+
+def resolve_space_phids(phab, space: str) -> list[str]:
+    """
+    Resolve a Space name, monogram, or wildcard pattern to list of PHIDs.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    space : str
+        Space name (e.g., "Public"), monogram (e.g., "S1"), or wildcard pattern.
+        Supports: "*" (all), "S*" (starts with S), "*Public*" (contains Public).
+
+    Returns
+    -------
+    list[str]
+        List of Space PHIDs matching the pattern
+
+    Raises
+    ------
+    PhabfiveConfigException
+        If no spaces match the pattern
+    """
+    if not space:
+        raise PhabfiveConfigException("No space name provided")
+
+    log.debug(f"Resolving space '{space}' to PHID(s)")
+
+    # Fetch all spaces by iterating through monograms
+    # Unfortunately, there's no spaces.search API
+    all_spaces = {}  # monogram -> {"phid": ..., "name": ..., "uri": ...}
+
+    try:
+        # Track consecutive misses to know when to stop
+        consecutive_misses = 0
+        max_consecutive_misses = 5  # Stop after 5 consecutive missing spaces
+
+        for i in range(1, 100):  # Try S1 through S99
+            monogram = f"S{i}"
+            try:
+                lookup_result = phab.phid.lookup(names=[monogram])
+                if lookup_result and monogram in lookup_result:
+                    space_data = lookup_result[monogram]
+                    all_spaces[monogram] = {
+                        "phid": space_data["phid"],
+                        "name": space_data.get("name", monogram),
+                        "fullName": space_data.get("fullName", monogram),
+                        "uri": space_data.get("uri", ""),
+                    }
+                    consecutive_misses = 0  # Reset on success
+                else:
+                    consecutive_misses += 1
+                    if consecutive_misses >= max_consecutive_misses:
+                        break
+            except Exception:
+                consecutive_misses += 1
+                if consecutive_misses >= max_consecutive_misses:
+                    break
+
+        log.debug(f"Found {len(all_spaces)} spaces: {list(all_spaces.keys())}")
+
+        if not all_spaces:
+            log.warning("No spaces found in Phabricator instance")
+            return []
+
+        # Check if wildcard search is needed
+        has_wildcard = "*" in space
+
+        if has_wildcard:
+            if space == "*":
+                # Return all space PHIDs
+                phids = [s["phid"] for s in all_spaces.values()]
+                log.info(
+                    f"Wildcard '*' matched all {len(phids)} space(s): "
+                    f"{', '.join(all_spaces.keys())}"
+                )
+                return phids
+            else:
+                # Filter by wildcard pattern (case-insensitive)
+                matching_phids = []
+                matching_names = []
+
+                for monogram, space_data in all_spaces.items():
+                    # Match against monogram, name, or fullName
+                    candidates = [
+                        monogram.lower(),
+                        space_data["name"].lower(),
+                        space_data["fullName"].lower(),
+                    ]
+                    pattern = space.lower()
+
+                    if any(fnmatch.fnmatch(c, pattern) for c in candidates):
+                        matching_phids.append(space_data["phid"])
+                        matching_names.append(monogram)
+
+                if not matching_phids:
+                    raise PhabfiveConfigException(
+                        f"Wildcard pattern '{space}' matched no spaces. "
+                        f"Available: {', '.join(all_spaces.keys())}"
+                    )
+
+                log.info(
+                    f"Wildcard pattern '{space}' matched {len(matching_phids)} "
+                    f"space(s): {', '.join(matching_names)}"
+                )
+                return matching_phids
+
+        # Exact match - check monogram first, then name
+        space_lower = space.lower()
+
+        # Check monogram (case-insensitive)
+        for monogram, space_data in all_spaces.items():
+            if monogram.lower() == space_lower:
+                log.debug(f"Resolved space '{space}' to PHID: {space_data['phid']}")
+                return [space_data["phid"]]
+
+        # Check name (case-insensitive)
+        for monogram, space_data in all_spaces.items():
+            if space_data["name"].lower() == space_lower:
+                log.debug(
+                    f"Resolved space '{space}' via name to PHID: {space_data['phid']}"
+                )
+                return [space_data["phid"]]
+
+        # Not found - suggest available spaces
+        raise PhabfiveConfigException(
+            f"Space '{space}' not found. Available spaces: {', '.join(all_spaces.keys())}"
+        )
+
+    except PhabfiveConfigException:
+        raise
+    except Exception as e:
+        raise PhabfiveRemoteException(f"Failed to resolve space '{space}': {e}")

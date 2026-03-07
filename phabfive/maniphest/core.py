@@ -421,6 +421,7 @@ class Maniphest(Phabfive):
         text_query=None,
         tag=None,
         assigned=None,
+        space=None,
         created_after=None,
         created_before=None,
         updated_after=None,
@@ -445,6 +446,8 @@ class Maniphest(Phabfive):
                       If None, no project filtering is applied.
         assigned      (str, optional): Filter by assignee. Use "@me" to filter tasks assigned to you,
                       or provide username(s). Comma-separated for OR logic (e.g., "@me,user1,user2").
+        space         (str, optional): Space name or monogram (e.g., "S1" or "Public") to filter tasks by.
+                      Limits search results to tasks in the specified Space.
         created_after (str|int, optional): Time period for task creation (e.g., "7d", "2w", "1m") or days as int.
                       Supports units: h (hours), d (days), w (weeks), m (months), y (years).
         created_before (str|int, optional): Tasks created more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
@@ -473,6 +476,7 @@ class Maniphest(Phabfive):
                 text_query,
                 tag,
                 assigned,
+                space,
                 created_after,
                 created_before,
                 updated_after,
@@ -545,6 +549,51 @@ class Maniphest(Phabfive):
                 )
             else:
                 log.info(f"Filtering by tasks assigned to {resolved_names[0]}")
+
+        # Resolve space filter - convert space name/monogram(s) to PHID(s)
+        # Supports: glob patterns (*, S*, *Public*), comma-separated list (S9,S10)
+        # Default (space=None): filter to S1 (Global) space only
+        space_phids = []
+
+        if space:
+            from phabfive.maniphest.resolvers import resolve_space_phids
+
+            # Split by comma to support multiple spaces (OR logic)
+            space_patterns = [s.strip() for s in space.split(",")]
+
+            for space_pattern in space_patterns:
+                resolved = resolve_space_phids(self.phab, space_pattern)
+                space_phids.extend(resolved)
+
+            # Remove duplicates while preserving order
+            space_phids = list(dict.fromkeys(space_phids))
+        else:
+            # Default to configured space(s) - supports glob patterns and comma-separated
+            from phabfive.maniphest.resolvers import resolve_space_phids
+
+            default_space = self.conf.get("PHAB_SPACE", "S1")
+            try:
+                # Split by comma to support multiple default spaces
+                space_patterns = [s.strip() for s in default_space.split(",")]
+
+                for space_pattern in space_patterns:
+                    resolved = resolve_space_phids(self.phab, space_pattern)
+                    space_phids.extend(resolved)
+
+                # Remove duplicates while preserving order
+                space_phids = list(dict.fromkeys(space_phids))
+
+                log.warning(
+                    f"Filtering to default space(s): {default_space}. "
+                    "Tasks in other spaces are excluded. "
+                    "Use --space='*' to include all spaces."
+                )
+            except Exception as e:
+                log.warning(
+                    f"Could not resolve default space '{default_space}': {e}. "
+                    "Showing all spaces."
+                )
+                space_phids = []
 
         project_patterns = None
         project_phids = []
@@ -634,6 +683,9 @@ class Maniphest(Phabfive):
             if assigned_phids:
                 constraints["assigned"] = assigned_phids
 
+            if space_phids:
+                constraints["spaces"] = space_phids
+
             if created_after:
                 constraints["createdStart"] = int(created_after)
             if created_before:
@@ -688,6 +740,9 @@ class Maniphest(Phabfive):
 
                     if assigned_phids:
                         constraints["assigned"] = assigned_phids
+
+                    if space_phids:
+                        constraints["spaces"] = space_phids
 
                     if created_after:
                         constraints["createdStart"] = int(created_after)
@@ -744,6 +799,9 @@ class Maniphest(Phabfive):
 
                 if assigned_phids:
                     constraints["assigned"] = assigned_phids
+
+                if space_phids:
+                    constraints["spaces"] = space_phids
 
                 if created_after:
                     constraints["createdStart"] = int(created_after)

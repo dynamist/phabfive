@@ -11,8 +11,13 @@ IO_NEW_URI_CHOICES = ["default", "observe", "mirror", "never"]
 DISPLAY_CHOICES = ["default", "always", "hidden"]
 REPO_STATUS_CHOICES = ["active", "inactive"]
 
-CONFIGURABLES = ["PHABFIVE_DEBUG", "PHAB_TOKEN", "PHAB_URL"]
-DEFAULTS = {"PHABFIVE_DEBUG": False, "PHAB_TOKEN": "", "PHAB_URL": ""}
+CONFIGURABLES = ["PHABFIVE_DEBUG", "PHAB_TOKEN", "PHAB_URL", "PHAB_SPACE"]
+DEFAULTS = {
+    "PHABFIVE_DEBUG": False,
+    "PHAB_TOKEN": "",
+    "PHAB_URL": "",
+    "PHAB_SPACE": "S1",
+}
 REQUIRED = ["PHAB_TOKEN", "PHAB_URL"]
 VALIDATORS = {
     "PHAB_URL": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
