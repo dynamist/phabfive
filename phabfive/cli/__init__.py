@@ -10,15 +10,15 @@ from typing import Optional
 # Disable Typer's Rich formatting for help text to remove fancy boxes
 os.environ.setdefault("TYPER_USE_RICH", "0")
 
-import typer
+import typer  # noqa: E402
 
-from phabfive.cli.diffusion import diffusion_app
-from phabfive.cli.maniphest import maniphest_app
-from phabfive.cli.passphrase import passphrase_app
-from phabfive.cli.paste import paste_app
-from phabfive.cli.repl import repl_app
-from phabfive.cli.user import user_app
-from phabfive.constants import COMMENTS_SUPPORTED, MONOGRAM_SHORTCUT, MONOGRAMS
+from phabfive.cli.diffusion import diffusion_app  # noqa: E402
+from phabfive.cli.maniphest import maniphest_app  # noqa: E402
+from phabfive.cli.passphrase import passphrase_app  # noqa: E402
+from phabfive.cli.paste import paste_app  # noqa: E402
+from phabfive.cli.repl import repl_app  # noqa: E402
+from phabfive.cli.user import user_app  # noqa: E402
+from phabfive.constants import COMMENTS_SUPPORTED, MONOGRAM_SHORTCUT, MONOGRAMS  # noqa: E402
 
 # Build pattern dynamically from MONOGRAM_SHORTCUT keys
 _MONOGRAM_PATTERN = re.compile(r"^([" + "".join(MONOGRAM_SHORTCUT.keys()) + r"])(\d+)$")
