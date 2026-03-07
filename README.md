@@ -43,11 +43,23 @@ mise use --global --pin pipx:phabfive
 
 ## Quick Start
 
-### 1. Get an API token
+```bash
+phabfive user setup
+```
 
-Grab a Phabricator/Phorge token at `https://<yourserver.com>/settings/panel/apitokens/`
+The interactive setup wizard will guide you through connecting to your Phabricator/Phorge instance.
 
-### 2. Configure credentials
+Then start using phabfive:
+
+```bash
+phabfive passphrase K123
+phabfive paste list
+phabfive maniphest search "migration tasks" --tag myproject
+phabfive maniphest search --tag myproject --updated-after=1w
+```
+
+<details>
+<summary>Manual configuration (advanced)</summary>
 
 **Environment variables:**
 
@@ -56,34 +68,16 @@ export PHAB_TOKEN=cli-ABC123
 export PHAB_URL=https://yourserver.com/api/
 ```
 
-**Or use a configuration file:**
+**Or configuration file** at `~/.config/phabfive.yaml`:
 
-```bash
-# Linux/XDG
-cat << 'EOF' > ~/.config/phabfive.yaml
+```yaml
 PHAB_TOKEN: cli-ABC123
 PHAB_URL: https://yourserver.com/api/
-EOF
-
-# macOS
-cat << 'EOF' > ~/Library/Application\ Support/phabfive.yaml
-PHAB_TOKEN: cli-ABC123
-PHAB_URL: https://yourserver.com/api/
-EOF
-
-# Windows - create at: %LOCALAPPDATA%\phabfive\phabfive.yaml
 ```
 
-**Note:** On macOS, you can use `~/.config` by setting `export XDG_CONFIG_HOME=~/.config`
+Other config file locations: `~/Library/Application Support/phabfive.yaml` (macOS) or `%LOCALAPPDATA%\phabfive\phabfive.yaml` (Windows).
 
-### 3. Use phabfive
-
-```bash
-phabfive passphrase K123
-phabfive paste list
-phabfive maniphest search "migration tasks" --tag myproject
-phabfive maniphest search --tag myproject --updated-after=1w
-```
+</details>
 
 ## Documentation
 
