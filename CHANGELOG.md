@@ -1,3 +1,10 @@
+# 0.7.1 (2026-03-07)
+
+## Bug Fixes
+
+* Fix standalone executables exiting silently without output
+
+
 # 0.7.0 (2026-03-07)
 
 ## Prelude
