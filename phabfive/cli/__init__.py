@@ -41,6 +41,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
 
     Examples:
         T123 → maniphest show T123
+        --format=strict T123 → --format=strict maniphest show T123
         T123 'comment' → maniphest comment T123 'comment'
         K123 → passphrase K123
         P123 → paste show P123
@@ -49,25 +50,44 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
     if len(argv) < 2:
         return argv
 
-    first_arg = argv[1]
-    match = _MONOGRAM_PATTERN.match(first_arg)
+    # Find the first non-option argument that matches a monogram
+    monogram_idx = None
+    skip_next = False
+    for i, arg in enumerate(argv[1:], start=1):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg.startswith("-"):
+            # Handle --option value (skip next arg if not --option=value)
+            if arg.startswith("--") and "=" not in arg:
+                skip_next = True
+            elif arg.startswith("-") and len(arg) == 2:
+                # Short option like -f value
+                skip_next = True
+            continue
+        match = _MONOGRAM_PATTERN.match(arg)
+        if match:
+            monogram_idx = i
+            break
 
-    if match:
-        prefix = match.group(1)
-        expansion = MONOGRAM_SHORTCUT[prefix]
+    if monogram_idx is None:
+        return argv
 
-        # Handle comment shortcut: T123 'text' → maniphest comment T123 'text'
-        if (
-            prefix in _COMMENT_PREFIXES
-            and len(argv) > 2
-            and not argv[2].startswith("-")
-        ):
-            app_name = expansion[0]  # e.g., 'maniphest'
-            return [argv[0], app_name, "comment", first_arg] + argv[2:]
+    monogram = argv[monogram_idx]
+    match = _MONOGRAM_PATTERN.match(monogram)
+    prefix = match.group(1)
+    expansion = MONOGRAM_SHORTCUT[prefix]
 
-        return [argv[0]] + expansion + [first_arg] + argv[2:]
+    # Split argv into: before monogram, monogram, after monogram
+    before = argv[:monogram_idx]
+    after = argv[monogram_idx + 1:]
 
-    return argv
+    # Handle comment shortcut: T123 'text' → maniphest comment T123 'text'
+    if prefix in _COMMENT_PREFIXES and after and not after[0].startswith("-"):
+        app_name = expansion[0]  # e.g., 'maniphest'
+        return before + [app_name, "comment", monogram] + after
+
+    return before + expansion + [monogram] + after
 
 
 def version_callback(value: bool) -> None:
