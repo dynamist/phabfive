@@ -10,6 +10,7 @@ from io import StringIO
 
 # 3rd party imports
 from docopt import DocoptExit, Option, docopt, extras
+from rich.markup import escape
 from rich.text import Text
 from rich.tree import Tree
 from ruamel.yaml import YAML
@@ -24,6 +25,32 @@ log = logging.getLogger(__name__)
 # =============================================================================
 # Maniphest Display Functions
 # =============================================================================
+
+
+def _escape_for_rich(content):
+    """Escape user content for safe Rich printing.
+
+    Rich interprets square brackets [...] as markup syntax.
+    This causes issues with user content containing:
+    - [/path] patterns -> MarkupError crash (interpreted as closing tag)
+    - [bug] tags -> Silently stripped (interpreted as invalid style)
+
+    Parameters
+    ----------
+    content : any
+        User-provided content to escape
+
+    Returns
+    -------
+    str or Text
+        Empty string for None, Text objects unchanged, escaped string otherwise
+    """
+    if content is None:
+        return ""
+    if isinstance(content, Text):
+        # Text objects are already safe Rich objects (e.g., hyperlinks)
+        return content
+    return escape(str(content))
 
 
 def _needs_yaml_quoting(value):
@@ -72,12 +99,12 @@ def display_task_rich(console, task_dict, phabfive_instance):
             # Multi-line value
             console.print(f"    {key}: |-")
             for line in str(value).splitlines():
-                console.print(f"      {line}")
+                console.print(f"      {_escape_for_rich(line)}")
         elif _needs_yaml_quoting(value):
-            escaped = value.replace("'", "''")
-            console.print(f"    {key}: '{escaped}'")
+            escaped = str(value).replace("'", "''")
+            console.print(f"    {key}: '{_escape_for_rich(escaped)}'")
         else:
-            console.print(f"    {key}: {value}")
+            console.print(f"    {key}: {_escape_for_rich(value)}")
 
     # Print Assignee
     if assignee:
@@ -127,10 +154,10 @@ def display_task_rich(console, task_dict, phabfive_instance):
                                 )
                             continue
                     if _needs_yaml_quoting(value):
-                        escaped = value.replace("'", "''")
-                        console.print(f"      {key}: '{escaped}'")
+                        escaped = str(value).replace("'", "''")
+                        console.print(f"      {key}: '{_escape_for_rich(escaped)}'")
                     else:
-                        console.print(f"      {key}: {value}")
+                        console.print(f"      {key}: {_escape_for_rich(value)}")
 
     # Print History section
     if history:
@@ -139,13 +166,13 @@ def display_task_rich(console, task_dict, phabfive_instance):
             if hist_key == "Boards" and isinstance(hist_value, dict):
                 console.print("    Boards:")
                 for board_name, transitions in hist_value.items():
-                    console.print(f"      {board_name}:")
+                    console.print(f"      {_escape_for_rich(board_name)}:")
                     for trans in transitions:
-                        console.print(f"        - {trans}")
+                        console.print(f"        - {_escape_for_rich(trans)}")
             elif isinstance(hist_value, list):
                 console.print(f"    {hist_key}:")
                 for trans in hist_value:
-                    console.print(f"      - {trans}")
+                    console.print(f"      - {_escape_for_rich(trans)}")
 
     # Print Comments section
     comments = task_dict.get("Comments", [])
@@ -155,11 +182,11 @@ def display_task_rich(console, task_dict, phabfive_instance):
             if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
                 # Multi-line comment
                 lines = str(comment).splitlines()
-                console.print(f"    - {lines[0]}")
+                console.print(f"    - {_escape_for_rich(lines[0])}")
                 for line in lines[1:]:
-                    console.print(f"      {line}")
+                    console.print(f"      {_escape_for_rich(line)}")
             else:
-                console.print(f"    - {comment}")
+                console.print(f"    - {_escape_for_rich(comment)}")
 
     # Print Metadata section
     if metadata:
@@ -169,11 +196,11 @@ def display_task_rich(console, task_dict, phabfive_instance):
                 if meta_value:
                     console.print(f"    {meta_key}:")
                     for item in meta_value:
-                        console.print(f"      - {item}")
+                        console.print(f"      - {_escape_for_rich(item)}")
                 else:
                     console.print(f"    {meta_key}: []")
             else:
-                console.print(f"    {meta_key}: {meta_value}")
+                console.print(f"    {meta_key}: {_escape_for_rich(meta_value)}")
 
 
 def display_task_tree(console, task_dict, phabfive_instance):
@@ -208,9 +235,9 @@ def display_task_tree(console, task_dict, phabfive_instance):
             first_line = str(value).split("\n")[0]
             if len(first_line) > 60:
                 first_line = first_line[:57] + "..."
-            task_branch.add(f"{key}: {first_line}")
+            task_branch.add(f"{key}: {_escape_for_rich(first_line)}")
         else:
-            task_branch.add(f"{key}: {value}")
+            task_branch.add(f"{key}: {_escape_for_rich(value)}")
 
     # Add Assignee
     if assignee:
@@ -244,7 +271,7 @@ def display_task_tree(console, task_dict, phabfive_instance):
                             )
                             board_branch.add(Text.assemble("Column: ", column_link))
                             continue
-                    board_branch.add(f"{key}: {value}")
+                    board_branch.add(f"{key}: {_escape_for_rich(value)}")
 
     # Add History section
     if history:
@@ -253,13 +280,13 @@ def display_task_tree(console, task_dict, phabfive_instance):
             if hist_key == "Boards" and isinstance(hist_value, dict):
                 boards_hist = history_branch.add("Boards")
                 for board_name, transitions in hist_value.items():
-                    board_hist = boards_hist.add(board_name)
+                    board_hist = boards_hist.add(_escape_for_rich(board_name))
                     for trans in transitions:
-                        board_hist.add(trans)
+                        board_hist.add(_escape_for_rich(trans))
             elif isinstance(hist_value, list):
                 hist_type_branch = history_branch.add(hist_key)
                 for trans in hist_value:
-                    hist_type_branch.add(trans)
+                    hist_type_branch.add(_escape_for_rich(trans))
 
     # Add Comments section
     comments = task_dict.get("Comments", [])
@@ -271,9 +298,9 @@ def display_task_tree(console, task_dict, phabfive_instance):
                 first_line = str(comment).split("\n")[0]
                 if len(first_line) > 60:
                     first_line = first_line[:57] + "..."
-                comments_branch.add(first_line)
+                comments_branch.add(_escape_for_rich(first_line))
             else:
-                comments_branch.add(str(comment))
+                comments_branch.add(_escape_for_rich(str(comment)))
 
     # Add Metadata section
     if metadata:
@@ -283,11 +310,11 @@ def display_task_tree(console, task_dict, phabfive_instance):
                 if meta_value:
                     list_branch = meta_branch.add(meta_key)
                     for item in meta_value:
-                        list_branch.add(str(item))
+                        list_branch.add(_escape_for_rich(str(item)))
                 else:
                     meta_branch.add(f"{meta_key}: []")
             else:
-                meta_branch.add(f"{meta_key}: {meta_value}")
+                meta_branch.add(f"{meta_key}: {_escape_for_rich(meta_value)}")
 
     console.print(tree)
 
