@@ -29,15 +29,17 @@ make up                              # start local Phorge
 make down                            # stop containers
 
 # Merge PRs (rebase only - merge and squash are disabled)
-gh pr merge --rebase
+gh pr merge --rebase --delete-branch
 ```
 
 ## Architecture
 
-### CLI Layer (`cli.py`)
-- Uses `docopt-ng` for argument parsing with docstring-based CLI definitions
-- Monogram shortcuts allow direct access: `phabfive T123` expands to `phabfive maniphest show T123`
-- Entry point: `cli_entrypoint()` → `parse_cli()`
+### CLI Layer (`cli/`)
+- Uses `typer` for argument parsing with built-in shell completion
+- Modular structure: `__init__.py` (main app), `maniphest.py`, `diffusion.py`, `paste.py`, `user.py`, `passphrase.py`, `repl.py`
+- Monogram shortcuts via `preprocess_monograms()`: `phabfive T123` expands to `phabfive maniphest show T123`
+- Entry point: `cli_entrypoint()`
+- Shell completion: `phabfive --install-completion bash|zsh|fish`
 
 ### Core Layer (`core.py`)
 - `Phabfive` class: central configuration and API client management

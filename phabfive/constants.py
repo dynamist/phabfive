@@ -6,6 +6,18 @@ MONOGRAMS = {
     "paste": "P[0-9]+",
     "maniphest": "T[0-9]+",
 }
+
+# Monogram shortcuts for CLI: maps prefix letter to command expansion
+MONOGRAM_SHORTCUT = {
+    "T": ["maniphest", "show"],  # T123 → maniphest show T123
+    "K": ["passphrase"],  # K123 → passphrase K123
+    "P": ["paste", "show"],  # P123 → paste show P123
+    "R": ["diffusion", "branch", "list"],  # R123 → diffusion branch list R123
+}
+
+# Apps that support "X123 'text'" → "app comment X123 'text'" shortcut
+# Currently only maniphest supports comments. Paste could be added later.
+COMMENTS_SUPPORTED = ["maniphest"]
 # IO_EDIT_URI_VALUES = ["default", "read", "write", "never"]
 IO_NEW_URI_CHOICES = ["default", "observe", "mirror", "never"]
 DISPLAY_CHOICES = ["default", "always", "hidden"]
@@ -42,6 +54,8 @@ __all__ = [
     "DEFAULTS",
     "DISPLAY_CHOICES",
     "IO_NEW_URI_CHOICES",
+    "COMMENTS_SUPPORTED",
+    "MONOGRAM_SHORTCUT",
     "MONOGRAMS",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
