@@ -77,6 +77,8 @@ PHAB_URL: https://yourserver.com/api/
 
 Other config file locations: `~/Library/Application Support/phabfive.yaml` (macOS) or `%LOCALAPPDATA%\phabfive\phabfive.yaml` (Windows).
 
+**Windows SSL certificates:** If you encounter certificate errors, install [pip-system-certs](https://pypi.org/project/pip-system-certs/) to use the Windows certificate store: `pip install pip-system-certs`
+
 </details>
 
 ## Documentation
