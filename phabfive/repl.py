@@ -1,29 +1,35 @@
 # -*- coding: utf-8 -*-
 
-# python std lib
+import code
 import logging
-import pdb
+import readline
 import rlcompleter
 from pprint import pprint as pp  # noqa: F401
 
-# phabfive imports
 from phabfive.core import Phabfive
-
 
 log = logging.getLogger(__name__)
 
 
 class Repl(Phabfive):
     def __init__(self):
-        super(Repl, self).__init__()
+        super().__init__()
 
     def run(self):
-        print("*************")
-        print("use self.phab to access the phacility API")
-        print("use self.conf to access current client configuration")
-        print("use self.url to get server address")
-        print("use pp() to prettyprint the API response back from self.phab.* calls")
-        print("*************")
+        print("phabfive REPL")
+        print("  phab  - Phabricator API client")
+        print("  conf  - Current configuration")
+        print("  url   - Server address")
+        print("  pp()  - Pretty print API responses")
 
-        pdb.Pdb.complete = rlcompleter.Completer(locals()).complete
-        pdb.set_trace()
+        namespace = {
+            "phab": self.phab,
+            "conf": self.conf,
+            "url": self.url,
+            "pp": pp,
+        }
+
+        readline.set_completer(rlcompleter.Completer(namespace).complete)
+        readline.parse_and_bind("tab: complete")
+
+        code.interact(local=namespace, banner="", exitmsg="")
