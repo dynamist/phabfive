@@ -143,7 +143,14 @@ app.add_typer(diffusion_app, name="diffusion")
 app.add_typer(paste_app, name="paste")
 app.add_typer(user_app, name="user")
 app.add_typer(maniphest_app, name="maniphest")
-app.add_typer(repl_app, name="repl", hidden=True)
+# Show repl command only if ptpython is installed (phabfive[repl])
+try:
+    import ptpython  # noqa: F401
+
+    _repl_hidden = False
+except ImportError:
+    _repl_hidden = True
+app.add_typer(repl_app, name="repl", hidden=_repl_hidden)
 
 
 def cli_entrypoint() -> None:
