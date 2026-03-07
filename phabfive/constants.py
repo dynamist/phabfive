@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+from enum import Enum
+
+
+class OutputFormat(str, Enum):
+    """Output format options for CLI commands."""
+
+    rich = "rich"  # Human-readable with Rich formatting
+    tree = "tree"  # Tree view with Rich Tree
+    yaml = "yaml"  # Machine-readable YAML
+    json = "json"  # Machine-readable JSON
+
+
 # https://secure.phabricator.com/w/object_name_prefixes/
 MONOGRAMS = {
     "diffusion": "R[0-9]+",
@@ -23,17 +35,25 @@ IO_NEW_URI_CHOICES = ["default", "observe", "mirror", "never"]
 DISPLAY_CHOICES = ["default", "always", "hidden"]
 REPO_STATUS_CHOICES = ["active", "inactive"]
 
-CONFIGURABLES = ["PHABFIVE_DEBUG", "PHAB_TOKEN", "PHAB_URL", "PHAB_SPACE"]
+CONFIGURABLES = [
+    "PHABFIVE_DEBUG",
+    "PHAB_TOKEN",
+    "PHAB_URL",
+    "PHAB_SPACE",
+    "PHAB_FALLBACK",
+]
 DEFAULTS = {
     "PHABFIVE_DEBUG": False,
     "PHAB_TOKEN": "",
     "PHAB_URL": "",
     "PHAB_SPACE": "S1",
+    "PHAB_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml or json)
 }
 REQUIRED = ["PHAB_TOKEN", "PHAB_URL"]
 VALIDATORS = {
     "PHAB_URL": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
     "PHAB_TOKEN": "^[a-zA-Z0-9-]{32}$",
+    "PHAB_FALLBACK": "^(yaml|json)$",
 }
 VALID_EXAMPLES = {"PHAB_URL": "example: http://127.0.0.1/api/"}
 CONFIG_EXAMPLES = {
@@ -57,6 +77,7 @@ __all__ = [
     "COMMENTS_SUPPORTED",
     "MONOGRAM_SHORTCUT",
     "MONOGRAMS",
+    "OutputFormat",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
     "TICKET_PRIORITY_HIGH",

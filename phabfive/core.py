@@ -42,6 +42,7 @@ class Phabfive:
     _ascii_when = "auto"
     _hyperlink_when = "auto"
     _output_format = "rich"
+    _fallback_format = "yaml"  # Format used when stdout is not a TTY
     # Maximum line width for rich format (to prevent YAML breaking)
     MAX_LINE_WIDTH = 4096
 
@@ -128,18 +129,18 @@ class Phabfive:
 
         return False
 
-    @staticmethod
-    def _get_auto_format():
+    @classmethod
+    def _get_auto_format(cls):
         """Determine default output format based on whether stdout is a TTY.
 
         Returns:
-            str: "rich" if stdout is a terminal, "strict" if piped/redirected
+            str: "rich" if stdout is a terminal, PHAB_FALLBACK if piped/redirected
         """
         import sys
 
-        # If output is piped or redirected, use strict format for machine processing
+        # If output is piped or redirected, use fallback format for machine processing
         if not sys.stdout.isatty():
-            return "strict"
+            return cls._fallback_format
 
         # If output is to a terminal, use rich format for human readability
         return "rich"
@@ -225,7 +226,7 @@ class Phabfive:
             if len(line) > self.MAX_LINE_WIDTH:
                 raise PhabfiveDataException(
                     f"{field_name} line {i + 1} exceeds maximum width of {self.MAX_LINE_WIDTH} characters "
-                    f"(length: {len(line)}). Use --format=strict for guaranteed valid YAML output."
+                    f"(length: {len(line)}). Use --format=yaml for guaranteed valid YAML output."
                 )
 
     def __init__(self):
@@ -259,6 +260,9 @@ class Phabfive:
                     error += ", " + example
 
                 raise PhabfiveConfigException(error)
+
+        # Set fallback format from config (used when stdout is not a TTY)
+        Phabfive._fallback_format = self.conf.get("PHAB_FALLBACK", "yaml")
 
         self.phab = Phabricator(
             host=self._normalize_url(self.conf.get("PHAB_URL")),

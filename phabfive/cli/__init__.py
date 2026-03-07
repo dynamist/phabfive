@@ -18,7 +18,12 @@ from phabfive.cli.passphrase import passphrase_app  # noqa: E402
 from phabfive.cli.paste import paste_app  # noqa: E402
 from phabfive.cli.repl import repl_app  # noqa: E402
 from phabfive.cli.user import user_app  # noqa: E402
-from phabfive.constants import COMMENTS_SUPPORTED, MONOGRAM_SHORTCUT, MONOGRAMS  # noqa: E402
+from phabfive.constants import (  # noqa: E402
+    COMMENTS_SUPPORTED,
+    MONOGRAM_SHORTCUT,
+    MONOGRAMS,
+    OutputFormat,
+)
 
 # Build pattern dynamically from MONOGRAM_SHORTCUT keys
 _MONOGRAM_PATTERN = re.compile(r"^([" + "".join(MONOGRAM_SHORTCUT.keys()) + r"])(\d+)$")
@@ -41,7 +46,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
 
     Examples:
         T123 → maniphest show T123
-        --format=strict T123 → --format=strict maniphest show T123
+        --format=yaml T123 → --format=yaml maniphest show T123
         T123 'comment' → maniphest comment T123 'comment'
         K123 → passphrase K123
         P123 → paste show P123
@@ -80,7 +85,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
 
     # Split argv into: before monogram, monogram, after monogram
     before = argv[:monogram_idx]
-    after = argv[monogram_idx + 1:]
+    after = argv[monogram_idx + 1:]  # noqa: E203
 
     # Handle comment shortcut: T123 'text' → maniphest comment T123 'text'
     if prefix in _COMMENT_PREFIXES and after and not after[0].startswith("-"):
@@ -97,6 +102,22 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def format_callback(value: Optional[str]) -> Optional[OutputFormat]:
+    """Parse format option, handling 'strict' as alias for 'yaml'."""
+    if value is None:
+        return None
+    # Handle legacy 'strict' as alias for 'yaml'
+    if value == "strict":
+        return OutputFormat.yaml
+    try:
+        return OutputFormat(value)
+    except ValueError:
+        valid = ", ".join(f.value for f in OutputFormat)
+        raise typer.BadParameter(
+            f"Invalid format '{value}'. Choose from: {valid}, strict"
+        )
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -105,10 +126,11 @@ def main(
         "--log-level",
         help="Set log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     ),
-    output_format: Optional[str] = typer.Option(
+    output_format: Optional[OutputFormat] = typer.Option(
         None,
         "--format",
-        help="Output format: rich, tree, or strict. Auto-detects based on TTY.",
+        callback=format_callback,
+        help="Output format: rich, tree, yaml, or json. Auto-detects based on TTY.",
     ),
     ascii_when: str = typer.Option(
         "auto",
@@ -133,7 +155,8 @@ def main(
     # Store global options in context for subcommands to access
     ctx.ensure_object(dict)
     ctx.obj["log_level"] = log_level
-    ctx.obj["format"] = output_format
+    # Store format as string value for downstream compatibility
+    ctx.obj["format"] = output_format.value if output_format else None
     ctx.obj["ascii"] = ascii_when
     ctx.obj["hyperlink"] = hyperlink_when
 

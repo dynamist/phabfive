@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Display functions for Maniphest tasks."""
 
+import json
 import sys
 from io import StringIO
 
@@ -303,7 +304,7 @@ def display_task_tree(console, task_dict, phabfive_instance):
     console.print(tree)
 
 
-def display_task_strict(task_dict):
+def display_task_yaml(task_dict):
     """Display task as strict YAML via ruamel.yaml.
 
     Guaranteed conformant YAML output for piping to yq/jq.
@@ -378,6 +379,82 @@ def display_task_strict(task_dict):
     print(stream.getvalue(), end="")
 
 
+def display_task_json(task_dict):
+    """Display task as JSON.
+
+    Machine-readable JSON output for piping to jq or other tools.
+    No hyperlinks, no Rich formatting.
+
+    Parameters
+    ----------
+    task_dict : dict
+        Task data dictionary with Link, Task, Boards, History, Metadata, etc.
+    """
+    # Build clean dict - use _url for the Link (plain URL string)
+    output = {"Link": task_dict.get("_url", "")}
+
+    # Add Task section
+    if task_dict.get("Task"):
+        output["Task"] = {}
+        for k, v in task_dict["Task"].items():
+            # Convert PreservedScalarString to plain string
+            if isinstance(v, PreservedScalarString):
+                output["Task"][k] = str(v)
+            else:
+                output["Task"][k] = v
+
+    # Add Assignee if present (extract plain text from Rich Text if needed)
+    assignee = task_dict.get("_assignee")
+    if assignee is not None:
+        # Convert Rich Text to plain string, or use string directly
+        if isinstance(assignee, Text):
+            output["Assignee"] = assignee.plain
+        else:
+            output["Assignee"] = str(assignee)
+
+    # Add Space if present (extract plain text from Rich Text if needed)
+    space = task_dict.get("_space")
+    if space is not None:
+        # Convert Rich Text to plain string, or use string directly
+        if isinstance(space, Text):
+            output["Space"] = space.plain
+        else:
+            output["Space"] = str(space)
+
+    # Add Boards section without internal keys
+    if task_dict.get("Boards"):
+        boards = {}
+        for board_name, board_data in task_dict["Boards"].items():
+            if isinstance(board_data, dict):
+                boards[board_name] = {
+                    k: v for k, v in board_data.items() if not k.startswith("_")
+                }
+            else:
+                boards[board_name] = board_data
+        output["Boards"] = boards
+
+    # Add History section if present
+    if task_dict.get("History"):
+        output["History"] = task_dict["History"]
+
+    # Add Comments section if present
+    if task_dict.get("Comments"):
+        # Convert PreservedScalarString to plain strings
+        comments = []
+        for comment in task_dict["Comments"]:
+            if isinstance(comment, PreservedScalarString):
+                comments.append(str(comment))
+            else:
+                comments.append(comment)
+        output["Comments"] = comments
+
+    # Add Metadata section if present
+    if task_dict.get("Metadata"):
+        output["Metadata"] = task_dict["Metadata"]
+
+    print(json.dumps(output, indent=2))
+
+
 def display_tasks(result, output_format, phabfive_instance):
     """Display task search/show results in the specified format.
 
@@ -386,7 +463,7 @@ def display_tasks(result, output_format, phabfive_instance):
     result : dict
         Result from task_search() or task_show() containing 'tasks' list
     output_format : str
-        One of 'rich', 'tree', or 'strict'
+        One of 'rich', 'tree', 'yaml', or 'json'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     """
@@ -399,8 +476,10 @@ def display_tasks(result, output_format, phabfive_instance):
         for task_dict in result["tasks"]:
             if output_format == "tree":
                 display_task_tree(console, task_dict, phabfive_instance)
-            elif output_format == "strict":
-                display_task_strict(task_dict)
+            elif output_format in ("yaml", "strict"):
+                display_task_yaml(task_dict)
+            elif output_format == "json":
+                display_task_json(task_dict)
             else:  # "rich" (default)
                 display_task_rich(console, task_dict, phabfive_instance)
     except BrokenPipeError:
