@@ -409,6 +409,7 @@ Available phabfive commands are:
     maniphest    The maniphest app
     paste        The paste app
     repl         Enter a REPL with API access
+    setup        Configure phabfive (first-run wizard)
     user         Information on users
 
 Shortcuts to view Phabricator monograms (example: phabfive T123):
@@ -501,6 +502,16 @@ Usage:
 
 Options:
     -h, --help  Show this help message and exit
+"""
+
+sub_setup_args = """
+Usage:
+    phabfive setup [options]
+
+Options:
+    -h, --help   Show this help message and exit
+
+Configure phabfive by setting up your Phabricator URL and API token.
 """
 
 sub_maniphest_base_args = """
@@ -753,6 +764,8 @@ def parse_cli():
         sub_args = docopt(sub_user_args, argv=argv)
     elif cli_args["<command>"] == "repl":
         sub_args = docopt(sub_repl_args, argv=argv)
+    elif cli_args["<command>"] == "setup":
+        sub_args = docopt(sub_setup_args, argv=argv)
     elif cli_args["<command>"] == "maniphest":
         # Determine which maniphest subcommand is being called
         maniphest_subcmd = None
@@ -801,7 +814,7 @@ def run(cli_args, sub_args):
     from phabfive import diffusion, maniphest, passphrase, paste, repl, user
     from phabfive.constants import REPO_STATUS_CHOICES
     from phabfive.core import Phabfive
-    from phabfive.exceptions import PhabfiveException
+    from phabfive.exceptions import PhabfiveConfigException, PhabfiveException
     from phabfive.transitions import parse_column_patterns, parse_priority_patterns
 
     # Validate and process output options
@@ -843,6 +856,13 @@ def run(cli_args, sub_args):
     retcode = 0
 
     try:
+        # Handle setup command first - it doesn't require existing configuration
+        if cli_args["<command>"] == "setup":
+            from phabfive.setup import SetupWizard
+
+            wizard = SetupWizard()
+            return 0 if wizard.run() else 1
+
         if cli_args["<command>"] == "passphrase":
             passphrase_app = passphrase.Passphrase()
             secret = passphrase_app.get_secret(sub_args["<id>"])
@@ -1235,6 +1255,14 @@ def run(cli_args, sub_args):
                     show_comments=show_comments,
                 )
                 display_tasks(result, output_format, maniphest_app)
+    except PhabfiveConfigException as e:
+        # Offer interactive setup for configuration errors
+        from phabfive.setup import offer_setup_on_error
+
+        if offer_setup_on_error(str(e)):
+            # Setup succeeded, retry the original command
+            return run(cli_args, sub_args)
+        retcode = 1
     except PhabfiveException as e:
         # Catch all types of phabricator base exceptions
         log.critical(str(e))
