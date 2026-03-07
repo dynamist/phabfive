@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import sys
+from importlib.metadata import version
 from io import StringIO
 
 # 3rd party imports
@@ -681,17 +682,19 @@ def parse_cli():
     """
     import phabfive
 
+    pkg_version = version("phabfive")
+
     try:
         cli_args = docopt(
             base_args,
             options_first=True,
-            version=phabfive.__version__,
+            version=pkg_version,
             default_help=True,
         )
     except DocoptExit:
         extras(
             True,
-            phabfive.__version__,
+            pkg_version,
             [Option("-h", "--help", 0, True)],
             base_args,
         )
@@ -778,7 +781,7 @@ def parse_cli():
     else:
         extras(
             True,
-            phabfive.__version__,
+            pkg_version,
             [Option("-h", "--help", 0, True)],
             base_args,
         )
