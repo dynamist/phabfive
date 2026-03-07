@@ -7,7 +7,7 @@ name = "phabfive"
 version = "0.8.0-dev.0"
 description = "CLI for Phabricator and Phorge - built for humans and AI agents"
 readme = "README.md"
-license = {text = "Apache License 2.0"}
+license = { text = "Apache-2.0" }
 authors = [
     {name = "Rickard Eriksson", email = "rickard@dynamist.se"}
 ]
