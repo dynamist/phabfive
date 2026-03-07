@@ -10,6 +10,13 @@ from phabfive.core import Phabfive
 
 log = logging.getLogger(__name__)
 
+try:
+    from ptpython.repl import embed as ptpython_embed
+
+    HAS_PTPYTHON = True
+except ImportError:
+    HAS_PTPYTHON = False
+
 
 class Repl(Phabfive):
     def __init__(self):
@@ -29,7 +36,9 @@ class Repl(Phabfive):
             "pp": pp,
         }
 
-        readline.set_completer(rlcompleter.Completer(namespace).complete)
-        readline.parse_and_bind("tab: complete")
-
-        code.interact(local=namespace, banner="", exitmsg="")
+        if HAS_PTPYTHON:
+            ptpython_embed(globals=namespace, locals=namespace)
+        else:
+            readline.set_completer(rlcompleter.Completer(namespace).complete)
+            readline.parse_and_bind("tab: complete")
+            code.interact(local=namespace, banner="", exitmsg="")

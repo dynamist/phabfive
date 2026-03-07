@@ -39,6 +39,7 @@ dependencies = [
 
 [project.optional-dependencies]
 docs = ["mkdocs"]
+repl = ["ptpython"]
 test = ["coverage", "flake8", "pytest", "pytest-cov"]
 
 [dependency-groups]
