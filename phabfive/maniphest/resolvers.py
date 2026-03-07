@@ -86,18 +86,70 @@ def resolve_project_phids(phab, project: str) -> list[str]:
         log.error("No project name provided. Use '*' to search all projects.")
         return []
 
-    # Fetch all projects from Phabricator regardless of exact match or not to be able to suggest project names
-    log.debug("Fetching all projects from Phabricator")
+    # Check if wildcard search is needed early to optimize API calls
+    has_wildcard = "*" in project
 
-    # Use project.query to get slugs (project.search doesn't return all hashtags)
-    # Note: project.query doesn't support pagination, so we fetch all at once
+    # For exact match without wildcard, try direct lookup first (more efficient)
+    if not has_wildcard:
+        log.debug(f"Attempting direct lookup for project '{project}'")
+        try:
+            # project.search with slugs constraint searches hashtags
+            result = phab.project.search(constraints={"slugs": [project]})
+            if result.get("data"):
+                proj = result["data"][0]
+                phid = proj["phid"]
+                name = proj["fields"]["name"]
+                log.debug(f"Found project '{project}' -> '{name}' (PHID: {phid})")
+                return [phid]
+        except Exception as e:
+            log.debug(f"Direct slug lookup failed: {e}")
+
+        # Also try searching by name in case user provided the display name
+        try:
+            result = phab.project.search(constraints={"query": project})
+            for proj in result.get("data", []):
+                if proj["fields"]["name"].lower() == project.lower():
+                    phid = proj["phid"]
+                    name = proj["fields"]["name"]
+                    log.debug(
+                        f"Found project by name '{project}' -> '{name}' (PHID: {phid})"
+                    )
+                    return [phid]
+        except Exception as e:
+            log.debug(f"Name query lookup failed: {e}")
+
+    # For wildcard searches or when direct lookup fails, fetch all projects with pagination
+    log.debug("Fetching all projects from Phabricator with pagination")
+
+    # Use project.query to get all slugs (project.search doesn't return all hashtags)
+    # project.query supports pagination via limit/offset parameters
     slug_to_phid = {}  # Maps each slug/hashtag to its project PHID
     phid_to_primary_name = {}  # Maps PHID to primary project name
 
     try:
-        # project.query returns a Result object with 'data' key containing projects
-        projects_result = phab.project.query()
-        projects_data = projects_result.get("data", {})
+        # Paginate through all projects
+        page_size = 100
+        offset = 0
+        projects_data = {}
+
+        while True:
+            # project.query returns a Result object with 'data' key containing projects
+            projects_result = phab.project.query(limit=page_size, offset=offset)
+            page_data = projects_result.get("data", {})
+
+            if not page_data:
+                # No more projects
+                break
+
+            # Merge page results into accumulated data
+            projects_data.update(page_data)
+
+            # If we got fewer than page_size, we've reached the end
+            if len(page_data) < page_size:
+                break
+
+            offset += page_size
+            log.debug(f"Fetched {len(projects_data)} projects so far, fetching next page...")
 
         # Process all projects (projects_data is a dict keyed by PHID)
         for phid, project_data in projects_data.items():
@@ -124,9 +176,6 @@ def resolve_project_phids(phab, project: str) -> list[str]:
     # Create case-insensitive lookup mappings for slugs
     lower_slug_to_phid = {slug.lower(): phid for slug, phid in slug_to_phid.items()}
     lower_slug_to_original = {slug.lower(): slug for slug in slug_to_phid.keys()}
-
-    # Check if wildcard search is needed
-    has_wildcard = "*" in project
 
     if has_wildcard:
         if project == "*":
@@ -312,9 +361,26 @@ def resolve_project_phids_for_create(phab, project_names):
         return {"phids": [], "slugs": []}
 
     # Fetch all projects to get both PHIDs and slugs
+    # project.query supports pagination via limit/offset parameters
     try:
-        projects_result = phab.project.query()
-        projects_data = projects_result.get("data", {})
+        page_size = 100
+        offset = 0
+        projects_data = {}
+
+        while True:
+            projects_result = phab.project.query(limit=page_size, offset=offset)
+            page_data = projects_result.get("data", {})
+
+            if not page_data:
+                break
+
+            projects_data.update(page_data)
+
+            if len(page_data) < page_size:
+                break
+
+            offset += page_size
+
     except Exception as e:
         raise PhabfiveRemoteException(f"Failed to fetch projects: {e}")
 
