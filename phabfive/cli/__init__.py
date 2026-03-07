@@ -19,7 +19,9 @@ from phabfive.cli.paste import paste_app  # noqa: E402
 from phabfive.cli.repl import repl_app  # noqa: E402
 from phabfive.cli.user import user_app  # noqa: E402
 from phabfive.constants import (  # noqa: E402
+    AutoOption,
     COMMENTS_SUPPORTED,
+    LogLevel,
     MONOGRAM_SHORTCUT,
     MONOGRAMS,
     OutputFormat,
@@ -121,26 +123,26 @@ def format_callback(value: Optional[str]) -> Optional[OutputFormat]:
 @app.callback()
 def main(
     ctx: typer.Context,
-    log_level: str = typer.Option(
-        "INFO",
+    log_level: LogLevel = typer.Option(
+        LogLevel.INFO,
         "--log-level",
-        help="Set log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+        help="Set log level.",
     ),
     output_format: Optional[OutputFormat] = typer.Option(
         None,
         "--format",
         callback=format_callback,
-        help="Output format: rich, tree, yaml, or json. Auto-detects based on TTY.",
+        help="Output format. Auto-detects based on TTY.",
     ),
-    ascii_when: str = typer.Option(
-        "auto",
+    ascii_when: AutoOption = typer.Option(
+        AutoOption.auto,
         "--ascii",
-        help="Use ASCII instead of Unicode (always/auto/never)",
+        help="Use ASCII instead of Unicode.",
     ),
-    hyperlink_when: str = typer.Option(
-        "auto",
+    hyperlink_when: AutoOption = typer.Option(
+        AutoOption.auto,
         "--hyperlink",
-        help="Enable terminal hyperlinks (always/auto/never)",
+        help="Enable terminal hyperlinks.",
     ),
     version: bool = typer.Option(
         False,
@@ -154,11 +156,11 @@ def main(
     """CLI for Phabricator and Phorge - built for humans and AI agents."""
     # Store global options in context for subcommands to access
     ctx.ensure_object(dict)
-    ctx.obj["log_level"] = log_level
-    # Store format as string value for downstream compatibility
+    # Store as string values for downstream compatibility
+    ctx.obj["log_level"] = log_level.value
     ctx.obj["format"] = output_format.value if output_format else None
-    ctx.obj["ascii"] = ascii_when
-    ctx.obj["hyperlink"] = hyperlink_when
+    ctx.obj["ascii"] = ascii_when.value
+    ctx.obj["hyperlink"] = hyperlink_when.value
 
 
 app.add_typer(passphrase_app, name="passphrase")
