@@ -1312,3 +1312,7 @@ def cli_entrypoint():
         sys.exit(130)  # Standard Unix exit code for SIGINT (128 + 2)
     except Exception:
         raise
+
+
+if __name__ == "__main__":
+    cli_entrypoint()
