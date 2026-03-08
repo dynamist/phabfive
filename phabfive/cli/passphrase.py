@@ -3,7 +3,7 @@
 
 import typer
 
-from phabfive.exceptions import PhabfiveConfigException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 
 passphrase_app = typer.Typer(help="The passphrase app")
 
@@ -30,5 +30,9 @@ def show(
 ) -> None:
     """Retrieve a secret from Passphrase by ID."""
     passphrase = _get_passphrase_app()
-    secret = passphrase.get_secret(id)
-    typer.echo(secret)
+    try:
+        secret = passphrase.get_secret(id)
+        typer.echo(secret)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)

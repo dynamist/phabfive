@@ -104,11 +104,11 @@ def uri_create(
     diffusion = _get_diffusion_app()
 
     if not observe and not mirror:
-        typer.echo("Error: Must specify either --observe or --mirror", err=True)
+        typer.echo("ERROR: Must specify either --observe or --mirror", err=True)
         raise typer.Exit(1)
 
     if observe and mirror:
-        typer.echo("Error: Cannot specify both --observe and --mirror", err=True)
+        typer.echo("ERROR: Cannot specify both --observe and --mirror", err=True)
         raise typer.Exit(1)
 
     if mirror:
@@ -151,7 +151,7 @@ def edit(
     diffusion = _get_diffusion_app()
 
     if enable and disable:
-        typer.echo("Error: Cannot specify both --enable and --disable", err=True)
+        typer.echo("ERROR: Cannot specify both --enable and --disable", err=True)
         raise typer.Exit(1)
 
     disable_flag = None
