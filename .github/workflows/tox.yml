@@ -42,4 +42,6 @@ jobs:
 
       - name: Run linting (Python 3.13 only)
         if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
-        run: uv run flake8 phabfive/ tests/
+        run: |
+          uv run ruff check phabfive/ tests/
+          uv run ruff format --check phabfive/ tests/

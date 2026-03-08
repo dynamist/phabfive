@@ -21,8 +21,9 @@ uv run pytest tests/test_foo.py      # run single test file
 uv run pytest -k test_name           # run specific test
 uv run tox                           # test all Python versions (3.10-3.14)
 
-# Lint
-uv run flake8 phabfive/ tests/
+# Lint and format
+uv run ruff check phabfive/ tests/
+uv run ruff format phabfive/ tests/
 
 # Local Phorge instance for testing
 make up                              # start local Phorge

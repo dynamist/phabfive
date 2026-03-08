@@ -1,8 +1,6 @@
 ---
 exclude: |
   (?x)
-  # Don't dive into test files
-  tests/|
   # You don't usually want a bot to modify your legal texts
   (LICENSE.*|COPYING.*)
 
