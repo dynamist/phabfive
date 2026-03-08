@@ -613,3 +613,46 @@ def get_current_column(task, board_phid, column_info):
     col_data = column_info.get(column_phid)
 
     return col_data["name"] if col_data else None
+
+
+def fetch_task_relationships(phab, task_phid, relationship_type):
+    """
+    Fetch parent or subtask relationships for a task.
+
+    Uses the edge.search API to query task relationships.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    task_phid : str
+        Task PHID (e.g., "PHID-TASK-...")
+    relationship_type : str
+        Either "parents" or "subtasks"
+
+    Returns
+    -------
+    list
+        List of related task PHIDs
+    """
+    edge_type = "task.parent" if relationship_type == "parents" else "task.subtask"
+
+    try:
+        result = phab.edge.search(sourcePHIDs=[task_phid], types=[edge_type])
+
+        related_phids = []
+        for edge in result.get("data", []):
+            dest_phid = edge.get("destinationPHID")
+            if dest_phid:
+                related_phids.append(dest_phid)
+
+        log.debug(
+            f"Found {len(related_phids)} {relationship_type} for task {task_phid}"
+        )
+        return related_phids
+
+    except Exception as e:
+        log.warning(
+            f"Failed to fetch {relationship_type} for {task_phid}: {type(e).__name__}: {e}"
+        )
+        return []
