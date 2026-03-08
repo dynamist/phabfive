@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import stat
+import sys
 from urllib.parse import urlparse
 
 # phabfive imports
@@ -437,6 +438,64 @@ class Phabfive:
 
         return result
 
+    def _load_arcconfig(self):
+        """
+        Load PHAB_URL from .arcconfig in the git repository root.
+
+        Walks up from the current working directory looking for a .git directory,
+        then reads .arcconfig in that directory. Extracts `phabricator.uri` and
+        normalizes it to an API URL.
+
+        Returns
+        -------
+        dict
+            Configuration dict with PHAB_URL if found, empty dict otherwise
+        """
+        # Walk up from cwd looking for .git directory
+        current = os.getcwd()
+        git_root = None
+
+        while True:
+            if os.path.isdir(os.path.join(current, ".git")):
+                git_root = current
+                break
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current = parent
+
+        if git_root is None:
+            log.debug("Not in a git repository, skipping .arcconfig")
+            return {}
+
+        arcconfig_path = os.path.join(git_root, ".arcconfig")
+
+        if not os.path.exists(arcconfig_path):
+            log.debug(f"No .arcconfig found at {arcconfig_path}")
+            return {}
+
+        log.debug(f"Loading configuration from {arcconfig_path}")
+
+        try:
+            with open(arcconfig_path, "r") as f:
+                arcconfig_data = json.load(f)
+        except json.JSONDecodeError as e:
+            log.warning(f"Failed to parse {arcconfig_path}: {e}")
+            return {}
+        except IOError as e:
+            log.warning(f"Failed to read {arcconfig_path}: {e}")
+            return {}
+
+        uri = arcconfig_data.get("phabricator.uri")
+
+        if not uri:
+            log.debug("No phabricator.uri found in .arcconfig")
+            return {}
+
+        normalized = self._normalize_url(uri)
+        log.debug(f"Using PHAB_URL from .arcconfig: {normalized}")
+        return {"PHAB_URL": normalized}
+
     def load_config(self):
         """
         Load configuration from configuration files and environment variables.
@@ -448,8 +507,9 @@ class Phabfive:
           3. `/etc/phabfive.d/*.yaml`
           4. `~/.config/phabfive.yaml`
           5. `~/.config/phabfive.d/*.yaml`
-          6. `~/.arcrc` (Arcanist configuration)
-          7. environment variables
+          6. `.arcconfig` in git root
+          7. `~/.arcrc` (Arcanist configuration)
+          8. environment variables
         """
         environ = os.environ.copy()
 
@@ -487,6 +547,10 @@ class Phabfive:
             },
         )
 
+        # Track config state before user yaml files to detect deprecated keys
+        pre_user_url = conf.get("PHAB_URL", "")
+        pre_user_token = conf.get("PHAB_TOKEN", "")
+
         user_conf_file = os.path.join(f"{appdirs.user_config_dir('phabfive')}.yaml")
         log.debug(f"Loading configuration file: {user_conf_file}")
         self._check_secure_permissions(user_conf_file)
@@ -520,8 +584,33 @@ class Phabfive:
             },
         )
 
+        # Warn if PHAB_URL or PHAB_TOKEN were set from user yaml config files
+        deprecated_keys = []
+        if conf.get("PHAB_URL", "") != pre_user_url and conf.get("PHAB_URL", ""):
+            deprecated_keys.append("PHAB_URL")
+        if conf.get("PHAB_TOKEN", "") != pre_user_token and conf.get("PHAB_TOKEN", ""):
+            deprecated_keys.append("PHAB_TOKEN")
+        if deprecated_keys:
+            keys_str = "/".join(deprecated_keys)
+            print(
+                f"WARNING: ~/.config/phabfive.yaml contains {keys_str} which is deprecated. "
+                "Migrate credentials to ~/.arcrc using: phabfive user setup",
+                file=sys.stderr,
+            )
+
+        # Load from .arcconfig in git repository root
+        arcconfig_conf = self._load_arcconfig()
+        if arcconfig_conf:
+            log.debug("Merging configuration from .arcconfig")
+            anyconfig.merge(conf, arcconfig_conf)
+
         # Load from Arcanist .arcrc file (supports single or multiple hosts)
-        arcrc_conf = self._load_arcrc(conf)
+        # Include PHAB_URL from environment so .arcrc can match the right host
+        # even though env vars are formally merged later
+        arcrc_lookup_conf = dict(conf)
+        if "PHAB_URL" in environ and environ["PHAB_URL"]:
+            arcrc_lookup_conf["PHAB_URL"] = environ["PHAB_URL"]
+        arcrc_conf = self._load_arcrc(arcrc_lookup_conf)
         if arcrc_conf:
             log.debug("Merging configuration from ~/.arcrc")
             anyconfig.merge(conf, arcrc_conf)
