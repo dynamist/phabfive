@@ -463,6 +463,50 @@ def get_api_priority_map():
     }
 
 
+def get_api_priority_names(phab):
+    """
+    Get list of priority names from Phabricator API.
+
+    Uses maniphest.priority.search to dynamically fetch all available
+    priorities. This allows the tool to work with custom priority
+    configurations in Phabricator/Phorge instances.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+
+    Returns
+    -------
+    list
+        List of priority name strings (lowercase), e.g., ["unbreak", "high", "normal"]
+    """
+    try:
+        result = phab.maniphest.priority.search()
+        priorities = []
+        for item in result.get("data", []):
+            name = item.get("fields", {}).get("name", "")
+            if name:
+                # Normalize: "Unbreak Now!" -> "unbreak"
+                normalized = name.lower().replace("!", "").replace(" now", "").strip()
+                # Also handle "wishlist" -> "wish"
+                if normalized == "wishlist":
+                    normalized = "wish"
+                priorities.append(normalized)
+        log.debug(
+            f"Fetched {len(priorities)} priorities from maniphest.priority.search"
+        )
+        return priorities if priorities else _default_priority_names()
+    except Exception as e:
+        log.debug(f"Failed to fetch priorities from API: {e}. Using fallback.")
+        return _default_priority_names()
+
+
+def _default_priority_names():
+    """Return default priority names for fallback."""
+    return ["unbreak", "triage", "high", "normal", "low", "wish"]
+
+
 def get_api_status_map(phab):
     """
     Get status information from Phabricator API using maniphest.querystatuses.

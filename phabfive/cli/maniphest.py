@@ -7,6 +7,7 @@ from typing import List, Optional
 
 import typer
 
+from phabfive.cli.completers import complete_column, complete_priority, complete_status
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
 
@@ -150,8 +151,12 @@ def create(
         None, "--tag", help="Project/workboard tag (repeatable)"
     ),
     assign: Optional[str] = typer.Option(None, "--assign", help="Assignee username"),
-    status: Optional[str] = typer.Option(None, "--status", help="Task status"),
-    priority: Optional[str] = typer.Option(None, "--priority", help="Task priority"),
+    status: Optional[str] = typer.Option(
+        None, "--status", help="Task status", autocompletion=complete_status
+    ),
+    priority: Optional[str] = typer.Option(
+        None, "--priority", help="Task priority", autocompletion=complete_priority
+    ),
     subscribe: Optional[List[str]] = typer.Option(
         None, "--subscribe", help="Subscriber username (repeatable)"
     ),
@@ -240,13 +245,22 @@ def search(
     ),
     include_all: bool = typer.Option(False, "--all", help="Include closed tasks"),
     column: Optional[str] = typer.Option(
-        None, "--column", help="Filter tasks by column transitions"
+        None,
+        "--column",
+        help="Filter tasks by column transitions",
+        autocompletion=complete_column,
     ),
     priority: Optional[str] = typer.Option(
-        None, "--priority", help="Filter tasks by priority transitions"
+        None,
+        "--priority",
+        help="Filter tasks by priority transitions",
+        autocompletion=complete_priority,
     ),
     status: Optional[str] = typer.Option(
-        None, "--status", help="Filter tasks by status transitions"
+        None,
+        "--status",
+        help="Filter tasks by status transitions",
+        autocompletion=complete_status,
     ),
     show_history: bool = typer.Option(
         False, "--show-history", help="Display transition history"
