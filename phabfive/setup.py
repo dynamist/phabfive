@@ -8,8 +8,8 @@ import re
 import sys
 
 from phabricator import Phabricator, APIError
+from InquirerPy import inquirer as inq
 from rich.console import Console
-from rich.prompt import Prompt, Confirm
 
 from phabfive.constants import VALIDATORS
 
@@ -51,7 +51,9 @@ class SetupWizard:
                 f"as [bold]{username}[/bold].\n"
             )
 
-            if not Confirm.ask("Do you want to reconfigure phabfive?", default=False):
+            if not inq.confirm(
+                message="Do you want to reconfigure phabfive?", default=False
+            ).execute():
                 self.console.print("Setup cancelled.\n")
                 return False
 
@@ -94,8 +96,8 @@ class SetupWizard:
 
     def _print_header(self):
         """Print the setup wizard header."""
-        self.console.print("\n[bold]Phabfive Setup[/bold]")
-        self.console.print("=" * 40)
+        self.console.print()
+        self.console.rule("[bold]Phabfive Setup[/bold]")
         self.console.print(
             "\nThis wizard will configure phabfive to connect to your "
             "Phabricator/Phorge instance.\n"
@@ -103,12 +105,12 @@ class SetupWizard:
 
     def _prompt_url(self) -> bool:
         """Prompt for and validate the Phabricator URL."""
-        self.console.print("[bold][1/3] Phabricator URL[/bold]")
+        self.console.rule("[bold][1/3] Phabricator URL[/bold]")
 
         while True:
-            url = Prompt.ask(
-                "Enter your Phabricator URL (e.g., https://phorge.example.com)"
-            )
+            url = inq.text(
+                message="Enter your Phabricator URL (e.g., https://phorge.example.com):"
+            ).execute()
 
             if not url:
                 self.console.print("[red]URL cannot be empty[/red]")
@@ -126,12 +128,12 @@ class SetupWizard:
                 continue
 
             self.phab_url = normalized
-            self.console.print(f"[green]> Using API endpoint: {normalized}[/green]\n")
+            self.console.print(f"  [green]✓[/green] API endpoint: {normalized}\n")
             return True
 
     def _prompt_token(self) -> bool:
         """Prompt for and validate the API token."""
-        self.console.print("[bold][2/3] API Token[/bold]")
+        self.console.rule("[bold][2/3] API Token[/bold]")
 
         # Extract base URL for settings link
         from urllib.parse import urlparse
@@ -145,8 +147,6 @@ class SetupWizard:
         )
         self.console.print('  2. Click "Generate API Token"')
         self.console.print("  3. Copy the token (starts with 'cli-')\n")
-
-        from InquirerPy import inquirer as inq
 
         while True:
             token = inq.secret(message="Enter your API token:").execute()
@@ -169,25 +169,23 @@ class SetupWizard:
 
     def _verify_connection(self) -> bool:
         """Verify the connection to Phabricator."""
-        self.console.print("[bold][3/3] Verifying connection...[/bold]")
+        self.console.rule("[bold][3/3] Verify Connection[/bold]")
 
         try:
-            phab = Phabricator(host=self.phab_url, token=self.phab_token)
-            phab.update_interfaces()
-            whoami = phab.user.whoami()
+            with self.console.status("Verifying connection..."):
+                phab = Phabricator(host=self.phab_url, token=self.phab_token)
+                phab.update_interfaces()
+                whoami = phab.user.whoami()
 
             username = whoami.get("userName", "unknown")
             realname = whoami.get("realName", "")
 
             if realname:
                 self.console.print(
-                    f"[green]> Connected successfully as: "
-                    f"{username} ({realname})[/green]\n"
+                    f"  [green]✓[/green] Connected as: {username} ({realname})\n"
                 )
             else:
-                self.console.print(
-                    f"[green]> Connected successfully as: {username}[/green]\n"
-                )
+                self.console.print(f"  [green]✓[/green] Connected as: {username}\n")
 
             return True
 
@@ -195,7 +193,9 @@ class SetupWizard:
             self.console.print(f"[red]> Connection failed: {e}[/red]")
             self.console.print("[red]Please check your URL and token.[/red]\n")
 
-            if Confirm.ask("Would you like to try again?", default=True):
+            if inq.confirm(
+                message="Would you like to try again?", default=True
+            ).execute():
                 return (
                     self._prompt_url()
                     and self._prompt_token()
@@ -241,10 +241,14 @@ class SetupWizard:
 
     def _print_success(self):
         """Print success message."""
-        self.console.print(f"[green]Configuration saved to {self.CONFIG_PATH}[/green]")
+        self.console.print()
+        self.console.rule("[bold green]Setup Complete[/bold green]")
+        self.console.print(
+            f"\n  [green]✓[/green] Configuration saved to {self.CONFIG_PATH}"
+        )
         if os.name != "nt":
             self.console.print(
-                "[green]File permissions set to 0600 (owner read/write only)[/green]"
+                "  [green]✓[/green] File permissions set to 0600 (owner read/write only)"
             )
         self.console.print("\n[bold]Example commands:[/bold]")
         self.console.print("  phabfive user whoami")
@@ -312,16 +316,18 @@ def _setup_arcconfig(console) -> bool:
         except (json.JSONDecodeError, IOError):
             pass
 
-        if not Confirm.ask("Do you want to overwrite it?", default=False):
+        if not inq.confirm(
+            message="Do you want to overwrite it?", default=False
+        ).execute():
             return False
 
-    console.print("[bold]Create .arcconfig[/bold]")
+    console.rule("[bold]Create .arcconfig[/bold]")
     console.print(f"This will create .arcconfig in: {git_root}\n")
 
     while True:
-        url = Prompt.ask(
-            "Enter your Phabricator URL (e.g., https://phorge.example.com)"
-        )
+        url = inq.text(
+            message="Enter your Phabricator URL (e.g., https://phorge.example.com):"
+        ).execute()
 
         if not url:
             console.print("[red]URL cannot be empty[/red]")
@@ -333,7 +339,7 @@ def _setup_arcconfig(console) -> bool:
         if url.endswith("/api"):
             url = url[:-4].rstrip("/")
 
-        console.print(f"[green]> Using URL: {url}[/green]\n")
+        console.print(f"  [green]✓[/green] Using URL: {url}\n")
         break
 
     try:
@@ -342,7 +348,7 @@ def _setup_arcconfig(console) -> bool:
             json.dump(arcconfig_data, f, indent=2)
             f.write("\n")
 
-        console.print(f"[green].arcconfig created at {arcconfig_path}[/green]")
+        console.print(f"  [green]✓[/green] .arcconfig created at {arcconfig_path}")
         console.print("[dim]Remember to commit .arcconfig to your repository.[/dim]\n")
         return True
 
@@ -376,13 +382,15 @@ def offer_setup_on_error(error_message: str) -> bool:
     is_url_error = "PHAB_URL" in error_message and "PHAB_TOKEN" not in error_message
 
     if is_url_error:
-        if Confirm.ask(
-            "Would you like to create .arcconfig for this repository?",
+        if inq.confirm(
+            message="Would you like to create .arcconfig for this repository?",
             default=True,
-        ):
+        ).execute():
             return _setup_arcconfig(console)
     else:
-        if Confirm.ask("Would you like to run interactive setup now?", default=True):
+        if inq.confirm(
+            message="Would you like to run interactive setup now?", default=True
+        ).execute():
             wizard = SetupWizard()
             return wizard.run()
 
