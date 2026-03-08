@@ -558,6 +558,8 @@ def build_task_display_data(
     status_transitions_map=None,
     assignee_transitions_map=None,
     comments_map=None,
+    parents_map=None,
+    subtasks_map=None,
     matching_boards_map=None,
     matching_priority_map=None,
     matching_status_map=None,
@@ -628,6 +630,10 @@ def build_task_display_data(
         assignee_transitions_map = {}
     if comments_map is None:
         comments_map = {}
+    if parents_map is None:
+        parents_map = {}
+    if subtasks_map is None:
+        subtasks_map = {}
     if matching_boards_map is None:
         matching_boards_map = {}
     if matching_priority_map is None:
@@ -755,6 +761,11 @@ def build_task_display_data(
         )
         if boards_data:
             task_dict["Boards"] = boards_data
+
+        # Add Parents and Subtasks (always include in dict, may be empty list)
+        # These are populated by task_show(), empty for task_search()
+        task_dict["Parents"] = parents_map.get(item["id"], [])
+        task_dict["Subtasks"] = subtasks_map.get(item["id"], [])
 
         # Add Comments section if show_comments is enabled
         if show_comments:

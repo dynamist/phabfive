@@ -1037,7 +1037,7 @@ class TestYAMLOutput:
         # Use display_tasks to render output
         from phabfive.display import display_tasks
 
-        display_tasks(result, "rich", maniphest)
+        display_tasks(result, "yaml", maniphest)
 
         # Capture output
         captured = capsys.readouterr()

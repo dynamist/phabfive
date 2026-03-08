@@ -192,6 +192,8 @@ class Maniphest(Phabfive):
         status_transitions_map=None,
         assignee_transitions_map=None,
         comments_map=None,
+        parents_map=None,
+        subtasks_map=None,
         matching_boards_map=None,
         matching_priority_map=None,
         matching_status_map=None,
@@ -212,6 +214,8 @@ class Maniphest(Phabfive):
             status_transitions_map=status_transitions_map,
             assignee_transitions_map=assignee_transitions_map,
             comments_map=comments_map,
+            parents_map=parents_map,
+            subtasks_map=subtasks_map,
             matching_boards_map=matching_boards_map,
             matching_priority_map=matching_priority_map,
             matching_status_map=matching_status_map,
@@ -284,9 +288,11 @@ class Maniphest(Phabfive):
         assignee_transitions_map = {}
         comments_map = {}
 
+        # Get task PHID for relationship lookups
+        task_phid = result_data[0].get("phid")
+
         # Fetch transaction data if any transaction-based info is requested
         if show_history or show_comments:
-            task_phid = result_data[0].get("phid")
             if task_phid:
                 log.debug(f"Fetching transactions for T{task_id}")
                 # Fetch all relevant transaction types in a single API call
@@ -314,6 +320,45 @@ class Maniphest(Phabfive):
                 if all_fetched_transactions.get("comments"):
                     comments_map[task_id] = all_fetched_transactions["comments"]
 
+        # Fetch parent and subtask relationships
+        parents_map = {}
+        subtasks_map = {}
+        if task_phid:
+            parent_phids = fetch_task_relationships(self.phab, task_phid, "parents")
+            subtask_phids = fetch_task_relationships(self.phab, task_phid, "subtasks")
+
+            # Resolve PHIDs to task IDs and titles
+            all_related_phids = parent_phids + subtask_phids
+            if all_related_phids:
+                related_result = self.phab.maniphest.search(
+                    constraints={"phids": all_related_phids}
+                )
+                phid_to_info = {
+                    t["phid"]: {"id": t["id"], "name": t["fields"].get("name", "")}
+                    for t in related_result.get("data", [])
+                }
+
+                # Build parent/subtask lists matching top-level task structure
+                parents_map[task_id] = [
+                    {
+                        "Link": f"{self.url}/T{phid_to_info[p]['id']}",
+                        "Task": {"Name": phid_to_info[p]["name"]},
+                    }
+                    for p in parent_phids
+                    if p in phid_to_info
+                ]
+                subtasks_map[task_id] = [
+                    {
+                        "Link": f"{self.url}/T{phid_to_info[p]['id']}",
+                        "Task": {"Name": phid_to_info[p]["name"]},
+                    }
+                    for p in subtask_phids
+                    if p in phid_to_info
+                ]
+            else:
+                parents_map[task_id] = []
+                subtasks_map[task_id] = []
+
         # Use shared method to build task data
         return self._build_task_display_data(
             result_data,
@@ -322,6 +367,8 @@ class Maniphest(Phabfive):
             status_transitions_map=status_transitions_map,
             assignee_transitions_map=assignee_transitions_map,
             comments_map=comments_map,
+            parents_map=parents_map,
+            subtasks_map=subtasks_map,
             show_history=show_history,
             show_metadata=show_metadata,
             show_comments=show_comments,
@@ -373,8 +420,53 @@ class Maniphest(Phabfive):
         if not related_data:
             return {"tasks": []}
 
+        # Fetch parents/subtasks for each related task
+        parents_map = {}
+        subtasks_map = {}
+        for task in related_data:
+            task_id = task["id"]
+            task_phid = task["phid"]
+
+            parent_phids = fetch_task_relationships(self.phab, task_phid, "parents")
+            subtask_phids = fetch_task_relationships(self.phab, task_phid, "subtasks")
+
+            # Resolve PHIDs to task IDs and titles
+            all_rel_phids = parent_phids + subtask_phids
+            if all_rel_phids:
+                rel_result = self.phab.maniphest.search(
+                    constraints={"phids": all_rel_phids}
+                )
+                phid_to_info = {
+                    t["phid"]: {"id": t["id"], "name": t["fields"].get("name", "")}
+                    for t in rel_result.get("data", [])
+                }
+
+                parents_map[task_id] = [
+                    {
+                        "Link": f"{self.url}/T{phid_to_info[p]['id']}",
+                        "Task": {"Name": phid_to_info[p]["name"]},
+                    }
+                    for p in parent_phids
+                    if p in phid_to_info
+                ]
+                subtasks_map[task_id] = [
+                    {
+                        "Link": f"{self.url}/T{phid_to_info[p]['id']}",
+                        "Task": {"Name": phid_to_info[p]["name"]},
+                    }
+                    for p in subtask_phids
+                    if p in phid_to_info
+                ]
+            else:
+                parents_map[task_id] = []
+                subtasks_map[task_id] = []
+
         # Build display data for related tasks
-        return self._build_task_display_data(related_data)
+        return self._build_task_display_data(
+            related_data,
+            parents_map=parents_map,
+            subtasks_map=subtasks_map,
+        )
 
     def _load_search_config(self, template_path):
         """
