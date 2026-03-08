@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import sys
+import webbrowser
 
 from phabricator import Phabricator, APIError
 from InquirerPy import inquirer as inq
@@ -15,6 +16,31 @@ from phabfive.constants import VALIDATORS
 
 
 log = logging.getLogger(__name__)
+
+
+def _has_display() -> bool:
+    """Check if we can reasonably auto-open a browser.
+
+    Returns False in environments where webbrowser.open() would either fail
+    or open a text-mode browser in the terminal:
+
+    - WSL2: Python's webbrowser module finds text browsers (lynx, w3m) instead
+      of the Windows browser. Detected via /proc/sys/kernel/osrelease containing
+      "microsoft".
+    - Docker containers: No display server available. Detected via the
+      /.dockerenv sentinel file.
+    - Podman / systemd-nspawn containers: No display server available. Detected
+      via the "container" environment variable set by these runtimes.
+    """
+    try:
+        with open("/proc/sys/kernel/osrelease") as f:
+            if "microsoft" in f.read().lower():
+                return False
+    except OSError:
+        pass
+    if os.path.exists("/.dockerenv") or os.environ.get("container"):
+        return False
+    return True
 
 
 class SetupWizard:
@@ -30,37 +56,58 @@ class SetupWizard:
     def _check_existing_config(self) -> bool:
         """Check if there's an existing working configuration.
 
-        If a working config exists, warn the user and ask for confirmation.
+        Reads ~/.arcrc directly to avoid triggering the interactive server
+        selector in Phabfive(). Tests each host silently and warns if any
+        connection works.
 
         Returns:
             bool: True to proceed with setup, False to abort
         """
         try:
-            from phabfive.core import Phabfive
+            if not os.path.exists(self.CONFIG_PATH):
+                return True
 
-            # Try to create a Phabfive instance - this validates config and connection
-            phabfive = Phabfive()
-            whoami = phabfive.phab.user.whoami()
-            username = whoami.get("userName", "unknown")
+            with open(self.CONFIG_PATH, "r") as f:
+                arcrc = json.load(f)
 
-            self.console.print(
-                "\n[yellow]Warning:[/yellow] A working configuration already exists."
-            )
-            self.console.print(
-                f"Currently connected to [bold]{phabfive.conf['PHAB_URL']}[/bold] "
-                f"as [bold]{username}[/bold].\n"
-            )
+            hosts = arcrc.get("hosts", {})
+            if not hosts:
+                return True
 
-            if not inq.confirm(
-                message="Do you want to reconfigure phabfive?", default=False
-            ).execute():
-                self.console.print("Setup cancelled.\n")
-                return False
+            # Try each host silently to find a working connection
+            for host_url, host_data in hosts.items():
+                token = host_data.get("token")
+                if not token:
+                    continue
+                try:
+                    phab = Phabricator(host=host_url, token=token)
+                    phab.update_interfaces()
+                    whoami = phab.user.whoami()
+                    username = whoami.get("userName", "unknown")
 
+                    self.console.print(
+                        "\n[yellow]Warning:[/yellow] A working configuration already exists."
+                    )
+                    self.console.print(
+                        f"Currently connected to [bold]{host_url}[/bold] "
+                        f"as [bold]{username}[/bold].\n"
+                    )
+
+                    if not inq.confirm(
+                        message="Do you want to reconfigure phabfive?", default=False
+                    ).execute():
+                        self.console.print("Setup cancelled.\n")
+                        return False
+
+                    return True
+                except Exception:
+                    continue
+
+            # No working host found - proceed with setup
             return True
 
         except Exception:
-            # No valid config or connection failed - proceed with setup
+            # Cannot read .arcrc or other error - proceed with setup
             return True
 
     def run(self) -> bool:
@@ -109,7 +156,7 @@ class SetupWizard:
 
         while True:
             url = inq.text(
-                message="Enter your Phabricator URL (e.g., https://phorge.example.com):"
+                message="Enter your Phabricator URL (e.g., phorge.example.com):"
             ).execute()
 
             if not url:
@@ -135,21 +182,27 @@ class SetupWizard:
         """Prompt for and validate the API token."""
         self.console.rule("[bold][2/3] API Token[/bold]")
 
-        # Extract base URL for settings link
         from urllib.parse import urlparse
 
         parsed = urlparse(self.phab_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
+        token_url = f"{base_url}/settings/panel/apitokens/"
 
-        self.console.print("To create an API token:")
-        self.console.print(
-            f"  1. Go to {base_url}/settings/user/YOUR_USERNAME/page/apitokens/"
-        )
-        self.console.print('  2. Click "Generate API Token"')
-        self.console.print("  3. Copy the token (starts with 'cli-')\n")
+        if _has_display():
+            self.console.print(
+                f"Opening [bold]{token_url}[/bold] in your browser to generate a token.\n"
+            )
+            webbrowser.open(token_url)
+            self.console.print(
+                "[dim]If the browser didn't open, visit the URL above manually.[/dim]\n"
+            )
+        else:
+            self.console.print(
+                f"Open this URL in your browser to generate a token:\n\n  [bold]{token_url}[/bold]\n"
+            )
 
         while True:
-            token = inq.secret(message="Enter your API token:").execute()
+            token = inq.secret(message="Paste your API token here:").execute()
 
             if not token:
                 self.console.print("[red]Token cannot be empty[/red]")
@@ -256,6 +309,8 @@ class SetupWizard:
 
     def _normalize_url(self, url: str) -> str:
         """Normalize URL to end with /api/."""
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
         url = url.rstrip("/")
         if not url.endswith("/api"):
             url += "/api"
