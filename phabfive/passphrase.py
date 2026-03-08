@@ -24,17 +24,43 @@ class Passphrase(Phabfive):
     def _validate_identifier(self, id_):
         return re.match(f"^{MONOGRAMS['passphrase']}$", id_)
 
-    def get_secret(self, ids):
-        if not self._validate_identifier(ids):
+    def get_passphrase(self, id_str):
+        """Retrieve passphrase data by ID.
+
+        Parameters
+        ----------
+        id_str : str
+            Passphrase ID (e.g., "K123")
+
+        Returns
+        -------
+        dict
+            Structured passphrase data with keys:
+            - id: str (e.g., "K1")
+            - url: str (full URL to passphrase)
+            - _link: Rich Text (OSC8 hyperlink for rich/tree formats)
+            - type: str (Password, Token, SSH Key, Note)
+            - name: str (credential name)
+            - username: str or None (only for Password type)
+            - secret: str (the actual secret value)
+
+        Raises
+        ------
+        PhabfiveDataException
+            If ID is invalid, no data found, or access denied
+        PhabfiveRemoteException
+            If API call fails
+        """
+        if not self._validate_identifier(id_str):
             raise PhabfiveDataException(
-                f"Invalid passphrase ID '{ids}'. Expected format: K123"
+                f"Invalid passphrase ID '{id_str}'. Expected format: K123"
             )
 
-        ids = ids.replace("K", "")
+        numeric_id = id_str.replace("K", "")
 
         try:
             response = self.phab.passphrase.query(
-                ids=[ids],
+                ids=[numeric_id],
                 needSecrets=1,
             )
         except APIError as e:
@@ -43,27 +69,69 @@ class Passphrase(Phabfive):
         has_data = response.get("data", {})
 
         if not has_data:
-            raise PhabfiveDataException(f"K{ids} has no data or other error")
+            raise PhabfiveDataException(f"K{numeric_id} has no data or other error")
 
-        # TODO: I am doing the logging wrong, in this module the loglevel
-        # is INFO, even if env PHABFIVE_DEBUG=1
         log.debug(json.dumps(response["data"], indent=2))
 
-        # When Conduit Access is not accepted for Passphrase the "response" will return value "noAPIAccess" in key "material" instead of the secret
-        api_access_value = response["data"].get(next(iter(response["data"])))[
-            "material"
-        ]
-        no_api_access = "noAPIAccess" in api_access_value
+        # Get the first (and only) entry
+        data = next(iter(response["data"].values()))
 
-        if no_api_access:
+        # Check for API access denial
+        material = data.get("material", {})
+
+        # Handle material being a list (empty) or dict
+        if isinstance(material, list):
+            material = {}
+
+        if "noAPIAccess" in material:
             raise PhabfiveDataException(
-                f"Access denied, visit {self.url}/K{ids} to allow Conduit",
+                f"Access denied, visit {self.url}/K{numeric_id} to allow Conduit",
             )
 
-        # Extract and return the secret value
-        for value in response["data"].values():
-            for secret_type, secret_value in value["material"].items():
-                if secret_type == "password":  # nosec-B105
-                    return secret_value
+        # Map API type to display type
+        type_map = {
+            "password": "Password",
+            "token": "Token",
+            "ssh-generated-key": "SSH Key",
+            "ssh-key-text": "SSH Key",
+            "note": "Note",
+        }
 
-        raise PhabfiveDataException(f"No password found in K{ids}")
+        # Extract secret from material (different key per type)
+        secret = (
+            material.get("password")  # nosec-B105
+            or material.get("token")
+            or material.get("privateKey")
+            or material.get("note")
+            or ""
+        )
+
+        monogram = f"K{data['id']}"
+        url = f"{self.url}/{monogram}"
+        credential_type = data.get("type", "")
+
+        return {
+            "id": monogram,
+            "url": url,
+            "_link": self.format_link(url, monogram),
+            "type": type_map.get(credential_type, credential_type or "Unknown"),
+            "name": data.get("name", ""),
+            "username": data.get("username"),
+            "secret": secret,
+        }
+
+    def get_secret(self, ids):
+        """Retrieve only the secret value.
+
+        Parameters
+        ----------
+        ids : str
+            Passphrase ID (e.g., "K123")
+
+        Returns
+        -------
+        str
+            The secret value
+        """
+        data = self.get_passphrase(ids)
+        return data["secret"]
