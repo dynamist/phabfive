@@ -5,26 +5,30 @@ import typer
 
 from phabfive.exceptions import PhabfiveConfigException
 
-passphrase_app = typer.Typer(
-    help="The passphrase app",
-    invoke_without_command=True,
-)
+passphrase_app = typer.Typer(help="The passphrase app")
 
 
-@passphrase_app.callback(invoke_without_command=True)
-def passphrase_callback(
-    ctx: typer.Context,
-    id: str = typer.Argument(..., help="Passphrase ID (e.g., K123)"),
-) -> None:
-    """Retrieve a secret from Passphrase by ID."""
+def _get_passphrase_app():
+    """Get Passphrase app instance with config error handling."""
     from phabfive.passphrase import Passphrase
 
     try:
-        passphrase = Passphrase()
-        secret = passphrase.get_secret(id)
-        typer.echo(secret)
+        return Passphrase()
     except PhabfiveConfigException as e:
         from phabfive.setup import offer_setup_on_error
 
         if not offer_setup_on_error(str(e)):
             raise typer.Exit(1)
+        # If setup succeeded, try again
+        return Passphrase()
+
+
+@passphrase_app.command()
+def show(
+    ctx: typer.Context,
+    id: str = typer.Argument(..., help="Passphrase ID (e.g., K123)"),
+) -> None:
+    """Retrieve a secret from Passphrase by ID."""
+    passphrase = _get_passphrase_app()
+    secret = passphrase.get_secret(id)
+    typer.echo(secret)

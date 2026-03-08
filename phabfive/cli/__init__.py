@@ -68,7 +68,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
         T123 → maniphest show T123
         --format=yaml T123 → --format=yaml maniphest show T123
         T123 'comment' → maniphest comment T123 'comment'
-        K123 → passphrase K123
+        K123 → passphrase show K123
         P123 → paste show P123
         R123 → diffusion branch list R123
     """
@@ -77,6 +77,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
 
     # Find the first non-option argument that matches a monogram
     monogram_idx = None
+    non_option_args = []  # Track non-option args before monogram
     skip_next = False
     for i, arg in enumerate(argv[1:], start=1):
         if skip_next:
@@ -94,6 +95,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
         if match:
             monogram_idx = i
             break
+        non_option_args.append(arg)
 
     if monogram_idx is None:
         return argv
@@ -102,6 +104,10 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
     match = _MONOGRAM_PATTERN.match(monogram)
     prefix = match.group(1)
     expansion = MONOGRAM_SHORTCUT[prefix]
+
+    # Check if already expanded (non-option args before monogram match expansion)
+    if non_option_args == expansion:
+        return argv
 
     # Split argv into: before monogram, monogram, after monogram
     before = argv[:monogram_idx]
