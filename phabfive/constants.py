@@ -9,6 +9,7 @@ class OutputFormat(str, Enum):
     tree = "tree"  # Tree view with Rich Tree
     yaml = "yaml"  # Machine-readable YAML
     json = "json"  # Machine-readable JSON
+    simple = "simple"  # Minimal output (e.g., just the secret for passphrase)
 
 
 class AutoOption(str, Enum):
