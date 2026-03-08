@@ -267,7 +267,7 @@ class TestArcrcMultipleHosts:
         self.phabfive = object.__new__(Phabfive)
 
     def test_multiple_hosts_without_phab_url_raises_error(self, tmp_path):
-        """Test that multiple hosts without PHAB_URL set raises error."""
+        """Test that multiple hosts without PHAB_URL set raises error (non-TTY)."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
@@ -282,7 +282,11 @@ class TestArcrcMultipleHosts:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
+        with (
+            mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)),
+            mock.patch("sys.stdin") as mock_stdin,
+        ):
+            mock_stdin.isatty.return_value = False
             with pytest.raises(PhabfiveConfigException) as exc_info:
                 self.phabfive._load_arcrc({})
 
@@ -290,6 +294,70 @@ class TestArcrcMultipleHosts:
         assert "Multiple hosts found" in error_msg
         assert "phorge-a.example.com" in error_msg
         assert "phorge-b.example.com" in error_msg
+
+    def test_multiple_hosts_interactive_selector(self, tmp_path):
+        """Test that interactive selector picks the selected host."""
+        arcrc_path = tmp_path / ".arcrc"
+        arcrc_data = {
+            "hosts": {
+                "https://phorge-a.example.com/api/": {
+                    "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                },
+                "https://phorge-b.example.com/api/": {
+                    "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                },
+            }
+        }
+        arcrc_path.write_text(json.dumps(arcrc_data))
+        os.chmod(arcrc_path, 0o600)
+
+        mock_prompt = mock.MagicMock()
+        mock_prompt.execute.return_value = "https://phorge-b.example.com/api/"
+
+        with (
+            mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)),
+            mock.patch("sys.stdin") as mock_stdin,
+            mock.patch(
+                "InquirerPy.inquirer.select", return_value=mock_prompt
+            ) as mock_select,
+        ):
+            mock_stdin.isatty.return_value = True
+            result = self.phabfive._load_arcrc({})
+
+        assert result["PHAB_URL"] == "https://phorge-b.example.com/api/"
+        assert result["PHAB_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        mock_select.assert_called_once()
+
+    def test_multiple_hosts_interactive_prints_tip(self, tmp_path, capsys):
+        """Test that interactive selector prints tip to stderr."""
+        arcrc_path = tmp_path / ".arcrc"
+        arcrc_data = {
+            "hosts": {
+                "https://phorge-a.example.com/api/": {
+                    "token": "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                },
+                "https://phorge-b.example.com/api/": {
+                    "token": "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                },
+            }
+        }
+        arcrc_path.write_text(json.dumps(arcrc_data))
+        os.chmod(arcrc_path, 0o600)
+
+        mock_prompt = mock.MagicMock()
+        mock_prompt.execute.return_value = "https://phorge-a.example.com/api/"
+
+        with (
+            mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)),
+            mock.patch("sys.stdin") as mock_stdin,
+            mock.patch("InquirerPy.inquirer.select", return_value=mock_prompt),
+        ):
+            mock_stdin.isatty.return_value = True
+            self.phabfive._load_arcrc({})
+
+        captured = capsys.readouterr()
+        assert "Tip:" in captured.err
+        assert "PHAB_URL" in captured.err
 
     def test_multiple_hosts_with_matching_phab_url(self, tmp_path):
         """Test that multiple hosts with matching PHAB_URL returns token."""
@@ -390,7 +458,7 @@ class TestArcrcMultipleHosts:
         assert result["PHAB_TOKEN"] == "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
     def test_multiple_hosts_with_invalid_default_raises_error(self, tmp_path):
-        """Test that invalid default (not matching any host) raises error."""
+        """Test that invalid default (not matching any host) raises error (non-TTY)."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
@@ -406,7 +474,11 @@ class TestArcrcMultipleHosts:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
+        with (
+            mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)),
+            mock.patch("sys.stdin") as mock_stdin,
+        ):
+            mock_stdin.isatty.return_value = False
             with pytest.raises(PhabfiveConfigException) as exc_info:
                 self.phabfive._load_arcrc({})
 

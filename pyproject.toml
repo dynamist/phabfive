@@ -28,6 +28,7 @@ classifiers = [
 dependencies = [
   "anyconfig>=0.10.0",
   "appdirs",
+  "InquirerPy>=0.3.4",
   "jinja2",
   "mkdocs>=1.6.1",
   "phabricator",
