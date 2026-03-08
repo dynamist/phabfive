@@ -43,6 +43,24 @@ app = typer.Typer(
 )
 
 
+def preprocess_format_alias(argv: list[str]) -> list[str]:
+    """Replace --format=strict with --format=yaml for backwards compatibility."""
+    result = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--format=strict":
+            result.append("--format=yaml")
+        elif arg == "--format" and i + 1 < len(argv) and argv[i + 1] == "strict":
+            result.append("--format")
+            result.append("yaml")
+            i += 1  # Skip the next arg since we handled it
+        else:
+            result.append(arg)
+        i += 1
+    return result
+
+
 def preprocess_monograms(argv: list[str]) -> list[str]:
     """Expand monogram shortcuts in argv before Typer parsing.
 
@@ -104,22 +122,6 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-def format_callback(value: Optional[str]) -> Optional[OutputFormat]:
-    """Parse format option, handling 'strict' as alias for 'yaml'."""
-    if value is None:
-        return None
-    # Handle legacy 'strict' as alias for 'yaml'
-    if value == "strict":
-        return OutputFormat.yaml
-    try:
-        return OutputFormat(value)
-    except ValueError:
-        valid = ", ".join(f.value for f in OutputFormat)
-        raise typer.BadParameter(
-            f"Invalid format '{value}'. Choose from: {valid}, strict"
-        )
-
-
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -131,7 +133,6 @@ def main(
     output_format: Optional[OutputFormat] = typer.Option(
         None,
         "--format",
-        callback=format_callback,
         help="Output format. Auto-detects based on TTY.",
     ),
     ascii_when: AutoOption = typer.Option(
@@ -192,7 +193,8 @@ def cli_entrypoint() -> None:
         )
         raise typer.Exit(1)
 
-    # Preprocess monograms before Typer sees the args
+    # Preprocess argv before Typer sees the args
+    sys.argv = preprocess_format_alias(sys.argv)
     sys.argv = preprocess_monograms(sys.argv)
 
     try:
