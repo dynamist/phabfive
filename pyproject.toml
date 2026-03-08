@@ -40,10 +40,10 @@ dependencies = [
 [project.optional-dependencies]
 docs = ["mkdocs"]
 repl = ["ptpython"]
-test = ["coverage", "flake8", "pytest", "pytest-cov"]
+test = ["coverage", "pytest", "pytest-cov", "ruff"]
 
 [dependency-groups]
-dev = ["coverage", "flake8", "pytest", "pytest-cov", "tox>=4.0", "tox-uv"]
+dev = ["coverage", "pytest", "pytest-cov", "ruff", "tox>=4.0", "tox-uv"]
 
 [project.scripts]
 phabfive = "phabfive.cli:cli_entrypoint"

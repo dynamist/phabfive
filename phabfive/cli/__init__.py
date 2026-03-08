@@ -10,15 +10,15 @@ from typing import Optional
 # Disable Typer's Rich formatting for help text to remove fancy boxes
 os.environ.setdefault("TYPER_USE_RICH", "0")
 
-import typer  # noqa: E402
+import typer
 
-from phabfive.cli.diffusion import diffusion_app  # noqa: E402
-from phabfive.cli.maniphest import maniphest_app  # noqa: E402
-from phabfive.cli.passphrase import passphrase_app  # noqa: E402
-from phabfive.cli.paste import paste_app  # noqa: E402
-from phabfive.cli.repl import repl_app  # noqa: E402
-from phabfive.cli.user import user_app  # noqa: E402
-from phabfive.constants import (  # noqa: E402
+from phabfive.cli.diffusion import diffusion_app
+from phabfive.cli.maniphest import maniphest_app
+from phabfive.cli.passphrase import passphrase_app
+from phabfive.cli.paste import paste_app
+from phabfive.cli.repl import repl_app
+from phabfive.cli.user import user_app
+from phabfive.constants import (
     AutoOption,
     COMMENTS_SUPPORTED,
     LogLevel,
@@ -105,7 +105,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
 
     # Split argv into: before monogram, monogram, after monogram
     before = argv[:monogram_idx]
-    after = argv[monogram_idx + 1:]  # noqa: E203
+    after = argv[monogram_idx + 1 :]
 
     # Handle comment shortcut: T123 'text' → maniphest comment T123 'text'
     if prefix in _COMMENT_PREFIXES and after and not after[0].startswith("-"):
