@@ -40,7 +40,7 @@ MONOGRAMS = {
 # Monogram shortcuts for CLI: maps prefix letter to command expansion
 MONOGRAM_SHORTCUT = {
     "T": ["maniphest", "show"],  # T123 → maniphest show T123
-    "K": ["passphrase"],  # K123 → passphrase K123
+    "K": ["passphrase", "show"],  # K123 → passphrase show K123
     "P": ["paste", "show"],  # P123 → paste show P123
     "R": ["diffusion", "branch", "list"],  # R123 → diffusion branch list R123
 }
