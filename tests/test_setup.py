@@ -7,7 +7,12 @@ from unittest import mock
 
 import pytest
 
-from phabfive.setup import SetupWizard, offer_setup_on_error
+from phabfive.setup import (
+    SetupWizard,
+    offer_setup_on_error,
+    _find_git_root,
+    _setup_arcconfig,
+)
 
 
 # Skip marker for tests that require Unix-style permissions
@@ -87,16 +92,128 @@ class TestOfferSetupOnError:
             result = offer_setup_on_error("Test error")
         assert result is False
 
+    def test_phab_url_error_offers_arcconfig(self):
+        """Test that PHAB_URL error offers .arcconfig setup, not full wizard."""
+        with (
+            mock.patch("sys.stdin.isatty", return_value=True),
+            mock.patch(
+                "phabfive.setup.Confirm.ask", return_value=False
+            ) as mock_confirm,
+            mock.patch("phabfive.setup.Console"),
+        ):
+            offer_setup_on_error("PHAB_URL is not configured")
+
+        # Should ask about .arcconfig, not generic setup
+        call_args = mock_confirm.call_args[0][0]
+        assert ".arcconfig" in call_args
+
+    def test_phab_token_error_offers_full_setup(self):
+        """Test that PHAB_TOKEN error offers full setup wizard."""
+        with (
+            mock.patch("sys.stdin.isatty", return_value=True),
+            mock.patch(
+                "phabfive.setup.Confirm.ask", return_value=False
+            ) as mock_confirm,
+            mock.patch("phabfive.setup.Console"),
+        ):
+            offer_setup_on_error("PHAB_TOKEN is not configured")
+
+        call_args = mock_confirm.call_args[0][0]
+        assert "interactive setup" in call_args
+
+
+class TestSetupArcconfig:
+    """Tests for .arcconfig creation."""
+
+    def test_find_git_root(self, tmp_path):
+        """Test finding git root from subdirectory."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        subdir = tmp_path / "src" / "deep"
+        subdir.mkdir(parents=True)
+
+        with mock.patch("os.getcwd", return_value=str(subdir)):
+            result = _find_git_root()
+
+        assert result == str(tmp_path)
+
+    def test_find_git_root_not_in_repo(self, tmp_path):
+        """Test returns None when not in a git repo."""
+        with mock.patch("os.getcwd", return_value=str(tmp_path)):
+            result = _find_git_root()
+
+        assert result is None
+
+    def test_setup_arcconfig_creates_file(self, tmp_path):
+        """Test that .arcconfig is created with correct content."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+
+        console = mock.MagicMock()
+
+        with (
+            mock.patch("os.getcwd", return_value=str(tmp_path)),
+            mock.patch(
+                "phabfive.setup.Prompt.ask",
+                return_value="https://phorge.example.com",
+            ),
+        ):
+            result = _setup_arcconfig(console)
+
+        assert result is True
+
+        import json
+
+        arcconfig_path = tmp_path / ".arcconfig"
+        assert arcconfig_path.exists()
+
+        with open(arcconfig_path) as f:
+            data = json.load(f)
+
+        assert data["phabricator.uri"] == "https://phorge.example.com/"
+
+    def test_setup_arcconfig_strips_api_suffix(self, tmp_path):
+        """Test that /api/ suffix is stripped from URL for .arcconfig."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+
+        console = mock.MagicMock()
+
+        with (
+            mock.patch("os.getcwd", return_value=str(tmp_path)),
+            mock.patch(
+                "phabfive.setup.Prompt.ask",
+                return_value="https://phorge.example.com/api/",
+            ),
+        ):
+            _setup_arcconfig(console)
+
+        import json
+
+        with open(tmp_path / ".arcconfig") as f:
+            data = json.load(f)
+
+        assert data["phabricator.uri"] == "https://phorge.example.com/"
+
+    def test_setup_arcconfig_not_in_git_repo(self, tmp_path):
+        """Test that setup fails gracefully outside a git repo."""
+        console = mock.MagicMock()
+
+        with mock.patch("os.getcwd", return_value=str(tmp_path)):
+            result = _setup_arcconfig(console)
+
+        assert result is False
+
 
 class TestSetupWizardSaveConfig:
-    """Tests for configuration saving."""
+    """Tests for configuration saving to ~/.arcrc."""
 
     def setup_method(self):
         self.wizard = SetupWizard()
 
     def test_save_creates_file(self, tmp_path):
-        """Test that save creates config file."""
-        config_path = tmp_path / "phabfive.yaml"
+        """Test that save creates .arcrc file."""
+        config_path = tmp_path / ".arcrc"
 
         self.wizard.CONFIG_PATH = str(config_path)
         self.wizard.phab_url = "https://phorge.example.com/api/"
@@ -107,9 +224,9 @@ class TestSetupWizardSaveConfig:
         assert result is True
         assert config_path.exists()
 
-    def test_save_writes_correct_content(self, tmp_path):
-        """Test that save writes correct YAML content."""
-        config_path = tmp_path / "phabfive.yaml"
+    def test_save_writes_arcrc_json_format(self, tmp_path):
+        """Test that save writes correct .arcrc JSON format."""
+        config_path = tmp_path / ".arcrc"
 
         self.wizard.CONFIG_PATH = str(config_path)
         self.wizard.phab_url = "https://phorge.example.com/api/"
@@ -117,14 +234,22 @@ class TestSetupWizardSaveConfig:
 
         self.wizard._save_config()
 
-        content = config_path.read_text()
-        assert "PHAB_URL: https://phorge.example.com/api/" in content
-        assert "PHAB_TOKEN: cli-abcdefghijklmnopqrstuvwxyz12" in content
+        import json
+
+        with open(config_path) as f:
+            data = json.load(f)
+
+        assert "hosts" in data
+        assert "https://phorge.example.com/api/" in data["hosts"]
+        assert (
+            data["hosts"]["https://phorge.example.com/api/"]["token"]
+            == "cli-abcdefghijklmnopqrstuvwxyz12"
+        )
 
     @skip_on_windows
     def test_save_creates_secure_permissions(self, tmp_path):
-        """Test that saved config file has secure permissions."""
-        config_path = tmp_path / "phabfive.yaml"
+        """Test that saved .arcrc file has secure permissions."""
+        config_path = tmp_path / ".arcrc"
 
         self.wizard.CONFIG_PATH = str(config_path)
         self.wizard.phab_url = "https://phorge.example.com/api/"
@@ -136,10 +261,19 @@ class TestSetupWizardSaveConfig:
         mode = os.stat(config_path).st_mode & 0o777
         assert mode == 0o600
 
-    def test_save_preserves_existing_config(self, tmp_path):
-        """Test that save preserves existing configuration values."""
-        config_path = tmp_path / "phabfive.yaml"
-        config_path.write_text("PHAB_SPACE: S42\n")
+    def test_save_merges_into_existing_arcrc(self, tmp_path):
+        """Test that save merges into existing .arcrc with other hosts."""
+        import json
+
+        config_path = tmp_path / ".arcrc"
+        existing = {
+            "hosts": {
+                "https://other.example.com/api/": {
+                    "token": "cli-existingtokenexistingtoken12"
+                }
+            }
+        }
+        config_path.write_text(json.dumps(existing))
 
         self.wizard.CONFIG_PATH = str(config_path)
         self.wizard.phab_url = "https://phorge.example.com/api/"
@@ -147,23 +281,48 @@ class TestSetupWizardSaveConfig:
 
         self.wizard._save_config()
 
-        content = config_path.read_text()
-        assert "PHAB_SPACE: S42" in content
-        assert "PHAB_URL: https://phorge.example.com/api/" in content
-        assert "PHAB_TOKEN: cli-abcdefghijklmnopqrstuvwxyz12" in content
+        with open(config_path) as f:
+            data = json.load(f)
 
-    def test_save_creates_parent_directory(self, tmp_path):
-        """Test that save creates parent directory if needed."""
-        config_path = tmp_path / "subdir" / "phabfive.yaml"
+        # Both hosts should be present
+        assert "https://other.example.com/api/" in data["hosts"]
+        assert (
+            data["hosts"]["https://other.example.com/api/"]["token"]
+            == "cli-existingtokenexistingtoken12"
+        )
+        assert "https://phorge.example.com/api/" in data["hosts"]
+        assert (
+            data["hosts"]["https://phorge.example.com/api/"]["token"]
+            == "cli-abcdefghijklmnopqrstuvwxyz12"
+        )
+
+    def test_save_updates_existing_host(self, tmp_path):
+        """Test that save updates token for existing host."""
+        import json
+
+        config_path = tmp_path / ".arcrc"
+        existing = {
+            "hosts": {
+                "https://phorge.example.com/api/": {
+                    "token": "cli-oldtokenoldtokenoldtokenold1"
+                }
+            }
+        }
+        config_path.write_text(json.dumps(existing))
 
         self.wizard.CONFIG_PATH = str(config_path)
         self.wizard.phab_url = "https://phorge.example.com/api/"
-        self.wizard.phab_token = "cli-abcdefghijklmnopqrstuvwxyz12"
+        self.wizard.phab_token = "cli-newtokennewtokennewtokennew1"
 
-        result = self.wizard._save_config()
+        self.wizard._save_config()
 
-        assert result is True
-        assert config_path.exists()
+        with open(config_path) as f:
+            data = json.load(f)
+
+        assert (
+            data["hosts"]["https://phorge.example.com/api/"]["token"]
+            == "cli-newtokennewtokennewtokennew1"
+        )
 
 
 class TestSetupWizardVerifyConnection:

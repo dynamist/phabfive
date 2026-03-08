@@ -77,8 +77,8 @@ VALIDATORS = {
 }
 VALIDATION_HINTS = {"PHAB_URL": "example: https://we.phorge.it/api/"}
 MISSING_CONFIG_HINTS = {
-    "PHAB_TOKEN": "example: export PHAB_TOKEN=cli-RANDOMRANDOMRANDOMRANDOMRAND",
-    "PHAB_URL": "example: echo PHAB_URL: https://we.phorge.it/api/ >> ~/.config/phabfive.yaml",
+    "PHAB_TOKEN": "add token to ~/.arcrc or run: phabfive user setup",
+    "PHAB_URL": 'create .arcconfig with: {"phabricator.uri": "https://we.phorge.it/"} or run: phabfive user setup',
 }
 
 PRIORITY_DEFAULT = "normal"

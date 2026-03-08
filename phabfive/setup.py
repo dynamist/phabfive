@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Interactive first-run configuration setup for phabfive."""
 
+import json
 import logging
 import os
 import re
@@ -9,7 +10,6 @@ import sys
 from phabricator import Phabricator, APIError
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
-from ruamel.yaml import YAML
 
 from phabfive.constants import VALIDATORS
 
@@ -92,7 +92,7 @@ log = logging.getLogger(__name__)
 class SetupWizard:
     """Interactive setup wizard for phabfive configuration."""
 
-    CONFIG_PATH = os.path.expanduser("~/.config/phabfive.yaml")
+    CONFIG_PATH = os.path.expanduser("~/.arcrc")
 
     def __init__(self):
         self.console = Console()
@@ -278,29 +278,26 @@ class SetupWizard:
             return False
 
     def _save_config(self) -> bool:
-        """Save configuration to file with secure permissions."""
+        """Save credentials to ~/.arcrc in Arcanist-compatible JSON format."""
         try:
-            # Ensure ~/.config directory exists
-            config_dir = os.path.dirname(self.CONFIG_PATH)
-            os.makedirs(config_dir, mode=0o700, exist_ok=True)
-
-            # Load existing config or create new
-            yaml = YAML()
-            yaml.default_flow_style = False
-
+            # Load existing .arcrc or create new
             if os.path.exists(self.CONFIG_PATH):
                 with open(self.CONFIG_PATH, "r") as f:
-                    config = yaml.load(f) or {}
+                    arcrc = json.load(f)
             else:
-                config = {}
+                arcrc = {}
 
-            # Update with new values
-            config["PHAB_URL"] = self.phab_url
-            config["PHAB_TOKEN"] = self.phab_token
+            # Ensure hosts key exists
+            if "hosts" not in arcrc:
+                arcrc["hosts"] = {}
 
-            # Write config file
+            # Add/update the host entry
+            arcrc["hosts"][self.phab_url] = {"token": self.phab_token}
+
+            # Write JSON with indentation
             with open(self.CONFIG_PATH, "w") as f:
-                yaml.dump(config, f)
+                json.dump(arcrc, f, indent=2)
+                f.write("\n")
 
             # Set secure permissions (Unix only)
             if os.name != "nt":
@@ -332,8 +329,104 @@ class SetupWizard:
         return url
 
 
+def _find_git_root():
+    """Find the git repository root by walking up from cwd.
+
+    Returns:
+        str or None: Path to git root, or None if not in a git repo
+    """
+    current = os.getcwd()
+    while True:
+        if os.path.isdir(os.path.join(current, ".git")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
+def _setup_arcconfig(console) -> bool:
+    """Interactive setup to create .arcconfig in the git repo root.
+
+    Args:
+        console: Rich Console instance for output
+
+    Returns:
+        bool: True if .arcconfig was created successfully, False otherwise
+    """
+    git_root = _find_git_root()
+
+    if git_root is None:
+        console.print(
+            "[yellow]Not inside a git repository. Cannot create .arcconfig.[/yellow]\n"
+        )
+        console.print("Either:")
+        console.print("  1. Run phabfive from inside a git repository")
+        console.print("  2. Set PHAB_URL environment variable")
+        console.print(
+            "  3. Run [bold]phabfive user setup[/bold] to configure ~/.arcrc\n"
+        )
+        return False
+
+    arcconfig_path = os.path.join(git_root, ".arcconfig")
+
+    if os.path.exists(arcconfig_path):
+        console.print(
+            f"[yellow].arcconfig already exists at {arcconfig_path}[/yellow]\n"
+        )
+        try:
+            with open(arcconfig_path, "r") as f:
+                data = json.load(f)
+            uri = data.get("phabricator.uri", "(not set)")
+            console.print(f"  Current phabricator.uri: [bold]{uri}[/bold]\n")
+        except (json.JSONDecodeError, IOError):
+            pass
+
+        if not Confirm.ask("Do you want to overwrite it?", default=False):
+            return False
+
+    console.print("[bold]Create .arcconfig[/bold]")
+    console.print(f"This will create .arcconfig in: {git_root}\n")
+
+    while True:
+        url = Prompt.ask(
+            "Enter your Phabricator URL (e.g., https://phorge.example.com)"
+        )
+
+        if not url:
+            console.print("[red]URL cannot be empty[/red]")
+            continue
+
+        # Strip trailing slashes and /api/ suffix for .arcconfig
+        # .arcconfig stores the base URL, not the API URL
+        url = url.rstrip("/")
+        if url.endswith("/api"):
+            url = url[:-4].rstrip("/")
+
+        console.print(f"[green]> Using URL: {url}[/green]\n")
+        break
+
+    try:
+        arcconfig_data = {"phabricator.uri": url + "/"}
+        with open(arcconfig_path, "w") as f:
+            json.dump(arcconfig_data, f, indent=2)
+            f.write("\n")
+
+        console.print(f"[green].arcconfig created at {arcconfig_path}[/green]")
+        console.print("[dim]Remember to commit .arcconfig to your repository.[/dim]\n")
+        return True
+
+    except Exception as e:
+        console.print(f"[red]Failed to create .arcconfig: {e}[/red]")
+        return False
+
+
 def offer_setup_on_error(error_message: str) -> bool:
     """Offer to run setup when configuration error occurs.
+
+    Routes to the appropriate wizard based on what's missing:
+    - Missing PHAB_URL: offer to create .arcconfig
+    - Missing PHAB_TOKEN or other errors: offer full setup wizard (~/.arcrc)
 
     Args:
         error_message: The configuration error message to display
@@ -350,8 +443,17 @@ def offer_setup_on_error(error_message: str) -> bool:
     console = Console()
     console.print(f"\n[red]ERROR: {error_message}[/red]\n")
 
-    if Confirm.ask("Would you like to run interactive setup now?", default=True):
-        wizard = SetupWizard()
-        return wizard.run()
+    is_url_error = "PHAB_URL" in error_message and "PHAB_TOKEN" not in error_message
+
+    if is_url_error:
+        if Confirm.ask(
+            "Would you like to create .arcconfig for this repository?",
+            default=True,
+        ):
+            return _setup_arcconfig(console)
+    else:
+        if Confirm.ask("Would you like to run interactive setup now?", default=True):
+            wizard = SetupWizard()
+            return wizard.run()
 
     return False
