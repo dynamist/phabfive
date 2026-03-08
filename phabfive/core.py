@@ -13,9 +13,9 @@ from urllib.parse import urlparse
 # phabfive imports
 from phabfive.constants import (
     REQUIRED,
-    CONFIG_EXAMPLES,
+    MISSING_CONFIG_HINTS,
     VALIDATORS,
-    VALID_EXAMPLES,
+    VALIDATION_HINTS,
     DEFAULTS,
     CONFIGURABLES,
 )
@@ -243,7 +243,7 @@ class Phabfive:
         for conf_key, conf_value in dict(self.conf).items():
             if conf_key in REQUIRED and not conf_value:
                 error = f"{conf_key} is not configured"
-                example = CONFIG_EXAMPLES.get(conf_key)
+                example = MISSING_CONFIG_HINTS.get(conf_key)
 
                 if example:
                     error += ", " + example
@@ -254,7 +254,7 @@ class Phabfive:
         for validator_key in VALIDATORS.keys():
             if not re.match(VALIDATORS[validator_key], self.conf[validator_key]):
                 error = f"{validator_key} is malformed"
-                example = VALID_EXAMPLES.get(validator_key)
+                example = VALIDATION_HINTS.get(validator_key)
 
                 if example:
                     error += ", " + example

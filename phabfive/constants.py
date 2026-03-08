@@ -46,8 +46,9 @@ MONOGRAM_SHORTCUT = {
 }
 
 # Apps that support "X123 'text'" → "app comment X123 'text'" shortcut
-# Currently only maniphest supports comments. Paste could be added later.
+# Currently only Maniphest supports comments. Paste could be added later.
 COMMENTS_SUPPORTED = ["maniphest"]
+
 # IO_EDIT_URI_VALUES = ["default", "read", "write", "never"]
 IO_NEW_URI_CHOICES = ["default", "observe", "mirror", "never"]
 DISPLAY_CHOICES = ["default", "always", "hidden"]
@@ -73,22 +74,17 @@ VALIDATORS = {
     "PHAB_TOKEN": "^[a-zA-Z0-9-]{32}$",
     "PHAB_FALLBACK": "^(yaml|json)$",
 }
-VALID_EXAMPLES = {"PHAB_URL": "example: http://127.0.0.1/api/"}
-CONFIG_EXAMPLES = {
+VALIDATION_HINTS = {"PHAB_URL": "example: https://we.phorge.it/api/"}
+MISSING_CONFIG_HINTS = {
     "PHAB_TOKEN": "example: export PHAB_TOKEN=cli-RANDOMRANDOMRANDOMRANDOMRAND",
-    "PHAB_URL": "example: echo PHAB_URL: https://dynamist.phacility.com/api/ >> ~/.config/phabfive.yaml",
+    "PHAB_URL": "example: echo PHAB_URL: https://we.phorge.it/api/ >> ~/.config/phabfive.yaml",
 }
 
-TICKET_PRIORITY_UNBREAK = "unbreak"
-TICKET_PRIORITY_TRIAGE = "triage"
-TICKET_PRIORITY_HIGH = "high"
-TICKET_PRIORITY_NORMAL = "normal"
-TICKET_PRIORITY_LOW = "low"
-TICKET_PRIORITY_WISH = "wish"
+PRIORITY_DEFAULT = "normal"
 
 __all__ = [
     "AutoOption",
-    "CONFIG_EXAMPLES",
+    "MISSING_CONFIG_HINTS",
     "CONFIGURABLES",
     "DEFAULTS",
     "DISPLAY_CHOICES",
@@ -98,14 +94,9 @@ __all__ = [
     "MONOGRAM_SHORTCUT",
     "MONOGRAMS",
     "OutputFormat",
+    "PRIORITY_DEFAULT",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
-    "TICKET_PRIORITY_HIGH",
-    "TICKET_PRIORITY_LOW",
-    "TICKET_PRIORITY_NORMAL",
-    "TICKET_PRIORITY_TRIAGE",
-    "TICKET_PRIORITY_UNBREAK",
-    "TICKET_PRIORITY_WISH",
-    "VALID_EXAMPLES",
+    "VALIDATION_HINTS",
     "VALIDATORS",
 ]

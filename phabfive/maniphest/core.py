@@ -11,7 +11,7 @@ from pathlib import Path
 from jinja2 import Template
 from ruamel.yaml import YAML
 
-from phabfive.constants import TICKET_PRIORITY_NORMAL
+from phabfive.constants import PRIORITY_DEFAULT
 from phabfive.core import Phabfive
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -1353,7 +1353,7 @@ class Maniphest(Phabfive):
                 add_transaction(
                     transactions,
                     "priority",
-                    task_config.get("priority", TICKET_PRIORITY_NORMAL),
+                    task_config.get("priority", PRIORITY_DEFAULT),
                 )
 
                 projects = task_config.get("projects", [])
