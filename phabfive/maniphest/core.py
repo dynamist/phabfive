@@ -22,6 +22,7 @@ from phabfive.exceptions import (
 from phabfive.maniphest.fetchers import (
     fetch_all_transactions,
     fetch_project_names_for_boards,
+    fetch_task_relationships,
     get_api_priority_map,
     get_api_status_map,
 )
@@ -325,6 +326,55 @@ class Maniphest(Phabfive):
             show_metadata=show_metadata,
             show_comments=show_comments,
         )
+
+    def get_related_tasks(self, task_id, relationship_type):
+        """
+        Get parent or subtask tasks for a given task.
+
+        Parameters
+        ----------
+        task_id : int
+            Task ID (e.g., 123 for T123)
+        relationship_type : str
+            Either "parents" or "subtasks"
+
+        Returns
+        -------
+        dict
+            Dictionary with 'tasks' key containing list of task display data,
+            or None if source task not found
+        """
+        # First get the source task's PHID
+        result = self.phab.maniphest.search(constraints={"ids": [task_id]})
+        result_data = result.response.get("data", [])
+
+        if not result_data:
+            log.error(f"Task T{task_id} not found")
+            return None
+
+        task_phid = result_data[0].get("phid")
+
+        # Fetch related task PHIDs using edge.search
+        related_phids = fetch_task_relationships(
+            self.phab, task_phid, relationship_type
+        )
+
+        if not related_phids:
+            log.debug(f"No {relationship_type} found for T{task_id}")
+            return {"tasks": []}
+
+        # Fetch full task data for related tasks
+        related_result = self.phab.maniphest.search(
+            constraints={"phids": related_phids}, attachments={"columns": True}
+        )
+
+        related_data = related_result.response.get("data", [])
+
+        if not related_data:
+            return {"tasks": []}
+
+        # Build display data for related tasks
+        return self._build_task_display_data(related_data)
 
     def _load_search_config(self, template_path):
         """

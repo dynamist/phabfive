@@ -105,8 +105,10 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
     prefix = match.group(1)
     expansion = MONOGRAM_SHORTCUT[prefix]
 
-    # Check if already expanded (non-option args before monogram match expansion)
-    if non_option_args == expansion:
+    # Only expand if monogram is the first positional argument
+    # If there are other args before it, the monogram is being used as an argument
+    # to another command (e.g., "maniphest parents T123")
+    if non_option_args:
         return argv
 
     # Split argv into: before monogram, monogram, after monogram

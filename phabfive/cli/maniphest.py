@@ -392,3 +392,63 @@ def search(
 
         output_format = _get_output_format(ctx)
         _display_tasks(result, output_format, maniphest)
+
+
+@maniphest_app.command()
+def parents(
+    ctx: typer.Context,
+    ticket_id: str = typer.Argument(..., help="Task ID (e.g., T123)"),
+) -> None:
+    """List parent tasks of a Maniphest task."""
+    _setup_output_options(ctx)
+    maniphest = _get_maniphest_app()
+
+    # Validate ticket ID format
+    maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
+    if not re.match(maniphest_pattern, ticket_id):
+        typer.echo(f"Invalid task ID '{ticket_id}'. Expected format: T123", err=True)
+        raise typer.Exit(1)
+
+    task_id = int(ticket_id[1:])
+    result = maniphest.get_related_tasks(task_id, "parents")
+
+    if result is None:
+        typer.echo(f"Task {ticket_id} not found", err=True)
+        raise typer.Exit(1)
+
+    if not result.get("tasks"):
+        typer.echo(f"No parent tasks found for {ticket_id}")
+        return
+
+    output_format = _get_output_format(ctx)
+    _display_tasks(result, output_format, maniphest)
+
+
+@maniphest_app.command()
+def subtasks(
+    ctx: typer.Context,
+    ticket_id: str = typer.Argument(..., help="Task ID (e.g., T123)"),
+) -> None:
+    """List subtasks of a Maniphest task."""
+    _setup_output_options(ctx)
+    maniphest = _get_maniphest_app()
+
+    # Validate ticket ID format
+    maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
+    if not re.match(maniphest_pattern, ticket_id):
+        typer.echo(f"Invalid task ID '{ticket_id}'. Expected format: T123", err=True)
+        raise typer.Exit(1)
+
+    task_id = int(ticket_id[1:])
+    result = maniphest.get_related_tasks(task_id, "subtasks")
+
+    if result is None:
+        typer.echo(f"Task {ticket_id} not found", err=True)
+        raise typer.Exit(1)
+
+    if not result.get("tasks"):
+        typer.echo(f"No subtasks found for {ticket_id}")
+        return
+
+    output_format = _get_output_format(ctx)
+    _display_tasks(result, output_format, maniphest)
