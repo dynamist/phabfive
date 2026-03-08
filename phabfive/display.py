@@ -68,6 +68,8 @@ def display_task_rich(console, task_dict, phabfive_instance):
     space = task_dict.get("_space")
     task_data = task_dict.get("Task", {})
     boards = task_dict.get("Boards", {})
+    parents = task_dict.get("Parents", [])
+    subtasks = task_dict.get("Subtasks", [])
     history = task_dict.get("History", {})
     metadata = task_dict.get("Metadata", {})
 
@@ -99,7 +101,7 @@ def display_task_rich(console, task_dict, phabfive_instance):
     if space:
         console.print(Text.assemble("    Space: ", space))
 
-    # Print Boards with clickable names
+    # Print Boards compacted: "Board-Name: Column-Value"
     if boards:
         console.print("  Boards:")
         for board_name, board_data in boards.items():
@@ -108,41 +110,48 @@ def display_task_rich(console, task_dict, phabfive_instance):
             board_link = phabfive_instance.format_link(
                 board_url, board_name, show_url=False
             )
-            console.print(Text.assemble("    ", board_link, ":"))
 
             if isinstance(board_data, dict):
-                for key, value in board_data.items():
-                    if key.startswith("_"):
-                        continue
-                    if key == "Column":
-                        column_phid = board_data.get("_column_phid", "")
-                        needs_quoting = _needs_yaml_quoting(value)
-                        if column_phid:
-                            query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}&statuses=open()"
-                            column_link = phabfive_instance.format_link(
-                                query_url, value, show_url=False
-                            )
-                            if needs_quoting:
-                                # When hyperlinks enabled, column_link is Text; when disabled, it's str
-                                if isinstance(column_link, Text):
-                                    console.print(
-                                        Text.assemble(
-                                            "      Column: '", column_link, "'"
-                                        )
-                                    )
-                                else:
-                                    escaped = column_link.replace("'", "''")
-                                    console.print(f"      Column: '{escaped}'")
-                            else:
-                                console.print(
-                                    Text.assemble("      Column: ", column_link)
-                                )
-                            continue
-                    if _needs_yaml_quoting(value):
-                        escaped = str(value).replace("'", "''")
-                        console.print(f"      {key}: '{_escape_for_rich(escaped)}'")
-                    else:
-                        console.print(f"      {key}: {_escape_for_rich(value)}")
+                column_value = board_data.get("Column", "")
+                column_phid = board_data.get("_column_phid", "")
+                if column_phid:
+                    query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}&statuses=open()"
+                    column_link = phabfive_instance.format_link(
+                        query_url, column_value, show_url=False
+                    )
+                    console.print(Text.assemble("    ", board_link, ": ", column_link))
+                else:
+                    console.print(
+                        Text.assemble(
+                            "    ", board_link, f": {_escape_for_rich(column_value)}"
+                        )
+                    )
+
+    # Print Parents section (only if non-empty)
+    if parents:
+        console.print("  Parents:")
+        for parent in parents:
+            # Format: {"Link": "url", "Task": {"Name": "title"}}
+            link = parent.get("Link", "")
+            name = parent.get("Task", {}).get("Name", "")
+            task_id = link.split("/")[-1] if link else ""
+            task_link = phabfive_instance.format_link(link, task_id, show_url=False)
+            console.print(
+                Text.assemble("    - ", task_link, f": {_escape_for_rich(name)}")
+            )
+
+    # Print Subtasks section (only if non-empty)
+    if subtasks:
+        console.print("  Subtasks:")
+        for subtask in subtasks:
+            # Format: {"Link": "url", "Task": {"Name": "title"}}
+            link = subtask.get("Link", "")
+            name = subtask.get("Task", {}).get("Name", "")
+            task_id = link.split("/")[-1] if link else ""
+            task_link = phabfive_instance.format_link(link, task_id, show_url=False)
+            console.print(
+                Text.assemble("    - ", task_link, f": {_escape_for_rich(name)}")
+            )
 
     # Print History section
     if history:
@@ -206,6 +215,8 @@ def display_task_tree(console, task_dict, phabfive_instance):
     space = task_dict.get("_space")
     task_data = task_dict.get("Task", {})
     boards = task_dict.get("Boards", {})
+    parents = task_dict.get("Parents", [])
+    subtasks = task_dict.get("Subtasks", [])
     history = task_dict.get("History", {})
     metadata = task_dict.get("Metadata", {})
 
@@ -232,7 +243,7 @@ def display_task_tree(console, task_dict, phabfive_instance):
     if space:
         task_branch.add(Text.assemble("Space: ", space))
 
-    # Add Boards section
+    # Add Boards section compacted: "Board-Name: Column-Value"
     if boards:
         boards_branch = tree.add("Boards")
         for board_name, board_data in boards.items():
@@ -241,22 +252,42 @@ def display_task_tree(console, task_dict, phabfive_instance):
             board_link = phabfive_instance.format_link(
                 board_url, board_name, show_url=False
             )
-            board_branch = boards_branch.add(board_link)
 
             if isinstance(board_data, dict):
-                for key, value in board_data.items():
-                    if key.startswith("_"):
-                        continue
-                    if key == "Column":
-                        column_phid = board_data.get("_column_phid", "")
-                        if column_phid:
-                            query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}&statuses=open()"
-                            column_link = phabfive_instance.format_link(
-                                query_url, value, show_url=False
-                            )
-                            board_branch.add(Text.assemble("Column: ", column_link))
-                            continue
-                    board_branch.add(f"{key}: {_escape_for_rich(value)}")
+                column_value = board_data.get("Column", "")
+                column_phid = board_data.get("_column_phid", "")
+                if column_phid:
+                    query_url = f"{phabfive_instance.url}/maniphest/?columns={column_phid}&statuses=open()"
+                    column_link = phabfive_instance.format_link(
+                        query_url, column_value, show_url=False
+                    )
+                    boards_branch.add(Text.assemble(board_link, ": ", column_link))
+                else:
+                    boards_branch.add(
+                        Text.assemble(board_link, f": {_escape_for_rich(column_value)}")
+                    )
+
+    # Add Parents section (only if non-empty)
+    if parents:
+        parents_branch = tree.add("Parents")
+        for parent in parents:
+            # Format: {"Link": "url", "Task": {"Name": "title"}}
+            link = parent.get("Link", "")
+            name = parent.get("Task", {}).get("Name", "")
+            task_id = link.split("/")[-1] if link else ""
+            task_link = phabfive_instance.format_link(link, task_id, show_url=False)
+            parents_branch.add(Text.assemble(task_link, f": {_escape_for_rich(name)}"))
+
+    # Add Subtasks section (only if non-empty)
+    if subtasks:
+        subtasks_branch = tree.add("Subtasks")
+        for subtask in subtasks:
+            # Format: {"Link": "url", "Task": {"Name": "title"}}
+            link = subtask.get("Link", "")
+            name = subtask.get("Task", {}).get("Name", "")
+            task_id = link.split("/")[-1] if link else ""
+            task_link = phabfive_instance.format_link(link, task_id, show_url=False)
+            subtasks_branch.add(Text.assemble(task_link, f": {_escape_for_rich(name)}"))
 
     # Add History section
     if history:
@@ -355,6 +386,10 @@ def display_task_yaml(task_dict):
                 boards[board_name] = board_data
         output["Boards"] = boards
 
+    # Always include Parents and Subtasks (even if empty list)
+    output["Parents"] = task_dict.get("Parents", [])
+    output["Subtasks"] = task_dict.get("Subtasks", [])
+
     # Add History section if present
     if task_dict.get("History"):
         output["History"] = task_dict["History"]
@@ -432,6 +467,10 @@ def display_task_json(task_dict):
             else:
                 boards[board_name] = board_data
         output["Boards"] = boards
+
+    # Always include Parents and Subtasks (even if empty list)
+    output["Parents"] = task_dict.get("Parents", [])
+    output["Subtasks"] = task_dict.get("Subtasks", [])
 
     # Add History section if present
     if task_dict.get("History"):
