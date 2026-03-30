@@ -100,12 +100,20 @@ jobs:
       - name: Build executable
         shell: bash
         run: |
-          pyinstaller --onefile --name phabfive phabfive/cli.py \
+          echo "from phabfive.cli import cli_entrypoint; cli_entrypoint()" > _entry.py
+          pyinstaller --onefile --name phabfive _entry.py \
             --collect-data rich \
             --copy-metadata rich \
             --collect-data phabricator \
             --hidden-import phabricator \
             --hidden-import anyconfig.backend.yaml \
+            --hidden-import phabfive.cli.maniphest \
+            --hidden-import phabfive.cli.diffusion \
+            --hidden-import phabfive.cli.passphrase \
+            --hidden-import phabfive.cli.paste \
+            --hidden-import phabfive.cli.user \
+            --hidden-import phabfive.cli.repl \
+            --hidden-import phabfive.cli.completers \
             --exclude-module mkdocs
 
       - name: Rename artifact
