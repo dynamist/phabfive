@@ -50,7 +50,7 @@ def _needs_yaml_quoting(value):
     return value == "" or any(c in value for c in ":{}[]`'\"")
 
 
-def display_task_rich(console, task_dict, phabfive_instance):
+def _display_task_rich(console, task_dict, phabfive_instance):
     """Display a single task in YAML-like format using Rich.
 
     Parameters
@@ -197,7 +197,7 @@ def display_task_rich(console, task_dict, phabfive_instance):
                 console.print(f"    {meta_key}: {_escape_for_rich(meta_value)}")
 
 
-def display_task_tree(console, task_dict, phabfive_instance):
+def _display_task_tree(console, task_dict, phabfive_instance):
     """Display a single task in tree format using Rich Tree.
 
     Parameters
@@ -335,17 +335,8 @@ def display_task_tree(console, task_dict, phabfive_instance):
     console.print(tree)
 
 
-def display_task_yaml(task_dict):
-    """Display task as strict YAML via ruamel.yaml.
-
-    Guaranteed conformant YAML output for piping to yq/jq.
-    No hyperlinks, no Rich formatting.
-
-    Parameters
-    ----------
-    task_dict : dict
-        Task data dictionary with Link, Task, Boards, History, Metadata, etc.
-    """
+def _display_task_yaml(task_dict):
+    """Display a single task as strict YAML via ruamel.yaml."""
     yaml = YAML()
     yaml.default_flow_style = False
 
@@ -414,16 +405,18 @@ def display_task_yaml(task_dict):
     print(stream.getvalue(), end="")
 
 
-def display_task_json(task_dict):
-    """Display task as JSON.
-
-    Machine-readable JSON output for piping to jq or other tools.
-    No hyperlinks, no Rich formatting.
+def _build_task_json_output(task_dict):
+    """Build a clean JSON-serializable dict from a task_dict.
 
     Parameters
     ----------
     task_dict : dict
         Task data dictionary with Link, Task, Boards, History, Metadata, etc.
+
+    Returns
+    -------
+    dict
+        Clean dictionary ready for JSON serialization.
     """
     # Build clean dict - use _url for the Link (plain URL string)
     output = {"Link": task_dict.get("_url", "")}
@@ -491,7 +484,63 @@ def display_task_json(task_dict):
     if task_dict.get("Metadata"):
         output["Metadata"] = task_dict["Metadata"]
 
-    print(json.dumps(output, indent=2))
+    return output
+
+
+def display_tasks_rich(console, task_dicts, phabfive_instance):
+    """Display tasks in YAML-like format using Rich.
+
+    Parameters
+    ----------
+    console : Console
+        Rich Console instance for output
+    task_dicts : list[dict]
+        List of task data dictionaries.
+    phabfive_instance : Phabfive
+        Instance to access format_link() and url
+    """
+    for task_dict in task_dicts:
+        _display_task_rich(console, task_dict, phabfive_instance)
+
+
+def display_tasks_tree(console, task_dicts, phabfive_instance):
+    """Display tasks in tree format using Rich Tree.
+
+    Parameters
+    ----------
+    console : Console
+        Rich Console instance for output
+    task_dicts : list[dict]
+        List of task data dictionaries.
+    phabfive_instance : Phabfive
+        Instance to access format_link() and url
+    """
+    for task_dict in task_dicts:
+        _display_task_tree(console, task_dict, phabfive_instance)
+
+
+def display_tasks_yaml(task_dicts):
+    """Display tasks as strict YAML.
+
+    Parameters
+    ----------
+    task_dicts : list[dict]
+        List of task data dictionaries.
+    """
+    for task_dict in task_dicts:
+        _display_task_yaml(task_dict)
+
+
+def display_tasks_json(task_dicts):
+    """Display tasks as a valid JSON array.
+
+    Parameters
+    ----------
+    task_dicts : list[dict]
+        List of task data dictionaries.
+    """
+    outputs = [_build_task_json_output(td) for td in task_dicts]
+    print(json.dumps(outputs, indent=2))
 
 
 def display_tasks(result, output_format, phabfive_instance):
@@ -512,15 +561,15 @@ def display_tasks(result, output_format, phabfive_instance):
     console = phabfive_instance.get_console()
 
     try:
-        for task_dict in result["tasks"]:
-            if output_format == "tree":
-                display_task_tree(console, task_dict, phabfive_instance)
-            elif output_format in ("yaml", "strict"):
-                display_task_yaml(task_dict)
-            elif output_format == "json":
-                display_task_json(task_dict)
-            else:  # "rich" (default)
-                display_task_rich(console, task_dict, phabfive_instance)
+        tasks = result["tasks"]
+        if output_format == "json":
+            display_tasks_json(tasks)
+        elif output_format == "tree":
+            display_tasks_tree(console, tasks, phabfive_instance)
+        elif output_format in ("yaml", "strict"):
+            display_tasks_yaml(tasks)
+        else:  # "rich" (default)
+            display_tasks_rich(console, tasks, phabfive_instance)
     except BrokenPipeError:
         # Handle pipe closed by consumer (e.g., head, less)
         # Quietly exit - this is normal behavior
