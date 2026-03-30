@@ -36,6 +36,8 @@ Major release featuring a migration from docopt-ng to Typer for the CLI framewor
 * Fix monogram shortcuts not working with global options
 * Improve error handling and standardize error format
 * Fix passphrase show subcommand for monogram shortcuts
+* Fix PyInstaller entry point for Typer CLI package structure
+* Fix insecure temp file reuse vulnerability in requests (upgrade to 2.33.0)
 
 ## Other Notes
 
@@ -44,6 +46,7 @@ Major release featuring a migration from docopt-ng to Typer for the CLI framewor
 * Removed unused MANIFEST.in
 * Updated pre-commit hooks
 * Cleaned up constants.py
+* Added `exclude-newer` to `[tool.uv]` for supply chain protection
 
 
 # 0.7.1 (2026-03-07)

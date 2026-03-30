@@ -53,5 +53,8 @@ phabfive = "phabfive.cli:cli_entrypoint"
 Homepage = "https://github.com/dynamist/phabfive"
 Download = "https://github.com/dynamist/phabfive/releases"
 
+[tool.uv]
+exclude-newer = "4 days"
+
 [tool.hatch.build.targets.wheel]
 packages = ["phabfive"]
