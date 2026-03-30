@@ -1,3 +1,51 @@
+# 0.8.0 (2026-03-30)
+
+## Prelude
+
+Major release featuring a migration from docopt-ng to Typer for the CLI framework, Arcanist-compatible configuration, and numerous new features including shell completion, JSON output, parent/subtask support, and search metadata embedding.
+
+## Upgrade Notes
+
+* **Breaking change:** Configuration now uses Arcanist-compatible `.arcrc` format. Existing `~/.config/phabfive.yaml` configurations need to be migrated. Run `phabfive user setup` for guided setup.
+* **CLI framework migrated from docopt-ng to Typer** - Command syntax is unchanged, but help output and error messages may differ.
+* **`--format=strict` renamed to `--format=yaml`** - The `strict` alias is still accepted for backwards compatibility.
+
+## New Features
+
+### CLI & Shell Completion
+* **Typer-based CLI** - Migrated from docopt-ng to Typer for better argument parsing, type safety, and help output
+* **Smart shell completion** - Tab completion for `--priority`, `--status`, `--column` values, and all other option values
+* **JSON output format** - New `--format=json` option for machine-readable output
+
+### Maniphest Enhancements
+* **Multi-task show** - `maniphest show` now accepts multiple task IDs (e.g., `phabfive maniphest show T123 T456`)
+* **Parents and subtasks** - New `maniphest parents` and `maniphest subtasks` commands, plus Parents/Subtasks fields in task output
+* **Search metadata Query embedding** - `--show-metadata` now includes a `Query` section with original search parameters, enabling downstream tools to access search context without duplicate arguments
+
+### Configuration
+* **Arcanist-compatible configuration** - Reads credentials from `.arcrc` files, compatible with Arcanist/Phorge tooling
+* **Interactive server selector** - When multiple hosts are configured in `.arcrc`, presents an interactive selection prompt
+
+### Other
+* **Passphrase structured output** - `passphrase show` now outputs structured data
+* **Optional ptpython REPL** - Enhanced REPL experience when ptpython is installed
+
+## Bug Fixes
+
+* Fix JSON output producing invalid JSON array for multiple tasks
+* Fix monogram shortcuts not working with global options
+* Improve error handling and standardize error format
+* Fix passphrase show subcommand for monogram shortcuts
+
+## Other Notes
+
+* Replaced flake8 with ruff for linting
+* Updated license to SPDX identifier format
+* Removed unused MANIFEST.in
+* Updated pre-commit hooks
+* Cleaned up constants.py
+
+
 # 0.7.1 (2026-03-07)
 
 ## Bug Fixes
