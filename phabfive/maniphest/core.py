@@ -200,6 +200,7 @@ class Maniphest(Phabfive):
         show_history=False,
         show_metadata=False,
         show_comments=False,
+        search_params=None,
     ):
         """Build structured task display data from API results."""
         return build_task_display_data(
@@ -222,6 +223,7 @@ class Maniphest(Phabfive):
             show_history=show_history,
             show_metadata=show_metadata,
             show_comments=show_comments,
+            search_params=search_params,
         )
 
     def parse_status_patterns_with_api(self, patterns_str):
@@ -1198,6 +1200,27 @@ class Maniphest(Phabfive):
                             "status"
                         ]
 
+        # Build search params for metadata embedding
+        search_params = None
+        if show_metadata:
+            search_params = {}
+            if tag:
+                search_params["tag"] = tag
+            if text_query:
+                search_params["text_query"] = text_query
+            if assigned:
+                search_params["assigned"] = assigned
+            if space:
+                search_params["space"] = space
+            if updated_after_original:
+                search_params["updated_after"] = updated_after_original
+            if updated_before_original:
+                search_params["updated_before"] = updated_before_original
+            if created_after_original:
+                search_params["created_after"] = created_after_original
+            if created_before_original:
+                search_params["created_before"] = created_before_original
+
         # Use shared method to build task data
         return self._build_task_display_data(
             result_data,
@@ -1209,6 +1232,7 @@ class Maniphest(Phabfive):
             matching_status_map=matching_status_map,
             show_history=show_history,
             show_metadata=show_metadata,
+            search_params=search_params,
         )
 
     def add_task_comment(self, ticket_identifier, comment_string):

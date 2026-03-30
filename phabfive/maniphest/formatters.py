@@ -495,6 +495,7 @@ def build_metadata_section(
     matching_priority_map,
     matching_status_map,
     project_phid_to_name,
+    search_params=None,
 ):
     """
     Build Metadata section dict with filter match information.
@@ -511,6 +512,8 @@ def build_metadata_section(
         Mapping of task ID to status match boolean
     project_phid_to_name : dict
         Mapping of board PHID to project name
+    search_params : dict, optional
+        Search parameters to embed as Query section
 
     Returns
     -------
@@ -543,6 +546,10 @@ def build_metadata_section(
     else:
         metadata["MatchedStatus"] = False
 
+    # Add search query parameters
+    if search_params:
+        metadata["Query"] = search_params
+
     return metadata
 
 
@@ -566,6 +573,7 @@ def build_task_display_data(
     show_history=False,
     show_metadata=False,
     show_comments=False,
+    search_params=None,
 ):
     """
     Build structured task display data from API results.
@@ -609,6 +617,8 @@ def build_task_display_data(
         Whether to include filter match metadata
     show_comments : bool, optional
         Whether to include comments
+    search_params : dict, optional
+        Search parameters to embed in metadata Query section
 
     Returns
     -------
@@ -800,6 +810,7 @@ def build_task_display_data(
                 matching_priority_map,
                 matching_status_map,
                 project_phid_to_name,
+                search_params=search_params,
             )
             task_dict["Metadata"] = metadata_data
 
