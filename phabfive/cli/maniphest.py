@@ -58,10 +58,10 @@ def _setup_output_options(ctx: typer.Context):
 def _display_tasks(result, output_format, maniphest_instance):
     """Display task search/show results in the specified format."""
     from phabfive.display import (
-        display_task_json,
-        display_task_rich,
-        display_task_yaml,
-        display_task_tree,
+        display_tasks_json,
+        display_tasks_rich,
+        display_tasks_tree,
+        display_tasks_yaml,
     )
 
     if not result or not result.get("tasks"):
@@ -70,15 +70,15 @@ def _display_tasks(result, output_format, maniphest_instance):
     console = maniphest_instance.get_console()
 
     try:
-        for task_dict in result["tasks"]:
-            if output_format == "tree":
-                display_task_tree(console, task_dict, maniphest_instance)
-            elif output_format in ("yaml", "strict"):
-                display_task_yaml(task_dict)
-            elif output_format == "json":
-                display_task_json(task_dict)
-            else:  # "rich" (default)
-                display_task_rich(console, task_dict, maniphest_instance)
+        tasks = result["tasks"]
+        if output_format == "json":
+            display_tasks_json(tasks)
+        elif output_format == "tree":
+            display_tasks_tree(console, tasks, maniphest_instance)
+        elif output_format in ("yaml", "strict"):
+            display_tasks_yaml(tasks)
+        else:  # "rich" (default)
+            display_tasks_rich(console, tasks, maniphest_instance)
     except BrokenPipeError:
         sys.stderr.close()
         sys.exit(0)
