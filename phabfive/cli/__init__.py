@@ -116,7 +116,13 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
     after = argv[monogram_idx + 1 :]
 
     # Handle comment shortcut: T123 'text' → maniphest comment T123 'text'
-    if prefix in _COMMENT_PREFIXES and after and not after[0].startswith("-"):
+    # But not when the next arg is also a monogram (T123 T456 → show both)
+    if (
+        prefix in _COMMENT_PREFIXES
+        and after
+        and not after[0].startswith("-")
+        and not _MONOGRAM_PATTERN.match(after[0])
+    ):
         app_name = expansion[0]  # e.g., 'maniphest'
         return before + [app_name, "comment", monogram] + after
 

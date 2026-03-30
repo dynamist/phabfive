@@ -87,7 +87,7 @@ def _display_tasks(result, output_format, maniphest_instance):
 @maniphest_app.command()
 def show(
     ctx: typer.Context,
-    ticket_id: str = typer.Argument(..., help="Task ID (e.g., T123)"),
+    ticket_ids: List[str] = typer.Argument(..., help="Task ID(s) (e.g., T123 T456)"),
     show_history: bool = typer.Option(
         False, "--show-history", "-H", help="Display transition history"
     ),
@@ -98,19 +98,23 @@ def show(
         False, "--show-comments", "-C", help="Display comments on the task"
     ),
 ) -> None:
-    """Show details for a Maniphest task."""
+    """Show details for one or more Maniphest tasks."""
     _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
 
-    # Validate ticket ID format
+    # Validate all ticket ID formats
     maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
-    if not re.match(maniphest_pattern, ticket_id):
-        typer.echo(f"Invalid task ID '{ticket_id}'. Expected format: T123", err=True)
-        raise typer.Exit(1)
+    task_ids = []
+    for ticket_id in ticket_ids:
+        if not re.match(maniphest_pattern, ticket_id):
+            typer.echo(
+                f"Invalid task ID '{ticket_id}'. Expected format: T123", err=True
+            )
+            raise typer.Exit(1)
+        task_ids.append(int(ticket_id[1:]))
 
-    task_id = int(ticket_id[1:])
     result = maniphest.task_show(
-        task_id,
+        task_ids,
         show_history=show_history,
         show_metadata=show_metadata,
         show_comments=show_comments,
