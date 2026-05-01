@@ -63,6 +63,11 @@ def edit_command(
         "--assign",
         help="Set assignee (username or @me for yourself)",
     ),
+    description: Optional[str] = typer.Option(
+        None,
+        "--description",
+        help="Set description (use - to read from stdin, or omit all options to open $EDITOR)",
+    ),
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
@@ -102,6 +107,7 @@ def edit_command(
         tag=tag,
         column=column,
         assign=assign,
+        description=description,
         subscribe=subscribe,
         comment=comment,
         dry_run=dry_run,

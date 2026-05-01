@@ -301,6 +301,7 @@ class Edit(Phabfive):
         tag=None,
         column=None,
         assign=None,
+        description=None,
         subscribe=None,
         comment=None,
         dry_run=False,
@@ -314,6 +315,7 @@ class Edit(Phabfive):
             tag (str): Board name for column context
             column (str): Column name (or "forward"/"backward")
             assign (str): Username to assign
+            description (str): Description text, or "" to open $EDITOR
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             dry_run (bool): Show changes without applying
@@ -321,13 +323,11 @@ class Edit(Phabfive):
         Returns:
             int: Return code (0 for success, 1 for failure)
         """
-        # Validate that at least one edit option is provided
-        if not any([priority, status, column, assign, subscribe, comment]):
-            sys.stderr.write(
-                "Error: No edit options provided. Specify at least one of: "
-                "--priority, --status, --column, --assign, --subscribe, --comment\n"
-            )
-            return 1
+        # If no edit options provided, default to editing description in $EDITOR
+        has_any_option = any([
+            priority, status, column, assign, description is not None, subscribe, comment
+        ])
+        edit_description_in_editor = not has_any_option
 
         try:
             # Auto-detect piped input
@@ -349,9 +349,11 @@ class Edit(Phabfive):
                             tag=tag,
                             column=column,
                             assign=assign,
+                            description=description,
                             subscribe=subscribe,
                             comment=comment,
                             dry_run=dry_run,
+                            edit_description_in_editor=edit_description_in_editor,
                         )
                     elif object_type == "passphrase":
                         sys.stderr.write(
@@ -364,6 +366,14 @@ class Edit(Phabfive):
                 else:
                     # Multiple objects - batch mode from CLI args
                     object_type = parsed_ids[0][0]  # All same type (validated above)
+
+                    # Editor mode not supported for batch operations
+                    if edit_description_in_editor:
+                        sys.stderr.write(
+                            "Error: Editing description in $EDITOR only works for single task.\n"
+                            "Specify an edit option (e.g., --priority, --status) for batch operations.\n"
+                        )
+                        return 1
 
                     if object_type == "task":
                         # Convert to batch format
@@ -378,6 +388,7 @@ class Edit(Phabfive):
                             tag=tag,
                             column=column,
                             assign=assign,
+                            description=description,
                             subscribe=subscribe,
                             comment=comment,
                             dry_run=dry_run,
@@ -393,6 +404,15 @@ class Edit(Phabfive):
 
             elif has_piped_input:
                 # Batch mode (auto-detected from pipe)
+
+                # Editor mode not supported for batch operations
+                if edit_description_in_editor:
+                    sys.stderr.write(
+                        "Error: Editing description in $EDITOR only works for single task.\n"
+                        "Specify an edit option (e.g., --priority, --status) for batch operations.\n"
+                    )
+                    return 1
+
                 objects = self._parse_yaml_from_stdin()
                 if not objects:
                     sys.stderr.write("Error: No objects found in stdin\n")
@@ -410,6 +430,7 @@ class Edit(Phabfive):
                         tag=tag,
                         column=column,
                         assign=assign,
+                        description=description,
                         subscribe=subscribe,
                         comment=comment,
                         dry_run=dry_run,
@@ -450,9 +471,11 @@ class Edit(Phabfive):
         tag=None,
         column=None,
         assign=None,
+        description=None,
         subscribe=None,
         comment=None,
         dry_run=False,
+        edit_description_in_editor=False,
     ):
         """Edit a single task.
 
@@ -463,9 +486,11 @@ class Edit(Phabfive):
             tag (str): Board name for column context
             column (str): Column name (or "forward"/"backward")
             assign (str): Username to assign
+            description (str): Description text, "" to clear, "-" to read from stdin
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             dry_run (bool): Show changes without applying
+            edit_description_in_editor (bool): Open $EDITOR for description
 
         Returns:
             int: Return code (0 for success, 1 for failure)
@@ -473,6 +498,27 @@ class Edit(Phabfive):
         try:
             # Fetch current task state
             task_data = self.maniphest._get_task_data(task_id)
+
+            # Handle description
+            final_description = None
+            if edit_description_in_editor:
+                # Open editor with current description
+                from phabfive.editor import edit_text
+
+                current_desc = task_data["fields"].get("description", {}).get("raw", "")
+                final_description = edit_text(current_desc)
+                if final_description is None:
+                    print("Description edit cancelled")
+                    return 0
+            elif description == "-":
+                # Read from stdin
+                if sys.stdin.isatty():
+                    sys.stderr.write("Error: --description - requires input from stdin\n")
+                    return 1
+                final_description = sys.stdin.read().rstrip()
+            elif description is not None:
+                # Use provided description (including empty string to clear)
+                final_description = description
 
             # Validate board/column context
             board_phid, error = self._validate_board_column_context(
@@ -503,6 +549,7 @@ class Edit(Phabfive):
                 board_phid=board_phid,
                 column=column,
                 assign=assign,
+                description=final_description,
                 subscribe=subscribe,
                 comment=comment,
                 dry_run=dry_run,
@@ -525,6 +572,7 @@ class Edit(Phabfive):
         tag=None,
         column=None,
         assign=None,
+        description=None,
         subscribe=None,
         comment=None,
         dry_run=False,
@@ -538,6 +586,7 @@ class Edit(Phabfive):
             tag (str): Board name for column context
             column (str): Column name (or "forward"/"backward")
             assign (str): Username to assign
+            description (str): Description text to set
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             dry_run (bool): Show changes without applying
@@ -611,6 +660,7 @@ class Edit(Phabfive):
                     board_phid=task["board_phid"],
                     column=column,
                     assign=assign,
+                    description=description,
                     subscribe=subscribe,
                     comment=comment,
                     dry_run=dry_run,

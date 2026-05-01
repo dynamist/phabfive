@@ -468,6 +468,11 @@ def edit(
         "--assign",
         help="Set assignee (username or @me for yourself)",
     ),
+    description: Optional[str] = typer.Option(
+        None,
+        "--description",
+        help="Set description (use - to read from stdin, or omit all options to open $EDITOR)",
+    ),
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
@@ -487,6 +492,7 @@ def edit(
     """Edit one or more Maniphest tasks.
 
     Examples:
+        phabfive maniphest edit T123  # opens $EDITOR for description
         phabfive maniphest edit T123 --priority=high
         phabfive maniphest edit T123,T124 --status=resolved
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
@@ -511,6 +517,7 @@ def edit(
         tag=tag,
         column=column,
         assign=assign,
+        description=description,
         subscribe=subscribe,
         comment=comment_text,
         dry_run=dry_run,
