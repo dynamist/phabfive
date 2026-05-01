@@ -260,7 +260,7 @@ class Edit(Phabfive):
                 # Open editor with current description
                 from phabfive.editor import edit_text
 
-                new_desc = edit_text(current_desc)
+                new_desc = edit_text(current_desc, prefix="description-")
                 if new_desc is None:
                     print("Description edit cancelled")
                     return 0

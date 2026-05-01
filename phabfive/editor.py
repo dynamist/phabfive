@@ -13,11 +13,12 @@ def get_editor():
     return os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
 
 
-def edit_text(initial_text="", suffix=".remarkup"):
+def edit_text(initial_text="", prefix="", suffix=".remarkup"):
     """Open external editor and return edited text.
 
     Args:
         initial_text: Text to pre-populate the editor with
+        prefix: File prefix (hints at what field is being edited)
         suffix: File suffix (helps editors with syntax highlighting)
 
     Returns:
@@ -27,7 +28,7 @@ def edit_text(initial_text="", suffix=".remarkup"):
             - Editor returns non-zero exit code
     """
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=suffix, delete=False, encoding="utf-8"
+        mode="w", prefix=prefix, suffix=suffix, delete=False, encoding="utf-8"
     ) as f:
         f.write(initial_text)
         temp_path = f.name
