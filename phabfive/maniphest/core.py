@@ -1753,9 +1753,12 @@ class Maniphest(Phabfive):
         # Fetch current task state
         task_data = self._get_task_data(task_id)
         current_priority = task_data["fields"]["priority"]["value"]
+        current_priority_name = task_data["fields"]["priority"].get("name", "Unknown")
         current_status = task_data["fields"]["status"]["value"]
+        current_status_name = task_data["fields"]["status"].get("name", current_status)
 
         transactions = []
+        changes = []  # Track human-readable changes for display
 
         # Handle priority
         if priority:
@@ -1768,22 +1771,92 @@ class Maniphest(Phabfive):
 
             if new_priority != current_priority:
                 transactions.append({"type": "priority", "value": new_priority})
+                # Get human-readable name for new priority
+                # new_priority is either a numeric value (from raise/lower) or
+                # a string like "high" (from validate_priority)
+                priority_map = self._get_api_priority_map()
+                # Map API string values to display names
+                api_to_display = {
+                    "unbreak": "Unbreak Now!",
+                    "triage": "Triage",
+                    "high": "High",
+                    "normal": "Normal",
+                    "low": "Low",
+                    "wish": "Wishlist",
+                }
+                if isinstance(new_priority, int):
+                    new_priority_name = priority_map.get(
+                        new_priority,
+                        priority_map.get(str(new_priority), str(new_priority)),
+                    )
+                else:
+                    new_priority_name = api_to_display.get(
+                        str(new_priority).lower(), str(new_priority)
+                    )
+                changes.append(
+                    {
+                        "field": "Priority",
+                        "old": current_priority_name,
+                        "new": new_priority_name,
+                    }
+                )
 
         # Handle status
         if status:
             validated_status = self._validate_status(status)
             if validated_status != current_status:
                 transactions.append({"type": "status", "value": validated_status})
+                # Get human-readable name for new status
+                status_map = self._get_api_status_map().get("statusMap", {})
+                new_status_name = status_map.get(validated_status, {}).get(
+                    "name", validated_status
+                )
+                changes.append(
+                    {
+                        "field": "Status",
+                        "old": current_status_name,
+                        "new": new_status_name,
+                    }
+                )
 
         # Handle column
         if column and board_phid:
             column_phid = self._navigate_column(task_id, task_data, column, board_phid)
             if column_phid:
+                # Get current and new column names
+                from phabfive.maniphest.fetchers import get_column_info
+
+                column_info = get_column_info(self.phab, board_phid)
+                new_column_name = column_info.get(column_phid, {}).get("name", column)
+
+                # Get current column name on this board
+                current_column_name = None
+                boards_data = (
+                    task_data.get("attachments", {})
+                    .get("columns", {})
+                    .get("boards", {})
+                )
+                if board_phid in boards_data:
+                    current_columns = boards_data[board_phid].get("columns", [])
+                    if current_columns:
+                        current_col_phid = current_columns[0].get("phid")
+                        current_column_name = column_info.get(current_col_phid, {}).get(
+                            "name"
+                        )
+
                 # Also need to add task to board if not already on it
                 task_projects = task_data["attachments"]["projects"]["projectPHIDs"]
                 if board_phid not in task_projects:
                     transactions.append({"type": "projects.add", "value": [board_phid]})
                 transactions.append({"type": "column", "value": [column_phid]})
+
+                changes.append(
+                    {
+                        "field": "Column",
+                        "old": current_column_name or "(none)",
+                        "new": new_column_name,
+                    }
+                )
 
         # Handle assignee
         if assign:
@@ -1791,34 +1864,59 @@ class Maniphest(Phabfive):
             if assign == "@me":
                 whoami = self.phab.user.whoami()
                 user_phid = whoami.get("phid")
+                new_username = whoami.get("userName", assign)
                 if not user_phid:
                     raise ValueError("Failed to get current user's PHID")
             else:
                 user_phid = self._resolve_user_phid(assign)
+                new_username = assign
                 if not user_phid:
                     raise ValueError(f"User not found: {assign}")
             current_owner = task_data["fields"]["ownerPHID"]
             if user_phid != current_owner:
                 transactions.append({"type": "owner", "value": user_phid})
+                # Get current owner username
+                current_username = None
+                if current_owner:
+                    try:
+                        result = self.phab.user.search(
+                            constraints={"phids": [current_owner]}
+                        )
+                        if result.get("data"):
+                            current_username = result["data"][0]["fields"].get(
+                                "username"
+                            )
+                    except Exception:
+                        pass
+                changes.append(
+                    {
+                        "field": "Assignee",
+                        "old": current_username or "(none)",
+                        "new": new_username,
+                    }
+                )
 
         # Handle comment
         if comment:
             transactions.append({"type": "comment", "value": comment})
+            changes.append({"field": "Comment", "old": None, "new": "Added"})
 
         if not transactions:
             log.info(f"No changes to apply for T{task_id}")
-            return
+            return {"task_id": task_id, "changes": []}
 
         if dry_run:
             print(f"[DRY RUN] Would apply to T{task_id}:")
             for txn in transactions:
                 print(f"  - {txn['type']}: {txn['value']}")
-            return
+            return {"task_id": task_id, "changes": changes, "dry_run": True}
 
         # Apply transactions
         self.phab.maniphest.edit(
             objectIdentifier=f"T{task_id}", transactions=transactions
         )
+
+        return {"task_id": task_id, "changes": changes}
 
     def _navigate_priority(self, current_priority, direction):
         """Navigate priority up or down, skipping Triage.
