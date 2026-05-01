@@ -412,6 +412,101 @@ def search(
         _display_tasks(result, output_format, maniphest)
 
 
+def _get_edit_app():
+    """Get Edit app instance with config error handling."""
+    from phabfive.edit import Edit
+
+    try:
+        return Edit()
+    except PhabfiveConfigException as e:
+        from phabfive.setup import offer_setup_on_error
+
+        if not offer_setup_on_error(str(e)):
+            raise typer.Exit(1)
+        # If setup succeeded, try again
+        return Edit()
+
+
+@maniphest_app.command()
+def edit(
+    ctx: typer.Context,
+    task_ids: str = typer.Argument(
+        ...,
+        help="Task monogram(s) (e.g., T123 or T123,T124,T125)",
+    ),
+    priority: Optional[str] = typer.Option(
+        None,
+        "--priority",
+        help="Set priority: unbreak, high, normal, low, wish, raise, lower",
+        autocompletion=complete_priority,
+    ),
+    status: Optional[str] = typer.Option(
+        None,
+        "--status",
+        help="Set status: open, resolved, wontfix, invalid, duplicate, etc.",
+        autocompletion=complete_status,
+    ),
+    tag: Optional[str] = typer.Option(
+        None,
+        "--tag",
+        help="Specify board context for --column (also adds task to board if needed)",
+    ),
+    column: Optional[str] = typer.Option(
+        None,
+        "--column",
+        help="Set column on board, or use forward/backward for directional navigation",
+        autocompletion=complete_column,
+    ),
+    assign: Optional[str] = typer.Option(
+        None,
+        "--assign",
+        help="Set assignee (username or @me for yourself)",
+    ),
+    comment_text: Optional[str] = typer.Option(
+        None,
+        "--comment",
+        help="Add comment with changes",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show changes without applying them",
+    ),
+) -> None:
+    """Edit one or more Maniphest tasks.
+
+    Examples:
+        phabfive maniphest edit T123 --priority=high
+        phabfive maniphest edit T123,T124 --status=resolved
+        phabfive maniphest edit T123 --tag="Sprint" --column=forward
+    """
+    # Validate monogram format (T followed by digits)
+    maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
+    for part in task_ids.split(","):
+        part = part.strip()
+        if not re.match(maniphest_pattern, part):
+            typer.echo(
+                f"Invalid task monogram '{part}'. Expected format: T123", err=True
+            )
+            raise typer.Exit(1)
+
+    # Delegate to Edit class for processing
+    edit_handler = _get_edit_app()
+
+    retcode = edit_handler.edit_objects(
+        object_id=task_ids,
+        priority=priority,
+        status=status,
+        tag=tag,
+        column=column,
+        assign=assign,
+        comment=comment_text,
+        dry_run=dry_run,
+    )
+
+    raise typer.Exit(retcode)
+
+
 @maniphest_app.command()
 def parents(
     ctx: typer.Context,

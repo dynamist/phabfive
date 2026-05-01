@@ -649,3 +649,106 @@ class TestPartitionSuggestions:
         assert "phabfive edit T123,T456" in result
         assert '--tag="Board1"' in result
         assert "echo" not in result  # Should not use echo pipe format
+
+
+class TestEditExpansion:
+    """Tests for 'edit T123' → 'maniphest edit T123' expansion."""
+
+    def test_edit_task_expansion(self):
+        """Test 'edit T123' expands to 'maniphest edit T123'."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "edit", "T123"])
+        assert result == ["phabfive", "maniphest", "edit", "T123"]
+
+    def test_edit_task_expansion_with_options(self):
+        """Test 'edit T123 --priority=high' expands correctly."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(
+            ["phabfive", "edit", "T123", "--priority=high", "--status=resolved"]
+        )
+        assert result == [
+            "phabfive",
+            "maniphest",
+            "edit",
+            "T123",
+            "--priority=high",
+            "--status=resolved",
+        ]
+
+    def test_edit_task_expansion_with_global_options(self):
+        """Test '--format=yaml edit T123' expands correctly."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(
+            ["phabfive", "--format=yaml", "edit", "T123", "--priority=high"]
+        )
+        assert result == [
+            "phabfive",
+            "--format=yaml",
+            "maniphest",
+            "edit",
+            "T123",
+            "--priority=high",
+        ]
+
+    def test_edit_comma_separated_expansion(self):
+        """Test 'edit T123,T456' expands to 'maniphest edit T123,T456'."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "edit", "T123,T456"])
+        # Comma-separated monograms are not detected as individual monograms
+        # The first is T123,T456 which doesn't match the monogram pattern
+        # So no expansion happens for this case - it goes through the top-level edit
+        assert result == ["phabfive", "edit", "T123,T456"]
+
+    def test_edit_without_monogram_no_expansion(self):
+        """Test 'edit --column=Done' (no monogram) is not expanded."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "edit", "--column=Done"])
+        assert result == ["phabfive", "edit", "--column=Done"]
+
+    def test_edit_alone_no_expansion(self):
+        """Test 'edit' alone is not expanded."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "edit"])
+        assert result == ["phabfive", "edit"]
+
+    def test_maniphest_edit_not_double_expanded(self):
+        """Test 'maniphest edit T123' is not expanded again."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "maniphest", "edit", "T123"])
+        # "maniphest" is the first positional arg, not "edit"
+        assert result == ["phabfive", "maniphest", "edit", "T123"]
+
+    def test_existing_show_shortcut_still_works(self):
+        """Test 'T123' still expands to 'maniphest show T123'."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "T123"])
+        assert result == ["phabfive", "maniphest", "show", "T123"]
+
+    def test_existing_comment_shortcut_still_works(self):
+        """Test 'T123 "comment"' still expands to 'maniphest comment T123 ...'."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "T123", "Add a comment"])
+        assert result == ["phabfive", "maniphest", "comment", "T123", "Add a comment"]
+
+    def test_edit_passphrase_expansion(self):
+        """Test 'edit K123' expands to 'passphrase edit K123'."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "edit", "K123"])
+        assert result == ["phabfive", "passphrase", "edit", "K123"]
+
+    def test_edit_paste_expansion(self):
+        """Test 'edit P123' expands to 'paste edit P123'."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "edit", "P123"])
+        assert result == ["phabfive", "paste", "edit", "P123"]

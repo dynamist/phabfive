@@ -69,12 +69,43 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
         T123 → maniphest show T123
         --format=yaml T123 → --format=yaml maniphest show T123
         T123 'comment' → maniphest comment T123 'comment'
+        edit T123 → maniphest edit T123
         K123 → passphrase show K123
         P123 → paste show P123
         R123 → diffusion branch list R123
     """
     if len(argv) < 2:
         return argv
+
+    # Find first positional argument (skip options and their values)
+    def find_first_positional():
+        skip_next = False
+        for i, arg in enumerate(argv[1:], start=1):
+            if skip_next:
+                skip_next = False
+                continue
+            if arg.startswith("-"):
+                if arg.startswith("--") and "=" not in arg:
+                    skip_next = True
+                elif arg.startswith("-") and len(arg) == 2:
+                    skip_next = True
+                continue
+            return i
+        return None
+
+    # Handle "edit <monogram>" pattern: edit T123 → maniphest edit T123
+    first_pos_idx = find_first_positional()
+    if first_pos_idx and argv[first_pos_idx] == "edit":
+        next_idx = first_pos_idx + 1
+        if next_idx < len(argv):
+            match = _MONOGRAM_PATTERN.match(argv[next_idx])
+            if match:
+                prefix = match.group(1)
+                app_name = MONOGRAM_SHORTCUT[prefix][0]  # e.g., "maniphest"
+                # edit T123 --opts → maniphest edit T123 --opts
+                before = argv[:first_pos_idx]
+                after = argv[next_idx:]  # includes T123 and rest
+                return before + [app_name, "edit"] + after
 
     # Find the first non-option argument that matches a monogram
     monogram_idx = None
