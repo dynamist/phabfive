@@ -1769,7 +1769,16 @@ class Maniphest(Phabfive):
             else:
                 new_priority = self._validate_priority(priority)
 
-            if new_priority != current_priority:
+            # Convert string priority to numeric for comparison
+            from phabfive.constants import PRIORITY_VALUES
+
+            new_priority_numeric = (
+                PRIORITY_VALUES.get(new_priority, new_priority)
+                if isinstance(new_priority, str)
+                else new_priority
+            )
+
+            if new_priority_numeric != current_priority:
                 transactions.append({"type": "priority", "value": new_priority})
                 # Get human-readable name for new priority
                 # new_priority is either a numeric value (from raise/lower) or
@@ -1940,18 +1949,18 @@ class Maniphest(Phabfive):
         str
             New priority key (e.g., "high")
         """
-        # Priority ladder excluding Triage
-        ladder = [
-            (0, "wish"),
-            (25, "low"),
-            (50, "normal"),
-            (80, "high"),
-            (100, "unbreak"),
-        ]
+        from phabfive.constants import PRIORITY_VALUES
+
+        # Build priority ladder excluding Triage, sorted by value
+        # Triage (90) is excluded and can only be set explicitly
+        ladder = sorted(
+            [(v, k) for k, v in PRIORITY_VALUES.items() if k != "triage"],
+            key=lambda x: x[0],
+        )
 
         # Special handling for Triage (90) - it sits between High and Unbreak
         # but is excluded from raise/lower navigation
-        if current_priority == 90:  # Triage
+        if current_priority == PRIORITY_VALUES.get("triage", 90):
             if direction == "raise":
                 return "unbreak"  # Skip directly to Unbreak
             else:  # lower
