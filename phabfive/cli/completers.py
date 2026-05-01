@@ -39,11 +39,16 @@ def _get_values_with_api_fallback(fetch_func, default_values: List[str]) -> List
     list
         Values from API or defaults
     """
+    import contextlib
+    import io
+
     try:
         from phabfive.core import Phabfive
 
-        pf = Phabfive()
-        return fetch_func(pf.phab)
+        # Suppress warnings during completion (they break shell completion output)
+        with contextlib.redirect_stderr(io.StringIO()):
+            pf = Phabfive()
+            return fetch_func(pf.phab)
     except Exception:
         return default_values
 
@@ -128,14 +133,18 @@ def complete_status(incomplete: str) -> List[str]:
     return _complete_with_prefixes(incomplete, statuses)
 
 
-def complete_column(incomplete: str) -> List[str]:
-    """Complete column patterns (prefixes + wildcard).
+def complete_column(ctx, args: List[str], incomplete: str) -> List[str]:
+    """Complete column names from the board specified by --tag.
 
-    Column names are board-specific, so we only complete pattern prefixes
-    and the wildcard character.
+    If --tag is provided, fetches actual column names from that board.
+    Otherwise falls back to pattern prefixes and wildcard.
 
     Parameters
     ----------
+    ctx : click.Context
+        Click context with parsed parameters
+    args : list
+        Command line arguments (unused, ctx.params preferred)
     incomplete : str
         The incomplete value being typed
 
@@ -144,10 +153,70 @@ def complete_column(incomplete: str) -> List[str]:
     list
         Matching column completions
     """
-    completions = [p for p in PATTERN_PREFIXES if p.startswith(incomplete)]
+    # Get --tag value from parsed parameters
+    tag_value = ctx.params.get("tag") if ctx else None
+
+    # Directional navigation values
+    directions = ["forward", "backward"]
+
+    # Start with directions and pattern prefixes
+    incomplete_lower = incomplete.lower()
+    completions = [d for d in directions if d.startswith(incomplete_lower)]
+    completions.extend(p for p in PATTERN_PREFIXES if p.startswith(incomplete))
     if not incomplete or "*".startswith(incomplete):
         completions.append("*")
+
+    if tag_value:
+        # Fetch columns from the specified board
+        columns = _get_board_columns(tag_value)
+        if columns:
+            # Add actual column names
+            completions.extend(c for c in columns if c.lower().startswith(incomplete_lower))
+
     return completions
+
+
+def _get_board_columns(tag_name: str) -> List[str]:
+    """Fetch column names for a board/project.
+
+    Parameters
+    ----------
+    tag_name : str
+        Project/board name
+
+    Returns
+    -------
+    list
+        Column names, or empty list if not found
+    """
+    import contextlib
+    import io
+
+    try:
+        from phabfive.core import Phabfive
+        from phabfive.maniphest.resolvers import resolve_project_phids
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            pf = Phabfive()
+            # Resolve project name to PHID
+            phids = resolve_project_phids(pf.phab, tag_name)
+            if not phids:
+                return []
+
+            board_phid = phids[0]  # Use first match
+
+            # Fetch columns for this board
+            result = pf.phab.project.column.search(
+                constraints={"projects": [board_phid]}
+            )
+
+            if not result.get("data"):
+                return []
+
+            # Extract column names
+            return [col["fields"]["name"] for col in result["data"]]
+    except Exception:
+        return []
 
 
 def complete_tag(incomplete: str) -> List[str]:
