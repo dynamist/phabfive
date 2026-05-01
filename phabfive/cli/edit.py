@@ -31,7 +31,7 @@ def edit(
     ctx: typer.Context,
     object_id: Optional[str] = typer.Argument(
         None,
-        help="Object to edit (e.g., T123, K456, P789). Auto-detects type from monogram. If omitted, reads YAML from stdin.",
+        help="Object(s) to edit (e.g., T123 or T123,T124,T125). Auto-detects type from monogram. If omitted, reads YAML from stdin.",
     ),
     priority: Optional[str] = typer.Option(
         None,

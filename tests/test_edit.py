@@ -564,3 +564,88 @@ class TestGroupObjectsByType:
         assert "passphrase" in grouped
         assert len(grouped["task"]) == 2
         assert len(grouped["passphrase"]) == 1
+
+
+class TestCommaSeparatedParsing:
+    """Tests for comma-separated object ID parsing."""
+
+    def test_parse_single_task_id(self):
+        """Test parsing single task ID."""
+        from phabfive.edit import Edit
+
+        edit_app = Edit()
+        result = edit_app._parse_object_ids("T123")
+
+        assert len(result) == 1
+        assert result[0] == ("task", "123")
+
+    def test_parse_comma_separated_tasks(self):
+        """Test parsing comma-separated task IDs."""
+        from phabfive.edit import Edit
+
+        edit_app = Edit()
+        result = edit_app._parse_object_ids("T123,T456,T789")
+
+        assert len(result) == 3
+        assert result[0] == ("task", "123")
+        assert result[1] == ("task", "456")
+        assert result[2] == ("task", "789")
+
+    def test_parse_comma_separated_with_spaces(self):
+        """Test parsing comma-separated IDs with whitespace."""
+        from phabfive.edit import Edit
+
+        edit_app = Edit()
+        result = edit_app._parse_object_ids("T123, T456 , T789")
+
+        assert len(result) == 3
+        assert result[0] == ("task", "123")
+        assert result[1] == ("task", "456")
+        assert result[2] == ("task", "789")
+
+    def test_parse_mixed_types_raises_error(self):
+        """Test that mixing object types raises ValueError."""
+        from phabfive.edit import Edit
+
+        edit_app = Edit()
+
+        with pytest.raises(ValueError, match="Cannot mix object types"):
+            edit_app._parse_object_ids("T123,K456")
+
+    def test_parse_empty_string_raises_error(self):
+        """Test that empty string raises ValueError."""
+        from phabfive.edit import Edit
+
+        edit_app = Edit()
+
+        with pytest.raises(ValueError, match="No valid object IDs"):
+            edit_app._parse_object_ids("")
+
+    def test_parse_only_commas_raises_error(self):
+        """Test that string with only commas raises ValueError."""
+        from phabfive.edit import Edit
+
+        edit_app = Edit()
+
+        with pytest.raises(ValueError, match="No valid object IDs"):
+            edit_app._parse_object_ids(",,,")
+
+
+class TestPartitionSuggestions:
+    """Tests for partition suggestion generation."""
+
+    def test_generates_comma_separated_format(self):
+        """Test that partition suggestions use comma-separated format."""
+        from phabfive.edit import Edit
+
+        edit_app = Edit()
+
+        errors_by_boards = {
+            frozenset(["Board1", "Board2"]): ["123", "456"],
+        }
+
+        result = edit_app._generate_partition_suggestions(errors_by_boards)
+
+        assert "phabfive edit T123,T456" in result
+        assert '--tag="Board1"' in result
+        assert "echo" not in result  # Should not use echo pipe format

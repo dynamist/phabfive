@@ -213,17 +213,51 @@ class Edit(Phabfive):
         for boards, task_ids in errors_by_boards.items():
             board_list = sorted(boards)
             board_str = " + ".join(board_list)
-            task_str = "\\n".join([f"T{tid}" for tid in task_ids])
+            task_str = ",".join([f"T{tid}" for tid in task_ids])
 
             suggestions.append(f"# Tasks on {board_str}:")
             # Pick the first board as the target (user can adjust)
             target_board = board_list[0]
             suggestions.append(
-                f'echo "{task_str}" | phabfive edit --tag="{target_board}" --column=COLUMN'
+                f'phabfive edit {task_str} --tag="{target_board}" --column=COLUMN'
             )
             suggestions.append("")
 
         return "\n".join(suggestions)
+
+    def _parse_object_ids(self, object_id_str):
+        """Parse object ID string which may contain comma-separated IDs.
+
+        Args:
+            object_id_str (str): Single ID or comma-separated IDs (e.g., "T123" or "T123,T124,T125")
+
+        Returns:
+            list: List of (object_type, object_id) tuples
+
+        Raises:
+            ValueError: If any ID is invalid or types are mixed
+        """
+        # Split by comma and strip whitespace
+        ids = [s.strip() for s in object_id_str.split(",") if s.strip()]
+
+        if not ids:
+            raise ValueError("No valid object IDs provided")
+
+        results = []
+        seen_types = set()
+
+        for id_str in ids:
+            obj_type, obj_id = self._parse_monogram(id_str)
+            results.append((obj_type, obj_id))
+            seen_types.add(obj_type)
+
+        # Check for mixed types
+        if len(seen_types) > 1:
+            raise ValueError(
+                f"Cannot mix object types in a single edit command: {seen_types}"
+            )
+
+        return results
 
     def edit_objects(
         self,
@@ -239,7 +273,7 @@ class Edit(Phabfive):
         """Edit one or more Phabricator objects.
 
         Args:
-            object_id (str): Single object ID (e.g., "T123") or None if from stdin
+            object_id (str): Object ID(s) - single (e.g., "T123") or comma-separated (e.g., "T123,T124")
             priority (str): Priority to set (or "raise"/"lower")
             status (str): Status to set
             tag (str): Board name for column context
@@ -256,26 +290,60 @@ class Edit(Phabfive):
             has_piped_input = not sys.stdin.isatty()
 
             if object_id:
-                # Single object mode (CLI argument takes priority)
-                object_type, oid = self._parse_monogram(object_id)
+                # Parse object IDs (supports comma-separated)
+                parsed_ids = self._parse_object_ids(object_id)
 
-                if object_type == "task":
-                    return self._edit_task_single(
-                        oid,
-                        priority=priority,
-                        status=status,
-                        tag=tag,
-                        column=column,
-                        assign=assign,
-                        comment=comment,
-                        dry_run=dry_run,
-                    )
-                elif object_type == "passphrase":
-                    sys.stderr.write("ERROR: Passphrase editing not yet implemented\n")
-                    return 1
-                elif object_type == "paste":
-                    sys.stderr.write("ERROR: Paste editing not yet implemented\n")
-                    return 1
+                if len(parsed_ids) == 1:
+                    # Single object mode
+                    object_type, oid = parsed_ids[0]
+
+                    if object_type == "task":
+                        return self._edit_task_single(
+                            oid,
+                            priority=priority,
+                            status=status,
+                            tag=tag,
+                            column=column,
+                            assign=assign,
+                            comment=comment,
+                            dry_run=dry_run,
+                        )
+                    elif object_type == "passphrase":
+                        sys.stderr.write(
+                            "ERROR: Passphrase editing not yet implemented\n"
+                        )
+                        return 1
+                    elif object_type == "paste":
+                        sys.stderr.write("ERROR: Paste editing not yet implemented\n")
+                        return 1
+                else:
+                    # Multiple objects - batch mode from CLI args
+                    object_type = parsed_ids[0][0]  # All same type (validated above)
+
+                    if object_type == "task":
+                        # Convert to batch format
+                        tasks = [
+                            {"object_type": "task", "object_id": oid, "data": {}}
+                            for _, oid in parsed_ids
+                        ]
+                        return self._edit_tasks_batch(
+                            tasks,
+                            priority=priority,
+                            status=status,
+                            tag=tag,
+                            column=column,
+                            assign=assign,
+                            comment=comment,
+                            dry_run=dry_run,
+                        )
+                    elif object_type == "passphrase":
+                        sys.stderr.write(
+                            "ERROR: Passphrase editing not yet implemented\n"
+                        )
+                        return 1
+                    elif object_type == "paste":
+                        sys.stderr.write("ERROR: Paste editing not yet implemented\n")
+                        return 1
 
             elif has_piped_input:
                 # Batch mode (auto-detected from pipe)

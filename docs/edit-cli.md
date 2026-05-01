@@ -38,7 +38,10 @@ phabfive edit T123 --priority=raise
 ## Command Syntax
 
 ```bash
-phabfive edit [<object_id>] [options]
+phabfive edit [<object_id>...] [options]
+
+Arguments:
+  <object_id>     Single ID (T123) or comma-separated (T123,T124,T125)
 
 Options:
   --priority=PRIORITY       Set priority (unbreak|high|normal|low|wish|raise|lower)
@@ -65,6 +68,18 @@ phabfive edit T123 --priority=high
 
 # Edit from URL (extracts T123)
 phabfive edit "https://phorge.example.com/T123" --status=resolved
+```
+
+### Batch Mode (Comma-Separated IDs)
+
+Edit multiple tasks by providing comma-separated IDs:
+
+```bash
+# Edit multiple specific tasks
+phabfive edit T123,T456,T789 --priority=high
+
+# Move multiple tasks to a column
+phabfive edit T123,T456 --tag="Sprint" --column=Done
 ```
 
 ### Batch Mode (Piped Input)
@@ -289,10 +304,10 @@ ERROR: Validation failed for 3 task(s):
 Suggested partition commands:
 
 # Tasks on Backend Team + Sprint 42:
-echo "T123\nT124" | phabfive edit --tag="Backend Team" --column=Done
+phabfive edit T123,T124 --tag="Backend Team" --column=Done
 
 # Task on Backend Team + Frontend Team:
-echo "T125" | phabfive edit --tag="Backend Team" --column=Done
+phabfive edit T125 --tag="Backend Team" --column=Done
 
 No tasks were modified (atomic batch failure).
 ```
@@ -555,11 +570,11 @@ phabfive maniphest show T123 --all
 **Solution:** Use partition suggestions from error message to split the batch:
 ```bash
 # Original (fails)
-echo "T123\nT124\nT125" | phabfive edit --column=Done
+phabfive edit T123,T124,T125 --column=Done
 
 # Split by board (from suggestions)
-echo "T123\nT124" | phabfive edit --tag="Backend" --column=Done
-echo "T125" | phabfive edit --tag="Frontend" --column=Done
+phabfive edit T123,T124 --tag="Backend" --column=Done
+phabfive edit T125 --tag="Frontend" --column=Done
 ```
 
 ### Priority Not Changing
