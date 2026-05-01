@@ -12,9 +12,7 @@ def get_task_boards(task_data):
         list: List of board PHIDs the task is on
     """
     try:
-        boards = (
-            task_data.get("attachments", {}).get("columns", {}).get("boards", {})
-        )
+        boards = task_data.get("attachments", {}).get("columns", {}).get("boards", {})
         return list(boards.keys())
     except Exception:
         return []

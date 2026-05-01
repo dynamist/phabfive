@@ -171,7 +171,9 @@ def complete_column(ctx, args: List[str], incomplete: str) -> List[str]:
         columns = _get_board_columns(tag_value)
         if columns:
             # Add actual column names
-            completions.extend(c for c in columns if c.lower().startswith(incomplete_lower))
+            completions.extend(
+                c for c in columns if c.lower().startswith(incomplete_lower)
+            )
 
     return completions
 
