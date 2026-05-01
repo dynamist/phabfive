@@ -13,6 +13,7 @@ os.environ.setdefault("TYPER_USE_RICH", "0")
 import typer
 
 from phabfive.cli.diffusion import diffusion_app
+from phabfive.cli.edit import edit_app
 from phabfive.cli.maniphest import maniphest_app
 from phabfive.cli.passphrase import passphrase_app
 from phabfive.cli.paste import paste_app
@@ -180,6 +181,7 @@ def main(
 
 app.add_typer(passphrase_app, name="passphrase")
 app.add_typer(diffusion_app, name="diffusion")
+app.add_typer(edit_app, name="edit")
 app.add_typer(paste_app, name="paste")
 app.add_typer(user_app, name="user")
 app.add_typer(maniphest_app, name="maniphest")

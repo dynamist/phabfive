@@ -13,6 +13,7 @@ A summary of the currently supported features:
 - **Paste** - List, get, and add pastes
 - **User** - Get information about the logged-in user
 - **Maniphest** - Add comments, show task details, create tasks from templates
+- **Edit** - Unified editing with auto-detection, batch operations, and smart column/priority navigation
 
 For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/).
 
@@ -56,6 +57,10 @@ phabfive passphrase K123
 phabfive paste list
 phabfive maniphest search "migration tasks" --tag myproject
 phabfive maniphest search --tag myproject --updated-after=1w
+
+# Edit tasks with smart navigation
+phabfive edit T123 --priority=raise --status=resolved
+phabfive maniphest search --assigned=@me | phabfive edit --column=Done
 ```
 
 ## Shell Completion
