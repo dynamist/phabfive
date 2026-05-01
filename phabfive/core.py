@@ -47,6 +47,11 @@ class Phabfive:
     # Maximum line width for rich format (to prevent YAML breaking)
     MAX_LINE_WIDTH = 4096
 
+    # Monogram patterns for object type detection
+    TASK_PATTERN = re.compile(r"[Tt](\d+)")
+    PASSPHRASE_PATTERN = re.compile(r"[Kk](\d+)")
+    PASTE_PATTERN = re.compile(r"[Pp](\d+)")
+
     @classmethod
     def set_output_options(
         cls, ascii_when="auto", hyperlink_when="auto", output_format="rich"
@@ -676,3 +681,67 @@ class Phabfive:
         url += "/"
 
         return url
+
+    def parse_monogram(self, text):
+        """Parse a monogram from text and return object type and ID.
+
+        Args:
+            text (str): Text containing a monogram (e.g., "T123", "https://phorge.example.com/T456")
+
+        Returns:
+            tuple: (object_type, object_id) where object_type is "task"|"passphrase"|"paste"
+                   and object_id is the numeric ID as string
+
+        Raises:
+            ValueError: If no valid monogram is found
+        """
+        # Try task monogram
+        match = self.TASK_PATTERN.search(text)
+        if match:
+            return ("task", match.group(1))
+
+        # Try passphrase monogram
+        match = self.PASSPHRASE_PATTERN.search(text)
+        if match:
+            return ("passphrase", match.group(1))
+
+        # Try paste monogram
+        match = self.PASTE_PATTERN.search(text)
+        if match:
+            return ("paste", match.group(1))
+
+        raise ValueError(f"No valid monogram found in: {text}")
+
+    def parse_object_ids(self, object_id_str):
+        """Parse object ID string which may contain comma-separated IDs.
+
+        Args:
+            object_id_str (str): Single ID or comma-separated IDs (e.g., "T123" or "T123,T124,T125")
+
+        Returns:
+            list: List of (object_type, object_id) tuples
+
+        Raises:
+            ValueError: If any ID is invalid or types are mixed
+        """
+        # Split by comma and strip whitespace
+        ids = [s.strip() for s in object_id_str.split(",") if s.strip()]
+
+        if not ids:
+            raise ValueError("No valid object IDs provided")
+
+        results = []
+        seen_types = set()
+
+        for id_str in ids:
+            obj_type, obj_id = self.parse_monogram(id_str)
+            results.append((obj_type, obj_id))
+            seen_types.add(obj_type)
+
+        # Check for mixed types
+        if len(seen_types) > 1:
+            raise ValueError(
+                f"Cannot mix object types in a single edit command: {seen_types}"
+            )
+
+        return results
