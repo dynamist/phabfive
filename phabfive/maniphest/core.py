@@ -1808,9 +1808,12 @@ class Maniphest(Phabfive):
                 transactions.append({"type": "status", "value": validated_status})
                 # Get human-readable name for new status
                 status_map = self._get_api_status_map().get("statusMap", {})
-                new_status_name = status_map.get(validated_status, {}).get(
-                    "name", validated_status
-                )
+                status_entry = status_map.get(validated_status, validated_status)
+                # statusMap values can be strings or dicts with "name" key
+                if isinstance(status_entry, dict):
+                    new_status_name = status_entry.get("name", validated_status)
+                else:
+                    new_status_name = status_entry
                 changes.append(
                     {
                         "field": "Status",
