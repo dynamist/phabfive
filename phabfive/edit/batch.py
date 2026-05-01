@@ -121,7 +121,7 @@ def edit_tasks_batch(
             display_changes(f"T{task['task_id']}", result)
 
         except Exception as e:
-            log.exception(f"Failed to edit task T{task['task_id']}")
+            log.debug(f"Failed to edit task T{task['task_id']}: {e}")
             sys.stderr.write(f"Error editing T{task['task_id']}: {e}\n")
             # Continue processing other tasks
 

@@ -210,7 +210,7 @@ class Edit(Phabfive):
             sys.stderr.write(f"Error: {e}\n")
             return 1
         except Exception as e:
-            log.exception("Unexpected error during edit")
+            log.debug(f"Unexpected error during edit: {e}")
             sys.stderr.write(f"Error: {e}\n")
             return 1
 
@@ -338,6 +338,6 @@ class Edit(Phabfive):
             return 0
 
         except Exception as e:
-            log.exception(f"Failed to edit task T{task_id}")
+            log.debug(f"Failed to edit task T{task_id}: {e}")
             sys.stderr.write(f"Error editing T{task_id}: {e}\n")
             return 1
