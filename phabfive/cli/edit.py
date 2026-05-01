@@ -83,6 +83,11 @@ def edit_command(
         "--dry-run",
         help="Show changes without applying them",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Skip confirmation prompt (required for non-interactive use)",
+    ),
 ) -> None:
     """Edit monograms (routes to app-specific edit command)
 
@@ -111,6 +116,7 @@ def edit_command(
         subscribe=subscribe,
         comment=comment,
         dry_run=dry_run,
+        force=force,
     )
 
     raise typer.Exit(retcode)

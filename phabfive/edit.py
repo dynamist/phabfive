@@ -259,6 +259,42 @@ class Edit(Phabfive):
             else:
                 print(f"  {field}: {old_val} → {new_val}")
 
+    def _confirm_text_change(self, old_text, new_text, force):
+        """Show diff and get confirmation for text change.
+
+        Args:
+            old_text (str): Current text content
+            new_text (str): New text content
+            force (bool): Skip confirmation prompt
+
+        Returns:
+            tuple: (confirmed: bool, return_code: int or None)
+                   If confirmed is False, return_code indicates exit code
+        """
+        import typer
+
+        from phabfive.editor import show_diff
+
+        print()
+        show_diff(old_text, new_text)
+        print()
+
+        if force:
+            return (True, None)
+
+        if not sys.stdin.isatty():
+            sys.stderr.write("Error: --force required for non-interactive mode\n")
+            return (False, 1)
+
+        try:
+            if typer.confirm("Apply changes?"):
+                return (True, None)
+            else:
+                return (False, 0)
+        except typer.Abort:
+            print("Cancelled")
+            return (False, 0)
+
     def _parse_object_ids(self, object_id_str):
         """Parse object ID string which may contain comma-separated IDs.
 
@@ -305,6 +341,7 @@ class Edit(Phabfive):
         subscribe=None,
         comment=None,
         dry_run=False,
+        force=False,
     ):
         """Edit one or more Phabricator objects.
 
@@ -319,14 +356,23 @@ class Edit(Phabfive):
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             dry_run (bool): Show changes without applying
+            force (bool): Skip confirmation prompts
 
         Returns:
             int: Return code (0 for success, 1 for failure)
         """
         # If no edit options provided, default to editing description in $EDITOR
-        has_any_option = any([
-            priority, status, column, assign, description is not None, subscribe, comment
-        ])
+        has_any_option = any(
+            [
+                priority,
+                status,
+                column,
+                assign,
+                description is not None,
+                subscribe,
+                comment,
+            ]
+        )
         edit_description_in_editor = not has_any_option
 
         try:
@@ -353,6 +399,7 @@ class Edit(Phabfive):
                             subscribe=subscribe,
                             comment=comment,
                             dry_run=dry_run,
+                            force=force,
                             edit_description_in_editor=edit_description_in_editor,
                         )
                     elif object_type == "passphrase":
@@ -475,6 +522,7 @@ class Edit(Phabfive):
         subscribe=None,
         comment=None,
         dry_run=False,
+        force=False,
         edit_description_in_editor=False,
     ):
         """Edit a single task.
@@ -490,6 +538,7 @@ class Edit(Phabfive):
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             dry_run (bool): Show changes without applying
+            force (bool): Skip confirmation prompts
             edit_description_in_editor (bool): Open $EDITOR for description
 
         Returns:
@@ -501,23 +550,48 @@ class Edit(Phabfive):
 
             # Handle description
             final_description = None
+            current_desc = task_data["fields"].get("description", {}).get("raw", "")
+
             if edit_description_in_editor:
                 # Open editor with current description
                 from phabfive.editor import edit_text
 
-                current_desc = task_data["fields"].get("description", {}).get("raw", "")
-                final_description = edit_text(current_desc)
-                if final_description is None:
+                new_desc = edit_text(current_desc)
+                if new_desc is None:
                     print("Description edit cancelled")
                     return 0
+
+                confirmed, return_code = self._confirm_text_change(
+                    current_desc, new_desc, force
+                )
+                if not confirmed:
+                    return return_code
+
+                final_description = new_desc
             elif description == "-":
                 # Read from stdin
                 if sys.stdin.isatty():
-                    sys.stderr.write("Error: --description - requires input from stdin\n")
+                    sys.stderr.write(
+                        "Error: --description - requires input from stdin\n"
+                    )
                     return 1
-                final_description = sys.stdin.read().rstrip()
+                new_desc = sys.stdin.read().rstrip()
+
+                confirmed, return_code = self._confirm_text_change(
+                    current_desc, new_desc, force
+                )
+                if not confirmed:
+                    return return_code
+
+                final_description = new_desc
             elif description is not None:
                 # Use provided description (including empty string to clear)
+                confirmed, return_code = self._confirm_text_change(
+                    current_desc, description, force
+                )
+                if not confirmed:
+                    return return_code
+
                 final_description = description
 
             # Validate board/column context
