@@ -442,7 +442,7 @@ def edit(
     priority: Optional[str] = typer.Option(
         None,
         "--priority",
-        help="Set priority: unbreak, high, normal, low, wish, raise, lower",
+        help="Set priority (unbreak, high, normal, low, wish) or use raise/lower to navigate",
         autocompletion=complete_priority,
     ),
     status: Optional[str] = typer.Option(
@@ -460,7 +460,7 @@ def edit(
     column: Optional[str] = typer.Option(
         None,
         "--column",
-        help="Set column on board, or use forward/backward for directional navigation",
+        help="Set column by name, or use forward/backward to navigate",
         autocompletion=complete_column,
     ),
     assign: Optional[str] = typer.Option(

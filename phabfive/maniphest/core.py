@@ -1762,10 +1762,10 @@ class Maniphest(Phabfive):
 
         # Handle priority
         if priority:
-            if priority.lower() in ("raise", "lower"):
-                new_priority = self._navigate_priority(
-                    current_priority, priority.lower()
-                )
+            if priority.lower() in ("raise", "higher", "lower"):
+                # Normalize "higher" to "raise"
+                direction = "raise" if priority.lower() in ("raise", "higher") else "lower"
+                new_priority = self._navigate_priority(current_priority, direction)
             else:
                 new_priority = self._validate_priority(priority)
 
@@ -2012,7 +2012,7 @@ class Maniphest(Phabfive):
         # Get column info for the board
         column_info = get_column_info(self.phab, board_phid)
 
-        if column_name.lower() == "forward" or column_name.lower() == "backward":
+        if column_name.lower() in ("forward", "next", "backward", "previous"):
             # Get current column on this board
             current_column_phid = None
             boards = (
@@ -2038,14 +2038,14 @@ class Maniphest(Phabfive):
             # Navigate by sorting columns by sequence
             sorted_cols = sorted(column_info.items(), key=lambda x: x[1]["sequence"])
 
-            if column_name.lower() == "forward":
+            if column_name.lower() in ("forward", "next"):
                 for col_phid, col_data in sorted_cols:
                     if col_data["sequence"] > current_seq:
                         return col_phid
                 # Already at end, stay
                 return current_column_phid
 
-            else:  # backward
+            else:  # backward, previous
                 for col_phid, col_data in reversed(sorted_cols):
                     if col_data["sequence"] < current_seq:
                         return col_phid
