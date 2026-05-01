@@ -468,6 +468,11 @@ def edit(
         "--assign",
         help="Set assignee (username or @me for yourself)",
     ),
+    subscribe: Optional[List[str]] = typer.Option(
+        None,
+        "--subscribe",
+        help="Add subscriber (username or @me, repeatable)",
+    ),
     comment_text: Optional[str] = typer.Option(
         None,
         "--comment",
@@ -506,6 +511,7 @@ def edit(
         tag=tag,
         column=column,
         assign=assign,
+        subscribe=subscribe,
         comment=comment_text,
         dry_run=dry_run,
     )

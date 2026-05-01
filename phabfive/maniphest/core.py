@@ -1705,7 +1705,7 @@ class Maniphest(Phabfive):
         """
         result = self.phab.maniphest.search(
             constraints={"ids": [int(task_id)]},
-            attachments={"columns": True, "projects": True},
+            attachments={"columns": True, "projects": True, "subscribers": True},
         )
 
         if not result["data"]:
@@ -1721,6 +1721,7 @@ class Maniphest(Phabfive):
         board_phid=None,
         column=None,
         assign=None,
+        subscribe=None,
         comment=None,
         dry_run=False,
     ):
@@ -1740,6 +1741,8 @@ class Maniphest(Phabfive):
             Column name or "forward"/"backward"
         assign : str, optional
             Username to assign
+        subscribe : list, optional
+            Usernames to add as subscribers (@me for current user)
         comment : str, optional
             Comment to add
         dry_run : bool
@@ -1912,6 +1915,50 @@ class Maniphest(Phabfive):
         if comment:
             transactions.append({"type": "comment", "value": comment})
             changes.append({"field": "Comment", "old": None, "new": "Added"})
+
+        # Handle subscribers
+        if subscribe:
+            # Get current subscribers
+            current_subscribers = set(
+                task_data.get("attachments", {})
+                .get("subscribers", {})
+                .get("subscriberPHIDs", [])
+            )
+
+            subscriber_phids = []
+            subscriber_names = []
+            # Flatten comma-separated values (e.g., ["user1,user2", "user3"] -> ["user1", "user2", "user3"])
+            usernames = []
+            for item in subscribe:
+                usernames.extend(u.strip() for u in item.split(",") if u.strip())
+            for username in usernames:
+                if username == "@me":
+                    whoami = self.phab.user.whoami()
+                    user_phid = whoami.get("phid")
+                    display_name = whoami.get("userName", username)
+                    if not user_phid:
+                        raise ValueError("Failed to get current user's PHID")
+                else:
+                    user_phid = self._resolve_user_phid(username)
+                    display_name = username
+                    if not user_phid:
+                        raise ValueError(f"User not found: {username}")
+                # Only add if not already subscribed
+                if user_phid not in current_subscribers:
+                    subscriber_phids.append(user_phid)
+                    subscriber_names.append(display_name)
+
+            if subscriber_phids:
+                transactions.append(
+                    {"type": "subscribers.add", "value": subscriber_phids}
+                )
+                changes.append(
+                    {
+                        "field": "Subscribers",
+                        "old": None,
+                        "new": f"Added: {', '.join(subscriber_names)}",
+                    }
+                )
 
         if not transactions:
             log.info(f"No changes to apply for T{task_id}")
