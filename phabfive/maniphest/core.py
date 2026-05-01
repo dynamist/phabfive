@@ -1787,9 +1787,16 @@ class Maniphest(Phabfive):
 
         # Handle assignee
         if assign:
-            user_phid = self._resolve_user_phid(assign)
-            if not user_phid:
-                raise ValueError(f"User not found: {assign}")
+            # Handle @me shortcut
+            if assign == "@me":
+                whoami = self.phab.user.whoami()
+                user_phid = whoami.get("phid")
+                if not user_phid:
+                    raise ValueError("Failed to get current user's PHID")
+            else:
+                user_phid = self._resolve_user_phid(assign)
+                if not user_phid:
+                    raise ValueError(f"User not found: {assign}")
             current_owner = task_data["fields"]["ownerPHID"]
             if user_phid != current_owner:
                 transactions.append({"type": "owner", "value": user_phid})

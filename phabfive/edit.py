@@ -431,6 +431,19 @@ class Edit(Phabfive):
             )
             if error:
                 sys.stderr.write(f"ERROR: {error}\n")
+
+                # For multiple boards error, show copy-paste ready commands (up to 5 boards)
+                if "multiple boards" in error and column:
+                    boards = self._get_task_boards(task_data)
+                    board_names = self._get_board_names(boards)
+                    if len(board_names) <= 5:
+                        sys.stderr.write("\nSuggested commands:\n\n")
+                        for board_name in sorted(board_names):
+                            sys.stderr.write(f"# Move on {board_name}:\n")
+                            sys.stderr.write(
+                                f'phabfive edit T{task_id} --tag="{board_name}" --column={column}\n\n'
+                            )
+
                 return 1
 
             # Delegate to maniphest module

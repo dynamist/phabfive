@@ -8,8 +8,6 @@ import typer
 from phabfive.cli.completers import complete_priority, complete_status
 from phabfive.exceptions import PhabfiveConfigException
 
-edit_app = typer.Typer(help="Edit Phabricator objects")
-
 
 def _get_edit_app():
     """Get Edit app instance with config error handling."""
@@ -26,9 +24,7 @@ def _get_edit_app():
         return Edit()
 
 
-@edit_app.callback(invoke_without_command=True)
-def edit(
-    ctx: typer.Context,
+def edit_command(
     object_id: Optional[str] = typer.Argument(
         None,
         help="Object(s) to edit (e.g., T123 or T123,T124,T125). Auto-detects type from monogram. If omitted, reads YAML from stdin.",
