@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Passphrase commands for phabfive CLI."""
 
+import sys
+
 import typer
 
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
@@ -10,6 +12,8 @@ passphrase_app = typer.Typer(help="The passphrase app")
 
 def _get_passphrase_app():
     """Get Passphrase app instance with config error handling."""
+    import requests
+
     from phabfive.passphrase import Passphrase
 
     try:
@@ -21,6 +25,9 @@ def _get_passphrase_app():
             raise typer.Exit(1)
         # If setup succeeded, try again
         return Passphrase()
+    except requests.exceptions.RequestException as e:
+        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        raise typer.Exit(1)
 
 
 @passphrase_app.command()

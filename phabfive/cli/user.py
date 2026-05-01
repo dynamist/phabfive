@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """User commands for phabfive CLI."""
 
+import sys
+
 import typer
 
 from phabfive.exceptions import PhabfiveConfigException
@@ -11,6 +13,8 @@ user_app = typer.Typer(help="Information on users, setup wizard")
 @user_app.command()
 def whoami(ctx: typer.Context) -> None:
     """Display information about the currently authenticated user."""
+    import requests
+
     from phabfive.user import User
 
     try:
@@ -23,6 +27,9 @@ def whoami(ctx: typer.Context) -> None:
 
         if not offer_setup_on_error(str(e)):
             raise typer.Exit(1)
+    except requests.exceptions.RequestException as e:
+        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        raise typer.Exit(1)
 
 
 @user_app.command()

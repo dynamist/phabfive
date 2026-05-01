@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Edit commands for phabfive CLI."""
 
+import sys
 from typing import List, Optional
 
 import typer
@@ -16,6 +17,8 @@ from phabfive.exceptions import PhabfiveConfigException
 
 def _get_edit_app():
     """Get Edit app instance with config error handling."""
+    import requests
+
     from phabfive.edit import Edit
 
     try:
@@ -27,6 +30,9 @@ def _get_edit_app():
             raise typer.Exit(1)
         # If setup succeeded, try again
         return Edit()
+    except requests.exceptions.RequestException as e:
+        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        raise typer.Exit(1)
 
 
 def edit_command(
