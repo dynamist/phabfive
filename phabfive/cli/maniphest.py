@@ -21,6 +21,8 @@ maniphest_app = typer.Typer(help="The maniphest app")
 
 def _get_maniphest_app():
     """Get Maniphest app instance with config error handling."""
+    import requests
+
     from phabfive.maniphest import Maniphest
 
     try:
@@ -32,6 +34,9 @@ def _get_maniphest_app():
             raise typer.Exit(1)
         # If setup succeeded, try again
         return Maniphest()
+    except requests.exceptions.RequestException as e:
+        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        raise typer.Exit(1)
 
 
 def _get_output_format(ctx: typer.Context):
@@ -425,6 +430,8 @@ def search(
 
 def _get_edit_app():
     """Get Edit app instance with config error handling."""
+    import requests
+
     from phabfive.edit import Edit
 
     try:
@@ -436,6 +443,9 @@ def _get_edit_app():
             raise typer.Exit(1)
         # If setup succeeded, try again
         return Edit()
+    except requests.exceptions.RequestException as e:
+        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        raise typer.Exit(1)
 
 
 @maniphest_app.command()

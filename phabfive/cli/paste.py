@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Paste commands for phabfive CLI."""
 
+import sys
 from typing import List, Optional
 
 import typer
@@ -12,6 +13,8 @@ paste_app = typer.Typer(help="The paste app")
 
 def _get_paste_app():
     """Get Paste app instance with config error handling."""
+    import requests
+
     from phabfive.paste import Paste
 
     try:
@@ -23,6 +26,9 @@ def _get_paste_app():
             raise typer.Exit(1)
         # If setup succeeded, try again
         return Paste()
+    except requests.exceptions.RequestException as e:
+        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        raise typer.Exit(1)
 
 
 @paste_app.command("list")

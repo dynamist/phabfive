@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Diffusion commands for phabfive CLI."""
 
+import sys
 from typing import Optional
 
 import typer
@@ -20,6 +21,8 @@ diffusion_app.add_typer(branch_app, name="branch")
 
 def _get_diffusion_app():
     """Get Diffusion app instance with config error handling."""
+    import requests
+
     from phabfive.diffusion import Diffusion
 
     try:
@@ -31,6 +34,9 @@ def _get_diffusion_app():
             raise typer.Exit(1)
         # If setup succeeded, try again
         return Diffusion()
+    except requests.exceptions.RequestException as e:
+        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        raise typer.Exit(1)
 
 
 # Repo commands
