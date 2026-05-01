@@ -4,15 +4,21 @@ The Edit CLI provides a unified interface for editing Phabricator/Phorge objects
 
 ## Overview
 
-The `phabfive edit` command automatically detects object types from their monograms (T for tasks, K for passphrases, P for pastes) and routes to the appropriate editor. It supports both single object editing and batch operations through piped YAML input.
+The `phabfive edit` command is a **monogram-based shortcut** that routes to app-specific edit commands:
+
+- `phabfive edit T123` is a shortcut for `phabfive maniphest edit T123`
+- `phabfive edit P456` will be a shortcut for `phabfive paste edit P456` (planned)
+- `phabfive edit K789` will be a shortcut for `phabfive passphrase edit K789` (planned)
+
+**Important:** The `phabfive edit` command **requires monograms** (T/K/P prefix) to determine which app to route to. For app-specific options or when working without monograms, use the full command (e.g., `phabfive maniphest edit`).
 
 **Current Support:**
-- ✅ **Maniphest Tasks (T)** - Full editing support
-- 🔜 **Passphrases (K)** - Planned for future release
-- 🔜 **Pastes (P)** - Planned for future release
+- **Maniphest Tasks (T)** - Full editing support via `phabfive edit Tnnn`
+- **Passphrases (K)** - Planned for future release
+- **Pastes (P)** - Planned for future release
 
 **Key Features:**
-- **Auto-detection**: Automatically detects object type from monogram (T123, K456, P789)
+- **Monogram routing**: Automatically routes to the correct app based on monogram (T/K/P)
 - **Piped input support**: Seamlessly process output from `search` and `show` commands
 - **Batch operations**: Edit multiple objects atomically with validation
 - **Smart board/column handling**: Auto-detect board context or specify explicitly
@@ -596,11 +602,14 @@ phabfive edit T123 --priority=high --dry-run
 - [Search Templates](search-templates.md) - Reusable search queries
 - [Create Templates](create-templates.md) - Bulk task creation
 
-## Future Support
+## Architecture and Future Support
 
-Planned object types for future releases:
+The `phabfive edit` command is designed as a **monogram-based router** that delegates to app-specific edit subcommands:
 
-- **Passphrases (K)** - Edit secrets and credentials
-- **Pastes (P)** - Edit code pastes
+| Shortcut | Routes to | Status |
+|----------|-----------|--------|
+| `phabfive edit T123` | `phabfive maniphest edit T123` | Implemented |
+| `phabfive edit P456` | `phabfive paste edit P456` | Planned |
+| `phabfive edit K789` | `phabfive passphrase edit K789` | Planned |
 
-The architecture supports easy extension to new object types through the monogram detection system.
+When app-specific edit subcommands are implemented (e.g., `phabfive paste edit`), they will have their own options relevant to that object type. The top-level `phabfive edit` remains a convenience shortcut for quick edits using monograms.
