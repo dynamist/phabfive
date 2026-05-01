@@ -97,3 +97,38 @@ def show_diff(old_text, new_text, filename="description"):
                 print(line, end="")
         else:
             print(line, end="")
+
+
+def confirm_text_change(old_text, new_text, force):
+    """Show diff and get confirmation for text change.
+
+    Args:
+        old_text (str): Current text content
+        new_text (str): New text content
+        force (bool): Skip confirmation prompt
+
+    Returns:
+        tuple: (confirmed: bool, return_code: int or None)
+               If confirmed is False, return_code indicates exit code
+    """
+    import typer
+
+    print()
+    show_diff(old_text, new_text)
+    print()
+
+    if force:
+        return (True, None)
+
+    if not sys.stdin.isatty():
+        sys.stderr.write("Error: --force required for non-interactive mode\n")
+        return (False, 1)
+
+    try:
+        if typer.confirm("Apply changes?"):
+            return (True, None)
+        else:
+            return (False, 0)
+    except typer.Abort:
+        print("Cancelled")
+        return (False, 0)

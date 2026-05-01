@@ -29,7 +29,7 @@ class TestMonogramDetection:
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        obj_type, obj_id = edit_app._parse_monogram("T123")
+        obj_type, obj_id = edit_app.parse_monogram("T123")
         assert obj_type == "task"
         assert obj_id == "123"
 
@@ -38,7 +38,7 @@ class TestMonogramDetection:
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        obj_type, obj_id = edit_app._parse_monogram("t456")
+        obj_type, obj_id = edit_app.parse_monogram("t456")
         assert obj_type == "task"
         assert obj_id == "456"
 
@@ -47,7 +47,7 @@ class TestMonogramDetection:
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        obj_type, obj_id = edit_app._parse_monogram("https://phorge.example.com/T789")
+        obj_type, obj_id = edit_app.parse_monogram("https://phorge.example.com/T789")
         assert obj_type == "task"
         assert obj_id == "789"
 
@@ -56,7 +56,7 @@ class TestMonogramDetection:
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        obj_type, obj_id = edit_app._parse_monogram("K123")
+        obj_type, obj_id = edit_app.parse_monogram("K123")
         assert obj_type == "passphrase"
         assert obj_id == "123"
 
@@ -65,7 +65,7 @@ class TestMonogramDetection:
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        obj_type, obj_id = edit_app._parse_monogram("P456")
+        obj_type, obj_id = edit_app.parse_monogram("P456")
         assert obj_type == "paste"
         assert obj_id == "456"
 
@@ -75,7 +75,7 @@ class TestMonogramDetection:
 
         edit_app = Edit()
         with pytest.raises(ValueError, match="No valid monogram found"):
-            edit_app._parse_monogram("invalid")
+            edit_app.parse_monogram("invalid")
 
 
 class TestPriorityNavigation:
@@ -380,9 +380,7 @@ class TestBoardColumnValidation:
 
     def test_single_board_auto_detect(self):
         """Test auto-detection when task is on single board."""
-        from phabfive.edit import Edit
-
-        edit_app = Edit()
+        from phabfive.edit.validators import validate_board_column_context
 
         task_data = {
             "attachments": {
@@ -394,8 +392,8 @@ class TestBoardColumnValidation:
             }
         }
 
-        board_phid, error = edit_app._validate_board_column_context(
-            "123", task_data, "Done", None
+        board_phid, error = validate_board_column_context(
+            "123", task_data, "Done", None, None
         )
 
         assert board_phid == "PHID-PROJ-board1"
@@ -403,9 +401,7 @@ class TestBoardColumnValidation:
 
     def test_multiple_boards_without_tag_errors(self):
         """Test error when task on multiple boards without --tag."""
-        from phabfive.edit import Edit
-
-        edit_app = Edit()
+        from phabfive.edit.validators import validate_board_column_context
 
         task_data = {
             "attachments": {
@@ -418,11 +414,14 @@ class TestBoardColumnValidation:
             }
         }
 
-        with mock.patch.object(
-            edit_app, "_get_board_names", return_value=["Board1", "Board2"]
+        # Create mock maniphest with phab attribute
+        mock_maniphest = mock.MagicMock()
+
+        with mock.patch(
+            "phabfive.edit.validators.get_board_names", return_value=["Board1", "Board2"]
         ):
-            board_phid, error = edit_app._validate_board_column_context(
-                "123", task_data, "Done", None
+            board_phid, error = validate_board_column_context(
+                "123", task_data, "Done", None, mock_maniphest
             )
 
             assert board_phid is None
@@ -432,14 +431,12 @@ class TestBoardColumnValidation:
 
     def test_no_column_arg_no_validation(self):
         """Test no validation when --column not specified."""
-        from phabfive.edit import Edit
-
-        edit_app = Edit()
+        from phabfive.edit.validators import validate_board_column_context
 
         task_data = {"attachments": {"columns": {"boards": {}}}}
 
-        board_phid, error = edit_app._validate_board_column_context(
-            "123", task_data, None, None
+        board_phid, error = validate_board_column_context(
+            "123", task_data, None, None, None
         )
 
         assert board_phid is None
@@ -458,8 +455,8 @@ class TestStdinAutoDetection:
         # Mock stdin as not a TTY (piped)
         with mock.patch("sys.stdin.isatty", return_value=False):
             with mock.patch("sys.stdin", mock.MagicMock()):
-                with mock.patch.object(
-                    edit_app, "_parse_yaml_from_stdin", return_value=[]
+                with mock.patch(
+                    "phabfive.edit.core.parse_yaml_from_stdin", return_value=[]
                 ):
                     # Should try to read from stdin
                     result = edit_app.edit_objects()
@@ -486,6 +483,7 @@ class TestYAMLParsing:
         from io import StringIO
 
         from phabfive.edit import Edit
+        from phabfive.yaml_utils import parse_yaml_from_stdin
 
         edit_app = Edit()
 
@@ -496,7 +494,7 @@ Task:
 """
 
         with mock.patch("sys.stdin", StringIO(yaml_data)):
-            objects = edit_app._parse_yaml_from_stdin()
+            objects = parse_yaml_from_stdin(edit_app.parse_monogram)
 
         assert len(objects) == 1
         assert objects[0]["object_type"] == "task"
@@ -507,6 +505,7 @@ Task:
         from io import StringIO
 
         from phabfive.edit import Edit
+        from phabfive.yaml_utils import parse_yaml_from_stdin
 
         edit_app = Edit()
 
@@ -520,7 +519,7 @@ Task:
 """
 
         with mock.patch("sys.stdin", StringIO(yaml_data)):
-            objects = edit_app._parse_yaml_from_stdin()
+            objects = parse_yaml_from_stdin(edit_app.parse_monogram)
 
         assert len(objects) == 2
         assert objects[0]["object_id"] == "123"
@@ -531,6 +530,7 @@ Task:
         from io import StringIO
 
         from phabfive.edit import Edit
+        from phabfive.yaml_utils import parse_yaml_from_stdin
 
         edit_app = Edit()
 
@@ -540,7 +540,7 @@ Task:
 
         with mock.patch("sys.stdin", StringIO(yaml_data)):
             with pytest.raises(ValueError, match="missing 'Link' field"):
-                edit_app._parse_yaml_from_stdin()
+                parse_yaml_from_stdin(edit_app.parse_monogram)
 
 
 class TestGroupObjectsByType:
@@ -548,9 +548,7 @@ class TestGroupObjectsByType:
 
     def test_group_mixed_objects(self):
         """Test grouping mixed object types."""
-        from phabfive.edit import Edit
-
-        edit_app = Edit()
+        from phabfive.yaml_utils import group_objects_by_type
 
         objects = [
             {"object_type": "task", "object_id": "123", "data": {}},
@@ -558,7 +556,7 @@ class TestGroupObjectsByType:
             {"object_type": "passphrase", "object_id": "789", "data": {}},
         ]
 
-        grouped = edit_app._group_objects_by_type(objects)
+        grouped = group_objects_by_type(objects)
 
         assert "task" in grouped
         assert "passphrase" in grouped
@@ -574,7 +572,7 @@ class TestCommaSeparatedParsing:
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        result = edit_app._parse_object_ids("T123")
+        result = edit_app.parse_object_ids("T123")
 
         assert len(result) == 1
         assert result[0] == ("task", "123")
@@ -584,7 +582,7 @@ class TestCommaSeparatedParsing:
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        result = edit_app._parse_object_ids("T123,T456,T789")
+        result = edit_app.parse_object_ids("T123,T456,T789")
 
         assert len(result) == 3
         assert result[0] == ("task", "123")
@@ -596,7 +594,7 @@ class TestCommaSeparatedParsing:
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        result = edit_app._parse_object_ids("T123, T456 , T789")
+        result = edit_app.parse_object_ids("T123, T456 , T789")
 
         assert len(result) == 3
         assert result[0] == ("task", "123")
@@ -610,7 +608,7 @@ class TestCommaSeparatedParsing:
         edit_app = Edit()
 
         with pytest.raises(ValueError, match="Cannot mix object types"):
-            edit_app._parse_object_ids("T123,K456")
+            edit_app.parse_object_ids("T123,K456")
 
     def test_parse_empty_string_raises_error(self):
         """Test that empty string raises ValueError."""
@@ -619,7 +617,7 @@ class TestCommaSeparatedParsing:
         edit_app = Edit()
 
         with pytest.raises(ValueError, match="No valid object IDs"):
-            edit_app._parse_object_ids("")
+            edit_app.parse_object_ids("")
 
     def test_parse_only_commas_raises_error(self):
         """Test that string with only commas raises ValueError."""
@@ -628,7 +626,7 @@ class TestCommaSeparatedParsing:
         edit_app = Edit()
 
         with pytest.raises(ValueError, match="No valid object IDs"):
-            edit_app._parse_object_ids(",,,")
+            edit_app.parse_object_ids(",,,")
 
 
 class TestPartitionSuggestions:
@@ -636,15 +634,13 @@ class TestPartitionSuggestions:
 
     def test_generates_comma_separated_format(self):
         """Test that partition suggestions use comma-separated format."""
-        from phabfive.edit import Edit
-
-        edit_app = Edit()
+        from phabfive.edit.formatters import generate_partition_suggestions
 
         errors_by_boards = {
             frozenset(["Board1", "Board2"]): ["123", "456"],
         }
 
-        result = edit_app._generate_partition_suggestions(errors_by_boards)
+        result = generate_partition_suggestions(errors_by_boards)
 
         assert "phabfive edit T123,T456" in result
         assert '--tag="Board1"' in result
