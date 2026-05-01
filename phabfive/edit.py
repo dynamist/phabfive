@@ -301,6 +301,7 @@ class Edit(Phabfive):
         tag=None,
         column=None,
         assign=None,
+        subscribe=None,
         comment=None,
         dry_run=False,
     ):
@@ -313,6 +314,7 @@ class Edit(Phabfive):
             tag (str): Board name for column context
             column (str): Column name (or "forward"/"backward")
             assign (str): Username to assign
+            subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             dry_run (bool): Show changes without applying
 
@@ -320,10 +322,10 @@ class Edit(Phabfive):
             int: Return code (0 for success, 1 for failure)
         """
         # Validate that at least one edit option is provided
-        if not any([priority, status, column, assign, comment]):
+        if not any([priority, status, column, assign, subscribe, comment]):
             sys.stderr.write(
                 "Error: No edit options provided. Specify at least one of: "
-                "--priority, --status, --column, --assign, --comment\n"
+                "--priority, --status, --column, --assign, --subscribe, --comment\n"
             )
             return 1
 
@@ -347,6 +349,7 @@ class Edit(Phabfive):
                             tag=tag,
                             column=column,
                             assign=assign,
+                            subscribe=subscribe,
                             comment=comment,
                             dry_run=dry_run,
                         )
@@ -375,6 +378,7 @@ class Edit(Phabfive):
                             tag=tag,
                             column=column,
                             assign=assign,
+                            subscribe=subscribe,
                             comment=comment,
                             dry_run=dry_run,
                         )
@@ -406,6 +410,7 @@ class Edit(Phabfive):
                         tag=tag,
                         column=column,
                         assign=assign,
+                        subscribe=subscribe,
                         comment=comment,
                         dry_run=dry_run,
                     )
@@ -445,6 +450,7 @@ class Edit(Phabfive):
         tag=None,
         column=None,
         assign=None,
+        subscribe=None,
         comment=None,
         dry_run=False,
     ):
@@ -457,6 +463,7 @@ class Edit(Phabfive):
             tag (str): Board name for column context
             column (str): Column name (or "forward"/"backward")
             assign (str): Username to assign
+            subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             dry_run (bool): Show changes without applying
 
@@ -496,6 +503,7 @@ class Edit(Phabfive):
                 board_phid=board_phid,
                 column=column,
                 assign=assign,
+                subscribe=subscribe,
                 comment=comment,
                 dry_run=dry_run,
             )
@@ -517,6 +525,7 @@ class Edit(Phabfive):
         tag=None,
         column=None,
         assign=None,
+        subscribe=None,
         comment=None,
         dry_run=False,
     ):
@@ -529,6 +538,7 @@ class Edit(Phabfive):
             tag (str): Board name for column context
             column (str): Column name (or "forward"/"backward")
             assign (str): Username to assign
+            subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             dry_run (bool): Show changes without applying
 
@@ -601,6 +611,7 @@ class Edit(Phabfive):
                     board_phid=task["board_phid"],
                     column=column,
                     assign=assign,
+                    subscribe=subscribe,
                     comment=comment,
                     dry_run=dry_run,
                 )

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Edit commands for phabfive CLI."""
 
-from typing import Optional
+from typing import List, Optional
 
 import typer
 
@@ -63,6 +63,11 @@ def edit_command(
         "--assign",
         help="Set assignee (username or @me for yourself)",
     ),
+    subscribe: Optional[List[str]] = typer.Option(
+        None,
+        "--subscribe",
+        help="Add subscriber (username or @me, repeatable)",
+    ),
     comment: Optional[str] = typer.Option(
         None,
         "--comment",
@@ -97,6 +102,7 @@ def edit_command(
         tag=tag,
         column=column,
         assign=assign,
+        subscribe=subscribe,
         comment=comment,
         dry_run=dry_run,
     )
