@@ -154,7 +154,9 @@ def comment(
 @maniphest_app.command()
 def create(
     ctx: typer.Context,
-    title: Optional[str] = typer.Argument(None, help="Task title (required unless using --with)"),
+    title: Optional[str] = typer.Argument(
+        None, help="Task title (required unless using --with)"
+    ),
     with_template: Optional[str] = typer.Option(
         None, "--with", help="Load task creation template from YAML file"
     ),

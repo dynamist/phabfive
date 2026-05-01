@@ -1770,7 +1770,9 @@ class Maniphest(Phabfive):
         if priority:
             if priority.lower() in ("raise", "higher", "lower"):
                 # Normalize "higher" to "raise"
-                direction = "raise" if priority.lower() in ("raise", "higher") else "lower"
+                direction = (
+                    "raise" if priority.lower() in ("raise", "higher") else "lower"
+                )
                 new_priority = self._navigate_priority(current_priority, direction)
             else:
                 new_priority = self._validate_priority(priority)

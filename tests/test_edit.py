@@ -418,7 +418,8 @@ class TestBoardColumnValidation:
         mock_maniphest = mock.MagicMock()
 
         with mock.patch(
-            "phabfive.edit.validators.get_board_names", return_value=["Board1", "Board2"]
+            "phabfive.edit.validators.get_board_names",
+            return_value=["Board1", "Board2"],
         ):
             board_phid, error = validate_board_column_context(
                 "123", task_data, "Done", None, mock_maniphest
