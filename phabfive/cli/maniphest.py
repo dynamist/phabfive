@@ -149,7 +149,7 @@ def comment(
 @maniphest_app.command()
 def create(
     ctx: typer.Context,
-    title: Optional[str] = typer.Argument(None, help="Task title (for CLI mode)"),
+    title: Optional[str] = typer.Argument(None, help="Task title (required unless using --with)"),
     with_template: Optional[str] = typer.Option(
         None, "--with", help="Load task creation template from YAML file"
     ),
@@ -157,7 +157,10 @@ def create(
         None, "--description", help="Task description"
     ),
     tag: Optional[List[str]] = typer.Option(
-        None, "--tag", help="Project/workboard tag (repeatable)", autocompletion=complete_tag
+        None,
+        "--tag",
+        help="Project/workboard tag (repeatable)",
+        autocompletion=complete_tag,
     ),
     assign: Optional[str] = typer.Option(None, "--assign", help="Assignee username"),
     status: Optional[str] = typer.Option(
@@ -232,7 +235,10 @@ def search(
         None, "--with", help="Load search parameters from a YAML template file"
     ),
     tag: Optional[str] = typer.Option(
-        None, "--tag", help="Filter by project/workboard tag (supports wildcards)", autocompletion=complete_tag
+        None,
+        "--tag",
+        help="Filter by project/workboard tag (supports wildcards)",
+        autocompletion=complete_tag,
     ),
     assigned: Optional[str] = typer.Option(
         None, "--assigned", help="Filter by assignee. Use @me for yourself."
@@ -488,9 +494,15 @@ def edit(
         "--dry-run",
         help="Show changes without applying them",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Skip confirmation prompt (required for non-interactive use)",
+    ),
 ) -> None:
     """Edit one or more Maniphest tasks.
 
+    \b
     Examples:
         phabfive maniphest edit T123  # opens $EDITOR for description
         phabfive maniphest edit T123 --priority=high
@@ -521,6 +533,7 @@ def edit(
         subscribe=subscribe,
         comment=comment_text,
         dry_run=dry_run,
+        force=force,
     )
 
     raise typer.Exit(retcode)

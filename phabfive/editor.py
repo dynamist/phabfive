@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """External editor support for phabfive."""
 
+import difflib
 import os
 import subprocess
+import sys
 import tempfile
 
 
@@ -48,3 +50,50 @@ def edit_text(initial_text="", suffix=".remarkup"):
         return content
     finally:
         os.unlink(temp_path)
+
+
+def show_diff(old_text, new_text, filename="description"):
+    """Display unified diff between old and new text.
+
+    Uses colors if stdout is a TTY.
+
+    Args:
+        old_text: Original text
+        new_text: New text
+        filename: Name to show in diff header
+    """
+    old_lines = (old_text or "").splitlines(keepends=True)
+    new_lines = (new_text or "").splitlines(keepends=True)
+
+    # Ensure trailing newline for proper diff
+    if old_lines and not old_lines[-1].endswith("\n"):
+        old_lines[-1] += "\n"
+    if new_lines and not new_lines[-1].endswith("\n"):
+        new_lines[-1] += "\n"
+
+    diff = list(
+        difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile=f"a/{filename}",
+            tofile=f"b/{filename}",
+        )
+    )
+
+    if not diff:
+        return  # No changes
+
+    use_color = sys.stdout.isatty()
+
+    for line in diff:
+        if use_color:
+            if line.startswith("+") and not line.startswith("+++"):
+                print(f"\033[32m{line}\033[0m", end="")  # Green
+            elif line.startswith("-") and not line.startswith("---"):
+                print(f"\033[31m{line}\033[0m", end="")  # Red
+            elif line.startswith("@@"):
+                print(f"\033[36m{line}\033[0m", end="")  # Cyan
+            else:
+                print(line, end="")
+        else:
+            print(line, end="")
