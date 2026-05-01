@@ -48,7 +48,7 @@ Options:
   --status=STATUS           Set status (open|resolved|wontfix|invalid|duplicate)
   --tag=BOARD               Specify board context for --column (also adds task to board)
   --column=COLUMN           Set column on board (or use forward/backward)
-  --assign=USER             Set assignee
+  --assign=USER             Set assignee (use @me for yourself)
   --comment=TEXT            Add comment with changes
   --dry-run                 Show changes without applying
   --format=FORMAT           Output format (auto|strict|rich) [default: auto]

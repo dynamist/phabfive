@@ -58,7 +58,7 @@ def edit(
     assign: Optional[str] = typer.Option(
         None,
         "--assign",
-        help="Set assignee (username)",
+        help="Set assignee (username or @me for yourself)",
     ),
     comment: Optional[str] = typer.Option(
         None,
