@@ -83,6 +83,17 @@ MISSING_CONFIG_HINTS = {
 
 PRIORITY_DEFAULT = "normal"
 
+# Priority name to API numeric value mapping
+# Used by the Phabricator/Phorge API for task priorities
+PRIORITY_VALUES = {
+    "unbreak": 100,
+    "triage": 90,
+    "high": 80,
+    "normal": 50,
+    "low": 25,
+    "wish": 0,
+}
+
 __all__ = [
     "AutoOption",
     "MISSING_CONFIG_HINTS",
@@ -95,6 +106,7 @@ __all__ = [
     "MONOGRAM_SHORTCUT",
     "MONOGRAMS",
     "OutputFormat",
+    "PRIORITY_VALUES",
     "PRIORITY_DEFAULT",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
