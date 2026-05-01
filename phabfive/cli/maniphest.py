@@ -232,7 +232,7 @@ def create(
             # Open $EDITOR for description (only in interactive mode)
             from phabfive.editor import edit_text
 
-            final_description = edit_text("")
+            final_description = edit_text("", prefix="description-")
             if final_description and not force:
                 print()
                 print(final_description)
@@ -243,7 +243,9 @@ def create(
 
         # Validate --column requires --tag
         if column and not tag:
-            sys.stderr.write("Error: --column requires --tag to specify board context\n")
+            sys.stderr.write(
+                "Error: --column requires --tag to specify board context\n"
+            )
             raise typer.Exit(1)
 
         # Resolve board PHID if column is specified
