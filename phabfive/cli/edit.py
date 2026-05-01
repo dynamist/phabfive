@@ -5,7 +5,12 @@ from typing import Optional
 
 import typer
 
-from phabfive.cli.completers import complete_priority, complete_status
+from phabfive.cli.completers import (
+    complete_column,
+    complete_priority,
+    complete_status,
+    complete_tag,
+)
 from phabfive.exceptions import PhabfiveConfigException
 
 
@@ -45,11 +50,13 @@ def edit_command(
         None,
         "--tag",
         help="Specify board context for --column (also adds task to board if needed)",
+        autocompletion=complete_tag,
     ),
     column: Optional[str] = typer.Option(
         None,
         "--column",
         help="Set column on board, or use forward/backward for directional navigation",
+        autocompletion=complete_column,
     ),
     assign: Optional[str] = typer.Option(
         None,

@@ -7,7 +7,12 @@ from typing import List, Optional
 
 import typer
 
-from phabfive.cli.completers import complete_column, complete_priority, complete_status
+from phabfive.cli.completers import (
+    complete_column,
+    complete_priority,
+    complete_status,
+    complete_tag,
+)
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
 
@@ -152,7 +157,7 @@ def create(
         None, "--description", help="Task description"
     ),
     tag: Optional[List[str]] = typer.Option(
-        None, "--tag", help="Project/workboard tag (repeatable)"
+        None, "--tag", help="Project/workboard tag (repeatable)", autocompletion=complete_tag
     ),
     assign: Optional[str] = typer.Option(None, "--assign", help="Assignee username"),
     status: Optional[str] = typer.Option(
@@ -227,7 +232,7 @@ def search(
         None, "--with", help="Load search parameters from a YAML template file"
     ),
     tag: Optional[str] = typer.Option(
-        None, "--tag", help="Filter by project/workboard tag (supports wildcards)"
+        None, "--tag", help="Filter by project/workboard tag (supports wildcards)", autocompletion=complete_tag
     ),
     assigned: Optional[str] = typer.Option(
         None, "--assigned", help="Filter by assignee. Use @me for yourself."
@@ -450,6 +455,7 @@ def edit(
         None,
         "--tag",
         help="Specify board context for --column (also adds task to board if needed)",
+        autocompletion=complete_tag,
     ),
     column: Optional[str] = typer.Option(
         None,

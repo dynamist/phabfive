@@ -148,3 +148,30 @@ def complete_column(incomplete: str) -> List[str]:
     if not incomplete or "*".startswith(incomplete):
         completions.append("*")
     return completions
+
+
+def complete_tag(incomplete: str) -> List[str]:
+    """Complete tag (project) names from API.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching project name completions
+    """
+
+    def fetch_project_names(phab):
+        # Fetch projects - project.search returns up to 100 by default
+        result = phab.project.search(constraints={})
+        return [proj["fields"]["name"] for proj in result.get("data", [])]
+
+    # No default values for tags - they are instance-specific
+    tags = _get_values_with_api_fallback(fetch_project_names, [])
+
+    # Case-insensitive prefix matching
+    incomplete_lower = incomplete.lower()
+    return [t for t in tags if t.lower().startswith(incomplete_lower)]
