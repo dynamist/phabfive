@@ -225,6 +225,40 @@ class Edit(Phabfive):
 
         return "\n".join(suggestions)
 
+    def _display_changes(self, task_monogram, result):
+        """Display the changes made to a task.
+
+        Args:
+            task_monogram (str): Task monogram (e.g., "T123")
+            result (dict): Result from edit_task_by_id with 'changes' list
+        """
+        if not result:
+            print(f"{task_monogram}: No changes")
+            return
+
+        changes = result.get("changes", [])
+        is_dry_run = result.get("dry_run", False)
+
+        if not changes:
+            print(f"{task_monogram}: No changes (already at target state)")
+            return
+
+        if is_dry_run:
+            # Dry run output is already printed by edit_task_by_id
+            return
+
+        print(f"{task_monogram}:")
+        for change in changes:
+            field = change["field"]
+            old_val = change["old"]
+            new_val = change["new"]
+
+            if old_val is None:
+                # For comment, just show "Added"
+                print(f"  {field}: {new_val}")
+            else:
+                print(f"  {field}: {old_val} → {new_val}")
+
     def _parse_object_ids(self, object_id_str):
         """Parse object ID string which may contain comma-separated IDs.
 
@@ -285,6 +319,14 @@ class Edit(Phabfive):
         Returns:
             int: Return code (0 for success, 1 for failure)
         """
+        # Validate that at least one edit option is provided
+        if not any([priority, status, column, assign, comment]):
+            sys.stderr.write(
+                "Error: No edit options provided. Specify at least one of: "
+                "--priority, --status, --column, --assign, --comment\n"
+            )
+            return 1
+
         try:
             # Auto-detect piped input
             has_piped_input = not sys.stdin.isatty()
@@ -310,11 +352,11 @@ class Edit(Phabfive):
                         )
                     elif object_type == "passphrase":
                         sys.stderr.write(
-                            "ERROR: Passphrase editing not yet implemented\n"
+                            "Error: Passphrase editing not yet implemented\n"
                         )
                         return 1
                     elif object_type == "paste":
-                        sys.stderr.write("ERROR: Paste editing not yet implemented\n")
+                        sys.stderr.write("Error: Paste editing not yet implemented\n")
                         return 1
                 else:
                     # Multiple objects - batch mode from CLI args
@@ -338,18 +380,18 @@ class Edit(Phabfive):
                         )
                     elif object_type == "passphrase":
                         sys.stderr.write(
-                            "ERROR: Passphrase editing not yet implemented\n"
+                            "Error: Passphrase editing not yet implemented\n"
                         )
                         return 1
                     elif object_type == "paste":
-                        sys.stderr.write("ERROR: Paste editing not yet implemented\n")
+                        sys.stderr.write("Error: Paste editing not yet implemented\n")
                         return 1
 
             elif has_piped_input:
                 # Batch mode (auto-detected from pipe)
                 objects = self._parse_yaml_from_stdin()
                 if not objects:
-                    sys.stderr.write("ERROR: No objects found in stdin\n")
+                    sys.stderr.write("Error: No objects found in stdin\n")
                     return 1
 
                 # Group by object type
@@ -372,10 +414,10 @@ class Edit(Phabfive):
 
                 # Passphrases and pastes not yet implemented
                 if "passphrase" in grouped:
-                    sys.stderr.write("ERROR: Passphrase editing not yet implemented\n")
+                    sys.stderr.write("Error: Passphrase editing not yet implemented\n")
                     return 1
                 if "paste" in grouped:
-                    sys.stderr.write("ERROR: Paste editing not yet implemented\n")
+                    sys.stderr.write("Error: Paste editing not yet implemented\n")
                     return 1
 
                 return 0
@@ -383,16 +425,16 @@ class Edit(Phabfive):
             else:
                 # Error: no input provided
                 sys.stderr.write(
-                    "ERROR: Object ID required (e.g., T123) or pipe YAML from stdin\n"
+                    "Error: Object ID required (e.g., T123) or pipe YAML from stdin\n"
                 )
                 return 1
 
         except ValueError as e:
-            sys.stderr.write(f"ERROR: {e}\n")
+            sys.stderr.write(f"Error: {e}\n")
             return 1
         except Exception as e:
             log.exception("Unexpected error during edit")
-            sys.stderr.write(f"ERROR: {e}\n")
+            sys.stderr.write(f"Error: {e}\n")
             return 1
 
     def _edit_task_single(
@@ -430,7 +472,7 @@ class Edit(Phabfive):
                 task_id, task_data, column, tag
             )
             if error:
-                sys.stderr.write(f"ERROR: {error}\n")
+                sys.stderr.write(f"Error: {error}\n")
 
                 # For multiple boards error, show copy-paste ready commands (up to 5 boards)
                 if "multiple boards" in error and column:
@@ -447,7 +489,7 @@ class Edit(Phabfive):
                 return 1
 
             # Delegate to maniphest module
-            self.maniphest.edit_task_by_id(
+            result = self.maniphest.edit_task_by_id(
                 task_id=task_id,
                 priority=priority,
                 status=status,
@@ -458,12 +500,13 @@ class Edit(Phabfive):
                 dry_run=dry_run,
             )
 
-            print(f"Successfully edited T{task_id}")
+            # Display the changes
+            self._display_changes(f"T{task_id}", result)
             return 0
 
         except Exception as e:
             log.exception(f"Failed to edit task T{task_id}")
-            sys.stderr.write(f"ERROR editing T{task_id}: {e}\n")
+            sys.stderr.write(f"Error editing T{task_id}: {e}\n")
             return 1
 
     def _edit_tasks_batch(
@@ -533,7 +576,7 @@ class Edit(Phabfive):
         # If any validation errors, fail atomically
         if validation_errors:
             sys.stderr.write(
-                f"ERROR: Validation failed for {len(validation_errors)} task(s):\n"
+                f"Error: Validation failed for {len(validation_errors)} task(s):\n"
             )
             for error in validation_errors:
                 sys.stderr.write(f"  - {error}\n")
@@ -551,7 +594,7 @@ class Edit(Phabfive):
         success_count = 0
         for task in validated_tasks:
             try:
-                self.maniphest.edit_task_by_id(
+                result = self.maniphest.edit_task_by_id(
                     task_id=task["task_id"],
                     priority=priority,
                     status=status,
@@ -562,11 +605,11 @@ class Edit(Phabfive):
                     dry_run=dry_run,
                 )
                 success_count += 1
-                print(f"Successfully edited T{task['task_id']}")
+                self._display_changes(f"T{task['task_id']}", result)
 
             except Exception as e:
                 log.exception(f"Failed to edit task T{task['task_id']}")
-                sys.stderr.write(f"ERROR editing T{task['task_id']}: {e}\n")
+                sys.stderr.write(f"Error editing T{task['task_id']}: {e}\n")
                 # Continue processing other tasks
 
         print(f"\nEdited {success_count}/{len(validated_tasks)} tasks")
