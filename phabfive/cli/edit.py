@@ -27,7 +27,7 @@ def _get_edit_app():
 def edit_command(
     object_id: Optional[str] = typer.Argument(
         None,
-        help="Object(s) to edit (e.g., T123 or T123,T124,T125). Auto-detects type from monogram. If omitted, reads YAML from stdin.",
+        help="Object monogram(s) to edit (e.g., T123 or T123,T124,T125). Routes to app-specific edit command. If omitted, reads YAML from stdin.",
     ),
     priority: Optional[str] = typer.Option(
         None,
@@ -67,7 +67,14 @@ def edit_command(
         help="Show changes without applying them",
     ),
 ) -> None:
-    """Edit Phabricator objects (auto-detects type from monogram).
+    """Edit monograms (routes to app-specific edit command)
+
+    Expands to app-specific edit commands based on monogram prefix:
+    - phabfive edit T123 → phabfive maniphest edit T123
+    - phabfive edit P456 → phabfive paste edit P456 (planned)
+    - phabfive edit K789 → phabfive passphrase edit K789 (planned)
+
+    For piped input, this command reads YAML from stdin.
 
     Examples:
         phabfive edit T123 --priority=raise --status=resolved
