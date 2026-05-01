@@ -1721,6 +1721,7 @@ class Maniphest(Phabfive):
         board_phid=None,
         column=None,
         assign=None,
+        description=None,
         subscribe=None,
         comment=None,
         dry_run=False,
@@ -1741,6 +1742,8 @@ class Maniphest(Phabfive):
             Column name or "forward"/"backward"
         assign : str, optional
             Username to assign
+        description : str, optional
+            Description text to set
         subscribe : list, optional
             Usernames to add as subscribers (@me for current user)
         comment : str, optional
@@ -1911,6 +1914,19 @@ class Maniphest(Phabfive):
                     }
                 )
 
+        # Handle description
+        if description is not None:
+            current_desc = task_data["fields"].get("description", {}).get("raw", "")
+            if description != current_desc:
+                transactions.append({"type": "description", "value": description})
+                changes.append(
+                    {
+                        "field": "Description",
+                        "old": self._format_description_preview(current_desc),
+                        "new": self._format_description_preview(description),
+                    }
+                )
+
         # Handle comment
         if comment:
             transactions.append({"type": "comment", "value": comment})
@@ -1976,6 +1992,40 @@ class Maniphest(Phabfive):
         )
 
         return {"task_id": task_id, "changes": changes}
+
+    def _format_description_preview(self, text):
+        """Format description for change display.
+
+        Shows first line (truncated) with line/char count for multiline text.
+
+        Parameters
+        ----------
+        text : str
+            Description text
+
+        Returns
+        -------
+        str
+            Formatted preview string
+        """
+        if not text:
+            return "(empty)"
+
+        lines = text.split("\n")
+        first_line = lines[0].strip()
+
+        # Truncate first line if too long
+        if len(first_line) > 50:
+            first_line = first_line[:47] + "..."
+
+        # Add stats for multiline
+        if len(lines) > 1:
+            total_chars = len(text)
+            return f"{first_line} ({len(lines)} lines, {total_chars} chars)"
+        elif len(text) > 50:
+            return f"{first_line} ({len(text)} chars)"
+        else:
+            return first_line or "(empty)"
 
     def _navigate_priority(self, current_priority, direction):
         """Navigate priority up or down, skipping Triage.
