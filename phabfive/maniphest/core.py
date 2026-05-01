@@ -1558,6 +1558,8 @@ class Maniphest(Phabfive):
         status=None,
         priority=None,
         subscribers=None,
+        column=None,
+        board_phid=None,
         dry_run=False,
     ):
         """
@@ -1572,13 +1574,17 @@ class Maniphest(Phabfive):
         tags : list, optional
             List of project names/tags (may contain plus-separated values)
         assignee : str, optional
-            Username of the assignee
+            Username of the assignee (supports @me for current user)
         status : str, optional
             Task status (Open, Resolved, etc.)
         priority : str, optional
             Task priority (Unbreak, Triage, High, Normal, Low, Wish)
         subscribers : list, optional
-            List of subscriber usernames (may contain plus-separated values)
+            List of subscriber usernames (supports @me for current user)
+        column : str, optional
+            Column name on board for initial placement
+        board_phid : str, optional
+            Board PHID for column placement (required if column is specified)
         dry_run : bool
             If True, validate and display without creating
 
@@ -1620,13 +1626,23 @@ class Maniphest(Phabfive):
             validated_status = self._validate_status(status)
             transactions.append({"type": "status", "value": validated_status})
 
-        # Resolve assignee username to PHID
+        # Resolve assignee username to PHID (supports @me shortcut)
+        assignee_display = assignee
         if assignee:
-            assignee_phid = self._resolve_user_phid(assignee)
-            if not assignee_phid:
-                raise PhabfiveConfigException(
-                    f"User '{assignee}' not found on Phabricator"
-                )
+            if assignee == "@me":
+                whoami = self.phab.user.whoami()
+                assignee_phid = whoami.get("phid")
+                assignee_display = whoami.get("userName", "@me")
+                if not assignee_phid:
+                    raise PhabfiveConfigException(
+                        "Failed to get current user's PHID"
+                    )
+            else:
+                assignee_phid = self._resolve_user_phid(assignee)
+                if not assignee_phid:
+                    raise PhabfiveConfigException(
+                        f"User '{assignee}' not found on Phabricator"
+                    )
             transactions.append({"type": "owner", "value": assignee_phid})
 
         # Resolve project tags to PHIDs and slugs
@@ -1639,13 +1655,33 @@ class Maniphest(Phabfive):
                 )
                 project_slugs = project_info["slugs"]
 
-        # Resolve subscriber usernames to PHIDs
+        # Resolve subscriber usernames to PHIDs (supports @me shortcut)
+        subscriber_display = []
         if parsed_subscribers:
-            subscriber_phids = self._resolve_user_phids(parsed_subscribers)
+            subscriber_phids = []
+            for sub in parsed_subscribers:
+                if sub == "@me":
+                    whoami = self.phab.user.whoami()
+                    phid = whoami.get("phid")
+                    display_name = whoami.get("userName", "@me")
+                    if not phid:
+                        raise PhabfiveConfigException(
+                            "Failed to get current user's PHID"
+                        )
+                    subscriber_phids.append(phid)
+                    subscriber_display.append(display_name)
+                else:
+                    phid = self._resolve_user_phid(sub)
+                    if not phid:
+                        raise PhabfiveConfigException(f"User '{sub}' not found")
+                    subscriber_phids.append(phid)
+                    subscriber_display.append(sub)
             if subscriber_phids:
                 transactions.append(
                     {"type": "subscribers.set", "value": subscriber_phids}
                 )
+        else:
+            subscriber_display = parsed_subscribers
 
         # Dry run - return what would be created
         if dry_run:
@@ -1656,9 +1692,10 @@ class Maniphest(Phabfive):
                 "description": description,
                 "priority": priority,
                 "status": status,
-                "assignee": assignee,
+                "assignee": assignee_display,
                 "tags": parsed_tags,
-                "subscribers": parsed_subscribers,
+                "column": column,
+                "subscribers": subscriber_display,
             }
 
         # Create the task via API
@@ -1674,6 +1711,17 @@ class Maniphest(Phabfive):
             # Extract base URL from task URI for building tag URLs
             # e.g., "http://phorge.domain.tld/T5" -> "http://phorge.domain.tld"
             base_url = task_uri.rsplit("/", 1)[0] if "/" in task_uri else self.url
+
+            # Move task to specified column if requested
+            if column and board_phid:
+                task_data = self._get_task_data(task_id)
+                column_phid = self._navigate_column(
+                    task_id, task_data, column, board_phid
+                )
+                self.phab.maniphest.edit(
+                    objectIdentifier=f"T{task_id}",
+                    transactions=[{"type": "column", "value": [column_phid]}],
+                )
 
             return {
                 "phid": task_object["phid"],

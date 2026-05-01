@@ -161,26 +161,51 @@ def create(
         None, "--with", help="Load task creation template from YAML file"
     ),
     description: Optional[str] = typer.Option(
-        None, "--description", help="Task description"
+        None,
+        "--description",
+        help="Task description (use - to read from stdin, or omit to open $EDITOR)",
     ),
     tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Project/workboard tag (repeatable)",
+        help="Add to project/workboard (repeatable)",
         autocompletion=complete_tag,
     ),
-    assign: Optional[str] = typer.Option(None, "--assign", help="Assignee username"),
+    column: Optional[str] = typer.Option(
+        None,
+        "--column",
+        help="Initial column on board (requires --tag)",
+        autocompletion=complete_column,
+    ),
+    assign: Optional[str] = typer.Option(
+        None,
+        "--assign",
+        help="Set assignee (username or @me for yourself)",
+    ),
     status: Optional[str] = typer.Option(
-        None, "--status", help="Task status", autocompletion=complete_status
+        None,
+        "--status",
+        help="Set status (open, resolved, wontfix, invalid, duplicate, etc.)",
+        autocompletion=complete_status,
     ),
     priority: Optional[str] = typer.Option(
-        None, "--priority", help="Task priority", autocompletion=complete_priority
+        None,
+        "--priority",
+        help="Set priority (unbreak, high, normal, low, wish)",
+        autocompletion=complete_priority,
     ),
     subscribe: Optional[List[str]] = typer.Option(
-        None, "--subscribe", help="Subscriber username (repeatable)"
+        None,
+        "--subscribe",
+        help="Add subscriber (username or @me, repeatable)",
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview without creating task"
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Skip confirmation prompt (required for non-interactive use)",
     ),
 ) -> None:
     """Create a new Maniphest task."""
@@ -194,15 +219,54 @@ def create(
                 indent = "  " * task["depth"]
                 typer.echo(f"{indent}- {task['title']}")
     elif title:
-        # CLI mode
+        # CLI mode - handle description input modes
+        final_description = description
+
+        if description == "-":
+            # Read from stdin
+            if sys.stdin.isatty():
+                sys.stderr.write("Error: --description - requires input from stdin\n")
+                raise typer.Exit(1)
+            final_description = sys.stdin.read().rstrip()
+        elif description is None and sys.stdin.isatty() and not dry_run:
+            # Open $EDITOR for description (only in interactive mode)
+            from phabfive.editor import edit_text
+
+            final_description = edit_text("")
+            if final_description and not force:
+                print()
+                print(final_description)
+                print()
+                if not typer.confirm("Create task with this description?"):
+                    print("Cancelled")
+                    raise typer.Exit(0)
+
+        # Validate --column requires --tag
+        if column and not tag:
+            sys.stderr.write("Error: --column requires --tag to specify board context\n")
+            raise typer.Exit(1)
+
+        # Resolve board PHID if column is specified
+        board_phid = None
+        if column and tag:
+            # Use the first tag as the board context
+            board_phids = maniphest._resolve_project_phids(tag[0])
+            if board_phids:
+                board_phid = board_phids[0]
+            else:
+                sys.stderr.write(f"Error: Board not found: {tag[0]}\n")
+                raise typer.Exit(1)
+
         result = maniphest.create_task(
             title=title,
-            description=description,
+            description=final_description,
             tags=tag,
             assignee=assign,
             status=status,
             priority=priority,
             subscribers=subscribe,
+            column=column,
+            board_phid=board_phid,
             dry_run=dry_run,
         )
         if result:
@@ -219,6 +283,8 @@ def create(
                     typer.echo(f"Assignee: {result['assignee']}")
                 if result.get("tags"):
                     typer.echo(f"Tags: {', '.join(result['tags'])}")
+                if result.get("column"):
+                    typer.echo(f"Column: {result['column']}")
                 if result.get("subscribers"):
                     typer.echo(f"Subscribers: {', '.join(result['subscribers'])}")
                 typer.echo("--- END DRY RUN ---\n")
