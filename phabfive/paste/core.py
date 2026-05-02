@@ -227,7 +227,9 @@ class Paste(Phabfive):
             "phid": paste["phid"],
             "title": paste["fields"].get("title", ""),
             "language": paste["fields"].get("language") or "text",
-            "content": paste.get("attachments", {}).get("content", {}).get("content", ""),
+            "content": paste.get("attachments", {})
+            .get("content", {})
+            .get("content", ""),
         }
 
     def edit_paste(
@@ -276,10 +278,16 @@ class Paste(Phabfive):
 
         if subscribers:
             transactions.append({"type": "subscribers.add", "value": subscribers})
-            changes.append({"field": "Subscribers", "new": f"Added: {', '.join(subscribers)}"})
+            changes.append(
+                {"field": "Subscribers", "new": f"Added: {', '.join(subscribers)}"}
+            )
 
         if not transactions:
-            return {"paste_id": paste_id, "changes": [], "message": "No changes specified"}
+            return {
+                "paste_id": paste_id,
+                "changes": [],
+                "message": "No changes specified",
+            }
 
         if dry_run:
             return {"paste_id": paste_id, "changes": changes, "dry_run": True}
