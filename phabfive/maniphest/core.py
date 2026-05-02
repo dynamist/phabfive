@@ -2032,8 +2032,14 @@ class Maniphest(Phabfive):
 
         if dry_run:
             print(f"[DRY RUN] Would apply to T{task_id}:")
-            for txn in transactions:
-                print(f"  - {txn['type']}: {txn['value']}")
+            for change in changes:
+                field = change["field"]
+                old = change["old"]
+                new = change["new"]
+                if old is None:
+                    print(f"  {field}: {new}")
+                else:
+                    print(f"  {field}: {old} → {new}")
             return {"task_id": task_id, "changes": changes, "dry_run": True}
 
         # Apply transactions

@@ -273,23 +273,29 @@ def create(
         )
         if result:
             if result.get("dry_run"):
-                typer.echo("\n--- DRY RUN ---")
-                typer.echo(f"Title: {result['title']}")
+                print("[DRY RUN] Would create task:")
+                print(f"  Title: {result['title']}")
                 if result.get("description"):
-                    typer.echo(f"Description: {result['description']}")
+                    desc = result["description"]
+                    lines = desc.split("\n")
+                    if len(lines) == 1 and len(desc) <= 60:
+                        print(f"  Description: {desc}")
+                    else:
+                        print("  Description:")
+                        for line in lines:
+                            print(f"    {line}")
                 if result.get("priority"):
-                    typer.echo(f"Priority: {result['priority']}")
+                    print(f"  Priority: {result['priority']}")
                 if result.get("status"):
-                    typer.echo(f"Status: {result['status']}")
+                    print(f"  Status: {result['status']}")
                 if result.get("assignee"):
-                    typer.echo(f"Assignee: {result['assignee']}")
+                    print(f"  Assignee: {result['assignee']}")
                 if result.get("tags"):
-                    typer.echo(f"Tags: {', '.join(result['tags'])}")
+                    print(f"  Tags: {', '.join(result['tags'])}")
                 if result.get("column"):
-                    typer.echo(f"Column: {result['column']}")
+                    print(f"  Column: {result['column']}")
                 if result.get("subscribers"):
-                    typer.echo(f"Subscribers: {', '.join(result['subscribers'])}")
-                typer.echo("--- END DRY RUN ---\n")
+                    print(f"  Subscribers: {', '.join(result['subscribers'])}")
             else:
                 typer.echo(result["uri"])
                 if result.get("tag_slugs"):
