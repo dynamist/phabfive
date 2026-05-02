@@ -33,6 +33,17 @@ make down                            # stop containers
 gh pr merge --rebase --delete-branch
 ```
 
+## Pre-commit Checks
+
+**Always run before committing:**
+
+```bash
+uv run ruff check phabfive/ tests/
+uv run ruff format phabfive/ tests/
+```
+
+CI will fail if files are not properly formatted.
+
 ## Architecture
 
 ### CLI Layer (`cli/`)
