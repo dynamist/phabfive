@@ -47,8 +47,57 @@ MONOGRAM_SHORTCUT = {
 }
 
 # Apps that support "X123 'text'" → "app comment X123 'text'" shortcut
-# Currently only Maniphest supports comments. Paste could be added later.
-COMMENTS_SUPPORTED = ["maniphest"]
+COMMENTS_SUPPORTED = ["maniphest", "paste"]
+
+# Default languages for paste syntax highlighting (from Phabricator pygments.dropdown-choices)
+# These are the languages shown in the Phabricator/Phorge Paste language dropdown by default.
+# The actual list can be configured per-instance via pygments.dropdown-choices.
+PASTE_LANGUAGES = [
+    "apacheconf",
+    "bash",
+    "brainfuck",
+    "c",
+    "coffee-script",
+    "cpp",
+    "csharp",
+    "css",
+    "d",
+    "diff",
+    "django",
+    "docker",
+    "erb",
+    "erlang",
+    "go",
+    "groovy",
+    "haskell",
+    "html",
+    "http",
+    "invisible",
+    "java",
+    "js",
+    "json",
+    "make",
+    "mysql",
+    "nginx",
+    "objc",
+    "perl",
+    "php",
+    "postgresql",
+    "pot",
+    "puppet",
+    "python",
+    "rainbow",
+    "remarkup",
+    "robotframework",
+    "rst",
+    "ruby",
+    "sql",
+    "tex",
+    "text",
+    "twig",
+    "xml",
+    "yaml",
+]
 
 # IO_EDIT_URI_VALUES = ["default", "read", "write", "never"]
 IO_NEW_URI_CHOICES = ["default", "observe", "mirror", "never"]
@@ -106,6 +155,7 @@ __all__ = [
     "MONOGRAM_SHORTCUT",
     "MONOGRAMS",
     "OutputFormat",
+    "PASTE_LANGUAGES",
     "PRIORITY_VALUES",
     "PRIORITY_DEFAULT",
     "REPO_STATUS_CHOICES",

@@ -9,6 +9,7 @@ from typing import List, Optional
 import typer
 import yaml
 
+from phabfive.cli.completers import complete_language
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
 
@@ -147,13 +148,16 @@ def create(
         help="Paste content (use - to read from stdin, omit for $EDITOR)",
     ),
     language: Optional[str] = typer.Option(
-        None, "--language", "-l", help="Language for syntax highlighting"
+        None,
+        "--language",
+        help="Language for syntax highlighting",
+        autocompletion=complete_language,
     ),
     tag: Optional[List[str]] = typer.Option(
-        None, "--tag", "-t", help="Add to project (repeatable)"
+        None, "--tag", help="Add to project (repeatable)"
     ),
     subscribe: Optional[List[str]] = typer.Option(
-        None, "--subscribe", "-s", help="Add subscriber (username or @me, repeatable)"
+        None, "--subscribe", help="Add subscriber (username or @me, repeatable)"
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without creating"),
 ) -> None:
@@ -165,7 +169,7 @@ def create(
         phabfive paste create "Notes" --content="Some text"
         echo "content" | phabfive paste create "From stdin" --content=-
         phabfive paste create "Code" --language=python  # opens $EDITOR
-        phabfive paste create "Task" --subscribe=@me --tag=project
+        phabfive paste create "Notes" --subscribe=@me --tag=project
     """
     paste = _get_paste_app()
 
@@ -280,8 +284,8 @@ def create(
         subscribers=subscriber_names,
     )
 
-    # Output the result
-    print(f"P{result['id']}")
+    # Output the result (full URL, consistent with maniphest create)
+    print(paste.get_paste_url(result["id"]))
 
 
 @paste_app.command()
@@ -399,3 +403,194 @@ def _display_pastes(result, output_format, paste_instance):
                     console.print(paste_data["content"])
 
             console.print()
+
+
+@paste_app.command()
+def edit(
+    ctx: typer.Context,
+    paste_id: str = typer.Argument(..., help="Paste monogram (e.g., P123)"),
+    title: Optional[str] = typer.Option(None, "--title", help="New title"),
+    content: Optional[str] = typer.Option(
+        None,
+        "--content",
+        help="New content (use - for stdin, omit to open $EDITOR with current content)",
+    ),
+    language: Optional[str] = typer.Option(
+        None,
+        "--language",
+        help="Language for syntax highlighting",
+        autocompletion=complete_language,
+    ),
+    tag: Optional[List[str]] = typer.Option(
+        None, "--tag", help="Add to project (repeatable)"
+    ),
+    subscribe: Optional[List[str]] = typer.Option(
+        None, "--subscribe", help="Add subscriber (username or @me, repeatable)"
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without applying"),
+    force: bool = typer.Option(
+        False, "--force", help="Apply changes without confirmation"
+    ),
+) -> None:
+    """Edit an existing paste.
+
+    \b
+    Examples:
+        phabfive paste edit P1 --title="New Title"
+        phabfive paste edit P1 --language=python
+        phabfive paste edit P1 --content="Updated content"
+        echo "new content" | phabfive paste edit P1 --content=-
+        phabfive paste edit P1 --content  # opens $EDITOR with current content
+        phabfive paste edit P1 --subscribe=@me --tag=project
+        phabfive paste edit P1 --title="Test" --dry-run
+    """
+    from phabfive.editor import confirm_text_change, edit_text
+
+    _setup_output_options(ctx)
+    paste = _get_paste_app()
+
+    # Validate paste ID format
+    paste_pattern = f"^{MONOGRAMS['paste']}$"
+    if not re.match(paste_pattern, paste_id):
+        sys.stderr.write(f"Error: Invalid paste ID '{paste_id}'. Expected format: P123\n")
+        raise typer.Exit(1)
+
+    numeric_id = int(paste_id[1:])
+
+    # Get current paste data
+    try:
+        current_paste = paste.get_paste_data(numeric_id)
+    except Exception as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
+    # Handle content editing
+    final_content = None
+    if content == "-":
+        # Read from stdin
+        if sys.stdin.isatty():
+            sys.stderr.write("Error: --content=- requires input from stdin\n")
+            raise typer.Exit(1)
+        final_content = sys.stdin.read()
+    elif content == "" or (content is None and "--content" in sys.argv):
+        # Open $EDITOR with current content
+        new_content = edit_text(
+            current_paste["content"],
+            prefix=f"paste-{paste_id}-",
+            suffix=f".{current_paste['language']}",
+        )
+        if new_content is None:
+            print("Edit cancelled (no changes)")
+            raise typer.Exit(0)
+        final_content = new_content
+    elif content is not None:
+        final_content = content
+
+    # Handle @me shortcut for subscribers
+    subscriber_names = []
+    if subscribe:
+        for sub in subscribe:
+            if sub == "@me":
+                whoami = paste.phab.user.whoami()
+                subscriber_names.append(whoami.get("userName", sub))
+            else:
+                subscriber_names.append(sub)
+
+    # Handle tags
+    tag_list = list(tag) if tag else None
+
+    # Show diff for content changes
+    if final_content is not None and not dry_run:
+        confirmed, return_code = confirm_text_change(
+            current_paste["content"], final_content, force
+        )
+        if not confirmed:
+            raise typer.Exit(return_code or 0)
+
+    # Perform edit
+    result = paste.edit_paste(
+        paste_id=numeric_id,
+        title=title,
+        content=final_content,
+        language=language,
+        tags=tag_list,
+        subscribers=subscriber_names if subscriber_names else None,
+        dry_run=dry_run,
+    )
+
+    # Output result
+    if dry_run:
+        print(f"[DRY RUN] Would edit {paste_id}:")
+        for change in result.get("changes", []):
+            print(f"  {change['field']}: {change['new']}")
+        if not result.get("changes"):
+            print("  No changes specified")
+    else:
+        if result.get("changes"):
+            print(f"Updated {paste_id}")
+            for change in result["changes"]:
+                print(f"  {change['field']}: {change['new']}")
+        else:
+            print(result.get("message", "No changes made"))
+
+
+@paste_app.command()
+def comment(
+    ctx: typer.Context,
+    paste_id: str = typer.Argument(..., help="Paste monogram (e.g., P123)"),
+    text: Optional[str] = typer.Argument(
+        None, help="Comment text (omit to open $EDITOR)"
+    ),
+) -> None:
+    """Add a comment to a paste.
+
+    \b
+    Examples:
+        phabfive paste comment P1 "Great paste!"
+        phabfive paste comment P1  # opens $EDITOR
+        echo "comment" | phabfive paste comment P1 -
+        phabfive P1 "Quick comment"  # monogram shortcut
+    """
+    from phabfive.editor import edit_text
+
+    paste = _get_paste_app()
+
+    # Validate paste ID format
+    paste_pattern = f"^{MONOGRAMS['paste']}$"
+    if not re.match(paste_pattern, paste_id):
+        sys.stderr.write(f"Error: Invalid paste ID '{paste_id}'. Expected format: P123\n")
+        raise typer.Exit(1)
+
+    numeric_id = int(paste_id[1:])
+
+    # Determine comment text
+    final_text = None
+    if text == "-":
+        # Read from stdin
+        if sys.stdin.isatty():
+            sys.stderr.write("Error: '-' requires input from stdin\n")
+            raise typer.Exit(1)
+        final_text = sys.stdin.read().strip()
+    elif text is not None:
+        final_text = text
+    else:
+        # Open $EDITOR
+        if not sys.stdin.isatty():
+            sys.stderr.write("Error: Provide comment text or run interactively\n")
+            raise typer.Exit(1)
+        final_text = edit_text("", prefix="paste-comment-", suffix=".remarkup")
+        if final_text is None:
+            print("Comment cancelled")
+            raise typer.Exit(0)
+
+    if not final_text:
+        sys.stderr.write("Error: Comment cannot be empty\n")
+        raise typer.Exit(1)
+
+    # Add the comment
+    try:
+        paste.add_paste_comment(numeric_id, final_text)
+        print(paste.get_paste_url(numeric_id))
+    except Exception as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
