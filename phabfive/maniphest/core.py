@@ -1634,9 +1634,7 @@ class Maniphest(Phabfive):
                 assignee_phid = whoami.get("phid")
                 assignee_display = whoami.get("userName", "@me")
                 if not assignee_phid:
-                    raise PhabfiveConfigException(
-                        "Failed to get current user's PHID"
-                    )
+                    raise PhabfiveConfigException("Failed to get current user's PHID")
             else:
                 assignee_phid = self._resolve_user_phid(assignee)
                 if not assignee_phid:
