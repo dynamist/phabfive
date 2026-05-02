@@ -62,16 +62,10 @@ def _get_paste_app():
         raise typer.Exit(1)
 
 
-@paste_app.command("list")
-def paste_list(ctx: typer.Context) -> None:
-    """List all pastes (alias for search)."""
-    # Delegate to search with no filters
-    ctx.invoke(search)
-
-
 @paste_app.command()
 def search(
     ctx: typer.Context,
+    query: Optional[str] = typer.Argument(None, help="Free-text search in paste title"),
     author: Optional[str] = typer.Option(
         None, "--author", help="Filter by author (username or @me)"
     ),
@@ -91,6 +85,10 @@ def search(
 
     # Build constraints
     constraints = {}
+
+    # Handle free-text query
+    if query:
+        constraints["query"] = query
 
     # Handle @me shortcut for author
     if author:
@@ -120,14 +118,10 @@ def search(
     if output_format == "json":
         import json
 
-        result = [
-            {"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes
-        ]
+        result = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
         print(json.dumps(result, indent=2))
     elif output_format in ("yaml", "strict"):
-        result = [
-            {"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes
-        ]
+        result = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
         print(yaml.dump(result, default_flow_style=False, allow_unicode=True))
     else:
         # Rich/default format
@@ -427,7 +421,9 @@ def edit(
     subscribe: Optional[List[str]] = typer.Option(
         None, "--subscribe", help="Add subscriber (username or @me, repeatable)"
     ),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without applying"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview changes without applying"
+    ),
     force: bool = typer.Option(
         False, "--force", help="Apply changes without confirmation"
     ),
@@ -452,7 +448,9 @@ def edit(
     # Validate paste ID format
     paste_pattern = f"^{MONOGRAMS['paste']}$"
     if not re.match(paste_pattern, paste_id):
-        sys.stderr.write(f"Error: Invalid paste ID '{paste_id}'. Expected format: P123\n")
+        sys.stderr.write(
+            f"Error: Invalid paste ID '{paste_id}'. Expected format: P123\n"
+        )
         raise typer.Exit(1)
 
     numeric_id = int(paste_id[1:])
@@ -558,7 +556,9 @@ def comment(
     # Validate paste ID format
     paste_pattern = f"^{MONOGRAMS['paste']}$"
     if not re.match(paste_pattern, paste_id):
-        sys.stderr.write(f"Error: Invalid paste ID '{paste_id}'. Expected format: P123\n")
+        sys.stderr.write(
+            f"Error: Invalid paste ID '{paste_id}'. Expected format: P123\n"
+        )
         raise typer.Exit(1)
 
     numeric_id = int(paste_id[1:])
