@@ -403,7 +403,13 @@ def _display_pastes(result, output_format, paste_instance):
 def edit(
     ctx: typer.Context,
     paste_id: str = typer.Argument(..., help="Paste monogram (e.g., P123)"),
-    title: Optional[str] = typer.Option(None, "--title", help="New title"),
+    title: Optional[str] = typer.Argument(None, help="New title for the paste"),
+    title_opt: Optional[str] = typer.Option(
+        None,
+        "--title",
+        hidden=True,
+        help="New title (hidden, use positional argument instead)",
+    ),
     content: Optional[str] = typer.Option(
         None,
         "--content",
@@ -432,18 +438,21 @@ def edit(
 
     \b
     Examples:
-        phabfive paste edit P1 --title="New Title"
+        phabfive paste edit P1 "New Title"
         phabfive paste edit P1 --language=python
         phabfive paste edit P1 --content="Updated content"
         echo "new content" | phabfive paste edit P1 --content=-
         phabfive paste edit P1 --content  # opens $EDITOR with current content
         phabfive paste edit P1 --subscribe=@me --tag=project
-        phabfive paste edit P1 --title="Test" --dry-run
+        phabfive paste edit P1 "Test" --dry-run
     """
     from phabfive.editor import confirm_text_change, edit_text
 
     _setup_output_options(ctx)
     paste = _get_paste_app()
+
+    # Merge positional and option title (positional takes precedence)
+    final_title = title or title_opt
 
     # Validate paste ID format
     paste_pattern = f"^{MONOGRAMS['paste']}$"
@@ -508,7 +517,7 @@ def edit(
     # Perform edit
     result = paste.edit_paste(
         paste_id=numeric_id,
-        title=title,
+        title=final_title,
         content=final_content,
         language=language,
         tags=tag_list,

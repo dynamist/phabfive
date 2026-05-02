@@ -34,6 +34,7 @@ class Edit(Phabfive):
     def edit_objects(
         self,
         object_id=None,
+        title=None,
         priority=None,
         status=None,
         tag=None,
@@ -49,6 +50,7 @@ class Edit(Phabfive):
 
         Args:
             object_id (str): Object ID(s) - single (e.g., "T123") or comma-separated (e.g., "T123,T124")
+            title (str): New title for the object
             priority (str): Priority to set (or "raise"/"lower")
             status (str): Status to set
             tag (str): Board name for column context
@@ -66,6 +68,7 @@ class Edit(Phabfive):
         # If no edit options provided, default to editing description in $EDITOR
         has_any_option = any(
             [
+                title,
                 priority,
                 status,
                 column,
@@ -92,6 +95,7 @@ class Edit(Phabfive):
                     if object_type == "task":
                         return self._edit_task_single(
                             oid,
+                            title=title,
                             priority=priority,
                             status=status,
                             tag=tag,
@@ -133,6 +137,7 @@ class Edit(Phabfive):
                         return edit_tasks_batch(
                             tasks,
                             self.maniphest,
+                            title=title,
                             priority=priority,
                             status=status,
                             tag=tag,
@@ -176,6 +181,7 @@ class Edit(Phabfive):
                     retcode = edit_tasks_batch(
                         grouped["task"],
                         self.maniphest,
+                        title=title,
                         priority=priority,
                         status=status,
                         tag=tag,
@@ -217,6 +223,7 @@ class Edit(Phabfive):
     def _edit_task_single(
         self,
         task_id,
+        title=None,
         priority=None,
         status=None,
         tag=None,
@@ -233,6 +240,7 @@ class Edit(Phabfive):
 
         Args:
             task_id (str): Task ID (numeric, e.g., "123")
+            title (str): New title for the task
             priority (str): Priority to set (or "raise"/"lower")
             status (str): Status to set
             tag (str): Board name for column context
@@ -322,6 +330,7 @@ class Edit(Phabfive):
             # Delegate to maniphest module
             result = self.maniphest.edit_task_by_id(
                 task_id=task_id,
+                title=title,
                 priority=priority,
                 status=status,
                 board_phid=board_phid,
