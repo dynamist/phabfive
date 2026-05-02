@@ -203,3 +203,125 @@ class Paste(Phabfive):
         except Exception:
             pass
         return phid
+
+    def get_paste_data(self, paste_id):
+        """Get full paste data including content.
+
+        Args:
+            paste_id: Paste ID (integer, without P prefix)
+
+        Returns:
+            dict with paste data including content
+        """
+        pastes = self.get_pastes(
+            constraints={"ids": [paste_id]},
+            attachments={"content": True},
+        )
+
+        if not pastes:
+            raise PhabfiveDataException(f"Paste P{paste_id} not found")
+
+        paste = pastes[0]
+        return {
+            "id": paste["id"],
+            "phid": paste["phid"],
+            "title": paste["fields"].get("title", ""),
+            "language": paste["fields"].get("language") or "text",
+            "content": paste.get("attachments", {}).get("content", {}).get("content", ""),
+        }
+
+    def edit_paste(
+        self,
+        paste_id,
+        title=None,
+        content=None,
+        language=None,
+        tags=None,
+        subscribers=None,
+        dry_run=False,
+    ):
+        """Edit an existing paste.
+
+        Args:
+            paste_id: Paste ID (integer, without P prefix)
+            title: New title (None to keep current)
+            content: New content (None to keep current)
+            language: New language (None to keep current)
+            tags: List of project tags to add
+            subscribers: List of subscriber usernames to add
+            dry_run: If True, return changes without applying
+
+        Returns:
+            dict with changes made or to be made
+        """
+        # Build transactions
+        transactions = []
+        changes = []
+
+        if title is not None:
+            transactions.append({"type": "title", "value": title})
+            changes.append({"field": "Title", "new": title})
+
+        if content is not None:
+            transactions.append({"type": "text", "value": content})
+            changes.append({"field": "Content", "new": "(updated)"})
+
+        if language is not None:
+            transactions.append({"type": "language", "value": language})
+            changes.append({"field": "Language", "new": language})
+
+        if tags:
+            transactions.append({"type": "projects.add", "value": tags})
+            changes.append({"field": "Tags", "new": f"Added: {', '.join(tags)}"})
+
+        if subscribers:
+            transactions.append({"type": "subscribers.add", "value": subscribers})
+            changes.append({"field": "Subscribers", "new": f"Added: {', '.join(subscribers)}"})
+
+        if not transactions:
+            return {"paste_id": paste_id, "changes": [], "message": "No changes specified"}
+
+        if dry_run:
+            return {"paste_id": paste_id, "changes": changes, "dry_run": True}
+
+        # Apply changes
+        try:
+            self.phab.paste.edit(
+                objectIdentifier=f"P{paste_id}",
+                transactions=transactions,
+            )
+        except APIError as e:
+            raise PhabfiveDataException(str(e).replace("ERR-CONDUIT-CORE: ", ""))
+
+        return {"paste_id": paste_id, "changes": changes}
+
+    def add_paste_comment(self, paste_id, comment_text):
+        """Add a comment to a paste.
+
+        Args:
+            paste_id: Paste ID (integer, without P prefix)
+            comment_text: The comment text to add
+
+        Returns:
+            dict with 'success' and 'paste_id' keys
+        """
+        try:
+            self.phab.paste.edit(
+                objectIdentifier=f"P{paste_id}",
+                transactions=[{"type": "comment", "value": comment_text}],
+            )
+        except APIError as e:
+            raise PhabfiveDataException(str(e).replace("ERR-CONDUIT-CORE: ", ""))
+
+        return {"success": True, "paste_id": paste_id}
+
+    def get_paste_url(self, paste_id):
+        """Get the URL for a paste.
+
+        Args:
+            paste_id: Paste ID (integer, without P prefix)
+
+        Returns:
+            URL string for the paste
+        """
+        return f"{self.url}/P{paste_id}"

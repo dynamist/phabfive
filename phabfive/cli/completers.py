@@ -3,6 +3,8 @@
 
 from typing import List
 
+from phabfive.constants import PASTE_LANGUAGES
+
 # Pattern prefixes for transition filters
 PATTERN_PREFIXES = ["in:", "not:in:", "from:", "to:", "been:", "never:"]
 
@@ -246,3 +248,22 @@ def complete_tag(incomplete: str) -> List[str]:
     # Case-insensitive prefix matching
     incomplete_lower = incomplete.lower()
     return [t for t in tags if t.lower().startswith(incomplete_lower)]
+
+
+def complete_language(incomplete: str) -> List[str]:
+    """Complete programming language values for syntax highlighting.
+
+    Uses the default languages from Phabricator/Phorge pygments.dropdown-choices.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching language completions
+    """
+    incomplete_lower = incomplete.lower()
+    return [lang for lang in PASTE_LANGUAGES if lang.startswith(incomplete_lower)]
