@@ -1762,6 +1762,7 @@ class Maniphest(Phabfive):
     def edit_task_by_id(
         self,
         task_id,
+        title=None,
         priority=None,
         status=None,
         board_phid=None,
@@ -1778,6 +1779,8 @@ class Maniphest(Phabfive):
         ----------
         task_id : str
             Numeric task ID (e.g., "123")
+        title : str, optional
+            New title for the task
         priority : str, optional
             Priority to set or "raise"/"lower"
         status : str, optional
@@ -1808,9 +1811,21 @@ class Maniphest(Phabfive):
         current_priority_name = task_data["fields"]["priority"].get("name", "Unknown")
         current_status = task_data["fields"]["status"]["value"]
         current_status_name = task_data["fields"]["status"].get("name", current_status)
+        current_title = task_data["fields"].get("name", "")
 
         transactions = []
         changes = []  # Track human-readable changes for display
+
+        # Handle title
+        if title is not None and title != current_title:
+            transactions.append({"type": "title", "value": title})
+            changes.append(
+                {
+                    "field": "Title",
+                    "old": current_title,
+                    "new": title,
+                }
+            )
 
         # Handle priority
         if priority:

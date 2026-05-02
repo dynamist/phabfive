@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 def edit_tasks_batch(
     tasks,
     maniphest,
+    title=None,
     priority=None,
     status=None,
     tag=None,
@@ -33,6 +34,7 @@ def edit_tasks_batch(
     Args:
         tasks (list): List of task dicts with 'object_id' key
         maniphest: Maniphest instance for editing tasks
+        title (str): New title for the tasks
         priority (str): Priority to set (or "raise"/"lower")
         status (str): Status to set
         tag (str): Board name for column context
@@ -107,6 +109,7 @@ def edit_tasks_batch(
         try:
             result = maniphest.edit_task_by_id(
                 task_id=task["task_id"],
+                title=title,
                 priority=priority,
                 status=status,
                 board_phid=task["board_phid"],

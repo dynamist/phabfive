@@ -540,6 +540,16 @@ def edit(
         ...,
         help="Task monogram(s) (e.g., T123 or T123,T124,T125)",
     ),
+    title: Optional[str] = typer.Argument(
+        None,
+        help="New title for the task",
+    ),
+    title_opt: Optional[str] = typer.Option(
+        None,
+        "--title",
+        hidden=True,
+        help="New title (hidden, use positional argument instead)",
+    ),
     priority: Optional[str] = typer.Option(
         None,
         "--priority",
@@ -599,11 +609,15 @@ def edit(
 
     \b
     Examples:
+        phabfive maniphest edit T123 "New Title"
         phabfive maniphest edit T123  # opens $EDITOR for description
         phabfive maniphest edit T123 --priority=high
         phabfive maniphest edit T123,T124 --status=resolved
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
     """
+    # Merge positional and option title (positional takes precedence)
+    final_title = title or title_opt
+
     # Validate monogram format (T followed by digits)
     maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
     for part in task_ids.split(","):
@@ -619,6 +633,7 @@ def edit(
 
     retcode = edit_handler.edit_objects(
         object_id=task_ids,
+        title=final_title,
         priority=priority,
         status=status,
         tag=tag,
