@@ -208,7 +208,16 @@ def create(
         help="Skip confirmation prompt (required for non-interactive use)",
     ),
 ) -> None:
-    """Create a new Maniphest task."""
+    """Create a new Maniphest task.
+
+    \b
+    Examples:
+        phabfive maniphest create "Fix bug"
+        phabfive maniphest create "New feature" --assign=@me
+        phabfive maniphest create "Task" --priority=high --tag=Sprint
+        phabfive maniphest create "Task" --tag=Board --column=Backlog
+        echo "Description" | phabfive maniphest create "Task" --description=-
+    """
     maniphest = _get_maniphest_app()
 
     if with_template:
