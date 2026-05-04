@@ -353,26 +353,6 @@ def display_passphrases_json(credentials, show_secrets=True):
     print(json.dumps(output, indent=2))
 
 
-def display_passphrases_list_compact(credentials):
-    """Display credentials as a compact list (search results).
-
-    Uses same field naming as passphrase show (capitalized).
-
-    Parameters
-    ----------
-    credentials : list
-        List of credential dictionaries (without secrets)
-    """
-    for cred in credentials:
-        url = cred.get("url", cred.get("id", ""))
-        cred_type = cred.get("type", "Unknown")
-        name = cred.get("name", "")
-
-        print(f"- Link: {url}")
-        print(f"  Type: {cred_type}")
-        print(f"  Name: {name}")
-
-
 def display_passphrases_list(
     credentials, output_format, phabfive_instance, show_secrets=False
 ):

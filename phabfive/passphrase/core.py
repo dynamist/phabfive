@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
+"""Core Passphrase class for credential management."""
 
-# python std lib
 import json
 import logging
 import re
 
-# phabfive imports
+from phabricator import APIError
+
 from phabfive.constants import MONOGRAMS
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException, PhabfiveRemoteException
-
-# 3rd party imports
-from phabricator import APIError
-
 
 log = logging.getLogger(__name__)
 
