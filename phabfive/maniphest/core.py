@@ -2044,12 +2044,18 @@ class Maniphest(Phabfive):
             return {"task_id": task_id, "changes": []}
 
         if dry_run:
+            from phabfive.editor import show_diff
+
             print(f"[DRY RUN] Would apply to T{task_id}:")
             for change in changes:
                 field = change["field"]
                 old = change["old"]
                 new = change["new"]
-                if old is None:
+                if field == "Title":
+                    # Show unified diff for title
+                    print()
+                    show_diff(old, new, filename="title")
+                elif old is None:
                     print(f"  {field}: {new}")
                 else:
                     print(f"  {field}: {old} → {new}")
