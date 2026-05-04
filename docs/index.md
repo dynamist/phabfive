@@ -32,9 +32,8 @@ uv tool install phabfive
 phabfive K123
 
 # Search and filter credentials
-phabfive passphrase search
-phabfive passphrase search --type=password
 phabfive passphrase search "deploy"
+phabfive passphrase search --type=password
 
 # Show multiple secrets at once
 phabfive passphrase show K1 K2 K3

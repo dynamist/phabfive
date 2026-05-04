@@ -105,7 +105,9 @@ def show(
 @passphrase_app.command()
 def search(
     ctx: typer.Context,
-    query: Optional[str] = typer.Argument(None, help="Search by name (partial match)"),
+    text_query: Optional[str] = typer.Argument(
+        None, help="Search by name (partial match)"
+    ),
     credential_type: Optional[str] = typer.Option(
         None,
         "--type",
@@ -125,23 +127,28 @@ def search(
         help="Maximum results to return",
     ),
 ) -> None:
-    """List and search credentials.
+    """Search credentials by name or type.
 
     \b
     Examples:
-        phabfive passphrase search
         phabfive passphrase search "deploy"
         phabfive passphrase search --type=password
-        phabfive passphrase search --show-secret
-        phabfive --format=json passphrase search
+        phabfive passphrase search "api" --type=token
+        phabfive --format=json passphrase search --type=key
     """
     from phabfive.passphrase.display import display_passphrases_list
+
+    # Require at least one search criterion
+    if not text_query and not credential_type:
+        typer.echo("Usage:")
+        typer.echo("    phabfive passphrase search [<text_query>] [options]")
+        return
 
     passphrase = _get_passphrase_app()
 
     try:
         credentials = passphrase.search_passphrases(
-            query=query,
+            query=text_query,
             credential_type=credential_type,
             need_secrets=show_secret,
             limit=limit,
@@ -150,7 +157,7 @@ def search(
         output_format = _get_output_format(ctx)
 
         if not credentials:
-            if query or credential_type:
+            if text_query or credential_type:
                 typer.echo("No credentials found matching the criteria", err=True)
             else:
                 typer.echo("No credentials found", err=True)
