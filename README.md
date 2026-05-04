@@ -48,11 +48,13 @@ mise use --global --pin pipx:phabfive
 
 ## Quick Start
 
+Run the interactive setup wizard:
+
 ```bash
 phabfive user setup
 ```
 
-The interactive setup wizard will guide you through connecting to your Phabricator/Phorge instance.
+The wizard will prompt for your Phabricator/Phorge URL and API token, then store them in `~/.arcrc` (Arcanist-compatible format). If you have multiple servers configured, phabfive will let you choose which one to use.
 
 Then start using phabfive:
 
@@ -93,21 +95,24 @@ After installation, restart your shell or source your profile.
 <details>
 <summary>Manual configuration (advanced)</summary>
 
-**Environment variables:**
+**Arcanist-compatible `~/.arcrc`** (recommended):
+
+```json
+{
+  "hosts": {
+    "https://yourserver.com/api/": {
+      "token": "cli-ABC123"
+    }
+  }
+}
+```
+
+**Or environment variables:**
 
 ```bash
 export PHAB_TOKEN=cli-ABC123
 export PHAB_URL=https://yourserver.com/api/
 ```
-
-**Or configuration file** at `~/.config/phabfive.yaml`:
-
-```yaml
-PHAB_TOKEN: cli-ABC123
-PHAB_URL: https://yourserver.com/api/
-```
-
-Other config file locations: `~/Library/Application Support/phabfive.yaml` (macOS) or `%LOCALAPPDATA%\phabfive\phabfive.yaml` (Windows).
 
 **Windows SSL certificates:** If you encounter certificate errors, install [pip-system-certs](https://pypi.org/project/pip-system-certs/) to use the Windows certificate store: `pip install pip-system-certs`
 
