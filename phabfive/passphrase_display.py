@@ -42,13 +42,24 @@ def display_passphrase_rich(console, passphrase_dict, phabfive_instance):
     if username:
         console.print(f"  Username: {username}")
 
-    # Print Secret (handle multi-line for SSH keys)
-    if "\n" in secret:
-        console.print("  Secret: |-")
-        for line in secret.splitlines():
-            console.print(f"    {line}")
-    else:
-        console.print(f"  Secret: {secret}")
+    # Print Secret (only when present and non-empty)
+    if "secret" in passphrase_dict and secret:
+        if "\n" in secret:
+            console.print("  Secret: |-")
+            for line in secret.splitlines():
+                console.print(f"    {line}")
+        else:
+            console.print(f"  Secret: {secret}")
+
+    # Print Public Key (only for SSH credentials when requested)
+    public_key = passphrase_dict.get("public_key", "")
+    if public_key:
+        if "\n" in public_key:
+            console.print("  PublicKey: |-")
+            for line in public_key.splitlines():
+                console.print(f"    {line}")
+        else:
+            console.print(f"  PublicKey: {public_key}")
 
 
 def display_passphrase_tree(console, passphrase_dict, phabfive_instance):
@@ -79,14 +90,28 @@ def display_passphrase_tree(console, passphrase_dict, phabfive_instance):
     if username:
         tree.add(f"Username: {username}")
 
-    # For multi-line secrets, show first line only
-    if "\n" in secret:
-        first_line = secret.split("\n")[0]
-        if len(first_line) > 50:
-            first_line = first_line[:47] + "..."
-        tree.add(f"Secret: {first_line}")
-    else:
-        tree.add(f"Secret: {secret}")
+    # Show secret only if present and non-empty
+    if "secret" in passphrase_dict and secret:
+        secret_stripped = secret.strip()
+        # For multi-line secrets, use subtree
+        if "\n" in secret_stripped:
+            secret_branch = tree.add("Secret:")
+            for line in secret_stripped.splitlines():
+                secret_branch.add(line)
+        else:
+            tree.add(f"Secret: {secret_stripped}")
+
+    # Show public key if present
+    public_key = passphrase_dict.get("public_key", "")
+    if public_key:
+        public_key_stripped = public_key.strip()
+        # For multi-line, use subtree; otherwise show full
+        if "\n" in public_key_stripped:
+            pk_branch = tree.add("PublicKey:")
+            for line in public_key_stripped.splitlines():
+                pk_branch.add(line)
+        else:
+            tree.add(f"PublicKey: {public_key_stripped}")
 
     console.print(tree)
 
@@ -124,6 +149,14 @@ def display_passphrase_yaml(passphrase_dict):
     else:
         output["Secret"] = secret
 
+    # Include PublicKey for SSH credentials
+    public_key = passphrase_dict.get("public_key", "")
+    if public_key:
+        if "\n" in public_key:
+            output["PublicKey"] = PreservedScalarString(public_key)
+        else:
+            output["PublicKey"] = public_key
+
     stream = StringIO()
     yaml.dump([output], stream)
     print(stream.getvalue(), end="")
@@ -152,6 +185,11 @@ def display_passphrase_json(passphrase_dict):
         output["Username"] = username
 
     output["Secret"] = passphrase_dict.get("secret", "")
+
+    # Include PublicKey for SSH credentials
+    public_key = passphrase_dict.get("public_key")
+    if public_key:
+        output["PublicKey"] = public_key
 
     print(json.dumps(output, indent=2))
 
@@ -194,5 +232,181 @@ def display_passphrase(passphrase_dict, output_format, phabfive_instance):
             display_passphrase_rich(console, passphrase_dict, phabfive_instance)
     except BrokenPipeError:
         # Handle pipe closed by consumer (e.g., head, less)
+        sys.stderr.close()
+        sys.exit(0)
+
+
+def display_passphrases(
+    credentials, output_format, phabfive_instance, show_secrets=True
+):
+    """Display multiple passphrases in the specified format.
+
+    Parameters
+    ----------
+    credentials : list
+        List of passphrase data dictionaries
+    output_format : str
+        One of 'rich', 'tree', 'yaml', 'json', or 'simple'
+    phabfive_instance : Phabfive
+        Instance to access formatting helpers
+    show_secrets : bool
+        Whether to show secret values
+    """
+    console = phabfive_instance.get_console()
+
+    try:
+        if output_format == "simple":
+            for cred in credentials:
+                if show_secrets and "secret" in cred:
+                    print(cred.get("secret", ""))
+        elif output_format == "tree":
+            for cred in credentials:
+                display_passphrase_tree(console, cred, phabfive_instance)
+        elif output_format in ("yaml", "strict"):
+            display_passphrases_yaml(credentials, show_secrets)
+        elif output_format == "json":
+            display_passphrases_json(credentials, show_secrets)
+        else:  # "rich" (default)
+            for cred in credentials:
+                display_passphrase_rich(console, cred, phabfive_instance)
+    except BrokenPipeError:
+        sys.stderr.close()
+        sys.exit(0)
+
+
+def display_passphrases_yaml(credentials, show_secrets=True):
+    """Display multiple passphrases as YAML.
+
+    Parameters
+    ----------
+    credentials : list
+        List of passphrase data dictionaries
+    show_secrets : bool
+        Whether to include secret values
+    """
+    yaml = YAML()
+    yaml.default_flow_style = False
+
+    output = []
+    for cred in credentials:
+        item = {
+            "Link": cred.get("url", ""),
+            "Type": cred.get("type", "Unknown"),
+            "Name": cred.get("name", ""),
+        }
+
+        username = cred.get("username")
+        if username:
+            item["Username"] = username
+
+        if show_secrets and "secret" in cred:
+            secret = cred.get("secret", "")
+            if "\n" in secret:
+                item["Secret"] = PreservedScalarString(secret)
+            else:
+                item["Secret"] = secret
+
+        if "public_key" in cred:
+            public_key = cred.get("public_key", "")
+            if "\n" in public_key:
+                item["PublicKey"] = PreservedScalarString(public_key)
+            else:
+                item["PublicKey"] = public_key
+
+        output.append(item)
+
+    stream = StringIO()
+    yaml.dump(output, stream)
+    print(stream.getvalue(), end="")
+
+
+def display_passphrases_json(credentials, show_secrets=True):
+    """Display multiple passphrases as JSON.
+
+    Parameters
+    ----------
+    credentials : list
+        List of passphrase data dictionaries
+    show_secrets : bool
+        Whether to include secret values
+    """
+    output = []
+    for cred in credentials:
+        item = {
+            "Link": cred.get("url", ""),
+            "Type": cred.get("type", "Unknown"),
+            "Name": cred.get("name", ""),
+        }
+
+        username = cred.get("username")
+        if username:
+            item["Username"] = username
+
+        if show_secrets and "secret" in cred:
+            item["Secret"] = cred.get("secret", "")
+
+        if "public_key" in cred:
+            item["PublicKey"] = cred.get("public_key", "")
+
+        output.append(item)
+
+    print(json.dumps(output, indent=2))
+
+
+def display_passphrases_list_compact(credentials):
+    """Display credentials as a compact list (search results).
+
+    Uses same field naming as passphrase show (capitalized).
+
+    Parameters
+    ----------
+    credentials : list
+        List of credential dictionaries (without secrets)
+    """
+    for cred in credentials:
+        url = cred.get("url", cred.get("id", ""))
+        cred_type = cred.get("type", "Unknown")
+        name = cred.get("name", "")
+
+        print(f"- Link: {url}")
+        print(f"  Type: {cred_type}")
+        print(f"  Name: {name}")
+
+
+def display_passphrases_list(
+    credentials, output_format, phabfive_instance, show_secrets=False
+):
+    """Display credentials list in the specified format (for search).
+
+    Parameters
+    ----------
+    credentials : list
+        List of credential dictionaries
+    output_format : str
+        One of 'rich', 'tree', 'yaml', 'json', 'simple'
+    phabfive_instance : Phabfive
+        Instance to access formatting helpers
+    show_secrets : bool
+        Whether to show secret values (default: False for search)
+    """
+    console = phabfive_instance.get_console()
+
+    try:
+        if output_format == "json":
+            display_passphrases_json(credentials, show_secrets)
+        elif output_format in ("yaml", "strict"):
+            display_passphrases_yaml(credentials, show_secrets)
+        elif output_format == "tree":
+            for cred in credentials:
+                display_passphrase_tree(console, cred, phabfive_instance)
+        elif output_format == "simple":
+            # Just output monograms for simple format
+            for cred in credentials:
+                print(cred.get("id", ""))
+        else:
+            # rich format (default) - YAML-like with Rich console
+            for cred in credentials:
+                display_passphrase_rich(console, cred, phabfive_instance)
+    except BrokenPipeError:
         sys.stderr.close()
         sys.exit(0)
