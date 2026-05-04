@@ -157,6 +157,12 @@ def create(
     title: Optional[str] = typer.Argument(
         None, help="Task title (required unless using --with)"
     ),
+    title_opt: Optional[str] = typer.Option(
+        None,
+        "--title",
+        hidden=True,
+        help="Task title (hidden, use positional argument instead)",
+    ),
     with_template: Optional[str] = typer.Option(
         None, "--with", help="Load task creation template from YAML file"
     ),
@@ -220,6 +226,9 @@ def create(
     """
     maniphest = _get_maniphest_app()
 
+    # Merge positional and option title (positional takes precedence)
+    final_title = title or title_opt
+
     if with_template:
         # Template mode
         result = maniphest.create_tasks_from_yaml(with_template, dry_run=dry_run)
@@ -227,7 +236,7 @@ def create(
             for task in result["tasks"]:
                 indent = "  " * task["depth"]
                 typer.echo(f"{indent}- {task['title']}")
-    elif title:
+    elif final_title:
         # CLI mode - handle description input modes
         final_description = description
 
@@ -269,7 +278,7 @@ def create(
                 raise typer.Exit(1)
 
         result = maniphest.create_task(
-            title=title,
+            title=final_title,
             description=final_description,
             tags=tag,
             assignee=assign,
