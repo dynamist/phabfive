@@ -592,7 +592,7 @@ wheels = [
 
 [[package]]
 name = "phabfive"
-version = "0.9.0.dev0"
+version = "0.10.0.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "anyconfig" },
@@ -648,7 +648,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruamel-yaml", specifier = ">=0.18.16" },
     { name = "ruff", marker = "extra == 'test'" },
-    { name = "typer", extras = ["all"], specifier = ">=0.12.0" },
+    { name = "typer", specifier = ">=0.12.0" },
 ]
 provides-extras = ["docs", "repl", "test"]
 
