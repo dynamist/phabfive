@@ -132,9 +132,15 @@ def search(
 @paste_app.command()
 def create(
     ctx: typer.Context,
-    title: str = typer.Argument(..., help="Title for Paste"),
+    title: Optional[str] = typer.Argument(None, help="Title for Paste"),
     file: Optional[str] = typer.Argument(
         None, help="File with content (optional if using --content or $EDITOR)"
+    ),
+    title_opt: Optional[str] = typer.Option(
+        None,
+        "--title",
+        hidden=True,
+        help="Title for Paste (hidden, use positional argument instead)",
     ),
     content: Optional[str] = typer.Option(
         None,
@@ -166,6 +172,12 @@ def create(
         phabfive paste create "Notes" --subscribe=@me --tag=project
     """
     paste = _get_paste_app()
+
+    # Merge positional and option title (positional takes precedence)
+    final_title = title or title_opt
+    if not final_title:
+        sys.stderr.write("Error: Title is required\n")
+        raise typer.Exit(1)
 
     # Determine content source
     final_content = None
@@ -252,7 +264,7 @@ def create(
 
     if dry_run:
         print("[DRY RUN] Would create paste:")
-        print(f"  Title: {title}")
+        print(f"  Title: {final_title}")
         if language:
             print(f"  Language: {language}")
         if tag_list:
@@ -271,7 +283,7 @@ def create(
 
     # Create the paste
     result = paste.create_paste_from_content(
-        title=title,
+        title=final_title,
         content=final_content,
         language=language,
         tags=tag_list,
