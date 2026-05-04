@@ -6,7 +6,7 @@ Phabfive is a command line tool to interact with Phabricator/Phorge, providing a
 
 Phabfive currently supports the following Phabricator/Phorge applications:
 
-- **Passphrase** - Get specified secrets for credential management
+- **Passphrase** - Search, list, and retrieve secrets (passwords, tokens, SSH keys, notes)
 - **Diffusion** - List repositories, get branches, clone URIs, add repositories, manage URIs
 - **Paste** - List, get, and add code pastes
 - **User** - Get information about the logged-in user
@@ -28,8 +28,16 @@ uv tool install phabfive
 ### Basic Usage
 
 ```bash
-# Get a secret from Passphrase
-phabfive passphrase K123
+# Get a secret from Passphrase (monogram shortcut)
+phabfive K123
+
+# Search and filter credentials
+phabfive passphrase search
+phabfive passphrase search --type=password
+phabfive passphrase search "deploy"
+
+# Show multiple secrets at once
+phabfive passphrase show K1 K2 K3
 
 # List pastes
 phabfive paste list
