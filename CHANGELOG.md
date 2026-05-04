@@ -1,3 +1,48 @@
+# 0.9.0 (2026-05-04)
+
+## Prelude
+
+This release completes the unified create/edit command UX for both Maniphest and Paste applications. Single task creation is now feature complete with consistent patterns across all object types.
+
+## New Features
+
+### Unified Edit Command
+* **Batch editing** - Edit multiple tasks at once with comma-separated IDs (e.g., `phabfive maniphest edit T123,T124,T125 --status=resolved`)
+* **Description editing** - New `--description` option with `$EDITOR` support, unified diff display, and confirmation prompts
+* **Title editing** - Positional title argument for quick renames (e.g., `phabfive maniphest edit T123 "New Title"`) with diff display
+* **Subscriber management** - New `--subscribe` option to add subscribers during edit (`--subscribe=@me`)
+* **Diff confirmation** - All text changes (title, description, content) show unified diffs and prompt for confirmation
+
+### Shell Completion Enhancements
+* **Context-aware column completion** - `--column` completion fetches actual column names from the board specified by `--tag`
+* **Tag completion** - `--tag` option now completes project names from API
+* **Pattern prefix support** - Completions support filter prefixes like `in:`, `not:in:`, `from:`, `to:`
+
+### Paste App Modernization
+* **Edit command** - New `phabfive paste edit P1` with `--content`, `--language`, `--tag`, `--subscribe` options
+* **Comment command** - New `phabfive paste comment P1 "text"` for adding comments
+* **Free-text search** - `phabfive paste search "query"` searches paste titles
+* **Positional title** - Quick title changes with `phabfive paste edit P1 "New Title"`
+
+### UX Improvements
+* **Unified dry-run output** - Consistent `[DRY RUN]` format across create and edit commands
+* **Editor temp file prefixes** - Temp files use descriptive prefixes (e.g., `description-T123.remarkup`)
+* **Graceful error handling** - API connection errors show clean messages without tracebacks
+
+## Bug Fixes
+
+* Fix priority value comparison using shared constants
+* Handle statusMap values that can be strings or dicts
+* Remove traceback output for user-facing errors
+
+## Other Notes
+
+* Restructured `edit.py` into `edit/` package for better organization
+* Removed deprecated `paste list` command (use `paste search` instead)
+* Added pre-commit checks documentation to AGENTS.md
+* Various dependency updates via Dependabot
+
+
 # 0.8.0 (2026-03-30)
 
 ## Prelude
