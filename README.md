@@ -6,14 +6,18 @@ CLI for [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https
 
 ## Features
 
-A summary of the currently supported features:
+- **Maniphest** - Full task management: create, show, edit, search, comment, parents/subtasks
+- **Paste** - Create, show, edit, search, and comment on pastes
+- **Diffusion** - Repository management, branches, and URI configuration
+- **Passphrase** - Retrieve secrets securely
+- **User** - User info and interactive setup wizard
 
-- **Passphrase** - Get specified secret
-- **Diffusion** - List repositories, get branches, clone URIs, add repositories, manage URIs
-- **Paste** - List, get, and add pastes
-- **User** - Get information about the logged-in user
-- **Maniphest** - Add comments, show task details, create tasks from templates
-- **Edit** - Unified editing with auto-detection, batch operations, and smart column/priority navigation
+Cross-cutting features:
+
+- **Monogram shortcuts** - `phabfive T123` expands to `phabfive maniphest show T123`
+- **Batch editing** - Edit multiple objects at once: `phabfive edit T1,T2,T3 --status=resolved`
+- **Shell completion** - Tab completion for commands, options, and values
+- **Machine-readable output** - `--format=json` or `--format=yaml` for scripting and AI agents
 
 For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/).
 
@@ -53,13 +57,24 @@ The interactive setup wizard will guide you through connecting to your Phabricat
 Then start using phabfive:
 
 ```bash
-phabfive passphrase K123
-phabfive paste list
-phabfive maniphest search "migration tasks" --tag myproject
-phabfive maniphest search --tag myproject --updated-after=1w
+# Show tasks and pastes with monogram shortcuts
+phabfive T123
+phabfive P456
 
-# Edit tasks with smart navigation
-phabfive edit T123 --priority=raise --status=resolved
+# Search and filter
+phabfive maniphest search "migration tasks" --tag myproject
+phabfive paste search "config"
+
+# Create and edit
+phabfive maniphest create "Fix the bug" --priority=high --tag myproject
+phabfive maniphest edit T123 "New Title" --status=resolved
+
+# Smart navigation - raise/lower priority, move columns forward/backward
+phabfive edit T123 --priority=raise
+phabfive edit T123 --tag=MyBoard --column=forward
+
+# Batch operations
+phabfive edit T1,T2,T3 --status=resolved
 phabfive maniphest search --assigned=@me | phabfive edit --column=Done
 ```
 
