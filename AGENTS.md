@@ -29,6 +29,9 @@ uv run ruff format phabfive/ tests/
 make up                              # start local Phorge
 make down                            # stop containers
 
+# Test against local Phorge (safe to run data-altering operations)
+PHAB_URL=http://phorge.domain.tld/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
+
 # Merge PRs (rebase only - merge and squash are disabled)
 gh pr merge --rebase --delete-branch
 ```
@@ -87,6 +90,21 @@ Config precedence (later overrides earlier):
 8. Environment variables
 
 ## AI Agent Usage
+
+### Data-Altering Operations
+
+**NEVER run create, edit, or delete operations on production instances.** Only run data-altering commands when explicitly overriding credentials with environment variables pointing to a test instance.
+
+When using the local Phorge development instance, it is **safe to run data-altering operations** (create, edit, delete) without `--dry-run`:
+
+```bash
+PHAB_URL=http://phorge.domain.tld/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest create "Test task"
+PHAB_URL=http://phorge.domain.tld/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest edit T123 --status=resolved
+```
+
+This is a disposable test environment. These specific credentials indicate a safe-to-modify development instance.
+
+### Machine-Readable Output
 
 Use `--format=yaml` or `--format=json` for machine-readable output:
 
