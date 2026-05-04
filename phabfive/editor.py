@@ -100,13 +100,14 @@ def show_diff(old_text, new_text, filename="description"):
             print(line, end="")
 
 
-def confirm_text_change(old_text, new_text, force):
+def confirm_text_change(old_text, new_text, force, filename="description"):
     """Show diff and get confirmation for text change.
 
     Args:
         old_text (str): Current text content
         new_text (str): New text content
         force (bool): Skip confirmation prompt
+        filename (str): Name to show in diff header (e.g., "title", "description")
 
     Returns:
         tuple: (confirmed: bool, return_code: int or None)
@@ -115,7 +116,7 @@ def confirm_text_change(old_text, new_text, force):
     import typer
 
     print()
-    show_diff(old_text, new_text)
+    show_diff(old_text, new_text, filename=filename)
     print()
 
     if force:

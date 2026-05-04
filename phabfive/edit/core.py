@@ -306,6 +306,16 @@ class Edit(Phabfive):
 
                 final_description = description
 
+            # Handle title confirmation
+            if title is not None and not dry_run:
+                current_title = task_data["fields"].get("name", "")
+                if title != current_title:
+                    confirmed, return_code = confirm_text_change(
+                        current_title, title, force, filename="title"
+                    )
+                    if not confirmed:
+                        return return_code
+
             # Validate board/column context
             board_phid, error = validate_board_column_context(
                 task_id, task_data, column, tag, self.maniphest

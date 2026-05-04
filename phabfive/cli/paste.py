@@ -514,6 +514,16 @@ def edit(
         if not confirmed:
             raise typer.Exit(return_code or 0)
 
+    # Show diff for title changes
+    if final_title is not None and not dry_run:
+        current_title = current_paste.get("title", "")
+        if final_title != current_title:
+            confirmed, return_code = confirm_text_change(
+                current_title, final_title, force, filename="title"
+            )
+            if not confirmed:
+                raise typer.Exit(return_code or 0)
+
     # Perform edit
     result = paste.edit_paste(
         paste_id=numeric_id,
@@ -527,9 +537,16 @@ def edit(
 
     # Output result
     if dry_run:
+        from phabfive.editor import show_diff
+
         print(f"[DRY RUN] Would edit {paste_id}:")
         for change in result.get("changes", []):
-            print(f"  {change['field']}: {change['new']}")
+            if change["field"] == "Title":
+                # Show unified diff for title
+                print()
+                show_diff(current_paste.get("title", ""), final_title, filename="title")
+            else:
+                print(f"  {change['field']}: {change['new']}")
         if not result.get("changes"):
             print("  No changes specified")
     else:
