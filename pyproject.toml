@@ -27,14 +27,13 @@ classifiers = [
 ]
 dependencies = [
   "anyconfig>=0.10.0",
-  "appdirs",
+  "appdirs>=1.4.0",
   "InquirerPy>=0.3.4",
-  "jinja2",
-  "mkdocs>=1.6.1",
-  "phabricator",
-  "pyyaml",
+  "jinja2>=3.0.0",
+  "phabricator>=0.7.0",
+  "pyyaml>=6.0",
   "rich>=13.0.0",
-  "ruamel-yaml>=0.18.16",
+  "ruamel-yaml>=0.18.0",
   "typer>=0.12.0",
 ]
 
