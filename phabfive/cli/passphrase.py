@@ -65,7 +65,7 @@ def show(
         phabfive K1  # shortcut
         phabfive K1,K2  # shortcut for multiple
     """
-    from phabfive.passphrase_display import display_passphrases
+    from phabfive.passphrase.display import display_passphrases
 
     passphrase = _get_passphrase_app()
 
@@ -88,7 +88,7 @@ def show(
 
         if len(all_ids) == 1:
             # Single credential - use singular display
-            from phabfive.passphrase_display import display_passphrase
+            from phabfive.passphrase.display import display_passphrase
 
             display_passphrase(data[0], output_format, passphrase)
         else:
@@ -134,7 +134,7 @@ def search(
         phabfive passphrase search --show-secret
         phabfive --format=json passphrase search
     """
-    from phabfive.passphrase_display import display_passphrases_list
+    from phabfive.passphrase.display import display_passphrases_list
 
     passphrase = _get_passphrase_app()
 
