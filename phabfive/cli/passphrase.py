@@ -58,12 +58,12 @@ def show(
 ) -> None:
     """Retrieve secrets from Passphrase by ID.
 
+    \b
     Examples:
         phabfive passphrase show K1
         phabfive passphrase show K1 K2 K3
         phabfive passphrase show K1,K2,K3
         phabfive K1  # shortcut
-        phabfive K1,K2  # shortcut for multiple
     """
     from phabfive.passphrase.display import display_passphrases
 
@@ -127,6 +127,7 @@ def search(
 ) -> None:
     """List and search credentials.
 
+    \b
     Examples:
         phabfive passphrase search
         phabfive passphrase search "deploy"

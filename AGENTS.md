@@ -64,15 +64,16 @@ CI will fail if files are not properly formatted.
 
 ### Feature Modules
 Complex features use a consistent subpackage structure:
-- `diffusion/` and `maniphest/` follow this pattern:
+- `diffusion/`, `maniphest/`, and `passphrase/` follow this pattern:
   - `core.py` - main class inheriting from `Phabfive`
-  - `fetchers.py` - API data fetching
-  - `resolvers.py` - ID/name resolution
-  - `formatters.py` - output formatting
-  - `validators.py` - input validation
+  - `display.py` - output formatting (passphrase)
+  - `fetchers.py` - API data fetching (diffusion, maniphest)
+  - `resolvers.py` - ID/name resolution (diffusion, maniphest)
+  - `formatters.py` - output formatting (diffusion, maniphest)
+  - `validators.py` - input validation (diffusion, maniphest)
 
 ### Simpler Modules
-- `passphrase.py`, `paste.py`, `user.py` - single-file implementations
+- `paste.py`, `user.py` - single-file implementations
 - `transitions/` - state machine for task status/priority/column changes
 
 ### Configuration

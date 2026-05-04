@@ -9,7 +9,7 @@ CLI for [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https
 - **Maniphest** - Full task management: create, show, edit, search, comment, parents/subtasks
 - **Paste** - Create, show, edit, search, and comment on pastes
 - **Diffusion** - Repository management, branches, and URI configuration
-- **Passphrase** - Retrieve secrets securely
+- **Passphrase** - Search, list, and retrieve secrets (passwords, tokens, SSH keys, notes)
 - **User** - User info and interactive setup wizard
 
 Cross-cutting features:
