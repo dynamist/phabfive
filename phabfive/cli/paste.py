@@ -3,6 +3,7 @@
 
 import re
 import sys
+from datetime import datetime
 from typing import List, Optional
 
 import typer
@@ -344,6 +345,13 @@ def show(
     _display_pastes(result, output_format, paste)
 
 
+def _format_timestamp(ts):
+    """Convert Unix timestamp to ISO format string."""
+    if ts:
+        return datetime.fromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%S")
+    return None
+
+
 def _display_pastes(result, output_format, paste_instance):
     """Display paste results in the specified format."""
     import json
@@ -363,6 +371,8 @@ def _display_pastes(result, output_format, paste_instance):
                 "Author": p.get("author", ""),
                 "Language": p.get("language", "text"),
                 "Status": p.get("status", ""),
+                "Created": _format_timestamp(p.get("dateCreated")),
+                "Modified": _format_timestamp(p.get("dateModified")),
             }
             if "content" in p:
                 item["Content"] = p.get("content", "")
@@ -380,6 +390,8 @@ def _display_pastes(result, output_format, paste_instance):
                 "Author": p.get("author", ""),
                 "Language": p.get("language", "text"),
                 "Status": p.get("status", ""),
+                "Created": _format_timestamp(p.get("dateCreated")),
+                "Modified": _format_timestamp(p.get("dateModified")),
             }
             if "content" in p:
                 content = p.get("content", "")
@@ -405,6 +417,12 @@ def _display_pastes(result, output_format, paste_instance):
                 tree.add(f"Language: {paste_data['language']}")
             if paste_data.get("status"):
                 tree.add(f"Status: {paste_data['status']}")
+            created = _format_timestamp(paste_data.get("dateCreated"))
+            if created:
+                tree.add(f"Created: {created}")
+            modified = _format_timestamp(paste_data.get("dateModified"))
+            if modified:
+                tree.add(f"Modified: {modified}")
             if paste_data.get("content"):
                 # Show content preview for tree view
                 content = paste_data["content"]
@@ -448,6 +466,14 @@ def _display_pastes(result, output_format, paste_instance):
             # Print Status
             if paste_data.get("status"):
                 console.print(f"  Status: {paste_data['status']}")
+
+            # Print dates
+            created = _format_timestamp(paste_data.get("dateCreated"))
+            if created:
+                console.print(f"  Created: {created}")
+            modified = _format_timestamp(paste_data.get("dateModified"))
+            if modified:
+                console.print(f"  Modified: {modified}")
 
             # Print Content (only when present and non-empty)
             content = paste_data.get("content", "")
