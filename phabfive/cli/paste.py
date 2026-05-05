@@ -65,7 +65,9 @@ def _get_paste_app():
 @paste_app.command()
 def search(
     ctx: typer.Context,
-    query: Optional[str] = typer.Argument(None, help="Free-text search in paste title"),
+    text_query: Optional[str] = typer.Argument(
+        None, help="Free-text search in paste title"
+    ),
     author: Optional[str] = typer.Option(
         None, "--author", help="Filter by author (username or @me)"
     ),
@@ -74,12 +76,17 @@ def search(
 
     \b
     Examples:
-        phabfive paste search
         phabfive paste search "script"
         phabfive paste search --author=@me
         phabfive paste search "config" --author=@me
-        phabfive --format=yaml paste search
+        phabfive --format=yaml paste search "notes"
     """
+    # Require at least one search criterion
+    if not text_query and not author:
+        typer.echo("Usage:")
+        typer.echo("    phabfive paste search [<text_query>] [options]")
+        return
+
     _setup_output_options(ctx)
     paste = _get_paste_app()
 
@@ -87,8 +94,8 @@ def search(
     constraints = {}
 
     # Handle free-text query
-    if query:
-        constraints["query"] = query
+    if text_query:
+        constraints["query"] = text_query
 
     # Handle @me shortcut for author
     if author:
