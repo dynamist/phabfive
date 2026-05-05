@@ -191,7 +191,7 @@ def display_passphrase_json(passphrase_dict):
     if public_key:
         output["PublicKey"] = public_key
 
-    print(json.dumps(output, indent=2))
+    print(json.dumps(output, indent=2))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
 
 
 def display_passphrase_simple(passphrase_dict):
@@ -202,7 +202,8 @@ def display_passphrase_simple(passphrase_dict):
     passphrase_dict : dict
         Passphrase data dictionary with secret
     """
-    print(passphrase_dict.get("secret", ""))
+    # Intentional: This function's purpose is to output secrets for piping
+    print(passphrase_dict.get("secret", ""))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
 
 
 def display_passphrase(passphrase_dict, output_format, phabfive_instance):
@@ -258,7 +259,8 @@ def display_passphrases(
         if output_format == "simple":
             for cred in credentials:
                 if show_secrets and "secret" in cred:
-                    print(cred.get("secret", ""))
+                    # Intentional: Output secrets for piping
+                    print(cred.get("secret", ""))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
         elif output_format == "tree":
             for cred in credentials:
                 display_passphrase_tree(console, cred, phabfive_instance)
