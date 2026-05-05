@@ -1198,7 +1198,8 @@ class TestYAMLQuoting:
 
         from phabfive.display import display_tasks
 
-        display_tasks(result, "rich", maniphest)
+        # Test yaml format (not rich) for YAML validity
+        display_tasks(result, "yaml", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1263,7 +1264,8 @@ class TestYAMLQuoting:
 
         from phabfive.display import display_tasks
 
-        display_tasks(result, "rich", maniphest)
+        # Test yaml format (not rich) for YAML validity
+        display_tasks(result, "yaml", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1329,7 +1331,8 @@ class TestYAMLQuoting:
 
         from phabfive.display import display_tasks
 
-        display_tasks(result, "rich", maniphest)
+        # Test yaml format (not rich) for YAML validity
+        display_tasks(result, "yaml", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1397,7 +1400,8 @@ class TestYAMLQuoting:
 
         from phabfive.display import display_tasks
 
-        display_tasks(result, "rich", maniphest)
+        # Test yaml format (not rich) for YAML validity
+        display_tasks(result, "yaml", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1463,7 +1467,8 @@ class TestYAMLQuoting:
 
         from phabfive.display import display_tasks
 
-        display_tasks(result, "rich", maniphest)
+        # Test yaml format (not rich) for YAML validity
+        display_tasks(result, "yaml", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
@@ -1609,7 +1614,8 @@ class TestStrictFormat:
 
         from phabfive.display import display_tasks
 
-        display_tasks(result, "rich", maniphest)
+        # Test strict/yaml format for YAML validity
+        display_tasks(result, "strict", maniphest)
 
         captured = capsys.readouterr()
         yaml_output = captured.out
