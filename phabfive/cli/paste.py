@@ -3,12 +3,12 @@
 
 import re
 import sys
-from datetime import datetime
 from typing import List, Optional
 
 import typer
 from io import StringIO
 
+from rich.text import Text
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
@@ -348,98 +348,116 @@ def _display_pastes(result, output_format, paste_instance):
     """Display paste results in the specified format."""
     import json
 
-    from rich.syntax import Syntax
-
     if not result or not result.get("pastes"):
         return
 
     pastes = result["pastes"]
 
     if output_format == "json":
-        print(json.dumps(pastes, indent=2, default=str))
+        # Use capitalized keys like passphrase/maniphest
+        output = []
+        for p in pastes:
+            item = {
+                "Link": p.get("url", ""),
+                "Title": p.get("title", ""),
+                "Author": p.get("author", ""),
+                "Language": p.get("language", "text"),
+                "Status": p.get("status", ""),
+            }
+            if "content" in p:
+                item["Content"] = p.get("content", "")
+            output.append(item)
+        print(json.dumps(output, indent=2, default=str))
     elif output_format in ("yaml", "strict"):
         yaml = YAML()
         yaml.default_flow_style = False
-        # Convert content to block scalar for readability
+        # Use capitalized keys like passphrase/maniphest
         output = []
         for p in pastes:
-            item = dict(p)
-            if "content" in item and "\n" in item.get("content", ""):
-                item["content"] = PreservedScalarString(item["content"])
+            item = {
+                "Link": p.get("url", ""),
+                "Title": p.get("title", ""),
+                "Author": p.get("author", ""),
+                "Language": p.get("language", "text"),
+                "Status": p.get("status", ""),
+            }
+            if "content" in p:
+                content = p.get("content", "")
+                if "\n" in content:
+                    item["Content"] = PreservedScalarString(content)
+                else:
+                    item["Content"] = content
             output.append(item)
         stream = StringIO()
         yaml.dump(output, stream)
         print(stream.getvalue(), end="")
+    elif output_format == "tree":
+        from rich.tree import Tree
+
+        console = paste_instance.get_console()
+        for paste_data in pastes:
+            # Use URL as tree root (like passphrase/maniphest)
+            tree = Tree(paste_data.get("url", paste_data["id"]))
+            tree.add(f"Title: {paste_data.get('title', '')}")
+            if paste_data.get("author"):
+                tree.add(f"Author: {paste_data['author']}")
+            if paste_data.get("language"):
+                tree.add(f"Language: {paste_data['language']}")
+            if paste_data.get("status"):
+                tree.add(f"Status: {paste_data['status']}")
+            if paste_data.get("content"):
+                # Show content preview for tree view
+                content = paste_data["content"]
+                if "\n" in content:
+                    content_branch = tree.add("Content:")
+                    for line in content.splitlines()[:5]:
+                        content_branch.add(line)
+                    if len(content.splitlines()) > 5:
+                        content_branch.add("...")
+                else:
+                    tree.add(
+                        f"Content: {content[:100]}{'...' if len(content) > 100 else ''}"
+                    )
+            console.print(tree)
+    elif output_format == "simple":
+        # Just output content for piping (like passphrase outputs secret)
+        for paste_data in pastes:
+            if paste_data.get("content"):
+                print(paste_data["content"])
     else:
-        # Rich format
+        # Rich format - YAML-like output with hyperlinks
         console = paste_instance.get_console()
 
         for paste_data in pastes:
-            # Build header
-            title = f"{paste_data['id']}: {paste_data['title']}"
+            link = paste_data.get("_link")
 
-            # Build metadata lines
-            lines = []
+            # Print link
+            console.print(Text.assemble("- Link: ", link))
+
+            # Print Title
+            console.print(f"  Title: {paste_data.get('title', '')}")
+
+            # Print Author (only when present)
             if paste_data.get("author"):
-                lines.append(f"Author: {paste_data['author']}")
+                console.print(f"  Author: {paste_data['author']}")
+
+            # Print Language
             if paste_data.get("language"):
-                lines.append(f"Language: {paste_data['language']}")
-            if paste_data.get("dateCreated"):
-                created = datetime.fromtimestamp(paste_data["dateCreated"])
-                lines.append(f"Created: {created.strftime('%Y-%m-%d %H:%M')}")
+                console.print(f"  Language: {paste_data['language']}")
 
-            # Print header and metadata
-            console.print(f"[bold]{title}[/bold]")
-            console.print("─" * min(len(title) + 10, 60))
-            for line in lines:
-                console.print(line)
+            # Print Status
+            if paste_data.get("status"):
+                console.print(f"  Status: {paste_data['status']}")
 
-            # Print content with syntax highlighting
-            if paste_data.get("content"):
-                console.print()
-                language = paste_data.get("language", "text")
-                # Map common phabricator language names to pygments lexers
-                lang_map = {
-                    "text": "text",
-                    "python": "python",
-                    "python3": "python",
-                    "javascript": "javascript",
-                    "js": "javascript",
-                    "bash": "bash",
-                    "shell": "bash",
-                    "json": "json",
-                    "yaml": "yaml",
-                    "sql": "sql",
-                    "html": "html",
-                    "css": "css",
-                    "c": "c",
-                    "cpp": "cpp",
-                    "java": "java",
-                    "go": "go",
-                    "rust": "rust",
-                    "ruby": "ruby",
-                    "php": "php",
-                }
-                lexer = lang_map.get(language.lower(), "text")
-                try:
-                    # Use word_wrap to prevent extremely wide output
-                    syntax = Syntax(
-                        paste_data["content"],
-                        lexer,
-                        theme="monokai",
-                        line_numbers=True,
-                        word_wrap=True,
-                    )
-                    # Print syntax with auto width (not the large MAX_LINE_WIDTH)
-                    from rich.console import Console as SyntaxConsole
-
-                    syntax_console = SyntaxConsole()
-                    syntax_console.print(syntax)
-                except Exception:
-                    # Fall back to plain text if syntax highlighting fails
-                    console.print(paste_data["content"])
-
-            console.print()
+            # Print Content (only when present and non-empty)
+            content = paste_data.get("content", "")
+            if content:
+                if "\n" in content:
+                    console.print("  Content: |-")
+                    for line in content.splitlines():
+                        console.print(f"    {line}")
+                else:
+                    console.print(f"  Content: {content}")
 
 
 @paste_app.command()
