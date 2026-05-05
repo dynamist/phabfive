@@ -87,9 +87,6 @@ def _display_task_rich(console, task_dict, phabfive_instance):
             console.print(f"    {key}: |-")
             for line in str(value).splitlines():
                 console.print(f"      {_escape_for_rich(line)}")
-        elif _needs_yaml_quoting(value):
-            escaped = str(value).replace("'", "''")
-            console.print(f"    {key}: '{_escape_for_rich(escaped)}'")
         else:
             console.print(f"    {key}: {_escape_for_rich(value)}")
 
