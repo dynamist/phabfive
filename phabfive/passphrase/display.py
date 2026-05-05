@@ -3,12 +3,20 @@
 
 import json
 import sys
+from datetime import datetime
 from io import StringIO
 
 from rich.text import Text
 from rich.tree import Tree
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
+
+
+def _format_timestamp(ts):
+    """Convert Unix timestamp to ISO format string."""
+    if ts:
+        return datetime.fromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%S")
+    return None
 
 
 def display_passphrase_rich(console, passphrase_dict, phabfive_instance):
@@ -60,6 +68,14 @@ def display_passphrase_rich(console, passphrase_dict, phabfive_instance):
                 console.print(f"    {line}")
         else:
             console.print(f"  PublicKey: {public_key}")
+
+    # Print dates
+    created = _format_timestamp(passphrase_dict.get("dateCreated"))
+    if created:
+        console.print(f"  Created: {created}")
+    modified = _format_timestamp(passphrase_dict.get("dateModified"))
+    if modified:
+        console.print(f"  Modified: {modified}")
 
 
 def display_passphrase_tree(console, passphrase_dict, phabfive_instance):
@@ -113,6 +129,14 @@ def display_passphrase_tree(console, passphrase_dict, phabfive_instance):
         else:
             tree.add(f"PublicKey: {public_key_stripped}")
 
+    # Show dates
+    created = _format_timestamp(passphrase_dict.get("dateCreated"))
+    if created:
+        tree.add(f"Created: {created}")
+    modified = _format_timestamp(passphrase_dict.get("dateModified"))
+    if modified:
+        tree.add(f"Modified: {modified}")
+
     console.print(tree)
 
 
@@ -157,6 +181,14 @@ def display_passphrase_yaml(passphrase_dict):
         else:
             output["PublicKey"] = public_key
 
+    # Include dates
+    created = _format_timestamp(passphrase_dict.get("dateCreated"))
+    if created:
+        output["Created"] = created
+    modified = _format_timestamp(passphrase_dict.get("dateModified"))
+    if modified:
+        output["Modified"] = modified
+
     stream = StringIO()
     yaml.dump([output], stream)
     print(stream.getvalue(), end="")
@@ -190,6 +222,14 @@ def display_passphrase_json(passphrase_dict):
     public_key = passphrase_dict.get("public_key")
     if public_key:
         output["PublicKey"] = public_key
+
+    # Include dates
+    created = _format_timestamp(passphrase_dict.get("dateCreated"))
+    if created:
+        output["Created"] = created
+    modified = _format_timestamp(passphrase_dict.get("dateModified"))
+    if modified:
+        output["Modified"] = modified
 
     print(json.dumps(output, indent=2))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
 
@@ -315,6 +355,14 @@ def display_passphrases_yaml(credentials, show_secrets=True):
             else:
                 item["PublicKey"] = public_key
 
+        # Include dates
+        created = _format_timestamp(cred.get("dateCreated"))
+        if created:
+            item["Created"] = created
+        modified = _format_timestamp(cred.get("dateModified"))
+        if modified:
+            item["Modified"] = modified
+
         output.append(item)
 
     stream = StringIO()
@@ -349,6 +397,14 @@ def display_passphrases_json(credentials, show_secrets=True):
 
         if "public_key" in cred:
             item["PublicKey"] = cred.get("public_key", "")
+
+        # Include dates
+        created = _format_timestamp(cred.get("dateCreated"))
+        if created:
+            item["Created"] = created
+        modified = _format_timestamp(cred.get("dateModified"))
+        if modified:
+            item["Modified"] = modified
 
         output.append(item)
 
