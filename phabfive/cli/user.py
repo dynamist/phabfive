@@ -5,23 +5,49 @@ import sys
 
 import typer
 
+from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException
 
 user_app = typer.Typer(help="Information on users, setup wizard")
 
 
+def _get_output_format(ctx: typer.Context) -> str:
+    """Get the output format from context or auto-detect."""
+    format_arg = ctx.obj.get("format") if ctx.obj else None
+    if format_arg:
+        return format_arg
+    return Phabfive._get_auto_format()
+
+
+def _setup_output_options(ctx: typer.Context) -> None:
+    """Set global output options from context."""
+    if ctx.obj:
+        ascii_when = ctx.obj.get("ascii", "auto")
+        hyperlink_when = ctx.obj.get("hyperlink", "auto")
+        output_format = _get_output_format(ctx)
+        Phabfive.set_output_options(ascii_when, hyperlink_when, output_format)
+
+
 @user_app.command()
 def whoami(ctx: typer.Context) -> None:
-    """Display information about the currently authenticated user."""
+    """Show current user for all configured hosts in ~/.arcrc."""
     import requests
 
+    from phabfive.display import display_users
     from phabfive.user import User
+
+    _setup_output_options(ctx)
 
     try:
         user = User()
-        whoami_data = user.whoami()
-        for key, value in whoami_data.items():
-            typer.echo(f"{key}: {value}")
+        results = user.whoami_all_hosts()
+
+        if not results:
+            typer.echo("No hosts found in ~/.arcrc", err=True)
+            raise typer.Exit(1)
+
+        output_format = _get_output_format(ctx)
+        display_users(results, output_format, user)
     except PhabfiveConfigException as e:
         from phabfive.setup import offer_setup_on_error
 

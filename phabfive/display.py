@@ -616,3 +616,193 @@ def display_tasks(result, output_format, phabfive_instance):
         # Quietly exit - this is normal behavior
         sys.stderr.close()
         sys.exit(0)
+
+
+# User display functions
+
+
+def _display_user_rich(console, user_dict, phabfive_instance):
+    """Display a single user/host in YAML-like format using Rich.
+
+    Parameters
+    ----------
+    console : Console
+        Rich Console instance for output
+    user_dict : dict
+        User data dictionary with Host, URL, User (or Error)
+    phabfive_instance : Phabfive
+        Instance to access format_link()
+    """
+    host = user_dict.get("Host", "")
+    url = user_dict.get("URL", "")
+    base_url = user_dict.get("_base_url", "")
+    user_data = user_dict.get("User")
+    error = user_dict.get("Error")
+
+    # Make host a clickable link to the base URL
+    if base_url:
+        host_link = phabfive_instance.format_link(base_url, host, show_url=False)
+        console.print(Text.assemble("- Host: ", host_link))
+    else:
+        console.print(f"- Host: {_escape_for_rich(host)}")
+    console.print(f"  URL: {_escape_for_rich(url)}")
+
+    if error:
+        console.print(f"  Error: {_escape_for_rich(error)}")
+    elif user_data:
+        console.print("  User:")
+        # Make UserName clickable if link is available
+        link = user_dict.get("_link")
+        if link:
+            console.print(Text.assemble("    UserName: ", link))
+        else:
+            console.print(
+                f"    UserName: {_escape_for_rich(user_data.get('UserName', ''))}"
+            )
+        console.print(
+            f"    RealName: {_escape_for_rich(user_data.get('RealName', ''))}"
+        )
+        console.print(
+            f"    PrimaryEmail: {_escape_for_rich(user_data.get('PrimaryEmail', ''))}"
+        )
+
+
+def _display_user_yaml(user_dict):
+    """Display a single user/host as strict YAML via ruamel.yaml.
+
+    Parameters
+    ----------
+    user_dict : dict
+        User data dictionary
+    """
+    yaml = YAML()
+    yaml.default_flow_style = False
+
+    # Build clean dict without internal keys
+    output = {
+        "Host": user_dict.get("Host", ""),
+        "URL": user_dict.get("URL", ""),
+    }
+
+    if user_dict.get("Error"):
+        output["Error"] = user_dict["Error"]
+    elif user_dict.get("User"):
+        output["User"] = user_dict["User"]
+
+    stream = StringIO()
+    yaml.dump([output], stream)
+    print(stream.getvalue(), end="")
+
+
+def _build_user_json_output(user_dict):
+    """Build a clean JSON-serializable dict from a user_dict.
+
+    Parameters
+    ----------
+    user_dict : dict
+        User data dictionary
+
+    Returns
+    -------
+    dict
+        Clean dictionary ready for JSON serialization.
+    """
+    output = {
+        "Host": user_dict.get("Host", ""),
+        "URL": user_dict.get("URL", ""),
+    }
+
+    if user_dict.get("Error"):
+        output["Error"] = user_dict["Error"]
+    elif user_dict.get("User"):
+        output["User"] = user_dict["User"]
+
+    return output
+
+
+def display_users_rich(console, user_dicts, phabfive_instance):
+    """Display users in YAML-like format using Rich.
+
+    Parameters
+    ----------
+    console : Console
+        Rich Console instance for output
+    user_dicts : list[dict]
+        List of user data dictionaries.
+    phabfive_instance : Phabfive
+        Instance to access format_link()
+    """
+    for user_dict in user_dicts:
+        _display_user_rich(console, user_dict, phabfive_instance)
+
+
+def display_users_yaml(user_dicts):
+    """Display users as strict YAML.
+
+    Parameters
+    ----------
+    user_dicts : list[dict]
+        List of user data dictionaries.
+    """
+    yaml = YAML()
+    yaml.default_flow_style = False
+
+    # Build clean list
+    outputs = []
+    for user_dict in user_dicts:
+        output = {
+            "Host": user_dict.get("Host", ""),
+            "URL": user_dict.get("URL", ""),
+        }
+        if user_dict.get("Error"):
+            output["Error"] = user_dict["Error"]
+        elif user_dict.get("User"):
+            output["User"] = user_dict["User"]
+        outputs.append(output)
+
+    stream = StringIO()
+    yaml.dump(outputs, stream)
+    print(stream.getvalue(), end="")
+
+
+def display_users_json(user_dicts):
+    """Display users as a valid JSON array.
+
+    Parameters
+    ----------
+    user_dicts : list[dict]
+        List of user data dictionaries.
+    """
+    outputs = [_build_user_json_output(ud) for ud in user_dicts]
+    print(json.dumps(outputs, indent=2))
+
+
+def display_users(user_dicts, output_format, phabfive_instance):
+    """Display user whoami results in the specified format.
+
+    Parameters
+    ----------
+    user_dicts : list[dict]
+        List of user data dictionaries from whoami_all_hosts()
+    output_format : str
+        One of 'rich', 'yaml', or 'json'
+    phabfive_instance : Phabfive
+        Instance to access formatting helpers
+    """
+    if not user_dicts:
+        return
+
+    console = phabfive_instance.get_console()
+
+    try:
+        if output_format == "json":
+            display_users_json(user_dicts)
+        elif output_format in ("yaml", "strict"):
+            display_users_yaml(user_dicts)
+        else:  # "rich" (default)
+            display_users_rich(console, user_dicts, phabfive_instance)
+    except BrokenPipeError:
+        # Handle pipe closed by consumer (e.g., head, less)
+        # Quietly exit - this is normal behavior
+        sys.stderr.close()
+        sys.exit(0)
