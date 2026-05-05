@@ -282,7 +282,7 @@ def create(
 
     if dry_run:
         print("[DRY RUN] Would create paste:")
-        print(f"  Title: {final_title}")
+        print(f"  Name: {final_title}")
         if language:
             print(f"  Language: {language}")
         if tag_list:
@@ -370,7 +370,7 @@ def _display_pastes(result, output_format, paste_instance):
         for p in pastes:
             item = {
                 "Link": p.get("url", ""),
-                "Title": p.get("title", ""),
+                "Name": p.get("title", ""),
                 "Author": p.get("author", ""),
                 "Language": p.get("language", "text"),
                 "Status": p.get("status", ""),
@@ -389,7 +389,7 @@ def _display_pastes(result, output_format, paste_instance):
         for p in pastes:
             item = {
                 "Link": p.get("url", ""),
-                "Title": p.get("title", ""),
+                "Name": p.get("title", ""),
                 "Author": p.get("author", ""),
                 "Language": p.get("language", "text"),
                 "Status": p.get("status", ""),
@@ -413,7 +413,7 @@ def _display_pastes(result, output_format, paste_instance):
         for paste_data in pastes:
             # Use URL as tree root (like passphrase/maniphest)
             tree = Tree(paste_data.get("url", paste_data["id"]))
-            tree.add(f"Title: {paste_data.get('title', '')}")
+            tree.add(f"Name: {paste_data.get('title', '')}")
             if paste_data.get("author"):
                 tree.add(f"Author: {paste_data['author']}")
             if paste_data.get("language"):
@@ -455,8 +455,8 @@ def _display_pastes(result, output_format, paste_instance):
             # Print link
             console.print(Text.assemble("- Link: ", link))
 
-            # Print Title
-            console.print(f"  Title: {paste_data.get('title', '')}")
+            # Print Name (matches Phorge web UI)
+            console.print(f"  Name: {paste_data.get('title', '')}")
 
             # Print Author (only when present)
             if paste_data.get("author"):
