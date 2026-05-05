@@ -133,6 +133,33 @@ class Passphrase(Phabfive):
         data = self.get_passphrase(ids)
         return data["secret"]
 
+    def _get_credential_dates(self, phid):
+        """Get creation and modification dates from transaction history.
+
+        Parameters
+        ----------
+        phid : str
+            The PHID of the credential
+
+        Returns
+        -------
+        tuple
+            (dateCreated, dateModified) as Unix timestamps, or (None, None)
+        """
+        try:
+            response = self.phab.transaction.search(objectIdentifier=phid)
+            transactions = response.get("data", [])
+            if not transactions:
+                return (None, None)
+
+            # Get min dateCreated (oldest transaction = creation time)
+            # Get max dateModified (most recent modification)
+            created = min(t.get("dateCreated", 0) for t in transactions)
+            modified = max(t.get("dateModified", 0) for t in transactions)
+            return (created if created else None, modified if modified else None)
+        except (APIError, Exception):
+            return (None, None)
+
     def _format_credential(self, data, need_secrets=True, need_public_keys=False):
         """Format a single credential from API response.
 
@@ -203,6 +230,15 @@ class Passphrase(Phabfive):
 
         if need_public_keys and public_key:
             result["public_key"] = public_key
+
+        # Get dates from transaction history
+        phid = data.get("phid")
+        if phid:
+            date_created, date_modified = self._get_credential_dates(phid)
+            if date_created:
+                result["dateCreated"] = date_created
+            if date_modified:
+                result["dateModified"] = date_modified
 
         return result
 
