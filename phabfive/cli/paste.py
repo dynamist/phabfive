@@ -7,7 +7,10 @@ from datetime import datetime
 from typing import List, Optional
 
 import typer
-import yaml
+from io import StringIO
+
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import PreservedScalarString
 
 from phabfive.cli.completers import complete_language
 from phabfive.constants import MONOGRAMS
@@ -129,7 +132,11 @@ def search(
         print(json.dumps(result, indent=2))
     elif output_format in ("yaml", "strict"):
         result = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
-        print(yaml.dump(result, default_flow_style=False, allow_unicode=True))
+        yaml = YAML()
+        yaml.default_flow_style = False
+        stream = StringIO()
+        yaml.dump(result, stream)
+        print(stream.getvalue(), end="")
     else:
         # Rich/default format
         for p in pastes:
@@ -351,7 +358,18 @@ def _display_pastes(result, output_format, paste_instance):
     if output_format == "json":
         print(json.dumps(pastes, indent=2, default=str))
     elif output_format in ("yaml", "strict"):
-        print(yaml.dump(pastes, default_flow_style=False, allow_unicode=True))
+        yaml = YAML()
+        yaml.default_flow_style = False
+        # Convert content to block scalar for readability
+        output = []
+        for p in pastes:
+            item = dict(p)
+            if "content" in item and "\n" in item.get("content", ""):
+                item["content"] = PreservedScalarString(item["content"])
+            output.append(item)
+        stream = StringIO()
+        yaml.dump(output, stream)
+        print(stream.getvalue(), end="")
     else:
         # Rich format
         console = paste_instance.get_console()
@@ -404,13 +422,19 @@ def _display_pastes(result, output_format, paste_instance):
                 }
                 lexer = lang_map.get(language.lower(), "text")
                 try:
+                    # Use word_wrap to prevent extremely wide output
                     syntax = Syntax(
                         paste_data["content"],
                         lexer,
                         theme="monokai",
                         line_numbers=True,
+                        word_wrap=True,
                     )
-                    console.print(syntax)
+                    # Print syntax with auto width (not the large MAX_LINE_WIDTH)
+                    from rich.console import Console as SyntaxConsole
+
+                    syntax_console = SyntaxConsole()
+                    syntax_console.print(syntax)
                 except Exception:
                     # Fall back to plain text if syntax highlighting fails
                     console.print(paste_data["content"])
