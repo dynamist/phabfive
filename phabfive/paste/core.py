@@ -101,7 +101,9 @@ class Paste(Phabfive):
 
         return id_and_phid["object"]
 
-    def get_pastes(self, query_key=None, attachments=None, constraints=None):
+    def get_pastes(
+        self, query_key=None, attachments=None, constraints=None, limit=None
+    ):
         """Wrapper that connects to Phabricator and retrieves information about pastes.
 
         `query_key` defaults to "all".
@@ -109,6 +111,7 @@ class Paste(Phabfive):
         :type query_key: str
         :type attachments: dict
         :type constraints: dict
+        :type limit: int
 
         :rtype: dict
         """
@@ -116,11 +119,15 @@ class Paste(Phabfive):
         attachments = attachments or {}
         constraints = constraints or {}
 
-        response = self.phab.paste.search(
-            queryKey=query_key,
-            attachments=attachments,
-            constraints=constraints,
-        )
+        kwargs = {
+            "queryKey": query_key,
+            "attachments": attachments,
+            "constraints": constraints,
+        }
+        if limit is not None:
+            kwargs["limit"] = limit
+
+        response = self.phab.paste.search(**kwargs)
 
         pastes = response.get("data", {})
 

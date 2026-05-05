@@ -38,14 +38,14 @@ gh pr merge --rebase --delete-branch
 
 ## Pre-commit Checks
 
-**Always run before committing:**
+**IMPORTANT: Always run before committing and pushing:**
 
 ```bash
 uv run ruff check phabfive/ tests/
 uv run ruff format phabfive/ tests/
 ```
 
-CI will fail if files are not properly formatted.
+CI will fail if files are not properly formatted. Run these commands before every commit to avoid CI failures.
 
 ## Architecture
 

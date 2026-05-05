@@ -65,7 +65,7 @@ def _setup_output_options(ctx: typer.Context):
         )
 
 
-def _display_tasks(result, output_format, maniphest_instance):
+def _display_tasks(result, output_format, maniphest_instance, show_description=True):
     """Display task search/show results in the specified format."""
     from phabfive.display import (
         display_tasks_json,
@@ -82,13 +82,17 @@ def _display_tasks(result, output_format, maniphest_instance):
     try:
         tasks = result["tasks"]
         if output_format == "json":
-            display_tasks_json(tasks)
+            display_tasks_json(tasks, show_description=show_description)
         elif output_format == "tree":
-            display_tasks_tree(console, tasks, maniphest_instance)
+            display_tasks_tree(
+                console, tasks, maniphest_instance, show_description=show_description
+            )
         elif output_format in ("yaml", "strict"):
-            display_tasks_yaml(tasks)
+            display_tasks_yaml(tasks, show_description=show_description)
         else:  # "rich" (default)
-            display_tasks_rich(console, tasks, maniphest_instance)
+            display_tasks_rich(
+                console, tasks, maniphest_instance, show_description=show_description
+            )
     except BrokenPipeError:
         sys.stderr.close()
         sys.exit(0)
@@ -106,6 +110,9 @@ def show(
     ),
     show_comments: bool = typer.Option(
         False, "--show-comments", "-C", help="Display comments on the task"
+    ),
+    no_description: bool = typer.Option(
+        False, "--no-description", "-n", help="Hide the task description"
     ),
 ) -> None:
     """Show details for one or more Maniphest tasks."""
@@ -128,10 +135,13 @@ def show(
         show_history=show_history,
         show_metadata=show_metadata,
         show_comments=show_comments,
+        show_description=not no_description,
     )
 
     output_format = _get_output_format(ctx)
-    _display_tasks(result, output_format, maniphest)
+    _display_tasks(
+        result, output_format, maniphest, show_description=not no_description
+    )
 
 
 @maniphest_app.command()
@@ -382,6 +392,7 @@ def search(
     show_metadata: bool = typer.Option(
         False, "--show-metadata", help="Display filter match metadata"
     ),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum results to return"),
 ) -> None:
     """Search for Maniphest tasks."""
     from phabfive.transitions import parse_column_patterns, parse_priority_patterns
@@ -481,6 +492,12 @@ def search(
             "all",
             False,
         )
+        final_limit = get_param(
+            limit if limit != 100 else None,
+            yaml_params,
+            "limit",
+            100,
+        )
 
         # Check if any search criteria provided
         has_criteria = any(
@@ -516,6 +533,7 @@ def search(
             show_history=final_show_history,
             show_metadata=final_show_metadata,
             include_closed=final_include_closed,
+            limit=final_limit,
         )
 
         output_format = _get_output_format(ctx)

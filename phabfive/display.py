@@ -50,7 +50,7 @@ def _needs_yaml_quoting(value):
     return value == "" or any(c in value for c in ":{}[]`'\"")
 
 
-def _display_task_rich(console, task_dict, phabfive_instance):
+def _display_task_rich(console, task_dict, phabfive_instance, show_description=True):
     """Display a single task in YAML-like format using Rich.
 
     Parameters
@@ -61,6 +61,8 @@ def _display_task_rich(console, task_dict, phabfive_instance):
         Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
     phabfive_instance : Phabfive
         Instance to access format_link() and url
+    show_description : bool
+        If True, include task description in output
     """
     # Extract internal fields
     link = task_dict.get("_link")
@@ -79,6 +81,10 @@ def _display_task_rich(console, task_dict, phabfive_instance):
     # Print Task section
     console.print("  Task:")
     for key, value in task_data.items():
+        # Skip description if show_description is False
+        if key == "Description" and not show_description:
+            continue
+
         # Check line width before printing
         phabfive_instance.check_line_width(value, f"Task.{key}")
 
@@ -194,7 +200,7 @@ def _display_task_rich(console, task_dict, phabfive_instance):
                 console.print(f"    {meta_key}: {_escape_for_rich(meta_value)}")
 
 
-def _display_task_tree(console, task_dict, phabfive_instance):
+def _display_task_tree(console, task_dict, phabfive_instance, show_description=True):
     """Display a single task in tree format using Rich Tree.
 
     Parameters
@@ -205,6 +211,8 @@ def _display_task_tree(console, task_dict, phabfive_instance):
         Task data dictionary with _link, _url, _assignee, Task, Boards, etc.
     phabfive_instance : Phabfive
         Instance to access format_link() and url
+    show_description : bool
+        If True, include task description in output
     """
     # Extract internal fields
     link = task_dict.get("_link")
@@ -223,6 +231,10 @@ def _display_task_tree(console, task_dict, phabfive_instance):
     # Add Task section
     task_branch = tree.add("Task")
     for key, value in task_data.items():
+        # Skip description if show_description is False
+        if key == "Description" and not show_description:
+            continue
+
         if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
             # Truncate multi-line descriptions in tree view
             first_line = str(value).split("\n")[0]
@@ -332,17 +344,29 @@ def _display_task_tree(console, task_dict, phabfive_instance):
     console.print(tree)
 
 
-def _display_task_yaml(task_dict):
-    """Display a single task as strict YAML via ruamel.yaml."""
+def _display_task_yaml(task_dict, show_description=True):
+    """Display a single task as strict YAML via ruamel.yaml.
+
+    Parameters
+    ----------
+    task_dict : dict
+        Task data dictionary
+    show_description : bool
+        If True, include task description in output
+    """
     yaml = YAML()
     yaml.default_flow_style = False
 
     # Build clean dict - use _url for the Link (plain URL string)
     output = {"Link": task_dict.get("_url", "")}
 
-    # Add Task section
+    # Add Task section (filter out Description if show_description is False)
     if task_dict.get("Task"):
-        output["Task"] = {k: v for k, v in task_dict["Task"].items()}
+        output["Task"] = {
+            k: v
+            for k, v in task_dict["Task"].items()
+            if show_description or k != "Description"
+        }
 
     # Add Assignee if present (extract plain text from Rich Text if needed)
     assignee = task_dict.get("_assignee")
@@ -402,13 +426,15 @@ def _display_task_yaml(task_dict):
     print(stream.getvalue(), end="")
 
 
-def _build_task_json_output(task_dict):
+def _build_task_json_output(task_dict, show_description=True):
     """Build a clean JSON-serializable dict from a task_dict.
 
     Parameters
     ----------
     task_dict : dict
         Task data dictionary with Link, Task, Boards, History, Metadata, etc.
+    show_description : bool
+        If True, include task description in output
 
     Returns
     -------
@@ -418,10 +444,13 @@ def _build_task_json_output(task_dict):
     # Build clean dict - use _url for the Link (plain URL string)
     output = {"Link": task_dict.get("_url", "")}
 
-    # Add Task section
+    # Add Task section (filter out Description if show_description is False)
     if task_dict.get("Task"):
         output["Task"] = {}
         for k, v in task_dict["Task"].items():
+            # Skip description if show_description is False
+            if k == "Description" and not show_description:
+                continue
             # Convert PreservedScalarString to plain string
             if isinstance(v, PreservedScalarString):
                 output["Task"][k] = str(v)
@@ -484,7 +513,7 @@ def _build_task_json_output(task_dict):
     return output
 
 
-def display_tasks_rich(console, task_dicts, phabfive_instance):
+def display_tasks_rich(console, task_dicts, phabfive_instance, show_description=True):
     """Display tasks in YAML-like format using Rich.
 
     Parameters
@@ -495,12 +524,16 @@ def display_tasks_rich(console, task_dicts, phabfive_instance):
         List of task data dictionaries.
     phabfive_instance : Phabfive
         Instance to access format_link() and url
+    show_description : bool
+        If True, include task description in output
     """
     for task_dict in task_dicts:
-        _display_task_rich(console, task_dict, phabfive_instance)
+        _display_task_rich(
+            console, task_dict, phabfive_instance, show_description=show_description
+        )
 
 
-def display_tasks_tree(console, task_dicts, phabfive_instance):
+def display_tasks_tree(console, task_dicts, phabfive_instance, show_description=True):
     """Display tasks in tree format using Rich Tree.
 
     Parameters
@@ -511,32 +544,43 @@ def display_tasks_tree(console, task_dicts, phabfive_instance):
         List of task data dictionaries.
     phabfive_instance : Phabfive
         Instance to access format_link() and url
+    show_description : bool
+        If True, include task description in output
     """
     for task_dict in task_dicts:
-        _display_task_tree(console, task_dict, phabfive_instance)
+        _display_task_tree(
+            console, task_dict, phabfive_instance, show_description=show_description
+        )
 
 
-def display_tasks_yaml(task_dicts):
+def display_tasks_yaml(task_dicts, show_description=True):
     """Display tasks as strict YAML.
 
     Parameters
     ----------
     task_dicts : list[dict]
         List of task data dictionaries.
+    show_description : bool
+        If True, include task description in output
     """
     for task_dict in task_dicts:
-        _display_task_yaml(task_dict)
+        _display_task_yaml(task_dict, show_description=show_description)
 
 
-def display_tasks_json(task_dicts):
+def display_tasks_json(task_dicts, show_description=True):
     """Display tasks as a valid JSON array.
 
     Parameters
     ----------
     task_dicts : list[dict]
         List of task data dictionaries.
+    show_description : bool
+        If True, include task description in output
     """
-    outputs = [_build_task_json_output(td) for td in task_dicts]
+    outputs = [
+        _build_task_json_output(td, show_description=show_description)
+        for td in task_dicts
+    ]
     print(json.dumps(outputs, indent=2))
 
 

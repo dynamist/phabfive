@@ -75,6 +75,7 @@ def search(
     author: Optional[str] = typer.Option(
         None, "--author", help="Filter by author (username or @me)"
     ),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum results to return"),
 ) -> None:
     """Search and list pastes with optional filters.
 
@@ -117,7 +118,9 @@ def search(
         constraints["authorPHIDs"] = [author_phid]
 
     # Get pastes with constraints
-    pastes = paste.get_pastes(constraints=constraints if constraints else None)
+    pastes = paste.get_pastes(
+        constraints=constraints if constraints else None, limit=limit
+    )
 
     if not pastes:
         typer.echo("No pastes found")

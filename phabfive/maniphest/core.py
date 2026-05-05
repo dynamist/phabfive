@@ -254,7 +254,12 @@ class Maniphest(Phabfive):
         return parse_status_patterns(patterns_str, api_response)
 
     def task_show(
-        self, task_ids, show_history=False, show_metadata=False, show_comments=False
+        self,
+        task_ids,
+        show_history=False,
+        show_metadata=False,
+        show_comments=False,
+        show_description=True,
     ):
         """
         Show one or more Phabricator Maniphest tasks with optional history and metadata.
@@ -271,6 +276,8 @@ class Maniphest(Phabfive):
             If True, display metadata (mainly useful for debugging, less useful for single task)
         show_comments : bool, optional
             If True, display comments on the task
+        show_description : bool, optional
+            If True, include task description in output. Default is True.
         """
         # Use maniphest.search API to fetch all tasks in one call
         result = self.phab.maniphest.search(
@@ -585,6 +592,7 @@ class Maniphest(Phabfive):
         show_history=False,
         show_metadata=False,
         include_closed=False,
+        limit=100,
     ):
         """
         Search for Phabricator Maniphest tasks with given parameters.
@@ -622,6 +630,7 @@ class Maniphest(Phabfive):
         include_closed (bool, optional): If True, include tasks with closed statuses
                       (resolved, wontfix, invalid, duplicate, spite). Default is False,
                       which filters out closed tasks at API level. --status filters are additive.
+        limit         (int, optional): Maximum number of tasks to return. Default is 100.
         """
         # Validation - require at least one filter
         has_any_filter = any(
@@ -1220,6 +1229,10 @@ class Maniphest(Phabfive):
                 search_params["created_after"] = created_after_original
             if created_before_original:
                 search_params["created_before"] = created_before_original
+
+        # Apply limit if specified
+        if limit and len(result_data) > limit:
+            result_data = result_data[:limit]
 
         # Use shared method to build task data
         return self._build_task_display_data(
