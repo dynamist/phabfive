@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project Overview
 
-phabfive is a CLI for Phabricator and Phorge. It provides commands for interacting with Passphrase, Diffusion, Paste, User, and Maniphest applications.
+phabfive is a CLI for Phabricator and Phorge. It provides commands for interacting with Countdown, Diffusion, Maniphest, Passphrase, Paste, and User applications.
 
 ## Common Commands
 
@@ -51,8 +51,8 @@ CI will fail if files are not properly formatted. Run these commands before ever
 
 ### CLI Layer (`cli/`)
 - Uses `typer` for argument parsing with built-in shell completion
-- Modular structure: `__init__.py` (main app), `maniphest.py`, `diffusion.py`, `paste.py`, `user.py`, `passphrase.py`, `repl.py`
-- Monogram shortcuts via `preprocess_monograms()`: `phabfive T123` expands to `phabfive maniphest show T123`
+- Modular structure: `__init__.py` (main app), `countdown.py`, `diffusion.py`, `maniphest.py`, `passphrase.py`, `paste.py`, `user.py`, `repl.py`
+- Monogram shortcuts via `preprocess_monograms()`: `phabfive T123` expands to `phabfive maniphest show T123`, `phabfive C123` expands to `phabfive countdown show C123`
 - Entry point: `cli_entrypoint()`
 - Shell completion: `phabfive --install-completion bash|zsh|fish`
 
@@ -73,7 +73,7 @@ Complex features use a consistent subpackage structure:
   - `validators.py` - input validation (diffusion, maniphest)
 
 ### Simpler Modules
-- `paste.py`, `user.py` - single-file implementations
+- `countdown/`, `paste/`, `user.py` - simpler implementations with core.py only
 - `transitions/` - state machine for task status/priority/column changes
 
 ### Configuration
