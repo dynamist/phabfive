@@ -171,24 +171,22 @@ class Paste(Phabfive):
         for paste in pastes:
             paste_data = {
                 "id": f"P{paste['id']}",
-                "phid": paste["phid"],
                 "title": paste["fields"].get("title", ""),
                 "language": paste["fields"].get("language") or "text",
                 "status": paste["fields"].get("status", "active"),
                 "dateCreated": paste["fields"].get("dateCreated"),
                 "dateModified": paste["fields"].get("dateModified"),
-                "authorPHID": paste["fields"].get("authorPHID"),
             }
+
+            # Resolve author name from PHID
+            author_phid = paste["fields"].get("authorPHID")
+            if author_phid:
+                paste_data["author"] = self._resolve_phid_to_name(author_phid)
 
             # Add content if requested and available
             if show_content and "attachments" in paste:
                 content_attachment = paste["attachments"].get("content", {})
                 paste_data["content"] = content_attachment.get("content", "")
-
-            # Resolve author name
-            author_phid = paste_data.get("authorPHID")
-            if author_phid:
-                paste_data["author"] = self._resolve_phid_to_name(author_phid)
 
             result.append(paste_data)
 
