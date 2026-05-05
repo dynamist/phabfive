@@ -92,6 +92,37 @@ Config precedence (later overrides earlier):
 
 ## AI Agent Usage
 
+### UX Consistency Between Phorge Apps
+
+When implementing new Phorge apps (countdown, paste, maniphest, etc.), **verify UX consistency** with existing apps:
+
+1. **Compare CLI options**: Check that similar commands have similar options
+   - Example: `maniphest show` vs `paste show` should have similar flags
+   - Don't add options that don't exist in similar commands (e.g., `--show-description` when maniphest doesn't have it)
+
+2. **Match output format structure**: Use the same nested structure as maniphest
+   - Use `"Paste":` section like maniphest uses `"Task":` section
+   - Fields should be capitalized (`Name`, `Status`, not `name`, `status`)
+   - Author goes in the nested section, not at the top level
+
+3. **Verify by comparing help output**:
+   ```bash
+   phabfive maniphest show --help
+   phabfive paste show --help
+   # These should have similar structure and options
+   ```
+
+4. **Reference maniphest as the canonical UX pattern** for Phorge apps - it's the most complete implementation
+
+5. **Verify API field names**: Different Phorge apps use different API field names
+   - maniphest: `fields.name`, transaction type `name`
+   - paste: `fields.title`, transaction type `title`
+   - description is often `fields.description.raw` (a dict, not a string)
+
+6. **Display labels should match the Phorge web UI**, not the API field names
+   - The web UI uses "Name" across all apps for the title/name field
+   - So display `"Name": fields.get("title", "")` for paste (API field is "title", display label is "Name")
+
 ### Data-Altering Operations
 
 **NEVER run create, edit, or delete operations on production instances.** Only run data-altering commands when explicitly overriding credentials with environment variables pointing to a test instance.
