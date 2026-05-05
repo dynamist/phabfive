@@ -169,8 +169,12 @@ class Paste(Phabfive):
 
         result = []
         for paste in pastes:
+            monogram = f"P{paste['id']}"
+            url = self.get_paste_url(paste["id"])
             paste_data = {
-                "id": f"P{paste['id']}",
+                "id": monogram,
+                "url": url,
+                "_link": self.format_link(url, monogram),
                 "title": paste["fields"].get("title", ""),
                 "language": paste["fields"].get("language") or "text",
                 "status": paste["fields"].get("status", "active"),
