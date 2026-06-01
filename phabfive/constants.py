@@ -32,6 +32,7 @@ class LogLevel(str, Enum):
 
 # https://secure.phabricator.com/w/object_name_prefixes/
 MONOGRAMS = {
+    "countdown": "C[0-9]+",
     "diffusion": "R[0-9]+",
     "passphrase": "K[0-9]+",
     "paste": "P[0-9]+",
@@ -40,6 +41,7 @@ MONOGRAMS = {
 
 # Monogram shortcuts for CLI: maps prefix letter to command expansion
 MONOGRAM_SHORTCUT = {
+    "C": ["countdown", "show"],  # C123 → countdown show C123
     "T": ["maniphest", "show"],  # T123 → maniphest show T123
     "K": ["passphrase", "show"],  # K123 → passphrase show K123
     "P": ["paste", "show"],  # P123 → paste show P123
@@ -47,7 +49,7 @@ MONOGRAM_SHORTCUT = {
 }
 
 # Apps that support "X123 'text'" → "app comment X123 'text'" shortcut
-COMMENTS_SUPPORTED = ["maniphest", "paste"]
+COMMENTS_SUPPORTED = ["countdown", "maniphest", "paste"]
 
 # Default languages for paste syntax highlighting (from Phabricator pygments.dropdown-choices)
 # These are the languages shown in the Phabricator/Phorge Paste language dropdown by default.
