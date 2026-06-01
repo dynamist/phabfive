@@ -34,6 +34,7 @@ from phabfive.maniphest.filters import (
 )
 from phabfive.maniphest.formatters import build_task_boards, build_task_display_data
 from phabfive.maniphest.resolvers import (
+    fetch_project_lookup_maps,
     parse_plus_separated,
     resolve_project_phids,
     resolve_project_phids_for_create,
@@ -1292,12 +1293,11 @@ class Maniphest(Phabfive):
 
         log.debug(username_to_id_mapping)
 
-        # Fetch all projects in phabricator, used to map ticket -> projects later
-        projects_query = self.phab.project.search(constraints={"name": ""})
-        project_name_to_id_map = {
-            project["fields"]["name"]: project["phid"]
-            for project in projects_query["data"]
-        }
+        # Fetch all projects in phabricator, used to map ticket -> projects later.
+        # The map keys lowercased primary names AND slugs/hashtags so that
+        # project references in YAML match case-insensitively,
+        # mirroring resolve_project_phids_for_create() used by the --tag path.
+        project_name_to_id_map, _ = fetch_project_lookup_maps(self.phab)
 
         log.debug(project_name_to_id_map)
 
@@ -1339,7 +1339,7 @@ class Maniphest(Phabfive):
             project_phids = []
 
             for project_name in output.get("projects", []):
-                project_phid = project_name_to_id_map.get(project_name, None)
+                project_phid = project_name_to_id_map.get(project_name.lower(), None)
 
                 if not project_phid:
                     raise PhabfiveRemoteException(

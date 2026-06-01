@@ -458,6 +458,49 @@ class TestBuildTaskBoards:
         assert result == {}
 
 
+class TestFetchProjectLookupMaps:
+    """Tests for the case-insensitive project lookup used by task creation."""
+
+    def _mock_phab(self):
+        phab = MagicMock()
+        # project.query returns a dict keyed by PHID, with slugs inline
+        phab.project.query.return_value = {
+            "data": {
+                "PHID-PROJ-dev": {
+                    "name": "Developer-Experience",
+                    "slugs": ["developer-experience", "devx"],
+                },
+                "PHID-PROJ-qa": {"name": "QA", "slugs": ["qa"]},
+            }
+        }
+        return phab
+
+    def test_lowercases_primary_name_and_slugs(self):
+        from phabfive.maniphest.resolvers import fetch_project_lookup_maps
+
+        name_to_phid, name_to_slug = fetch_project_lookup_maps(self._mock_phab())
+
+        # Primary name is matchable case-insensitively
+        assert name_to_phid["developer-experience"] == "PHID-PROJ-dev"
+        # Every slug/hashtag is matchable too
+        assert name_to_phid["devx"] == "PHID-PROJ-dev"
+        assert name_to_phid["qa"] == "PHID-PROJ-qa"
+        # Slug map points at the primary URL slug
+        assert name_to_slug["developer-experience"] == "developer-experience"
+        assert name_to_slug["devx"] == "developer-experience"
+
+    def test_yaml_create_resolves_mixed_case_project(self):
+        """The YAML create path must resolve 'developer-experience' to a PHID
+        even though the project's primary name is 'Developer-Experience'."""
+        from phabfive.maniphest.resolvers import fetch_project_lookup_maps
+
+        name_to_phid, _ = fetch_project_lookup_maps(self._mock_phab())
+
+        # Mirror the lookup performed in create_tasks_from_yaml
+        for reference in ("developer-experience", "DEVELOPER-EXPERIENCE", "DevX"):
+            assert name_to_phid.get(reference.lower()) == "PHID-PROJ-dev"
+
+
 class TestParseSingleCondition:
     def test_parse_backward(self):
         result = _parse_single_condition("backward")
