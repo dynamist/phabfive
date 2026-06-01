@@ -335,6 +335,68 @@ def resolve_user_phids(phab, usernames):
         raise PhabfiveRemoteException(f"Failed to resolve users: {e}")
 
 
+def fetch_project_lookup_maps(phab):
+    """
+    Fetch all projects and build case-insensitive lookup maps.
+
+    Uses project.query (paginated) because, unlike project.search, it returns
+    each project's slugs/hashtags inline. Both the primary name and every slug
+    are keyed lowercased so project references match case-insensitively.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+
+    Returns
+    -------
+    tuple(dict, dict)
+        (name_to_phid, name_to_slug) where keys are lowercased primary names
+        and slugs. name_to_slug maps each key to the project's primary URL slug.
+    """
+    try:
+        page_size = 100
+        offset = 0
+        projects_data = {}
+
+        while True:
+            projects_result = phab.project.query(limit=page_size, offset=offset)
+            page_data = projects_result.get("data", {})
+
+            if not page_data:
+                break
+
+            projects_data.update(page_data)
+
+            if len(page_data) < page_size:
+                break
+
+            offset += page_size
+
+    except Exception as e:
+        raise PhabfiveRemoteException(f"Failed to fetch projects: {e}")
+
+    name_to_phid = {}
+    name_to_slug = {}
+    for phid, project_data in projects_data.items():
+        primary_name = project_data["name"]
+        slugs = project_data.get("slugs", [])
+        # Use first slug for URL, or lowercase name if no slugs
+        primary_slug = slugs[0] if slugs else primary_name.lower().replace(" ", "-")
+
+        # Map by primary name (case-insensitive)
+        name_to_phid[primary_name.lower()] = phid
+        name_to_slug[primary_name.lower()] = primary_slug
+
+        # Also map by each slug
+        for slug in slugs:
+            if slug:
+                name_to_phid[slug.lower()] = phid
+                name_to_slug[slug.lower()] = primary_slug
+
+    return name_to_phid, name_to_slug
+
+
 def resolve_project_phids_for_create(phab, project_names):
     """
     Resolve project names to PHIDs and slugs for task creation.
@@ -362,48 +424,7 @@ def resolve_project_phids_for_create(phab, project_names):
     if not project_names:
         return {"phids": [], "slugs": []}
 
-    # Fetch all projects to get both PHIDs and slugs
-    # project.query supports pagination via limit/offset parameters
-    try:
-        page_size = 100
-        offset = 0
-        projects_data = {}
-
-        while True:
-            projects_result = phab.project.query(limit=page_size, offset=offset)
-            page_data = projects_result.get("data", {})
-
-            if not page_data:
-                break
-
-            projects_data.update(page_data)
-
-            if len(page_data) < page_size:
-                break
-
-            offset += page_size
-
-    except Exception as e:
-        raise PhabfiveRemoteException(f"Failed to fetch projects: {e}")
-
-    # Build lookup maps
-    name_to_phid = {}
-    name_to_slug = {}
-    for phid, project_data in projects_data.items():
-        primary_name = project_data["name"]
-        slugs = project_data.get("slugs", [])
-        # Use first slug for URL, or lowercase name if no slugs
-        primary_slug = slugs[0] if slugs else primary_name.lower().replace(" ", "-")
-
-        # Map by primary name (case-insensitive)
-        name_to_phid[primary_name.lower()] = phid
-        name_to_slug[primary_name.lower()] = primary_slug
-
-        # Also map by each slug
-        for slug in slugs:
-            if slug:
-                name_to_phid[slug.lower()] = phid
-                name_to_slug[slug.lower()] = primary_slug
+    name_to_phid, name_to_slug = fetch_project_lookup_maps(phab)
 
     phids = []
     slugs = []
