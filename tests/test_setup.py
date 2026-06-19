@@ -84,9 +84,11 @@ class TestOfferSetupOnError:
 
     def test_interactive_declines_returns_false(self):
         """Test that declining interactive setup returns False."""
+        mock_confirm = mock.MagicMock()
+        mock_confirm.return_value.execute.return_value = False
         with (
             mock.patch("sys.stdin.isatty", return_value=True),
-            mock.patch("phabfive.setup.Confirm.ask", return_value=False),
+            mock.patch("phabfive.setup.inq.confirm", mock_confirm),
             mock.patch("phabfive.setup.Console"),
         ):
             result = offer_setup_on_error("Test error")
@@ -94,31 +96,31 @@ class TestOfferSetupOnError:
 
     def test_phab_url_error_offers_arcconfig(self):
         """Test that PHAB_URL error offers .arcconfig setup, not full wizard."""
+        mock_confirm = mock.MagicMock()
+        mock_confirm.return_value.execute.return_value = False
         with (
             mock.patch("sys.stdin.isatty", return_value=True),
-            mock.patch(
-                "phabfive.setup.Confirm.ask", return_value=False
-            ) as mock_confirm,
+            mock.patch("phabfive.setup.inq.confirm", mock_confirm),
             mock.patch("phabfive.setup.Console"),
         ):
             offer_setup_on_error("PHAB_URL is not configured")
 
         # Should ask about .arcconfig, not generic setup
-        call_args = mock_confirm.call_args[0][0]
+        call_args = mock_confirm.call_args[1]["message"]
         assert ".arcconfig" in call_args
 
     def test_phab_token_error_offers_full_setup(self):
         """Test that PHAB_TOKEN error offers full setup wizard."""
+        mock_confirm = mock.MagicMock()
+        mock_confirm.return_value.execute.return_value = False
         with (
             mock.patch("sys.stdin.isatty", return_value=True),
-            mock.patch(
-                "phabfive.setup.Confirm.ask", return_value=False
-            ) as mock_confirm,
+            mock.patch("phabfive.setup.inq.confirm", mock_confirm),
             mock.patch("phabfive.setup.Console"),
         ):
             offer_setup_on_error("PHAB_TOKEN is not configured")
 
-        call_args = mock_confirm.call_args[0][0]
+        call_args = mock_confirm.call_args[1]["message"]
         assert "interactive setup" in call_args
 
 
@@ -151,12 +153,11 @@ class TestSetupArcconfig:
 
         console = mock.MagicMock()
 
+        mock_text = mock.MagicMock()
+        mock_text.return_value.execute.return_value = "https://phorge.example.com"
         with (
             mock.patch("os.getcwd", return_value=str(tmp_path)),
-            mock.patch(
-                "phabfive.setup.Prompt.ask",
-                return_value="https://phorge.example.com",
-            ),
+            mock.patch("phabfive.setup.inq.text", mock_text),
         ):
             result = _setup_arcconfig(console)
 
@@ -179,12 +180,11 @@ class TestSetupArcconfig:
 
         console = mock.MagicMock()
 
+        mock_text = mock.MagicMock()
+        mock_text.return_value.execute.return_value = "https://phorge.example.com/api/"
         with (
             mock.patch("os.getcwd", return_value=str(tmp_path)),
-            mock.patch(
-                "phabfive.setup.Prompt.ask",
-                return_value="https://phorge.example.com/api/",
-            ),
+            mock.patch("phabfive.setup.inq.text", mock_text),
         ):
             _setup_arcconfig(console)
 
@@ -357,7 +357,10 @@ class TestSetupWizardVerifyConnection:
         with (
             mock.patch("phabfive.setup.Phabricator") as mock_phab,
             mock.patch("phabfive.setup.Console"),
-            mock.patch("phabfive.setup.Confirm.ask", return_value=False),
+            mock.patch(
+                "phabfive.setup.inq.confirm",
+                lambda **kw: mock.MagicMock(execute=mock.MagicMock(return_value=False)),
+            ),
         ):
             mock_instance = mock_phab.return_value
             mock_instance.update_interfaces.return_value = None
