@@ -1,4 +1,4 @@
-FROM alpine:3.23
+FROM alpine:3.24
 
 # Install terminfo database for proper terminal support
 RUN apk add --no-cache ncurses-terminfo-base
