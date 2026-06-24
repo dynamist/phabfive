@@ -1,0 +1,62 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "Europe/Stockholm",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "pre-commit": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Group dev/test tooling (Python) into one PR",
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchPackageNames": [
+        "pytest",
+        "pytest-cov",
+        "coverage",
+        "tox",
+        "tox-uv"
+      ],
+      "groupName": "python test tooling"
+    },
+    {
+      "description": "Group all GitHub Actions bumps into one PR",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Group remaining pre-commit hook bumps into one PR",
+      "matchManagers": [
+        "pre-commit"
+      ],
+      "groupName": "pre-commit hooks"
+    },
+    {
+      "description": "Keep ruff and ruff-pre-commit in lockstep (same upstream release, two managers). Listed after the generic pre-commit group so it wins for ruff-pre-commit.",
+      "matchPackageNames": [
+        "ruff",
+        "astral-sh/ruff-pre-commit"
+      ],
+      "groupName": "ruff"
+    },
+    {
+      "description": "Keep uv and uv-pre-commit in lockstep (same upstream release, two managers). Listed after the generic pre-commit group so it wins for uv-pre-commit.",
+      "matchPackageNames": [
+        "uv",
+        "astral-sh/uv-pre-commit"
+      ],
+      "groupName": "uv"
+    }
+  ]
+}
