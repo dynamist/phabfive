@@ -132,3 +132,11 @@ k8s/overlays/local/config.local.env
 
 # Throwaway venv built by "make smoke"
 .smoke/
+
+# nix
+result
+result-*
+.direnv/
+
+# flake-compatish machine-local input overrides
+overrides.nix
