@@ -1287,6 +1287,13 @@ class Maniphest(Phabfive):
                 if tid not in found_ids:
                     log.error(f"Task T{tid} not found")
 
+            # The API returns tasks in its own order (newest first); append
+            # in the order the tasks were given to --include
+            requested_order = {tid: i for i, tid in enumerate(include_task_ids)}
+            included_tasks.sort(
+                key=lambda t: requested_order.get(t["id"], len(requested_order))
+            )
+
             existing_ids = {t["id"] for t in result_data}
             for item in included_tasks:
                 if item["id"] in existing_ids:

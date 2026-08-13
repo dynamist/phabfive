@@ -2259,3 +2259,17 @@ class TestTaskSearchIncludeExclude:
 
         assert configs[0]["search"]["include"] == "T1,T2"
         assert configs[0]["search"]["exclude"] == "T3"
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_included_tasks_follow_requested_order(self, mock_init):
+        """Included tasks are appended in --include order, not API order."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        # API returns newest first, opposite of the requested order
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[], included=[self._make_task(2257), self._make_task(2069)]
+        )
+
+        result = maniphest.task_search(include_task_ids=[2069, 2257])
+
+        assert self._result_ids(result) == [2069, 2257]
