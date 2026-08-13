@@ -315,7 +315,9 @@ def create(
 @paste_app.command()
 def show(
     ctx: typer.Context,
-    paste_ids: List[str] = typer.Argument(..., help="Paste monogram(s) (e.g., P1 P2)"),
+    paste_ids: List[str] = typer.Argument(
+        ..., help="Paste monogram(s) (e.g., P1 P2 or P1,P2)"
+    ),
     show_content: bool = typer.Option(
         True, "--show-content/--no-content", help="Show paste content"
     ),
@@ -326,15 +328,21 @@ def show(
     Examples:
         phabfive paste show P1
         phabfive paste show P1 P2 --no-content
+        phabfive paste show P1,P2
         phabfive --format=yaml paste show P1
     """
     _setup_output_options(ctx)
     paste = _get_paste_app()
 
+    # Support both space-separated (P1 P2) and comma-separated (P1,P2)
+    all_ids = []
+    for id_arg in paste_ids:
+        all_ids.extend(part.strip() for part in id_arg.split(",") if part.strip())
+
     # Validate all paste ID formats
     paste_pattern = f"^{MONOGRAMS['paste']}$"
     ids = []
-    for paste_id in paste_ids:
+    for paste_id in all_ids:
         if not re.match(paste_pattern, paste_id):
             typer.echo(
                 f"Invalid paste ID '{paste_id}'. Expected format: P123", err=True

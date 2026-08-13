@@ -47,7 +47,7 @@ phabfive edit T123 --priority=raise
 phabfive edit [<object_id>...] [options]
 
 Arguments:
-  <object_id>     Single ID (T123) or comma-separated (T123,T124,T125)
+  <object_id>     Single ID (T123), space-separated (T123 T124), or comma-separated (T123,T124,T125)
 
 Options:
   --priority=PRIORITY       Set priority (unbreak|high|normal|low|wish|raise|lower)
@@ -76,17 +76,22 @@ phabfive edit T123 --priority=high
 phabfive edit "https://phorge.example.com/T123" --status=resolved
 ```
 
-### Batch Mode (Comma-Separated IDs)
+### Batch Mode (Multiple IDs)
 
-Edit multiple tasks by providing comma-separated IDs:
+Edit multiple tasks by providing space- or comma-separated IDs:
 
 ```bash
 # Edit multiple specific tasks
 phabfive edit T123,T456,T789 --priority=high
+phabfive edit T123 T456 T789 --priority=high
 
 # Move multiple tasks to a column
 phabfive edit T123,T456 --tag="Sprint" --column=Done
 ```
+
+Note: with space-separated IDs, the first argument that is not a task
+monogram is treated as the new title (`phabfive edit T123 T456 "New Title"`).
+A title that itself looks like a monogram must be set with `--title`.
 
 ### Batch Mode (Piped Input)
 

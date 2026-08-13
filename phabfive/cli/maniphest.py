@@ -101,7 +101,9 @@ def _display_tasks(result, output_format, maniphest_instance, show_description=T
 @maniphest_app.command()
 def show(
     ctx: typer.Context,
-    ticket_ids: List[str] = typer.Argument(..., help="Task ID(s) (e.g., T123 T456)"),
+    ticket_ids: List[str] = typer.Argument(
+        ..., help="Task ID(s) (e.g., T123 T456 or T123,T456)"
+    ),
     show_history: bool = typer.Option(
         False, "--show-history", "-H", help="Display transition history"
     ),
@@ -115,14 +117,27 @@ def show(
         False, "--no-description", "-n", help="Hide the task description"
     ),
 ) -> None:
-    """Show details for one or more Maniphest tasks."""
+    """Show details for one or more Maniphest tasks.
+
+    \b
+    Examples:
+        phabfive maniphest show T123
+        phabfive maniphest show T123 T456
+        phabfive maniphest show T123,T456
+        phabfive T123  # shortcut
+    """
     _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
+
+    # Support both space-separated (T123 T456) and comma-separated (T123,T456)
+    all_ids = []
+    for id_arg in ticket_ids:
+        all_ids.extend(part.strip() for part in id_arg.split(",") if part.strip())
 
     # Validate all ticket ID formats
     maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
     task_ids = []
-    for ticket_id in ticket_ids:
+    for ticket_id in all_ids:
         if not re.match(maniphest_pattern, ticket_id):
             typer.echo(
                 f"Invalid task ID '{ticket_id}'. Expected format: T123", err=True
@@ -563,13 +578,11 @@ def _get_edit_app():
 @maniphest_app.command()
 def edit(
     ctx: typer.Context,
-    task_ids: str = typer.Argument(
+    args: List[str] = typer.Argument(
         ...,
-        help="Task monogram(s) (e.g., T123 or T123,T124,T125)",
-    ),
-    title: Optional[str] = typer.Argument(
-        None,
-        help="New title for the task",
+        metavar="TASK_IDS... [TITLE]",
+        help="Task monogram(s) (e.g., T123 T124 or T123,T124,T125), "
+        "optionally followed by a new title",
     ),
     title_opt: Optional[str] = typer.Option(
         None,
@@ -639,21 +652,41 @@ def edit(
         phabfive maniphest edit T123 "New Title"
         phabfive maniphest edit T123  # opens $EDITOR for description
         phabfive maniphest edit T123 --priority=high
+        phabfive maniphest edit T123 T124 --status=resolved
         phabfive maniphest edit T123,T124 --status=resolved
+        phabfive maniphest edit T123 T124 "New Title"
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
     """
-    # Merge positional and option title (positional takes precedence)
-    final_title = title or title_opt
-
-    # Validate monogram format (T followed by digits)
+    # Greedy monogram parsing: leading args that are task monograms (or
+    # comma-separated lists of them) are task IDs; the first non-matching
+    # arg is the new title. A title that looks like a monogram must be set
+    # via the hidden --title option.
     maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
-    for part in task_ids.split(","):
-        part = part.strip()
-        if not re.match(maniphest_pattern, part):
-            typer.echo(
-                f"Invalid task monogram '{part}'. Expected format: T123", err=True
-            )
+    task_parts: List[str] = []
+    positional_title: Optional[str] = None
+    for arg in args:
+        parts = [p.strip() for p in arg.split(",") if p.strip()]
+        is_monograms = bool(parts) and all(
+            re.match(maniphest_pattern, p) for p in parts
+        )
+        if is_monograms and positional_title is None:
+            task_parts.extend(parts)
+        elif positional_title is None:
+            positional_title = arg
+        else:
+            typer.echo(f"Unexpected argument '{arg}'", err=True)
             raise typer.Exit(1)
+
+    if not task_parts:
+        typer.echo(
+            f"Invalid task monogram '{args[0]}'. Expected format: T123", err=True
+        )
+        raise typer.Exit(1)
+
+    task_ids = ",".join(task_parts)
+
+    # Merge positional and option title (positional takes precedence)
+    final_title = positional_title or title_opt
 
     # Delegate to Edit class for processing
     edit_handler = _get_edit_app()
