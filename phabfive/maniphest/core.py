@@ -298,6 +298,13 @@ class Maniphest(Phabfive):
             if task_id not in found_ids:
                 log.error(f"Task T{task_id} not found")
 
+        # The API returns tasks in its own order (newest first); reorder to
+        # match the order the tasks were requested in
+        requested_order = {tid: i for i, tid in enumerate(task_ids)}
+        result_data.sort(
+            key=lambda t: requested_order.get(t["id"], len(requested_order))
+        )
+
         # Initialize maps for storing transitions, assignee, and comments history
         task_transitions_map = {}
         priority_transitions_map = {}
