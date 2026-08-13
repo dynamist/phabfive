@@ -78,3 +78,59 @@ class TestSearchIncludeExcludeCli:
         assert result.exit_code == 1
         assert "T2 cannot be both included and excluded" in _output(result)
         mock_m.task_search.assert_not_called()
+
+
+class TestSearchIncludeExcludeYamlTemplate:
+    """YAML templates accept include/exclude as a string or an actual list."""
+
+    def _invoke_with_template(self, search_params):
+        mock_m = MagicMock()
+        mock_m.task_search.return_value = None
+        mock_m._load_search_config.return_value = [
+            {
+                "search": search_params,
+                "title": "Command Line Search",
+                "description": None,
+            }
+        ]
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=mock_m):
+            result = runner.invoke(maniphest_app, ["search", "--with", "template.yaml"])
+        return result, mock_m
+
+    def test_include_as_yaml_list(self):
+        result, mock_m = self._invoke_with_template({"include": ["T2069", "T2257"]})
+
+        assert result.exit_code == 0
+        kwargs = mock_m.task_search.call_args[1]
+        assert kwargs["include_task_ids"] == [2069, 2257]
+
+    def test_include_as_string(self):
+        result, mock_m = self._invoke_with_template({"include": "T2069,T2257"})
+
+        assert result.exit_code == 0
+        kwargs = mock_m.task_search.call_args[1]
+        assert kwargs["include_task_ids"] == [2069, 2257]
+
+    def test_exclude_as_yaml_list(self):
+        result, mock_m = self._invoke_with_template(
+            {"include": ["T1"], "exclude": ["T2", "T3"]}
+        )
+
+        assert result.exit_code == 0
+        kwargs = mock_m.task_search.call_args[1]
+        assert kwargs["include_task_ids"] == [1]
+        assert kwargs["exclude_task_ids"] == [2, 3]
+
+    def test_list_with_comma_separated_entry(self):
+        result, mock_m = self._invoke_with_template({"include": ["T1,T2", "T3"]})
+
+        assert result.exit_code == 0
+        kwargs = mock_m.task_search.call_args[1]
+        assert kwargs["include_task_ids"] == [1, 2, 3]
+
+    def test_list_with_invalid_entry_errors(self):
+        result, mock_m = self._invoke_with_template({"include": ["T1", "BAD"]})
+
+        assert result.exit_code == 1
+        assert "Invalid task ID 'BAD'" in _output(result)
+        mock_m.task_search.assert_not_called()
