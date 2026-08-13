@@ -98,6 +98,8 @@ search:
 
 - `text_query`: Free-text search in task title/description
 - `tag`: Project/workboard filtering with wildcards and logic
+- `include`: Task ID(s) to force-include in results even if other filters don't match them (e.g., `"T123,T456"`)
+- `exclude`: Task ID(s) to remove from results even if the filters match them (e.g., `"T123"`)
 - `created-after`: Tasks created within TIME (e.g., `"1w"`, `"2m"`, or `7` for days)
 - `created-before`: Tasks created more than TIME ago (e.g., `"1w"`, `"2m"`, or `7` for days)
 - `updated-after`: Tasks updated within TIME (e.g., `"1w"`, `"2m"`, or `7` for days)

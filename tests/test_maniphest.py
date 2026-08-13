@@ -2077,3 +2077,185 @@ class TestTaskSearchTextQuery:
         assert maniphest.phab.maniphest.search.called
         # Should make multiple calls for OR logic (2 projects = 2 calls)
         assert maniphest.phab.maniphest.search.call_count >= 2
+
+
+class TestTaskSearchIncludeExclude:
+    """Test suite for --include/--exclude force-include/exclude of tasks."""
+
+    def _make_task(self, task_id):
+        return {
+            "id": task_id,
+            "phid": f"PHID-TASK-{task_id}",
+            "fields": {
+                "name": f"Test Task {task_id}",
+                "status": {"name": "Open"},
+                "priority": {"name": "Normal"},
+                "description": {"raw": f"Description {task_id}"},
+            },
+            "attachments": {"columns": {"boards": {}}},
+        }
+
+    def _make_maniphest(self):
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
+        }
+        maniphest.phab.project.query.return_value = {"data": {}}
+        return maniphest
+
+    def _search_side_effect(self, matched, included):
+        def side_effect(**kwargs):
+            resp = MagicMock()
+            if "ids" in kwargs.get("constraints", {}):
+                resp.response = {"data": included}
+            else:
+                resp.response = {"data": matched}
+            resp.get.return_value = {"after": None}
+            return resp
+
+        return side_effect
+
+    def _result_ids(self, result):
+        return [int(t["_url"].rsplit("/T", 1)[1]) for t in result["tasks"]]
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_include_only_skips_general_search(self, mock_init):
+        """--include with no other filters fetches exactly those tasks."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[], included=[self._make_task(2069)]
+        )
+
+        result = maniphest.task_search(include_task_ids=[2069])
+
+        assert maniphest.phab.maniphest.search.call_count == 1
+        call_kwargs = maniphest.phab.maniphest.search.call_args[1]
+        assert call_kwargs["constraints"] == {"ids": [2069]}
+        assert self._result_ids(result) == [2069]
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_include_requires_no_other_criteria(self, mock_init):
+        """--include alone satisfies the search criteria requirement."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[], included=[]
+        )
+
+        # Must not raise PhabfiveConfigException
+        maniphest.task_search(include_task_ids=[1])
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_no_criteria_still_raises(self, mock_init):
+        """Neither filters nor --include raises the criteria error."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+
+        with pytest.raises(PhabfiveConfigException):
+            maniphest.task_search(exclude_task_ids=[1])
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_included_tasks_merged_and_deduped(self, mock_init):
+        """Included tasks merge with matches; overlaps appear once."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[self._make_task(1), self._make_task(2)],
+            included=[self._make_task(1), self._make_task(2069)],
+        )
+
+        result = maniphest.task_search(text_query="x", include_task_ids=[1, 2069])
+
+        assert self._result_ids(result) == [1, 2, 2069]
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_included_tasks_survive_limit(self, mock_init):
+        """Included tasks are added after limit truncation."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[self._make_task(1), self._make_task(2), self._make_task(3)],
+            included=[self._make_task(2069)],
+        )
+
+        result = maniphest.task_search(text_query="x", include_task_ids=[2069], limit=2)
+
+        assert self._result_ids(result) == [1, 2, 2069]
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_missing_included_task_logged(self, mock_init, caplog):
+        """A non-existent included task ID is reported as an error."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[], included=[]
+        )
+
+        result = maniphest.task_search(include_task_ids=[2069])
+
+        assert "Task T2069 not found" in caplog.text
+        assert result["tasks"] == []
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_excluded_tasks_removed(self, mock_init):
+        """Excluded tasks are removed even though the filters match them."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[self._make_task(1), self._make_task(2)], included=[]
+        )
+
+        result = maniphest.task_search(text_query="x", exclude_task_ids=[1])
+
+        assert self._result_ids(result) == [2]
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_exclusion_applied_before_limit(self, mock_init):
+        """Exclusion frees limit slots for other matches."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[self._make_task(1), self._make_task(2), self._make_task(3)],
+            included=[],
+        )
+
+        result = maniphest.task_search(text_query="x", exclude_task_ids=[1], limit=2)
+
+        assert self._result_ids(result) == [2, 3]
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_excluding_non_matching_id_is_noop(self, mock_init):
+        """Excluding an ID that didn't match anything changes nothing."""
+        mock_init.return_value = None
+        maniphest = self._make_maniphest()
+        maniphest.phab.maniphest.search.side_effect = self._search_side_effect(
+            matched=[self._make_task(1)], included=[]
+        )
+
+        result = maniphest.task_search(text_query="x", exclude_task_ids=[999])
+
+        assert self._result_ids(result) == [1]
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_load_search_config_accepts_include_exclude(self, mock_init, tmp_path):
+        """YAML search templates support include/exclude parameters."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        template = tmp_path / "search.yaml"
+        template.write_text(
+            "search:\n  include: T1,T2\n  exclude: T3\n", encoding="utf-8"
+        )
+
+        configs = maniphest._load_search_config(str(template))
+
+        assert configs[0]["search"]["include"] == "T1,T2"
+        assert configs[0]["search"]["exclude"] == "T3"

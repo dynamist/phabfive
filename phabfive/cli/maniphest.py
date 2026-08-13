@@ -364,6 +364,18 @@ def search(
         help="Filter by project/workboard tag (supports wildcards)",
         autocompletion=complete_tag,
     ),
+    include: Optional[str] = typer.Option(
+        None,
+        "--include",
+        help="Force-include task(s) in results even if other filters "
+        "don't match them (e.g., T123 or T123,T456)",
+    ),
+    exclude: Optional[str] = typer.Option(
+        None,
+        "--exclude",
+        help="Remove task(s) from results even if the filters "
+        "match them (e.g., T123 or T123,T456)",
+    ),
     assigned: Optional[str] = typer.Option(
         None, "--assigned", help="Filter by assignee. Use @me for yourself."
     ),
@@ -495,6 +507,35 @@ def search(
         )
         final_text_query = get_param(text_query, yaml_params, "text_query")
         final_tag = get_param(tag, yaml_params, "tag")
+        final_include = get_param(include, yaml_params, "include")
+        final_exclude = get_param(exclude, yaml_params, "exclude")
+
+        def parse_task_id_list(value):
+            """Parse a comma-separated monogram list into task ID ints."""
+            if not value:
+                return None
+            maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
+            task_id_list = []
+            for part in str(value).split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                if not re.match(maniphest_pattern, part):
+                    typer.echo(
+                        f"Invalid task ID '{part}'. Expected format: T123", err=True
+                    )
+                    raise typer.Exit(1)
+                task_id_list.append(int(part[1:]))
+            return task_id_list or None
+
+        include_task_ids = parse_task_id_list(final_include)
+        exclude_task_ids = parse_task_id_list(final_exclude)
+
+        overlap = set(include_task_ids or []) & set(exclude_task_ids or [])
+        if overlap:
+            overlap_str = ", ".join(f"T{tid}" for tid in sorted(overlap))
+            typer.echo(f"{overlap_str} cannot be both included and excluded", err=True)
+            raise typer.Exit(1)
         final_assigned = get_param(assigned, yaml_params, "assigned")
         final_space = get_param(space, yaml_params, "space")
         final_created_after = get_param(created_after, yaml_params, "created-after")
@@ -526,6 +567,7 @@ def search(
                 column_patterns,
                 priority_patterns,
                 status_patterns,
+                include_task_ids,
             ]
         )
         if not has_criteria:
@@ -536,6 +578,8 @@ def search(
         result = maniphest.task_search(
             text_query=final_text_query,
             tag=final_tag,
+            include_task_ids=include_task_ids,
+            exclude_task_ids=exclude_task_ids,
             assigned=final_assigned,
             space=final_space,
             created_after=final_created_after,
