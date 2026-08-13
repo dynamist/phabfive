@@ -1678,6 +1678,46 @@ class TestStrictFormat:
         Phabfive.set_output_options(output_format="rich")
 
 
+class TestTaskShowOrdering:
+    """Test suite for task_show result ordering."""
+
+    def _make_task(self, task_id):
+        return {
+            "id": task_id,
+            "phid": f"PHID-TASK-{task_id}",
+            "fields": {
+                "name": f"Test Task {task_id}",
+                "status": {"name": "Open"},
+                "priority": {"name": "Normal"},
+                "description": {"raw": f"Description {task_id}"},
+            },
+            "attachments": {"columns": {"boards": {}}},
+        }
+
+    @patch("phabfive.maniphest.core.fetch_task_relationships", return_value=[])
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_results_follow_requested_order(self, mock_init, mock_relationships):
+        """Tasks are displayed in the order they were requested, not API order."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.phab.project.query.return_value = {"data": {}}
+
+        # API returns newest first, opposite of the requested order
+        mock_response = MagicMock()
+        mock_response.response = {
+            "data": [self._make_task(2257), self._make_task(2069)]
+        }
+        maniphest.phab.maniphest.search.return_value = mock_response
+
+        result = maniphest.task_show([2069, 2257])
+
+        ids = [int(t["_url"].rsplit("/T", 1)[1]) for t in result["tasks"]]
+        assert ids == [2069, 2257]
+
+
 class TestTaskSearchTextQuery:
     """Test suite for free-text search functionality."""
 
