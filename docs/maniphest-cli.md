@@ -219,7 +219,33 @@ phabfive maniphest search "migration" --tag "Database" --column="in:In Progress"
 ```
 
 !!! important
-    **Validation:** At least one filter is required (text query, --tag, --created-after, --created-before, --updated-after, --updated-before, --column, --priority, or --status) to prevent accidentally querying all tasks.
+    **Validation:** At least one filter is required (text query, --tag, --include, --created-after, --created-before, --updated-after, --updated-before, --column, --priority, or --status) to prevent accidentally querying all tasks.
+
+### Pinning Tasks Into or Out of Results
+
+Force specific tasks into the results with `--include`, even when the other
+filters (tag, dates, space, column/priority/status patterns, or `--limit`)
+don't match them — useful for pinning tasks into reports. The orthogonal
+`--exclude` removes matched tasks to unpin them:
+
+```bash
+# Sprint report with two pinned tasks and one unpinned
+phabfive maniphest search --tag "Sprint*" --include T2069,T2257 --exclude T1500
+
+# Exactly these tasks (no other filters needed)
+phabfive maniphest search --include T2069,T2257
+```
+
+**Behavior:**
+
+- `--include` tasks always appear in the output, bypassing status/space/date
+  constraints, post-filters, and `--limit`. A task that both matches the
+  search and is included appears once.
+- `--exclude` is applied before `--limit`, so freed slots fill with other
+  matches. Excluded IDs that didn't match anything are silently ignored.
+- Passing the same task to both `--include` and `--exclude` is an error.
+- Both are supported in [search templates](search-templates.md) as
+  `include: "T2069,T2257"` and `exclude: "T1500"`.
 
 ### Advanced Project Filtering
 

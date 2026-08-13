@@ -539,6 +539,8 @@ class Maniphest(Phabfive):
         supported_params = {
             "text_query",
             "tag",
+            "include",
+            "exclude",
             "created-after",
             "updated-after",
             "column",
@@ -588,6 +590,8 @@ class Maniphest(Phabfive):
         self,
         text_query=None,
         tag=None,
+        include_task_ids=None,
+        exclude_task_ids=None,
         assigned=None,
         space=None,
         created_after=None,
@@ -613,6 +617,13 @@ class Maniphest(Phabfive):
                       Supports wildcards: "*" (all), "prefix*", "*suffix", "*contains*"
                       Supports filter syntax: "ProjectA,ProjectB" (OR), "ProjectA+ProjectB" (AND)
                       If None, no project filtering is applied.
+        include_task_ids (list[int], optional): Task IDs to force-include in the results.
+                      Bypasses all filters, post-filters, and the limit; deduplicated
+                      against matched results. With no other filters, returns exactly
+                      these tasks without running a general search.
+        exclude_task_ids (list[int], optional): Task IDs to remove from the results even
+                      when the filters match them. Applied before the limit, so freed
+                      slots fill with other matches. Non-matching IDs are ignored.
         assigned      (str, optional): Filter by assignee. Use "@me" to filter tasks assigned to you,
                       or provide username(s). Comma-separated for OR logic (e.g., "@me,user1,user2").
         space         (str, optional): Space name or monogram (e.g., "S1" or "Public") to filter tasks by.
@@ -641,7 +652,7 @@ class Maniphest(Phabfive):
         limit         (int, optional): Maximum number of tasks to return. Default is 100.
         """
         # Validation - require at least one filter
-        has_any_filter = any(
+        has_other_filters = any(
             [
                 text_query,
                 tag,
@@ -657,7 +668,7 @@ class Maniphest(Phabfive):
             ]
         )
 
-        if not has_any_filter:
+        if not has_other_filters and not include_task_ids:
             raise PhabfiveConfigException("No search criteria specified")
 
         # Convert date filters to Unix timestamps (preserve original values for logging)
@@ -832,7 +843,13 @@ class Maniphest(Phabfive):
                     # Error already logged in _resolve_project_phids
                     return
 
-        if tag == "*" or tag is None:
+        if include_task_ids and not has_other_filters:
+            # --include is the only criterion: skip the general search entirely
+            # (an empty constraints dict would fetch every open task); the
+            # included tasks are fetched and merged below.
+            log.info("Only --include specified, skipping general search")
+            result_data = []
+        elif tag == "*" or tag is None:
             if tag == "*":
                 log.info("Searching across all projects (tag='*', no project filter)")
             else:
@@ -1237,10 +1254,64 @@ class Maniphest(Phabfive):
                 search_params["created_after"] = created_after_original
             if created_before_original:
                 search_params["created_before"] = created_before_original
+            if include_task_ids:
+                search_params["include"] = ",".join(
+                    f"T{tid}" for tid in include_task_ids
+                )
+            if exclude_task_ids:
+                search_params["exclude"] = ",".join(
+                    f"T{tid}" for tid in exclude_task_ids
+                )
+
+        # Remove excluded tasks before the limit so freed slots fill with
+        # other matches; IDs that didn't match anything are ignored.
+        if exclude_task_ids:
+            excluded = set(exclude_task_ids)
+            result_data = [t for t in result_data if t["id"] not in excluded]
 
         # Apply limit if specified
         if limit and len(result_data) > limit:
             result_data = result_data[:limit]
+
+        # Force-include tasks from --include: merged after post-filtering and
+        # after the limit so they always survive; deduplicated by task id.
+        if include_task_ids:
+            included_result = self.phab.maniphest.search(
+                constraints={"ids": list(include_task_ids)},
+                attachments={"columns": True},
+            )
+            included_tasks = included_result.response.get("data", [])
+
+            found_ids = {t["id"] for t in included_tasks}
+            for tid in include_task_ids:
+                if tid not in found_ids:
+                    log.error(f"Task T{tid} not found")
+
+            existing_ids = {t["id"] for t in result_data}
+            for item in included_tasks:
+                if item["id"] in existing_ids:
+                    # Already matched the search; keep the single copy
+                    continue
+                result_data.append(item)
+                if show_history and item.get("phid"):
+                    all_fetched_transactions = self._fetch_all_transactions(
+                        item["phid"],
+                        need_columns=True,
+                        need_priority=True,
+                        need_status=True,
+                    )
+                    if all_fetched_transactions.get("columns"):
+                        task_transitions_map[item["id"]] = all_fetched_transactions[
+                            "columns"
+                        ]
+                    if all_fetched_transactions.get("priority"):
+                        priority_transitions_map[item["id"]] = all_fetched_transactions[
+                            "priority"
+                        ]
+                    if all_fetched_transactions.get("status"):
+                        status_transitions_map[item["id"]] = all_fetched_transactions[
+                            "status"
+                        ]
 
         # Use shared method to build task data
         return self._build_task_display_data(
