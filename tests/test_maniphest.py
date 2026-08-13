@@ -2261,6 +2261,22 @@ class TestTaskSearchIncludeExclude:
         assert configs[0]["search"]["exclude"] == "T3"
 
     @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_load_search_config_accepts_include_as_yaml_list(self, mock_init, tmp_path):
+        """YAML search templates support include/exclude as actual lists."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        template = tmp_path / "search.yaml"
+        template.write_text(
+            "search:\n  include:\n    - T1\n    - T2\n  exclude:\n    - T3\n",
+            encoding="utf-8",
+        )
+
+        configs = maniphest._load_search_config(str(template))
+
+        assert list(configs[0]["search"]["include"]) == ["T1", "T2"]
+        assert list(configs[0]["search"]["exclude"]) == ["T3"]
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_included_tasks_follow_requested_order(self, mock_init):
         """Included tasks are appended in --include order, not API order."""
         mock_init.return_value = None

@@ -511,21 +511,28 @@ def search(
         final_exclude = get_param(exclude, yaml_params, "exclude")
 
         def parse_task_id_list(value):
-            """Parse a comma-separated monogram list into task ID ints."""
+            """Parse monograms into task ID ints.
+
+            Accepts a comma-separated string ("T123,T456") or, from YAML
+            templates, a list of monograms (["T123", "T456"]).
+            """
             if not value:
                 return None
+            raw_items = value if isinstance(value, (list, tuple)) else [value]
             maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
             task_id_list = []
-            for part in str(value).split(","):
-                part = part.strip()
-                if not part:
-                    continue
-                if not re.match(maniphest_pattern, part):
-                    typer.echo(
-                        f"Invalid task ID '{part}'. Expected format: T123", err=True
-                    )
-                    raise typer.Exit(1)
-                task_id_list.append(int(part[1:]))
+            for raw_item in raw_items:
+                for part in str(raw_item).split(","):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    if not re.match(maniphest_pattern, part):
+                        typer.echo(
+                            f"Invalid task ID '{part}'. Expected format: T123",
+                            err=True,
+                        )
+                        raise typer.Exit(1)
+                    task_id_list.append(int(part[1:]))
             return task_id_list or None
 
         include_task_ids = parse_task_id_list(final_include)

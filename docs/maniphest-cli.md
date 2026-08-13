@@ -244,8 +244,16 @@ phabfive maniphest search --include T2069,T2257
 - `--exclude` is applied before `--limit`, so freed slots fill with other
   matches. Excluded IDs that didn't match anything are silently ignored.
 - Passing the same task to both `--include` and `--exclude` is an error.
-- Both are supported in [search templates](search-templates.md) as
-  `include: "T2069,T2257"` and `exclude: "T1500"`.
+- Both are supported in [search templates](search-templates.md) as a
+  comma-separated string (`include: "T2069,T2257"`) or a YAML list:
+
+  ```yaml
+  search:
+    include:
+      - T2069
+      - T2257
+    exclude: "T1500"
+  ```
 
 ### Advanced Project Filtering
 
