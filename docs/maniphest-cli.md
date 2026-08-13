@@ -23,6 +23,10 @@ Display information about a specific task:
 # Basic details
 phabfive maniphest show T123
 
+# Multiple tasks (space- or comma-separated)
+phabfive maniphest show T123 T456
+phabfive maniphest show T123,T456
+
 # Show all fields including workboard transition history
 phabfive maniphest show T123 --all
 
