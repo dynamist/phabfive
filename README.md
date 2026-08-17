@@ -85,9 +85,7 @@ phabfive maniphest search --assigned=@me | phabfive edit --column=Done
 Enable tab completion for bash, zsh, or fish:
 
 ```bash
-phabfive --install-completion bash
-phabfive --install-completion zsh
-phabfive --install-completion fish
+phabfive --install-completion
 ```
 
 After installation, restart your shell or source your profile.

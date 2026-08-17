@@ -1,0 +1,27 @@
+diff --git a/phabricator/__init__.py b/phabricator/__init__.py
+index 4dbe9b6..9ec520c 100644
+--- a/phabricator/__init__.py
++++ b/phabricator/__init__.py
+@@ -9,9 +9,19 @@ For more endpoints, see https://secure.phabricator.com/conduit/
+ 
+ """
+ try:
+-    __version__ = __import__('pkg_resources') \
+-        .get_distribution('phabricator').version
+-except:
++    from importlib.metadata import version
++except ImportError:
++    try:
++        from importlib_metadata import version
++    except ImportError:
++        version = None
++
++try:
++    if version is None:
++        __version__ = 'unknown'
++    else:
++        __version__ = version('phabricator')
++except Exception:
+     __version__ = 'unknown'
+ 
+ import collections
