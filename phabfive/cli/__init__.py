@@ -12,6 +12,7 @@ os.environ.setdefault("TYPER_USE_RICH", "0")
 
 import typer
 
+from phabfive.cli.countdown import countdown_app
 from phabfive.cli.diffusion import diffusion_app
 from phabfive.cli.edit import edit_command
 from phabfive.cli.maniphest import maniphest_app
@@ -210,6 +211,7 @@ def main(
     ctx.obj["hyperlink"] = hyperlink_when.value
 
 
+app.add_typer(countdown_app, name="countdown")
 app.add_typer(passphrase_app, name="passphrase")
 app.add_typer(diffusion_app, name="diffusion")
 app.command(name="edit")(edit_command)
