@@ -1,5 +1,5 @@
 # Use PHP 8.1 with Apache (matches guide's PHP 8.0+ requirement)
-FROM php:8.1-apache
+FROM php:8.5-apache
 
 WORKDIR /app
 
