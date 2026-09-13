@@ -199,7 +199,7 @@ def create(
     tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Add to project/workboard (repeatable)",
+        help="Add to project/workboard by name, hashtag, ID, or PHID (repeatable)",
         autocompletion=complete_tag,
     ),
     column: Optional[str] = typer.Option(
@@ -361,7 +361,7 @@ def search(
     tag: Optional[str] = typer.Option(
         None,
         "--tag",
-        help="Filter by project/workboard tag (supports wildcards)",
+        help="Filter by project/workboard name, hashtag, ID, or PHID (supports wildcards)",
         autocompletion=complete_tag,
     ),
     include: Optional[str] = typer.Option(
