@@ -59,6 +59,47 @@ def parse_plus_separated(values):
     return result
 
 
+PROJECT_PHID_PREFIX = "PHID-PROJ-"
+
+
+def lookup_project_by_id(phab, project: str):
+    """
+    Look up a project by numeric ID (e.g. "8048") or PHID.
+
+    Lets users target projects that are hard to reach by name, such as
+    milestones that share a name with milestones of other projects.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    project : str
+        Numeric project ID or project PHID (e.g. "PHID-PROJ-abc123").
+
+    Returns
+    -------
+    dict or None
+        The project.search result item, or None if the value is not an
+        ID/PHID or no such project exists.
+    """
+    value = project.strip()
+    if value.startswith(PROJECT_PHID_PREFIX):
+        constraints = {"phids": [value]}
+    elif value.isascii() and value.isdigit():
+        constraints = {"ids": [int(value)]}
+    else:
+        return None
+
+    try:
+        result = phab.project.search(constraints=constraints)
+    except Exception as e:
+        log.debug(f"Project ID lookup failed for '{value}': {e}")
+        return None
+
+    data = result.get("data") or []
+    return data[0] if data else None
+
+
 def resolve_project_phids(phab, project: str) -> list[str]:
     """
     Resolve project name, hashtag, or wildcard pattern to list of project PHIDs.
@@ -71,9 +112,11 @@ def resolve_project_phids(phab, project: str) -> list[str]:
     phab : Phabricator
         Phabricator API client
     project : str
-        Project name, hashtag, or wildcard pattern.
+        Project name, hashtag, numeric ID, PHID, or wildcard pattern.
         Supports: "*" (all), "prefix*", "*suffix", "*contains*"
         Matches against any project slug/hashtag (case-insensitive).
+        A numeric value is treated as a project ID only if no project
+        has that name or hashtag.
 
     Returns
     -------
@@ -88,6 +131,17 @@ def resolve_project_phids(phab, project: str) -> list[str]:
 
     # Check if wildcard search is needed early to optimize API calls
     has_wildcard = "*" in project
+
+    # PHIDs are unambiguous, so look them up directly
+    if project.startswith(PROJECT_PHID_PREFIX):
+        proj = lookup_project_by_id(phab, project)
+        if proj:
+            log.debug(
+                f"Found project by PHID '{project}' -> '{proj['fields']['name']}'"
+            )
+            return [proj["phid"]]
+        log.error(f"Project '{project}' not found")
+        return []
 
     # For exact match without wildcard, try direct lookup first (more efficient)
     if not has_wildcard:
@@ -117,6 +171,14 @@ def resolve_project_phids(phab, project: str) -> list[str]:
                     return [phid]
         except Exception as e:
             log.debug(f"Name query lookup failed: {e}")
+
+        # Fall back to numeric project ID (e.g. "8048" from /project/view/8048/)
+        proj = lookup_project_by_id(phab, project)
+        if proj:
+            log.debug(
+                f"Found project by ID '{project}' -> '{proj['fields']['name']}' (PHID: {proj['phid']})"
+            )
+            return [proj["phid"]]
 
     # For wildcard searches or when direct lookup fails, fetch all projects with pagination
     log.debug("Fetching all projects from Phabricator with pagination")
@@ -409,7 +471,7 @@ def resolve_project_phids_for_create(phab, project_names):
     phab : Phabricator
         Phabricator API client
     project_names : list
-        List of project names
+        List of project names, hashtags, numeric IDs, or PHIDs
 
     Returns
     -------
@@ -441,6 +503,16 @@ def resolve_project_phids_for_create(phab, project_names):
         if name_lower in name_to_phid:
             phids.append(name_to_phid[name_lower])
             slugs.append(name_to_slug[name_lower])
+            continue
+
+        # Fall back to numeric project ID or PHID
+        proj = lookup_project_by_id(phab, name)
+        if proj:
+            phids.append(proj["phid"])
+            # Milestones usually have no hashtag, and a slug guessed from the
+            # name could link to another project, so only use a real slug
+            if proj["fields"].get("slug"):
+                slugs.append(proj["fields"]["slug"])
         else:
             not_found.append(name)
 

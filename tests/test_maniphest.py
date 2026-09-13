@@ -501,6 +501,138 @@ class TestFetchProjectLookupMaps:
             assert name_to_phid.get(reference.lower()) == "PHID-PROJ-dev"
 
 
+class TestResolveProjectById:
+    """Tests for resolving --tag values given as a numeric project ID or PHID."""
+
+    MILESTONE = {
+        "id": 8048,
+        "phid": "PHID-PROJ-milestone",
+        "fields": {"name": "Kanban Board", "slug": None},
+    }
+    NUMERIC_NAMED = {
+        "id": 12,
+        "phid": "PHID-PROJ-2024",
+        "fields": {"name": "2024", "slug": "2024"},
+    }
+
+    def _mock_phab(self):
+        phab = MagicMock()
+
+        def search(constraints):
+            projects = (self.MILESTONE, self.NUMERIC_NAMED)
+            if "ids" in constraints:
+                return {"data": [p for p in projects if p["id"] in constraints["ids"]]}
+            if "phids" in constraints:
+                phids = constraints["phids"]
+                return {"data": [p for p in projects if p["phid"] in phids]}
+            if constraints.get("slugs") == ["2024"]:
+                return {"data": [self.NUMERIC_NAMED]}
+            return {"data": []}
+
+        phab.project.search.side_effect = search
+        phab.project.query.return_value = {
+            "data": {
+                "PHID-PROJ-2024": {"name": "2024", "slugs": ["2024"]},
+                "PHID-PROJ-milestone": {"name": "Kanban Board", "slugs": []},
+            }
+        }
+        return phab
+
+    def test_lookup_by_numeric_id(self):
+        from phabfive.maniphest.resolvers import lookup_project_by_id
+
+        phab = self._mock_phab()
+        assert lookup_project_by_id(phab, "8048") == self.MILESTONE
+        phab.project.search.assert_called_with(constraints={"ids": [8048]})
+
+    def test_lookup_by_phid(self):
+        from phabfive.maniphest.resolvers import lookup_project_by_id
+
+        phab = self._mock_phab()
+        assert lookup_project_by_id(phab, "PHID-PROJ-milestone") == self.MILESTONE
+        phab.project.search.assert_called_with(
+            constraints={"phids": ["PHID-PROJ-milestone"]}
+        )
+
+    @pytest.mark.parametrize("value", ["Kanban Board", "80a48", "²", "-1", ""])
+    def test_lookup_ignores_non_id_values(self, value):
+        from phabfive.maniphest.resolvers import lookup_project_by_id
+
+        phab = self._mock_phab()
+        assert lookup_project_by_id(phab, value) is None
+        phab.project.search.assert_not_called()
+
+    def test_lookup_unknown_id_returns_none(self):
+        from phabfive.maniphest.resolvers import lookup_project_by_id
+
+        assert lookup_project_by_id(self._mock_phab(), "99999") is None
+
+    def test_lookup_api_error_returns_none(self):
+        from phabfive.maniphest.resolvers import lookup_project_by_id
+
+        phab = MagicMock()
+        phab.project.search.side_effect = Exception("boom")
+        assert lookup_project_by_id(phab, "8048") is None
+
+    def test_search_resolves_numeric_id(self):
+        from phabfive.maniphest.resolvers import resolve_project_phids
+
+        phab = self._mock_phab()
+        assert resolve_project_phids(phab, "8048") == ["PHID-PROJ-milestone"]
+        # Resolved without fetching every project
+        phab.project.query.assert_not_called()
+
+    def test_search_resolves_phid(self):
+        from phabfive.maniphest.resolvers import resolve_project_phids
+
+        phab = self._mock_phab()
+        assert resolve_project_phids(phab, "PHID-PROJ-milestone") == [
+            "PHID-PROJ-milestone"
+        ]
+        phab.project.query.assert_not_called()
+
+    def test_search_unknown_phid_returns_empty(self):
+        from phabfive.maniphest.resolvers import resolve_project_phids
+
+        phab = self._mock_phab()
+        assert resolve_project_phids(phab, "PHID-PROJ-missing") == []
+        phab.project.query.assert_not_called()
+
+    def test_search_prefers_hashtag_over_numeric_id(self):
+        """A project whose hashtag is '2024' wins over the project with ID 2024."""
+        from phabfive.maniphest.resolvers import resolve_project_phids
+
+        phab = self._mock_phab()
+        assert resolve_project_phids(phab, "2024") == ["PHID-PROJ-2024"]
+        for call in phab.project.search.call_args_list:
+            assert "ids" not in call.kwargs["constraints"]
+
+    def test_search_unknown_numeric_id_returns_empty(self):
+        from phabfive.maniphest.resolvers import resolve_project_phids
+
+        assert resolve_project_phids(self._mock_phab(), "99999") == []
+
+    def test_create_resolves_numeric_id_and_phid(self):
+        from phabfive.maniphest.resolvers import resolve_project_phids_for_create
+
+        result = resolve_project_phids_for_create(
+            self._mock_phab(), ["2024", "8048", "PHID-PROJ-2024"]
+        )
+        assert result["phids"] == [
+            "PHID-PROJ-2024",
+            "PHID-PROJ-milestone",
+            "PHID-PROJ-2024",
+        ]
+        # The milestone has no hashtag, so no /tag/ link is guessed for it
+        assert result["slugs"] == ["2024", "2024"]
+
+    def test_create_unknown_id_raises(self):
+        from phabfive.maniphest.resolvers import resolve_project_phids_for_create
+
+        with pytest.raises(PhabfiveConfigException, match="99999"):
+            resolve_project_phids_for_create(self._mock_phab(), ["99999"])
+
+
 class TestParseSingleCondition:
     def test_parse_backward(self):
         result = _parse_single_condition("backward")

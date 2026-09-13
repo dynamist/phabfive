@@ -180,7 +180,16 @@ phabfive maniphest search --tag "Team Alpha+Sprint 42"
 
 # Combine with date filters
 phabfive maniphest search --tag "Backend" --updated-after=1w
+
+# Search by project ID (from the project URL, e.g. /project/view/8048/) or PHID
+phabfive maniphest search --tag 8048
+phabfive maniphest search --tag PHID-PROJ-abcdefghijklmnopqrst
 ```
+
+!!! tip
+    Use a project ID when a name is ambiguous, for example milestones that share a
+    name like "Kanban Board" with milestones of other projects. If a project's name or
+    hashtag is itself a number, the name/hashtag match wins over the ID.
 
 !!! tip
     For advanced project filtering with AND/OR logic and complex patterns, see the [Advanced Project Filtering](#advanced-project-filtering) section below.
