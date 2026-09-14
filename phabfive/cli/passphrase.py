@@ -6,6 +6,7 @@ from typing import List, Optional
 
 import typer
 
+from phabfive.cli.completers import complete_passphrase_type
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
@@ -113,6 +114,7 @@ def search(
         "--type",
         "-t",
         help="Filter by type: password, token, key, note",
+        autocompletion=complete_passphrase_type,
     ),
     show_secret: bool = typer.Option(
         False,

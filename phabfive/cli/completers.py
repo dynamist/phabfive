@@ -3,7 +3,7 @@
 
 from typing import List, Optional
 
-from phabfive.constants import PASTE_LANGUAGES
+from phabfive.constants import PASTE_LANGUAGES, REPO_STATUS_CHOICES
 
 # Pattern prefixes for transition filters
 PATTERN_PREFIXES = ["in:", "not:in:", "from:", "to:", "been:", "never:"]
@@ -345,3 +345,44 @@ def complete_language(incomplete: str) -> List[str]:
     """
     incomplete_lower = incomplete.lower()
     return [lang for lang in PASTE_LANGUAGES if lang.startswith(incomplete_lower)]
+
+
+# Credential types accepted by passphrase search --type ("ssh" is an alias for "key")
+PASSPHRASE_TYPES = ["password", "token", "key", "ssh", "note"]
+
+
+def _complete_fixed(incomplete: str, values: List[str]) -> List[str]:
+    """Complete from a fixed list of values."""
+    return [v for v in values if v.startswith(incomplete)]
+
+
+def complete_repo_status(incomplete: str) -> List[str]:
+    """Complete the repository status filter for diffusion repo list.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching status completions
+    """
+    return _complete_fixed(incomplete, REPO_STATUS_CHOICES + ["all"])
+
+
+def complete_passphrase_type(incomplete: str) -> List[str]:
+    """Complete credential types for passphrase search --type.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching credential type completions
+    """
+    return _complete_fixed(incomplete, PASSPHRASE_TYPES)
