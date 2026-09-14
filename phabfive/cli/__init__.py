@@ -18,6 +18,7 @@ from phabfive.cli.maniphest import maniphest_app
 from phabfive.cli.passphrase import passphrase_app
 from phabfive.cli.paste import paste_app
 from phabfive.cli.repl import repl_app
+from phabfive.cli.shell_completion import install_bash_escaping
 from phabfive.cli.user import user_app
 from phabfive.constants import (
     AutoOption,
@@ -34,6 +35,9 @@ _MONOGRAM_PATTERN = re.compile(r"^([" + "".join(MONOGRAM_SHORTCUT.keys()) + r"])
 # Build set of prefix letters for apps that support comments
 # e.g., ["maniphest"] -> {"T"} (extracted from MONOGRAMS["maniphest"] = "T[0-9]+")
 _COMMENT_PREFIXES = {MONOGRAMS[app][0] for app in COMMENTS_SUPPORTED}
+
+# Insert completion values with spaces (e.g. project names) as one bash word
+install_bash_escaping()
 
 # Main app
 app = typer.Typer(
