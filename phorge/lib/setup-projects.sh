@@ -147,6 +147,55 @@ EOF
   echo "Default projects created!"
 }
 
+create_milestones() {
+  echo ""
+  echo "Creating default milestones..."
+
+  for milestone_data in "${DEFAULT_MILESTONES[@]}"; do
+    IFS=':' read -r parent_name milestone_name <<< "$milestone_data"
+
+    PARENT_PHID=$(mysql_query phabricator_project "SELECT phid FROM project WHERE name='$parent_name' AND parentProjectPHID IS NULL")
+
+    if [ -z "$PARENT_PHID" ]; then
+      echo "ERROR: Parent project '$parent_name' not found, skipping milestone '$milestone_name'"
+      continue
+    fi
+
+    MILESTONE_COUNT=$(mysql_query phabricator_project "SELECT COUNT(*) FROM project WHERE name='$milestone_name' AND parentProjectPHID='$PARENT_PHID' AND milestoneNumber IS NOT NULL")
+
+    if [ "$MILESTONE_COUNT" -gt 0 ]; then
+      echo "Milestone '$milestone_name' in '$parent_name' already exists, skipping..."
+      continue
+    fi
+
+    # Create through Conduit rather than SQL so Phorge fills in the project
+    # path, depth and milestone number that milestones depend on
+    MILESTONE_PHID=$(conduit_call project.edit "{\"transactions\": [
+      {\"type\": \"name\", \"value\": \"$milestone_name\"},
+      {\"type\": \"milestone\", \"value\": \"$PARENT_PHID\"}
+    ]}" | php -r '$r = json_decode(stream_get_contents(STDIN), true); echo $r["result"]["object"]["phid"] ?? "";')
+
+    if [ -z "$MILESTONE_PHID" ]; then
+      echo "ERROR: Failed to create milestone '$milestone_name' in '$parent_name'"
+      continue
+    fi
+
+    echo "Created milestone '$milestone_name' in '$parent_name' with PHID: $MILESTONE_PHID"
+
+    # Conduit cannot enable workboards, so add the same columns as for projects
+    TIMESTAMP=$(get_timestamp)
+    create_workboard_columns "$MILESTONE_PHID" "$TIMESTAMP"
+
+    mysql_exec phabricator_project <<EOF
+UPDATE project SET hasWorkboard=1 WHERE phid='$MILESTONE_PHID';
+EOF
+
+    create_workboard_menu "$MILESTONE_PHID" "$TIMESTAMP"
+  done
+
+  echo "Default milestones created!"
+}
+
 create_workboard_columns() {
   local PROJECT_PHID=$1
   local TIMESTAMP=$2
@@ -303,4 +352,5 @@ EOF
 # If script is run directly (not sourced), execute setup
 if [ "${BASH_SOURCE[0]}" -ef "$0" ]; then
   create_projects
+  create_milestones
 fi

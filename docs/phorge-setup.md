@@ -63,6 +63,15 @@ Seven projects with 5-column workboards (Backlog → Up Next → In Progress →
 
 The admin user is automatically joined to all projects.
 
+### Default Milestones
+
+Two milestones with the same name and the same 5-column workboards:
+
+- **Sprint 1** in **Development** - shown as "Sprint 1 (Development)" in the web UI
+- **Sprint 1** in **QA** - shown as "Sprint 1 (QA)" in the web UI
+
+Since they share a name, `--tag "Sprint 1"` only reaches one of them. Use the project ID (from `/project/view/<id>/`) or PHID to target a specific milestone, e.g. `--tag 9`.
+
 ## Configuration
 
 All settings can be customized via environment variables. Defaults are in `compose.yml` and can be overridden from the command line:
@@ -150,7 +159,8 @@ The script runs automatically during container startup and:
 2. Creates admin and test user accounts with verified emails
 3. Generates API token for immediate use
 4. Creates default projects with workboard columns
-5. Sets passwords for all users (if `PHORGE_ADMIN_PASS` is set) or generates a recovery link
+5. Creates default milestones with workboard columns
+6. Sets passwords for all users (if `PHORGE_ADMIN_PASS` is set) or generates a recovery link
 
 All operations are idempotent - safe to run multiple times. Container restarts won't duplicate data.
 
