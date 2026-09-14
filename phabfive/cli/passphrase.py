@@ -167,6 +167,10 @@ def search(
             credentials, output_format, passphrase, show_secrets=show_secret
         )
 
-    except (PhabfiveDataException, PhabfiveRemoteException) as e:
+    except (
+        PhabfiveConfigException,
+        PhabfiveDataException,
+        PhabfiveRemoteException,
+    ) as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)

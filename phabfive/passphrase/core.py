@@ -9,9 +9,22 @@ from phabricator import APIError
 
 from phabfive.constants import MONOGRAMS
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveDataException, PhabfiveRemoteException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveRemoteException,
+)
 
 log = logging.getLogger(__name__)
+
+# Map user-friendly credential type names to API types
+CREDENTIAL_TYPE_FILTERS = {
+    "password": ["password"],
+    "token": ["token"],
+    "key": ["ssh-generated-key", "ssh-key-text"],
+    "ssh": ["ssh-generated-key", "ssh-key-text"],
+    "note": ["note"],
+}
 
 
 class Passphrase(Phabfive):
@@ -262,7 +275,21 @@ class Passphrase(Phabfive):
         -------
         list
             List of credential dictionaries
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If credential_type is not a known type
         """
+        api_types = None
+        if credential_type:
+            api_types = CREDENTIAL_TYPE_FILTERS.get(credential_type.lower())
+            if api_types is None:
+                raise PhabfiveConfigException(
+                    f"Invalid type '{credential_type}'. "
+                    f"Valid choices: {', '.join(CREDENTIAL_TYPE_FILTERS)}"
+                )
+
         try:
             response = self.phab.passphrase.query(
                 needSecrets=1 if need_secrets else 0,
@@ -272,23 +299,13 @@ class Passphrase(Phabfive):
             raise PhabfiveRemoteException(e)
 
         credentials = []
-        data = response.get("data", {})
-
-        # Map user-friendly type names to API types
-        type_filter_map = {
-            "password": ["password"],
-            "token": ["token"],
-            "key": ["ssh-generated-key", "ssh-key-text"],
-            "ssh": ["ssh-generated-key", "ssh-key-text"],
-            "note": ["note"],
-        }
+        # Conduit returns an empty list instead of an object when nothing matches
+        data = response.get("data") or {}
 
         for item in data.values():
             # Apply type filter
-            if credential_type:
-                api_types = type_filter_map.get(credential_type.lower(), [])
-                if api_types and item.get("type") not in api_types:
-                    continue
+            if api_types and item.get("type") not in api_types:
+                continue
 
             # Apply name filter (case-insensitive partial match)
             if query:
