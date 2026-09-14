@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
 """Shell completion functions for phabfive CLI options."""
 
-from typing import List
+from typing import List, Optional
 
 from phabfive.constants import PASTE_LANGUAGES
 
 # Pattern prefixes for transition filters
 PATTERN_PREFIXES = ["in:", "not:in:", "from:", "to:", "been:", "never:"]
+
+# Keywords accepted by the priority and status filters
+FILTER_DIRECTION_KEYWORDS = ["raised", "lowered"]
+
+# Keywords accepted when editing a priority
+PRIORITY_CHANGE_KEYWORDS = ["raise", "lower"]
+
+# Keywords accepted when editing a column, and by the column filter
+COLUMN_DIRECTIONS = ["forward", "backward"]
 
 # Default values used when API is unavailable
 DEFAULT_PRIORITY_VALUES = [
@@ -89,8 +98,34 @@ def _complete_with_prefixes(incomplete: str, values: List[str]) -> List[str]:
     return completions
 
 
+def _get_priorities() -> List[str]:
+    """Get priority names - tries API first, falls back to defaults."""
+    from phabfive.maniphest.fetchers import get_api_priority_names
+
+    return _get_values_with_api_fallback(
+        lambda phab: get_api_priority_names(phab),
+        DEFAULT_PRIORITY_VALUES,
+    )
+
+
+def _get_statuses() -> List[str]:
+    """Get status keys (e.g., "open", "resolved") - tries API first, falls back to defaults."""
+    from phabfive.maniphest.fetchers import get_api_status_map
+
+    def fetch_statuses(phab):
+        status_map = get_api_status_map(phab)
+        return list(status_map.get("statusMap", {}).keys())
+
+    return _get_values_with_api_fallback(fetch_statuses, DEFAULT_STATUS_VALUES)
+
+
+def _starting_with(incomplete: str, values: List[str]) -> List[str]:
+    """Return the values that start with the incomplete text."""
+    return [v for v in values if v.startswith(incomplete)]
+
+
 def complete_priority(incomplete: str) -> List[str]:
-    """Complete priority values - tries API first, falls back to defaults.
+    """Complete priority values for setting a priority (maniphest create).
 
     Parameters
     ----------
@@ -102,17 +137,30 @@ def complete_priority(incomplete: str) -> List[str]:
     list
         Matching priority completions
     """
-    from phabfive.maniphest.fetchers import get_api_priority_names
+    return _starting_with(incomplete, _get_priorities())
 
-    priorities = _get_values_with_api_fallback(
-        lambda phab: get_api_priority_names(phab),
-        DEFAULT_PRIORITY_VALUES,
-    )
-    return _complete_with_prefixes(incomplete, priorities)
+
+def complete_priority_change(incomplete: str) -> List[str]:
+    """Complete priority values for changing a priority (edit).
+
+    Like complete_priority, plus the raise/lower navigation keywords.
+    """
+    return _starting_with(incomplete, _get_priorities() + PRIORITY_CHANGE_KEYWORDS)
+
+
+def complete_priority_filter(incomplete: str) -> List[str]:
+    """Complete priority filter patterns (maniphest search).
+
+    Offers priority names, pattern prefixes (e.g., "in:high") and the
+    raised/lowered keywords.
+    """
+    completions = _complete_with_prefixes(incomplete, _get_priorities())
+    completions.extend(_starting_with(incomplete, FILTER_DIRECTION_KEYWORDS))
+    return completions
 
 
 def complete_status(incomplete: str) -> List[str]:
-    """Complete status values - tries API first, falls back to defaults.
+    """Complete status values for setting a status (create, edit).
 
     Parameters
     ----------
@@ -124,22 +172,48 @@ def complete_status(incomplete: str) -> List[str]:
     list
         Matching status completions
     """
-    from phabfive.maniphest.fetchers import get_api_status_map
+    return _starting_with(incomplete, _get_statuses())
 
-    def fetch_statuses(phab):
-        status_map = get_api_status_map(phab)
-        # Return status keys (e.g., "open", "resolved")
-        return list(status_map.get("statusMap", {}).keys())
 
-    statuses = _get_values_with_api_fallback(fetch_statuses, DEFAULT_STATUS_VALUES)
-    return _complete_with_prefixes(incomplete, statuses)
+def complete_status_filter(incomplete: str) -> List[str]:
+    """Complete status filter patterns (maniphest search).
+
+    Offers status names, pattern prefixes (e.g., "in:open") and the
+    raised/lowered keywords.
+    """
+    completions = _complete_with_prefixes(incomplete, _get_statuses())
+    completions.extend(_starting_with(incomplete, FILTER_DIRECTION_KEYWORDS))
+    return completions
+
+
+def _board_context(ctx) -> Optional[str]:
+    """Get the board name given with --tag, if any.
+
+    --tag is a single value on search and edit but repeatable on create,
+    where the first tag is the board context.
+    """
+    tag_value = ctx.params.get("tag") if ctx else None
+    if isinstance(tag_value, (list, tuple)):
+        tag_value = tag_value[0] if tag_value else None
+    return tag_value or None
+
+
+def _matching_board_columns(ctx, incomplete: str) -> List[str]:
+    """Return column names on the --tag board that match the incomplete text."""
+    tag_value = _board_context(ctx)
+    if not tag_value:
+        return []
+
+    incomplete_lower = incomplete.lower()
+    return [
+        c
+        for c in _get_board_columns(tag_value)
+        if c.lower().startswith(incomplete_lower)
+    ]
 
 
 def complete_column(ctx, args: List[str], incomplete: str) -> List[str]:
-    """Complete column names from the board specified by --tag.
-
-    If --tag is provided, fetches actual column names from that board.
-    Otherwise falls back to pattern prefixes and wildcard.
+    """Complete column names from the board specified by --tag (maniphest create).
 
     Parameters
     ----------
@@ -155,28 +229,32 @@ def complete_column(ctx, args: List[str], incomplete: str) -> List[str]:
     list
         Matching column completions
     """
-    # Get --tag value from parsed parameters
-    tag_value = ctx.params.get("tag") if ctx else None
+    return _matching_board_columns(ctx, incomplete)
 
-    # Directional navigation values
-    directions = ["forward", "backward"]
 
-    # Start with directions and pattern prefixes
+def complete_column_change(ctx, args: List[str], incomplete: str) -> List[str]:
+    """Complete column names for moving a task (edit).
+
+    Like complete_column, plus the forward/backward navigation keywords.
+    """
     incomplete_lower = incomplete.lower()
-    completions = [d for d in directions if d.startswith(incomplete_lower)]
+    completions = [d for d in COLUMN_DIRECTIONS if d.startswith(incomplete_lower)]
+    completions.extend(_matching_board_columns(ctx, incomplete))
+    return completions
+
+
+def complete_column_filter(ctx, args: List[str], incomplete: str) -> List[str]:
+    """Complete column filter patterns (maniphest search).
+
+    Offers the forward/backward keywords, pattern prefixes, the wildcard
+    and, if --tag is given, column names from that board.
+    """
+    incomplete_lower = incomplete.lower()
+    completions = [d for d in COLUMN_DIRECTIONS if d.startswith(incomplete_lower)]
     completions.extend(p for p in PATTERN_PREFIXES if p.startswith(incomplete))
     if not incomplete or "*".startswith(incomplete):
         completions.append("*")
-
-    if tag_value:
-        # Fetch columns from the specified board
-        columns = _get_board_columns(tag_value)
-        if columns:
-            # Add actual column names
-            completions.extend(
-                c for c in columns if c.lower().startswith(incomplete_lower)
-            )
-
+    completions.extend(_matching_board_columns(ctx, incomplete))
     return completions
 
 
