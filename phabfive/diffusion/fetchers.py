@@ -102,17 +102,9 @@ def fetch_uris(phab, repo_id=None, clone_uri=False):
     -------
     list
         List of URI strings
-
-    Raises
-    ------
-    PhabfiveDataException
-        If no data returned
     """
     uris = []
     repos = fetch_repositories(phab, attachments={"uris": True})
-
-    if not repos:
-        raise PhabfiveDataException("No data or other error.")
 
     for repo in repos:
         if repo_id == repo["fields"]["shortName"]:
