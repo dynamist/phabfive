@@ -9,8 +9,13 @@ import typer
 
 from phabfive.cli.completers import (
     complete_column,
+    complete_column_change,
+    complete_column_filter,
     complete_priority,
+    complete_priority_change,
+    complete_priority_filter,
     complete_status,
+    complete_status_filter,
     complete_tag,
 )
 from phabfive.constants import MONOGRAMS
@@ -399,19 +404,19 @@ def search(
         None,
         "--column",
         help="Filter tasks by column transitions",
-        autocompletion=complete_column,
+        autocompletion=complete_column_filter,
     ),
     priority: Optional[str] = typer.Option(
         None,
         "--priority",
         help="Filter tasks by priority transitions",
-        autocompletion=complete_priority,
+        autocompletion=complete_priority_filter,
     ),
     status: Optional[str] = typer.Option(
         None,
         "--status",
         help="Filter tasks by status transitions",
-        autocompletion=complete_status,
+        autocompletion=complete_status_filter,
     ),
     show_history: bool = typer.Option(
         False, "--show-history", help="Display transition history"
@@ -645,7 +650,7 @@ def edit(
         None,
         "--priority",
         help="Set priority (unbreak, high, normal, low, wish) or use raise/lower to navigate",
-        autocompletion=complete_priority,
+        autocompletion=complete_priority_change,
     ),
     status: Optional[str] = typer.Option(
         None,
@@ -663,7 +668,7 @@ def edit(
         None,
         "--column",
         help="Set column by name, or use forward/backward to navigate",
-        autocompletion=complete_column,
+        autocompletion=complete_column_change,
     ),
     assign: Optional[str] = typer.Option(
         None,

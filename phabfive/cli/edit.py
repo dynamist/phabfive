@@ -7,8 +7,8 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.completers import (
-    complete_column,
-    complete_priority,
+    complete_column_change,
+    complete_priority_change,
     complete_status,
     complete_tag,
 )
@@ -44,7 +44,7 @@ def edit_command(
         None,
         "--priority",
         help="Set priority (unbreak, high, normal, low, wish) or use raise/lower to navigate",
-        autocompletion=complete_priority,
+        autocompletion=complete_priority_change,
     ),
     status: Optional[str] = typer.Option(
         None,
@@ -62,7 +62,7 @@ def edit_command(
         None,
         "--column",
         help="Set column by name, or use forward/backward to navigate",
-        autocompletion=complete_column,
+        autocompletion=complete_column_change,
     ),
     assign: Optional[str] = typer.Option(
         None,
