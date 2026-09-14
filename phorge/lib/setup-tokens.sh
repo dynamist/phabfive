@@ -22,10 +22,20 @@ create_api_token() {
     echo "Creating API token: $PHORGE_ADMIN_TOKEN"
     TIMESTAMP=$(get_timestamp)
 
-    mysql_exec phabricator_conduit <<EOF
+    # Newer Phorge releases added a required tokenName column
+    HAS_TOKEN_NAME=$(mysql_query phabricator_conduit "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='phabricator_conduit' AND TABLE_NAME='conduit_token' AND COLUMN_NAME='tokenName'")
+
+    if [ "$HAS_TOKEN_NAME" -gt 0 ]; then
+      mysql_exec phabricator_conduit <<EOF
+INSERT INTO conduit_token (objectPHID, tokenType, token, tokenName, expires, dateCreated, dateModified)
+VALUES ('$USER_PHID', 'cli', '$PHORGE_ADMIN_TOKEN', 'phabfive-dev', NULL, $TIMESTAMP, $TIMESTAMP);
+EOF
+    else
+      mysql_exec phabricator_conduit <<EOF
 INSERT INTO conduit_token (objectPHID, tokenType, token, expires, dateCreated, dateModified)
 VALUES ('$USER_PHID', 'cli', '$PHORGE_ADMIN_TOKEN', NULL, $TIMESTAMP, $TIMESTAMP);
 EOF
+    fi
 
     echo "API token created successfully!"
   fi
