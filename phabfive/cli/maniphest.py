@@ -256,7 +256,11 @@ def create(
 
     if with_template:
         # Template mode
-        result = maniphest.create_tasks_from_yaml(with_template, dry_run=dry_run)
+        try:
+            result = maniphest.create_tasks_from_yaml(with_template, dry_run=dry_run)
+        except PhabfiveConfigException as e:
+            sys.stderr.write(f"Error: {e}\n")
+            raise typer.Exit(1)
         if result and result.get("dry_run"):
             for task in result["tasks"]:
                 indent = "  " * task["depth"]
@@ -302,18 +306,23 @@ def create(
                 sys.stderr.write(f"Error: Board not found: {tag[0]}\n")
                 raise typer.Exit(1)
 
-        result = maniphest.create_task(
-            title=final_title,
-            description=final_description,
-            tags=tag,
-            assignee=assign,
-            status=status,
-            priority=priority,
-            subscribers=subscribe,
-            column=column,
-            board_phid=board_phid,
-            dry_run=dry_run,
-        )
+        try:
+            result = maniphest.create_task(
+                title=final_title,
+                description=final_description,
+                tags=tag,
+                assignee=assign,
+                status=status,
+                priority=priority,
+                subscribers=subscribe,
+                column=column,
+                board_phid=board_phid,
+                dry_run=dry_run,
+            )
+        except PhabfiveConfigException as e:
+            # e.g. a --tag that matches no project, or several projects
+            sys.stderr.write(f"Error: {e}\n")
+            raise typer.Exit(1)
         if result:
             if result.get("dry_run"):
                 print("[DRY RUN] Would create task:")
