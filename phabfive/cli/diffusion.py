@@ -6,6 +6,7 @@ from typing import Optional
 
 import typer
 
+from phabfive.cli.completers import complete_repo_status
 from phabfive.constants import REPO_STATUS_CHOICES
 from phabfive.exceptions import PhabfiveConfigException
 
@@ -48,6 +49,7 @@ def repo_list(
     status: Optional[str] = typer.Argument(
         None,
         help="Filter by status: active, inactive, or all",
+        autocompletion=complete_repo_status,
     ),
     url: bool = typer.Option(False, "--url", "-u", help="Show URL"),
 ) -> None:

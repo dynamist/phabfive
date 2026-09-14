@@ -13,7 +13,7 @@ from rich.text import Text
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
-from phabfive.cli.completers import complete_language
+from phabfive.cli.completers import complete_language, complete_tag
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
 
@@ -172,7 +172,10 @@ def create(
         autocompletion=complete_language,
     ),
     tag: Optional[List[str]] = typer.Option(
-        None, "--tag", help="Add to project (repeatable)"
+        None,
+        "--tag",
+        help="Add to project (repeatable)",
+        autocompletion=complete_tag,
     ),
     subscribe: Optional[List[str]] = typer.Option(
         None, "--subscribe", help="Add subscriber (username or @me, repeatable)"
@@ -520,7 +523,10 @@ def edit(
         autocompletion=complete_language,
     ),
     tag: Optional[List[str]] = typer.Option(
-        None, "--tag", help="Add to project (repeatable)"
+        None,
+        "--tag",
+        help="Add to project (repeatable)",
+        autocompletion=complete_tag,
     ),
     subscribe: Optional[List[str]] = typer.Option(
         None, "--subscribe", help="Add subscriber (username or @me, repeatable)"
