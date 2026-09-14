@@ -5,7 +5,6 @@
 from phabfive.constants import REPO_STATUS_CHOICES
 from phabfive.diffusion.fetchers import fetch_branches, fetch_repositories, fetch_uris
 from phabfive.diffusion.validators import validate_repo_identifier
-from phabfive.exceptions import PhabfiveDataException
 
 
 def format_uris(phab, repo, clone_uri=False):
@@ -48,18 +47,10 @@ def format_repositories(phab, status=None, include_url=False):
     -------
     list
         List of dicts with 'name' and optionally 'urls' keys
-
-    Raises
-    ------
-    PhabfiveDataException
-        If no data returned
     """
     status = status or REPO_STATUS_CHOICES
 
     repos = fetch_repositories(phab, attachments={"uris": include_url})
-
-    if not repos:
-        raise PhabfiveDataException("No data or other error")
 
     # filter based on active or inactive status
     repos = [repo for repo in repos if repo["fields"]["status"] in status]

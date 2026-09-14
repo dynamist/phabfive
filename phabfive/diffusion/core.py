@@ -166,11 +166,8 @@ class Diffusion(Phabfive):
 
         repos = self.get_repositories()
 
-        if not repos:
-            raise PhabfiveDataException("No data or other error")
-
         for repo in repos:
-            if name in repo["fields"]["name"]:
+            if name in (repo["fields"]["name"], repo["fields"]["shortName"]):
                 raise PhabfiveDataException(f"Repository {name} already exists")
 
         transactions = self.to_transactions(
@@ -268,9 +265,6 @@ class Diffusion(Phabfive):
             )
 
         repos = self.get_repositories(attachments={"uris": True})
-
-        if not repos:
-            raise PhabfiveDataException("No data or other error")
 
         # Check if input of repository_name is an id
         if self._validate_identifier(repository_name):
