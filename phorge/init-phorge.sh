@@ -57,6 +57,9 @@ fi
 source "${LIB_DIR}/setup-projects.sh"
 create_projects
 
+# Step 10: Create milestones (with workboards) under the default projects
+create_milestones
+
 # Display final summary
 echo ""
 echo "================================"
@@ -85,6 +88,10 @@ echo "🗂️ Projects Created:"
 for project_data in "${DEFAULT_PROJECTS[@]}"; do
   IFS=':' read -r name description <<< "$project_data"
   echo "  - ${name}"
+done
+for milestone_data in "${DEFAULT_MILESTONES[@]}"; do
+  IFS=':' read -r parent_name milestone_name <<< "$milestone_data"
+  echo "  - ${milestone_name} (${parent_name} milestone)"
 done
 echo ""
 echo "🌍 Your new Phorge is waiting for you at:"

@@ -36,6 +36,23 @@ export DEFAULT_PROJECTS=(
   "Security:Security compliance, hardening, and vulnerability assessment"
 )
 
+# Default milestones (parent project:milestone name). Milestones in different
+# projects share a name, shown as "Sprint 1 (Development)" and "Sprint 1 (QA)"
+# in the web UI, so the API can only tell them apart by ID or PHID.
+export DEFAULT_MILESTONES=(
+  "Development:Sprint 1"
+  "QA:Sprint 1"
+)
+
+# Function to call a Conduit method in-process as the admin user.
+# Runs without the web server, so it can be used during setup.
+conduit_call() {
+  local method=$1
+  local params=$2
+  echo "$params" | /app/phorge/bin/conduit call --local --as "$PHORGE_ADMIN_USER" \
+    --method "$method" --input - 2>/dev/null
+}
+
 # Function to generate a PHID
 generate_phid() {
   local type=$1
