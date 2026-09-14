@@ -478,7 +478,7 @@ class TestFetchProjectLookupMaps:
     def test_lowercases_primary_name_and_slugs(self):
         from phabfive.maniphest.resolvers import fetch_project_lookup_maps
 
-        name_to_phid, name_to_slug = fetch_project_lookup_maps(self._mock_phab())
+        name_to_phid, name_to_slug, _ = fetch_project_lookup_maps(self._mock_phab())
 
         # Primary name is matchable case-insensitively
         assert name_to_phid["developer-experience"] == "PHID-PROJ-dev"
@@ -494,7 +494,7 @@ class TestFetchProjectLookupMaps:
         even though the project's primary name is 'Developer-Experience'."""
         from phabfive.maniphest.resolvers import fetch_project_lookup_maps
 
-        name_to_phid, _ = fetch_project_lookup_maps(self._mock_phab())
+        name_to_phid, _, _ = fetch_project_lookup_maps(self._mock_phab())
 
         # Mirror the lookup performed in create_tasks_from_yaml
         for reference in ("developer-experience", "DEVELOPER-EXPERIENCE", "DevX"):

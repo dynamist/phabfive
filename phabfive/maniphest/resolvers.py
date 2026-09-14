@@ -100,6 +100,67 @@ def lookup_project_by_id(phab, project: str):
     return data[0] if data else None
 
 
+def fetch_projects_by_phid(phab, phids):
+    """
+    Fetch projects by PHID, ordered by project ID.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    phids : list
+        Project PHIDs
+
+    Returns
+    -------
+    list
+        project.search result items, or an empty list if the lookup fails
+    """
+    try:
+        data = phab.project.search(constraints={"phids": list(phids)}).get("data")
+    except Exception as e:
+        log.debug(f"Project lookup by PHID failed: {e}")
+        return []
+    return sorted(data or [], key=lambda proj: proj["id"])
+
+
+def ambiguous_project_message(name, projects):
+    """
+    Describe the projects an ambiguous project name matches.
+
+    Several projects can share a name, typically milestones such as
+    "Sprint 1" in different parent projects. Phorge shows these as
+    "Sprint 1 (Development)" and "Sprint 1 (QA)".
+
+    Parameters
+    ----------
+    name : str
+        The project name as given by the user
+    projects : list
+        project.search result items for the matching projects, or PHIDs
+        if the details could not be fetched
+
+    Returns
+    -------
+    str
+        Error message listing each match with its project ID
+    """
+    described = []
+    for proj in projects:
+        if isinstance(proj, str):
+            described.append(proj)
+            continue
+        fields = proj["fields"]
+        parent = fields.get("parent")
+        label = f"{fields['name']} ({parent['name']})" if parent else fields["name"]
+        described.append(f"{label}, ID {proj['id']}")
+
+    return (
+        f"Project name '{name}' is ambiguous, it matches: {'; '.join(described)}. "
+        "Use the project ID or PHID instead."
+    )
+
+
 def resolve_project_phids(phab, project: str) -> list[str]:
     """
     Resolve project name, hashtag, or wildcard pattern to list of project PHIDs.
@@ -116,7 +177,8 @@ def resolve_project_phids(phab, project: str) -> list[str]:
         Supports: "*" (all), "prefix*", "*suffix", "*contains*"
         Matches against any project slug/hashtag (case-insensitive).
         A numeric value is treated as a project ID only if no project
-        has that name or hashtag.
+        has that name or hashtag. A name shared by several projects is
+        rejected as ambiguous; hashtags are unique and always resolve.
 
     Returns
     -------
@@ -161,14 +223,21 @@ def resolve_project_phids(phab, project: str) -> list[str]:
         # Also try searching by name in case user provided the display name
         try:
             result = phab.project.search(constraints={"query": project})
-            for proj in result.get("data", []):
-                if proj["fields"]["name"].lower() == project.lower():
-                    phid = proj["phid"]
-                    name = proj["fields"]["name"]
-                    log.debug(
-                        f"Found project by name '{project}' -> '{name}' (PHID: {phid})"
-                    )
-                    return [phid]
+            matches = [
+                proj
+                for proj in result.get("data", [])
+                if proj["fields"]["name"].lower() == project.lower()
+            ]
+            if len(matches) > 1:
+                log.error(ambiguous_project_message(project, matches))
+                return []
+            if matches:
+                phid = matches[0]["phid"]
+                name = matches[0]["fields"]["name"]
+                log.debug(
+                    f"Found project by name '{project}' -> '{name}' (PHID: {phid})"
+                )
+                return [phid]
         except Exception as e:
             log.debug(f"Name query lookup failed: {e}")
 
@@ -185,7 +254,8 @@ def resolve_project_phids(phab, project: str) -> list[str]:
 
     # Use project.query to get all slugs (project.search doesn't return all hashtags)
     # project.query supports pagination via limit/offset parameters
-    slug_to_phid = {}  # Maps each slug/hashtag to its project PHID
+    slug_to_phid = {}  # Maps each slug/hashtag (and primary name) to its project PHID
+    hashtag_to_phid = {}  # Maps each lowercased hashtag to its project PHID
     phid_to_primary_name = {}  # Maps PHID to primary project name
 
     try:
@@ -229,6 +299,7 @@ def resolve_project_phids(phab, project: str) -> list[str]:
                 for slug in slugs:
                     if slug:
                         slug_to_phid[slug] = phid
+                        hashtag_to_phid[slug.lower()] = phid
 
     except Exception as e:
         log.error(f"Failed to fetch projects: {e}")
@@ -244,22 +315,24 @@ def resolve_project_phids(phab, project: str) -> list[str]:
     if has_wildcard:
         if project == "*":
             # Search all projects - return unique PHIDs
-            unique_phids = list(set(slug_to_phid.values()))
+            unique_phids = list(phid_to_primary_name)
             log.info(f"Wildcard '*' matched all {len(unique_phids)} projects")
             return unique_phids
         else:
-            # Filter slugs by wildcard pattern (case-insensitive)
-            # Use set to avoid duplicate PHIDs when multiple slugs of same project match
-            matching_phids = set()
-            matching_display_names = []
-
-            for slug_lower in lower_slug_to_phid.keys():
-                if fnmatch.fnmatch(slug_lower, project.lower()):
-                    phid = lower_slug_to_phid[slug_lower]
-                    if phid not in matching_phids:
-                        matching_phids.add(phid)
-                        # Use primary name for display
-                        matching_display_names.append(phid_to_primary_name[phid])
+            # Match primary names and hashtags by wildcard pattern (case-insensitive).
+            # Names are matched per project, since several projects can share one.
+            pattern = project.lower()
+            matching_phids = {
+                phid
+                for phid, primary_name in phid_to_primary_name.items()
+                if fnmatch.fnmatch(primary_name.lower(), pattern)
+            }
+            matching_phids.update(
+                phid
+                for hashtag, phid in hashtag_to_phid.items()
+                if fnmatch.fnmatch(hashtag, pattern)
+            )
+            matching_display_names = [phid_to_primary_name[p] for p in matching_phids]
 
             if not matching_phids:
                 log.warning(f"Wildcard pattern '{project}' matched no projects")
@@ -275,14 +348,28 @@ def resolve_project_phids(phab, project: str) -> list[str]:
     log.debug(f"Exact match mode, validating project '{project}'")
 
     project_lower = project.lower()
-    if project_lower in lower_slug_to_phid:
-        phid = lower_slug_to_phid[project_lower]
-        matched_slug = lower_slug_to_original[project_lower]
-        primary_name = phid_to_primary_name[phid]
+
+    # Hashtags are unique, so they win over primary names
+    if project_lower in hashtag_to_phid:
+        phid = hashtag_to_phid[project_lower]
         log.debug(
-            f"Found case-insensitive match for project '{project}' -> slug '{matched_slug}' (primary: '{primary_name}')"
+            f"Found hashtag match for project '{project}' (primary: '{phid_to_primary_name[phid]}')"
         )
         return [phid]
+
+    name_matches = sorted(
+        phid
+        for phid, primary_name in phid_to_primary_name.items()
+        if primary_name.lower() == project_lower
+    )
+    if len(name_matches) > 1:
+        projects = fetch_projects_by_phid(phab, name_matches) or name_matches
+        log.error(ambiguous_project_message(project, projects))
+        return []
+
+    if name_matches:
+        log.debug(f"Found case-insensitive name match for project '{project}'")
+        return name_matches
     else:
         # Project not found - suggest similar slugs (case-insensitive)
         # Deduplicate suggestions by PHID to avoid showing same project multiple times
@@ -405,6 +492,11 @@ def fetch_project_lookup_maps(phab):
     each project's slugs/hashtags inline. Both the primary name and every slug
     are keyed lowercased so project references match case-insensitively.
 
+    Hashtags are unique and take precedence over primary names. A primary
+    name shared by several projects (e.g. milestones named "Sprint 1" in
+    different parents) is left out of name_to_phid and listed in
+    ambiguous_names instead, so it is never resolved to an arbitrary project.
+
     Parameters
     ----------
     phab : Phabricator
@@ -412,9 +504,11 @@ def fetch_project_lookup_maps(phab):
 
     Returns
     -------
-    tuple(dict, dict)
-        (name_to_phid, name_to_slug) where keys are lowercased primary names
-        and slugs. name_to_slug maps each key to the project's primary URL slug.
+    tuple(dict, dict, dict)
+        (name_to_phid, name_to_slug, ambiguous_names) where keys are lowercased
+        primary names and slugs. name_to_slug maps each key to the project's
+        primary URL slug. ambiguous_names maps each shared primary name to the
+        PHIDs of the projects using it.
     """
     try:
         page_size = 100
@@ -440,23 +534,36 @@ def fetch_project_lookup_maps(phab):
 
     name_to_phid = {}
     name_to_slug = {}
+    name_phids = {}  # lowercased primary name -> PHIDs of projects using it
+    primary_slugs = {}  # PHID -> primary URL slug
+
     for phid, project_data in projects_data.items():
         primary_name = project_data["name"]
         slugs = project_data.get("slugs", [])
         # Use first slug for URL, or lowercase name if no slugs
-        primary_slug = slugs[0] if slugs else primary_name.lower().replace(" ", "-")
+        primary_slugs[phid] = (
+            slugs[0] if slugs else primary_name.lower().replace(" ", "-")
+        )
+        name_phids.setdefault(primary_name.lower(), []).append(phid)
 
-        # Map by primary name (case-insensitive)
-        name_to_phid[primary_name.lower()] = phid
-        name_to_slug[primary_name.lower()] = primary_slug
+    # Map by primary name (case-insensitive), unless several projects share it
+    ambiguous_names = {}
+    for name, phids in name_phids.items():
+        if len(phids) > 1:
+            ambiguous_names[name] = phids
+        else:
+            name_to_phid[name] = phids[0]
+            name_to_slug[name] = primary_slugs[phids[0]]
 
-        # Also map by each slug
-        for slug in slugs:
+    # Also map by each slug; hashtags are unique and win over names
+    for phid, project_data in projects_data.items():
+        for slug in project_data.get("slugs", []):
             if slug:
                 name_to_phid[slug.lower()] = phid
-                name_to_slug[slug.lower()] = primary_slug
+                name_to_slug[slug.lower()] = primary_slugs[phid]
+                ambiguous_names.pop(slug.lower(), None)
 
-    return name_to_phid, name_to_slug
+    return name_to_phid, name_to_slug, ambiguous_names
 
 
 def resolve_project_phids_for_create(phab, project_names):
@@ -481,12 +588,13 @@ def resolve_project_phids_for_create(phab, project_names):
     Raises
     ------
     PhabfiveConfigException
-        If any project is not found or wildcards are used
+        If any project is not found, a name matches several projects, or
+        wildcards are used
     """
     if not project_names:
         return {"phids": [], "slugs": []}
 
-    name_to_phid, name_to_slug = fetch_project_lookup_maps(phab)
+    name_to_phid, name_to_slug, ambiguous_names = fetch_project_lookup_maps(phab)
 
     phids = []
     slugs = []
@@ -504,6 +612,14 @@ def resolve_project_phids_for_create(phab, project_names):
             phids.append(name_to_phid[name_lower])
             slugs.append(name_to_slug[name_lower])
             continue
+
+        if name_lower in ambiguous_names:
+            matches = ambiguous_names[name_lower]
+            raise PhabfiveConfigException(
+                ambiguous_project_message(
+                    name, fetch_projects_by_phid(phab, matches) or matches
+                )
+            )
 
         # Fall back to numeric project ID or PHID
         proj = lookup_project_by_id(phab, name)
