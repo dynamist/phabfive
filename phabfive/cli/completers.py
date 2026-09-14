@@ -223,8 +223,45 @@ def _get_board_columns(tag_name: str) -> List[str]:
         return []
 
 
-def complete_tag(incomplete: str) -> List[str]:
+# Stop fetching projects for --tag completion after this many matches
+TAG_COMPLETION_LIMIT = 500
+
+
+def _fetch_projects_named(phab, incomplete: str) -> list:
+    """Fetch projects whose name has a word starting with the incomplete text.
+
+    Uses the project.search "name" constraint so matching happens on the
+    server, and follows the result cursor up to TAG_COMPLETION_LIMIT.
+    """
+    constraints = {"name": incomplete} if incomplete.strip() else {}
+    projects = []
+    after = None
+
+    while len(projects) < TAG_COMPLETION_LIMIT:
+        kwargs = {"constraints": constraints, "limit": 100}
+        if after:
+            kwargs["after"] = after
+        result = phab.project.search(**kwargs)
+        projects.extend(result.get("data", []))
+        after = (result.get("cursor") or {}).get("after")
+        if not after:
+            break
+
+    return projects
+
+
+def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
     """Complete tag (project) names from API.
+
+    Matching is case-insensitive. Completions follow the case the user typed
+    (e.g. "gun" -> "gunnar-core"), because Typer drops completions that don't
+    start with the typed text; project names resolve case-insensitively, so
+    the value still works.
+
+    A name shared by several projects (e.g. milestones named "Sprint 1" in
+    different parents) is offered once, with a description listing the
+    project IDs to use instead. Milestones and subprojects are described
+    with their parent. Descriptions are shown by zsh and fish.
 
     Parameters
     ----------
@@ -234,20 +271,54 @@ def complete_tag(incomplete: str) -> List[str]:
     Returns
     -------
     list
-        Matching project name completions
+        Matching project names, as (name, description) tuples where a
+        description applies
     """
-
-    def fetch_project_names(phab):
-        # Fetch projects - project.search returns up to 100 by default
-        result = phab.project.search(constraints={})
-        return [proj["fields"]["name"] for proj in result.get("data", [])]
-
     # No default values for tags - they are instance-specific
-    tags = _get_values_with_api_fallback(fetch_project_names, [])
+    projects = _get_values_with_api_fallback(
+        lambda phab: _fetch_projects_named(phab, incomplete), []
+    )
 
-    # Case-insensitive prefix matching
     incomplete_lower = incomplete.lower()
-    return [t for t in tags if t.lower().startswith(incomplete_lower)]
+    by_name = {}
+    for proj in projects:
+        name = proj["fields"]["name"]
+        if name.lower().startswith(incomplete_lower):
+            by_name.setdefault(name.lower(), []).append(proj)
+
+    completions = []
+    for _, matches in sorted(by_name.items()):
+        value = _in_typed_case(incomplete, matches[0]["fields"]["name"])
+
+        if len(matches) > 1:
+            ids = ", ".join(
+                _describe_project_id(proj)
+                for proj in sorted(matches, key=lambda proj: proj["id"])
+            )
+            completions.append((value, f"ambiguous, use the ID: {ids}"))
+        elif matches[0]["fields"].get("parent"):
+            completions.append((value, f"in {matches[0]['fields']['parent']['name']}"))
+        else:
+            completions.append(value)
+
+    return completions
+
+
+def _in_typed_case(incomplete: str, name: str) -> str:
+    """Return name so that it starts with the incomplete text as typed."""
+    if name.startswith(incomplete):
+        return name
+    if incomplete.islower():
+        return name.lower()
+    if incomplete.isupper():
+        return name.upper()
+    return incomplete + name[len(incomplete) :]
+
+
+def _describe_project_id(proj) -> str:
+    """Describe a project as its ID plus parent name, e.g. "9 (QA)"."""
+    parent = proj["fields"].get("parent")
+    return f"{proj['id']} ({parent['name']})" if parent else str(proj["id"])
 
 
 def complete_language(incomplete: str) -> List[str]:
