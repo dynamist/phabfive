@@ -56,12 +56,38 @@ tasks:
 | `title` | string | Task title (supports Jinja2 variables) | `"Fix bug in {{ component }}"` |
 | `description` | string | Task description (supports Jinja2 variables) | Multi-line YAML string |
 | `projects` | list | Project names or PHIDs | `["Backend Team", "Sprint 42"]` |
+| `space` | string | Space to create the task in, by monogram, name, or a pattern matching one | `"S3"`, `"Archive"` |
 | `priority` | string | Task priority | `"high"`, `"normal"`, `"low"`, etc. |
 | `assignment` | string | Assignee username | `"alice"` |
 | `subscribers` | list | Subscriber usernames | `["bob", "carol"]` |
 | `parents` | list | Parent task IDs | `["T123", "T456"]` |
 | `subtasks` | list | Subtask IDs to attach | `["T789"]` |
 | `tasks` | list | Nested subtasks (see [Subtasks](#subtasks)) | Array of task objects |
+
+### Spaces
+
+A task can name the Space it should be created in, by monogram, by name, or by
+a pattern that matches exactly one - the same values `maniphest create --space`
+takes, and refused the same way if more than one Space matches:
+
+```yaml
+variables:
+  where: "Archive"
+
+tasks:
+  - title: "Quarterly cleanup"
+    description: "Filed out of the way"
+    space: "{{ where }}"
+
+    tasks:
+      - title: "Collect the old plans"
+        description: "Nested tasks name their own Space"
+        space: "S10"
+```
+
+Without a `space` field a task lands wherever the server puts it, which is the
+instance's default Space; `PHAB_SPACE` narrows searches and is not consulted
+here. Every Space named is resolved once, however many tasks name it.
 
 ### Jinja2 Variable Support
 

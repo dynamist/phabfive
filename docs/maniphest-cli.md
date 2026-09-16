@@ -978,6 +978,68 @@ phabfive maniphest search --tag "My Project" --status="raised+not:in:Resolved"
 
 **Note**: `not:been:STATUS` is functionally equivalent to `never:STATUS`.
 
+## Spaces
+
+Spaces are Phorge's namespaces: every task is in exactly one, and which one it
+is decides who can see it. Phabfive names a Space by monogram (`S3`), by name
+(`Archive`), or by a pattern that matches one (`*rch*`), case-insensitively.
+
+### Searching within a Space
+
+Every search narrows to a Space - `PHAB_SPACE`, default `S1` - even when
+`--space` is not given, so tasks in other Spaces are silently excluded:
+
+```bash
+# The default Space only
+phabfive maniphest search --tag '*'
+
+# One Space, by monogram or by name
+phabfive maniphest search --space S3 --tag '*'
+phabfive maniphest search --space Archive --tag '*'
+
+# Several Spaces, or all of them
+phabfive maniphest search --space S1,S3 --tag '*'
+phabfive maniphest search --space '*' --tag '*'
+```
+
+`-v` reports which Space was searched, which is worth reaching for when a
+search returns fewer tasks than expected - see [Verbose Output](#verbose-output).
+
+### Creating in a Space, and moving between them
+
+`--space` on `create` places a new task, and on `edit` moves an existing one:
+
+```bash
+phabfive maniphest create "Quarterly cleanup" --space=Archive
+phabfive maniphest edit T123 --space=S3
+phabfive maniphest edit T123 T124 --space=Archive   # a batch in one go
+```
+
+A task is stored in exactly one Space, so unlike the filter these refuse
+anything naming more than one, whether a wildcard or a name two Spaces share:
+
+```console
+$ phabfive maniphest create "Task" --space='*'
+Error: Space '*' is ambiguous, it matches: S1 (Default), S3 (Restricted), S10 (Archive). Use a monogram to name one.
+```
+
+A pattern that leaves no doubt is accepted, and `edit` shows both ends of the
+move before making it:
+
+```console
+$ phabfive maniphest edit T123 --space='*rch*' --dry-run
+[DRY RUN] Would apply to T123:
+  Space: S1 (Default) → S10 (Archive)
+```
+
+`PHAB_SPACE` is a search filter and nothing more. A create with no `--space`
+lands wherever the server puts it, which is the instance's own default Space,
+so set it explicitly when it matters. Templates take a `space` field per task -
+see [Task Creation Templates](create-templates.md).
+
+Monograms and names complete with TAB, from a list kept for a day - see
+[Caching](caching.md).
+
 ## Viewing Metadata
 
 Use `--show-metadata` to see why tasks matched your filters. This is especially useful when debugging complex filter combinations.
@@ -1103,7 +1165,8 @@ INFO - Filtering to tag(s): backend (1 project(s))
 This is worth reaching for when a search returns fewer tasks than expected.
 Every search narrows to a Space - `PHAB_SPACE`, default `S1` - even when
 `--space` is not given, so tasks in other Spaces are silently excluded.
-Use `--space='*'` to search them all.
+Use `--space='*'` to search them all, and see [Spaces](#spaces) for placing a
+task in one.
 
 `-vv` adds debug detail, including API resolution steps. In the other
 direction, `-q` reports only errors and `-qq` only critical failures:

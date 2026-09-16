@@ -105,6 +105,14 @@ phabfive maniphest search --space '*' --tag '*'
 phabfive maniphest search --space S3 --tag '*'
 ```
 
+They are also where `--space` on `create` and `edit` can be exercised, this
+being an instance it is safe to write to:
+
+```bash
+phabfive maniphest create "Something to file away" --space=Archive
+phabfive maniphest edit T1 --space=S3
+```
+
 ## Configuration
 
 All settings can be customized via environment variables. Defaults are in `compose.yml` and can be overridden from the command line:

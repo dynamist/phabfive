@@ -56,6 +56,7 @@ Options:
   --column=COLUMN           Set column on board (or use forward/backward)
   --assign=USER             Set assignee (use @me for yourself)
   --comment=TEXT            Add comment with changes
+  --space=SPACE             Move to a Space (monogram, name, or unique pattern)
   --dry-run                 Show changes without applying
   --format=FORMAT           Output format (auto|strict|rich) [default: auto]
 ```
