@@ -371,6 +371,93 @@ def _project_records(projects: list) -> list:
     return records
 
 
+# Namespace the project lookups are cached under
+PROJECT_CACHE_NAMESPACE = "projects"
+
+
+def _matching_projects(records: list, text: str) -> list:
+    """Return the records whose name starts with the lowercased text.
+
+    This is the same predicate complete_tag offers on, deliberately: see
+    _narrowed_projects_from_cache for why reusing it is what makes a narrowed
+    answer equal to an uncached one rather than merely contain it.
+    """
+    return [record for record in records if record["name"].lower().startswith(text)]
+
+
+def _narrowed_projects_from_cache(text: str, directory, ttl):
+    """Return records for text out of a cached entry, or None.
+
+    The project.search "name" constraint matches word prefixes, and it
+    tokenises the query too, so "sprint 1" is two constraints rather than one
+    string. If P is a prefix of T then every constraint P imposes is implied
+    by the corresponding one in T, so everything matching T also matches P: a
+    cached result for a shorter prefix is a superset of the one being asked
+    for, and one lookup answers every prefix extending it.
+
+    The filter applied to it is a whole-name prefix match rather than an
+    attempt to reproduce that tokenisation locally. Phorge splits on non-word
+    characters, so a search for "Core" really does return "GUNNAR-Core" and a
+    naive split() here would disagree. Reusing the predicate complete_tag
+    offers on avoids the question: a name starting with T matches the server's
+    constraint for T as well as for P, so the narrowed answer is exactly the
+    uncached one, not a superset of it. Names the server returned for T but
+    that do not start with T are dropped either way.
+
+    One thing makes that unsound, and it is checked here: a truncated entry
+    stopped at TAG_COMPLETION_LIMIT, so it is an arbitrary subset rather than
+    the whole answer, and nothing can be narrowed out of it. It still answers
+    its own key, which is exactly what an uncached lookup would have returned.
+    """
+    for length in range(len(text), -1, -1):
+        prefix = text[:length]
+        entry = cache.get(PROJECT_CACHE_NAMESPACE, prefix, ttl=ttl, directory=directory)
+        if entry is cache.MISS or not isinstance(entry, dict):
+            continue
+
+        records = entry.get("records")
+        if records is None:
+            continue
+
+        if prefix == text:
+            return records
+
+        if entry.get("truncated"):
+            continue
+
+        return _matching_projects(records, text)
+
+    return None
+
+
+def _cached_project_records(incomplete: str) -> list:
+    """Return project records for the typed text, from cache where possible."""
+    text = _cache_text(incomplete)
+
+    # Resolved once: every probe below would otherwise re-read the config,
+    # which costs more than the lookups it is meant to save
+    directory, ttl = cache.context(PROJECT_CACHE_NAMESPACE)
+
+    cached = _narrowed_projects_from_cache(text, directory, ttl)
+    if cached is not None:
+        return cached
+
+    projects = _fetch_or_none(lambda phab: _fetch_projects_named(phab, incomplete))
+    if projects is None:
+        # The API was unavailable; offer nothing, and do not remember that
+        return []
+
+    records = _project_records(projects)
+    cache.set(
+        PROJECT_CACHE_NAMESPACE,
+        text,
+        {"records": records, "truncated": len(projects) >= TAG_COMPLETION_LIMIT},
+        ttl=ttl,
+        directory=directory,
+    )
+    return records
+
+
 def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
     """Complete tag (project) names from API.
 
@@ -395,21 +482,12 @@ def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
         Matching project names, as (name, description) tuples where a
         description applies
     """
-    # No default values for tags - they are instance-specific. _fetch_or_none
-    # rather than the fallback helper, so that an unreachable API is not
-    # mistaken for an instance that has no matching project.
-    projects = _fetch_or_none(lambda phab: _fetch_projects_named(phab, incomplete))
-    if projects is None:
-        return []
+    # No default values for tags - they are instance-specific
+    records = _cached_project_records(incomplete)
 
-    records = _project_records(projects)
-
-    incomplete_lower = incomplete.lower()
     by_name = {}
-    for record in records:
-        name = record["name"]
-        if name.lower().startswith(incomplete_lower):
-            by_name.setdefault(name.lower(), []).append(record)
+    for record in _matching_projects(records, incomplete.lower()):
+        by_name.setdefault(record["name"].lower(), []).append(record)
 
     completions = []
     for _, matches in sorted(by_name.items()):
@@ -488,12 +566,12 @@ def _fetch_users_named(phab, incomplete: str, include_disabled: bool) -> list:
 USER_CACHE_NAMESPACE = "users"
 
 
-def _user_cache_text(incomplete: str) -> str:
+def _cache_text(incomplete: str) -> str:
     """Normalise the typed text into the query it actually produces.
 
-    _fetch_users_named drops the nameLike constraint for whitespace-only
-    input, so that has to key the same entry as an empty string. Matching is
-    case-insensitive, so the key is lowercased.
+    Both _fetch_users_named and _fetch_projects_named drop their name
+    constraint for whitespace-only input, so that has to key the same entry as
+    an empty string. Matching is case-insensitive, so the key is lowercased.
     """
     return incomplete.lower() if incomplete.strip() else ""
 
@@ -524,7 +602,7 @@ def _user_records(users: list) -> list:
     return records
 
 
-def _narrowed_from_cache(text: str, include_disabled: bool, directory, ttl):
+def _narrowed_users_from_cache(text: str, include_disabled: bool, directory, ttl):
     """Return records for text out of a cached entry, or None.
 
     The nameLike constraint is a case-insensitive substring match, so if P is
@@ -575,13 +653,13 @@ def _narrowed_from_cache(text: str, include_disabled: bool, directory, ttl):
 
 def _cached_user_records(incomplete: str, include_disabled: bool) -> list:
     """Return user records for the typed text, from cache where possible."""
-    text = _user_cache_text(incomplete)
+    text = _cache_text(incomplete)
 
     # Resolved once: every probe below would otherwise re-read the config,
     # which costs more than the lookups it is meant to save
     directory, ttl = cache.context(USER_CACHE_NAMESPACE)
 
-    cached = _narrowed_from_cache(text, include_disabled, directory, ttl)
+    cached = _narrowed_users_from_cache(text, include_disabled, directory, ttl)
     if cached is not None:
         return cached
 
