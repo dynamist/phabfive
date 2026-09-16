@@ -327,6 +327,110 @@ def _prune(namespace_dir):
         return
 
 
+def host_of(url):
+    """The host part of url, accepting a bare hostname too.
+
+    What is cached is keyed by host, and the cache never records a scheme,
+    so completion can only offer bare hosts. Taking them here means the
+    value that was completed is a value that works.
+    """
+    if not url:
+        return None
+
+    netloc = urlparse(url).netloc
+    if netloc:
+        return netloc
+
+    # No scheme: "phorge.localhost" parses entirely as a path
+    candidate = url.split("/")[0]
+    return candidate or None
+
+
+def cached_hosts():
+    """Every host with something cached, for completing `cache clear --url`."""
+    base = root(_read_config())
+    if not os.path.isdir(base):
+        return []
+
+    # Not set(): this module defines its own set(), which shadows the builtin
+    hosts = []
+    for name in os.listdir(base):
+        if not os.path.isdir(os.path.join(base, name)):
+            continue
+        match = re.fullmatch(r"(.+)-[0-9a-f]{8}", name)
+        if match:
+            hosts.append(match.group(1))
+
+    return sorted(dict.fromkeys(hosts))
+
+
+def _dirs_for_host(conf, url):
+    """Every instance directory cached for the host of url.
+
+    One host has a directory per token, because _slug mixes the token into
+    the digest. Naming the host is enough to find them all, which is what
+    lets a caller clear an instance it holds no token for.
+    """
+    netloc = host_of(url)
+    if not netloc:
+        return []
+
+    base = root(conf)
+    if not os.path.isdir(base):
+        return []
+
+    # _slug writes the host into the name and appends "-<8 hex digits>"
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", netloc).lower()[:40]
+    pattern = re.compile(rf"{re.escape(safe)}-[0-9a-f]{{8}}$")
+
+    return [
+        os.path.join(base, name)
+        for name in sorted(os.listdir(base))
+        if pattern.fullmatch(name) and os.path.isdir(os.path.join(base, name))
+    ]
+
+
+def clear_host(url):
+    """Remove every cached entry for the host of url, whatever the token.
+
+    Destroying an instance invalidates what was cached for all of its
+    accounts, not just the one whose token happens to be configured, and
+    this needs no token to work out which directories those are.
+
+    Returns the number of files removed, or None if url names no host.
+    """
+    import shutil
+
+    if not host_of(url):
+        return None
+
+    conf = _read_config()
+
+    removed = 0
+    for directory in _dirs_for_host(conf, url):
+        removed += sum(len(files) for _, _, files in os.walk(directory))
+        shutil.rmtree(directory, ignore_errors=True)
+
+    return removed
+
+
+def other_cached_accounts():
+    """Accounts cached for the configured host under a different token.
+
+    Returns (count, url). A non-zero count means clearing the configured
+    instance left entries behind that a different token wrote, which is
+    what makes "Removed 0" misleading on its own.
+    """
+    conf = _read_config() or {}
+    url = conf.get("PHAB_URL")
+    if not url:
+        return 0, None
+
+    configured = _instance_dir(conf)
+    others = [d for d in _dirs_for_host(conf, url) if d != configured]
+    return len(others), url
+
+
 def clear(all_instances=False):
     """Remove cached entries, returning how many files were removed.
 
