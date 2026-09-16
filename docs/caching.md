@@ -88,9 +88,28 @@ phabfive cache clear
 ```bash
 phabfive cache info          # where the cache is, how much is in it, how old
 phabfive cache clear         # drop the configured instance's entries
+phabfive cache clear users   # drop just one namespace
+phabfive cache clear users projects             # or several
 phabfive cache clear --url phorge.example.com   # drop every account's, for one host
 phabfive cache clear --all   # drop every instance's, works without credentials
 ```
+
+Naming a namespace keeps the rest: after somebody is renamed, `cache clear users`
+costs one slower username completion instead of re-fetching every project too. The
+namespaces are `users`, `projects`, `columns`, `spaces`, `priorities` and
+`statuses`, and they complete, showing what each currently holds:
+
+```console
+$ phabfive cache clear <TAB>
+columns     -- nothing cached
+priorities  -- nothing cached
+projects    -- 3 lookups, 9 records
+users       -- 1 lookup, 3 records
+```
+
+An unrecognised name is rejected rather than quietly clearing nothing, and a
+namespace combines with `--url` or `--all` to clear it across every account or
+every instance.
 
 `cache info` reports sizes and ages only; it never prints what was cached.
 

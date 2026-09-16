@@ -390,28 +390,56 @@ def _dirs_for_host(conf, url):
     ]
 
 
-def clear_host(url):
-    """Remove every cached entry for the host of url, whatever the token.
+def known_namespaces():
+    """The namespaces entries are filed under, whether cached yet or not."""
+    return sorted(CACHE_TTLS)
+
+
+def _remove(directory, namespaces=None):
+    """Remove a directory, or just some namespaces inside it.
+
+    Returns how many files went. namespaces None means the whole thing.
+    """
+    import shutil
+
+    if not os.path.isdir(directory):
+        return 0
+
+    targets = (
+        [directory]
+        if namespaces is None
+        else [os.path.join(directory, name) for name in namespaces]
+    )
+
+    removed = 0
+    for target in targets:
+        if not os.path.isdir(target):
+            continue
+        removed += sum(len(files) for _, _, files in os.walk(target))
+        shutil.rmtree(target, ignore_errors=True)
+
+    return removed
+
+
+def clear_host(url, namespaces=None):
+    """Remove cached entries for the host of url, whatever the token.
 
     Destroying an instance invalidates what was cached for all of its
     accounts, not just the one whose token happens to be configured, and
     this needs no token to work out which directories those are.
 
+    namespaces limits it to those namespaces; None clears everything.
+
     Returns the number of files removed, or None if url names no host.
     """
-    import shutil
-
     if not host_of(url):
         return None
 
     conf = _read_config()
 
-    removed = 0
-    for directory in _dirs_for_host(conf, url):
-        removed += sum(len(files) for _, _, files in os.walk(directory))
-        shutil.rmtree(directory, ignore_errors=True)
-
-    return removed
+    return sum(
+        _remove(directory, namespaces) for directory in _dirs_for_host(conf, url)
+    )
 
 
 def other_cached_accounts():
@@ -431,32 +459,38 @@ def other_cached_accounts():
     return len(others), url
 
 
-def clear(all_instances=False):
+def clear(all_instances=False, namespaces=None):
     """Remove cached entries, returning how many files were removed.
 
     all_instances works without valid credentials, which is what somebody
-    reaches for when something is wrong.
+    reaches for when something is wrong. namespaces limits it to those
+    namespaces; None clears everything.
     """
-    import shutil
-
     conf = _read_config()
 
     if all_instances:
-        target = root(conf)
-    else:
-        # Not instance_dir(): caching may be switched off now, yet entries from
-        # before it was switched off are exactly what needs clearing. None here
-        # means there is no configured instance to clear.
-        target = _instance_dir(conf)
-        if target is None:
-            return None
+        base = root(conf)
+        if namespaces is None:
+            return _remove(base)
 
-    if not os.path.isdir(target):
-        return 0
+        if not os.path.isdir(base):
+            return 0
 
-    removed = sum(len(files) for _, _, files in os.walk(target))
-    shutil.rmtree(target, ignore_errors=True)
-    return removed
+        # A namespace lives inside each instance's directory, not beside them
+        return sum(
+            _remove(os.path.join(base, name), namespaces)
+            for name in sorted(os.listdir(base))
+            if os.path.isdir(os.path.join(base, name))
+        )
+
+    # Not instance_dir(): caching may be switched off now, yet entries from
+    # before it was switched off are exactly what needs clearing. None here
+    # means there is no configured instance to clear.
+    target = _instance_dir(conf)
+    if target is None:
+        return None
+
+    return _remove(target, namespaces)
 
 
 def _record_count(path):

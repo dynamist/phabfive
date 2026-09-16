@@ -24,7 +24,7 @@ from typer.testing import CliRunner
 # phabfive imports
 from phabfive import cache
 from phabfive.cli import app
-from phabfive.cli.completers import complete_cached_host
+from phabfive.cli.completers import complete_cache_namespace, complete_cached_host
 from tests.conftest import CONF
 
 runner = CliRunner()
@@ -191,3 +191,146 @@ class TestTokenMismatchIsVisible:
 
         assert "Removed 0 cached entries" in result.stdout
         assert "different token" not in result.stderr
+
+
+class TestClearNamespaces:
+    """`cache clear users` clears one namespace rather than everything."""
+
+    def _seed(self, url=None, token=None):
+        conf = dict(
+            CONF,
+            PHAB_URL=url or CONF["PHAB_URL"],
+            PHAB_TOKEN=token or CONF["PHAB_TOKEN"],
+        )
+        with patch("phabfive.core.Phabfive.read_config", return_value=(conf, True)):
+            for namespace in ("projects", "users", "priorities"):
+                cache.set(namespace, "key", {"records": [1], "truncated": False})
+
+    def _namespaces(self):
+        return sorted(n["Namespace"] for n in cache.describe()["Namespaces"])
+
+    def test_clears_only_the_named_namespace(self, enabled_cache):
+        self._seed()
+
+        assert cache.clear(namespaces=["users"]) == 1
+        assert self._namespaces() == ["priorities", "projects"]
+
+    def test_clears_several_namespaces(self, enabled_cache):
+        self._seed()
+
+        assert cache.clear(namespaces=["users", "priorities"]) == 2
+        assert self._namespaces() == ["projects"]
+
+    def test_no_namespaces_clears_everything(self, enabled_cache):
+        self._seed()
+
+        assert cache.clear() == 3
+        assert self._namespaces() == []
+
+    def test_a_namespace_with_nothing_cached_is_not_an_error(self, enabled_cache):
+        self._seed()
+
+        assert cache.clear(namespaces=["spaces"]) == 0
+        assert self._namespaces() == ["priorities", "projects", "users"]
+
+    def test_host_scoped_clear_takes_namespaces(self, enabled_cache):
+        """One namespace, across every account cached for the host."""
+        self._seed()
+        self._seed(token=OTHER_TOKEN)
+
+        assert cache.clear_host(CONF["PHAB_URL"], namespaces=["users"]) == 2
+
+        remaining = sorted(
+            name
+            for directory in cache._dirs_for_host(dict(CONF), CONF["PHAB_URL"])
+            for name in os.listdir(directory)
+        )
+        assert remaining == ["priorities", "priorities", "projects", "projects"]
+
+    def test_all_instances_clear_takes_namespaces(self, enabled_cache):
+        """A namespace lives inside each instance, not beside them."""
+        self._seed()
+        self._seed(url=OTHER_HOST)
+
+        assert cache.clear(all_instances=True, namespaces=["projects"]) == 2
+        assert self._namespaces() == ["priorities", "users"]
+
+
+class TestClearNamespacesCommand:
+    def _seed(self, enabled_cache):
+        for namespace in ("projects", "users"):
+            cache.set(namespace, "key", {"records": [1], "truncated": False})
+
+    def test_clears_the_named_namespace(self, enabled_cache):
+        self._seed(enabled_cache)
+
+        result = runner.invoke(app, ["cache", "clear", "users"])
+
+        assert result.exit_code == 0
+        assert "(users)" in result.stdout
+        assert [n["Namespace"] for n in cache.describe()["Namespaces"]] == ["projects"]
+
+    def test_rejects_an_unknown_namespace(self, enabled_cache):
+        """A typo must not clear nothing and report success."""
+        self._seed(enabled_cache)
+
+        result = runner.invoke(app, ["cache", "clear", "userz"])
+
+        assert result.exit_code == 1
+        assert "unknown cache namespace: userz" in result.stderr
+        assert "users" in result.stderr
+        assert len(cache.describe()["Namespaces"]) == 2
+
+    def test_rejects_an_unknown_namespace_among_known_ones(self, enabled_cache):
+        self._seed(enabled_cache)
+
+        result = runner.invoke(app, ["cache", "clear", "users", "nope"])
+
+        assert result.exit_code == 1
+        assert len(cache.describe()["Namespaces"]) == 2
+
+    def test_repeating_a_namespace_names_it_once(self, enabled_cache):
+        self._seed(enabled_cache)
+
+        result = runner.invoke(app, ["cache", "clear", "users", "users"])
+
+        assert result.exit_code == 0
+        assert "(users)" in result.stdout
+
+    def test_combines_with_url(self, enabled_cache):
+        self._seed(enabled_cache)
+
+        result = runner.invoke(
+            app, ["cache", "clear", "--url", "phorge.example.com", "users"]
+        )
+
+        assert result.exit_code == 0
+        assert "(users)" in result.stdout
+        assert [n["Namespace"] for n in cache.describe()["Namespaces"]] == ["projects"]
+
+
+class TestCompleteCacheNamespace:
+    def test_offers_every_known_namespace(self, enabled_cache):
+        offered = [value for value, _ in complete_cache_namespace("")]
+
+        assert offered == cache.known_namespaces()
+
+    def test_narrows_by_what_was_typed(self, enabled_cache):
+        offered = [value for value, _ in complete_cache_namespace("us")]
+
+        assert offered == ["users"]
+        assert complete_cache_namespace("zz") == []
+
+    def test_describes_what_is_cached(self, enabled_cache):
+        cache.set("users", "key", {"records": [1, 2, 3], "truncated": False})
+
+        described = dict(complete_cache_namespace(""))
+
+        assert described["users"] == "1 lookup, 3 records"
+        assert described["projects"] == "nothing cached"
+
+    def test_every_completion_starts_with_what_was_typed(self, enabled_cache):
+        for typed in ["", "p", "us", "stat"]:
+            assert all(
+                value.startswith(typed) for value, _ in complete_cache_namespace(typed)
+            )

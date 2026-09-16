@@ -854,6 +854,51 @@ def _complete_fixed(incomplete: str, values: List[str]) -> List[str]:
     return [v for v in values if v.startswith(incomplete)]
 
 
+def complete_cache_namespace(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete the namespaces `cache clear` accepts.
+
+    Every known namespace is offered, not only the ones with something in
+    them, so the vocabulary is discoverable and clearing an empty one is
+    harmless. What is cached shows up as the description instead.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching namespaces, described by what they hold
+    """
+    from phabfive import cache
+
+    try:
+        described = {
+            entry["Namespace"]: entry for entry in cache.describe()["Namespaces"]
+        }
+    except (OSError, KeyError):
+        described = {}
+
+    completions = []
+    for namespace in cache.known_namespaces():
+        if not namespace.startswith(incomplete):
+            continue
+
+        entry = described.get(namespace)
+        if entry is None:
+            completions.append((namespace, "nothing cached"))
+            continue
+
+        records = entry.get("Records")
+        held = "" if records is None else f", {records} records"
+        lookups = entry["Lookups"]
+        unit = "lookup" if lookups == 1 else "lookups"
+        completions.append((namespace, f"{lookups} {unit}{held}"))
+
+    return completions
+
+
 def complete_cached_host(incomplete: str) -> List[str]:
     """Complete the hosts that have something cached, for cache clear --url.
 
