@@ -1084,6 +1084,29 @@ If a filter pattern doesn't return expected results:
 2. Add `--show-history` to inspect actual column and priority movements for all tasks
 3. Verify column names match exactly (case-sensitive)
 4. Start with simple patterns and add complexity incrementally
+5. Add `-v` to see which filters were actually applied (see below)
+
+### Verbose Output
+
+Searches are quiet by default. `-v` reports which filters were applied,
+on stderr, so stdout stays clean for `--format=json` consumers:
+
+```bash
+# Which Space and project(s) did this actually search?
+phabfive -v maniphest search --tag backend
+
+INFO - Filtering to space(s): S1 (from PHAB_SPACE). Tasks in other spaces are excluded; use --space='*' to include all spaces.
+INFO - Filtering to open statuses: ['open']
+INFO - Filtering to tag(s): backend (1 project(s))
+```
+
+This is worth reaching for when a search returns fewer tasks than expected.
+Every search narrows to a Space - `PHAB_SPACE`, default `S1` - even when
+`--space` is not given, so tasks in other Spaces are silently excluded.
+Use `--space='*'` to search them all.
+
+`-vv` adds debug detail, including API resolution steps. `--log-level` sets
+a level directly; when both are given, the more verbose of the two wins.
 
 ### Using Search Templates for Complex Queries
 

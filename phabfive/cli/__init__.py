@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Typer-based CLI for phabfive."""
 
+import logging
 import os
 import re
 import sys
@@ -12,6 +13,7 @@ os.environ.setdefault("TYPER_USE_RICH", "0")
 
 import typer
 
+from phabfive import init_logging
 from phabfive.cli.cache import cache_app
 from phabfive.cli.diffusion import diffusion_app
 from phabfive.cli.edit import edit_command
@@ -36,6 +38,32 @@ _MONOGRAM_PATTERN = re.compile(r"^([" + "".join(MONOGRAM_SHORTCUT.keys()) + r"])
 # Build set of prefix letters for apps that support comments
 # e.g., ["maniphest"] -> {"T"} (extracted from MONOGRAMS["maniphest"] = "T[0-9]+")
 _COMMENT_PREFIXES = {MONOGRAMS[app][0] for app in COMMENTS_SUPPORTED}
+
+# Global flags that take no value. Monogram preprocessing otherwise assumes
+# every option consumes the next argument, which would swallow the monogram
+# in "phabfive -v T123" and leave it unexpanded.
+_VALUELESS_GLOBAL_FLAGS = {
+    "--verbose",
+    "-V",
+    "--version",
+    "--help",
+    "--install-completion",
+    "--show-completion",
+}
+
+# -v is counted rather than valued, so -v, -vv and -vvv all take no value
+_COUNTED_SHORT_FLAG = re.compile(r"-v+")
+
+
+def _consumes_next_arg(arg: str) -> bool:
+    """Whether an option argument takes the following argv entry as its value."""
+    if arg in _VALUELESS_GLOBAL_FLAGS or _COUNTED_SHORT_FLAG.fullmatch(arg):
+        return False
+    if arg.startswith("--"):
+        return "=" not in arg
+    # Short option like -f value
+    return len(arg) == 2
+
 
 # Insert completion values with spaces (e.g. project names) as one bash word
 install_bash_escaping()
@@ -91,10 +119,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
                 skip_next = False
                 continue
             if arg.startswith("-"):
-                if arg.startswith("--") and "=" not in arg:
-                    skip_next = True
-                elif arg.startswith("-") and len(arg) == 2:
-                    skip_next = True
+                skip_next = _consumes_next_arg(arg)
                 continue
             return i
         return None
@@ -122,12 +147,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
             skip_next = False
             continue
         if arg.startswith("-"):
-            # Handle --option value (skip next arg if not --option=value)
-            if arg.startswith("--") and "=" not in arg:
-                skip_next = True
-            elif arg.startswith("-") and len(arg) == 2:
-                # Short option like -f value
-                skip_next = True
+            skip_next = _consumes_next_arg(arg)
             continue
         match = _MONOGRAM_PATTERN.match(arg)
         if match:
@@ -174,13 +194,37 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def resolve_log_level(log_level: str, verbose: int) -> str:
+    """Combine --log-level and repeated -v into one effective level.
+
+    The more verbose of the two wins, so the flags compose instead of one
+    silently overriding the other.
+    """
+    candidates = [log_level]
+
+    if verbose >= 2:
+        candidates.append("DEBUG")
+    elif verbose == 1:
+        candidates.append("INFO")
+
+    # Lower numeric level == more verbose
+    return min(candidates, key=lambda name: logging.getLevelName(name))
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
     log_level: LogLevel = typer.Option(
-        LogLevel.INFO,
+        LogLevel.WARNING,
         "--log-level",
         help="Set log level.",
+    ),
+    verbose: int = typer.Option(
+        0,
+        "-v",
+        "--verbose",
+        count=True,
+        help="Increase verbosity: -v for INFO, -vv for DEBUG.",
     ),
     output_format: Optional[OutputFormat] = typer.Option(
         None,
@@ -207,10 +251,15 @@ def main(
     ),
 ) -> None:
     """CLI for Phabricator and Phorge - built for humans and AI agents."""
+    # Configure logging before anything can log; --log-level and -v compose,
+    # with the more verbose of the two winning.
+    effective_log_level = resolve_log_level(log_level.value, verbose)
+    init_logging(effective_log_level)
+
     # Store global options in context for subcommands to access
     ctx.ensure_object(dict)
     # Store as string values for downstream compatibility
-    ctx.obj["log_level"] = log_level.value
+    ctx.obj["log_level"] = effective_log_level
     ctx.obj["format"] = output_format.value if output_format else None
     ctx.obj["ascii"] = ascii_when.value
     ctx.obj["hyperlink"] = hyperlink_when.value
