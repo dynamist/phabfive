@@ -76,6 +76,22 @@ Complex features use a consistent subpackage structure:
 - `paste.py`, `user.py` - single-file implementations
 - `transitions/` - state machine for task status/priority/column changes
 
+### Completion Cache (`cache.py`)
+
+- Server-backed shell completions are cached under `appdirs.user_cache_dir("phabfive")`,
+  keyed by instance URL and token, with per-namespace TTLs from `CACHE_TTLS`
+- Caching is **opt-in per call site**: `phabfive/cache.py` is called only from
+  `cli/completers.py` and `cli/cache.py`. Nothing wraps the API client, which is
+  what keeps passphrase values out of the cache by construction. Do not add a
+  transparent wrapper.
+- `Phabfive.read_config()` is a classmethod so the cache can key entries by
+  `PHAB_URL` without constructing `Phabfive()`, which would cost two round trips
+  (`update_interfaces` + `verify_connection`) on every completion
+- Every cache operation is best effort — a miss must never raise, or completion
+  breaks
+- `tests/conftest.py` disables the cache for the whole suite; tests that want it
+  set `PHAB_CACHE=1` and patch `Phabfive.read_config`
+
 ### Configuration
 
 Required: `PHAB_TOKEN` and `PHAB_URL`
@@ -84,7 +100,7 @@ Config precedence (later overrides earlier):
 1. Hard-coded defaults
 2. `/etc/phabfive.yaml`
 3. `/etc/phabfive.d/*.yaml`
-4. `~/.config/phabfive.yaml` (PHAB_URL/PHAB_TOKEN deprecated here, use for PHAB_SPACE/PHAB_FALLBACK/PHABFIVE_DEBUG)
+4. `~/.config/phabfive.yaml` (PHAB_URL/PHAB_TOKEN deprecated here, use for PHAB_SPACE/PHAB_FALLBACK/PHABFIVE_DEBUG/PHAB_CACHE/PHAB_CACHE_TTL/PHAB_CACHE_DIR)
 5. `~/.config/phabfive.d/*.yaml`
 6. `.arcconfig` in git root (provides PHAB_URL from `phabricator.uri`)
 7. `~/.arcrc` (provides PHAB_TOKEN for matched URL)
