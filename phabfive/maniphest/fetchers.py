@@ -471,6 +471,11 @@ def get_api_priority_names(phab):
     priorities. This allows the tool to work with custom priority
     configurations in Phabricator/Phorge instances.
 
+    Raises rather than substituting defaults, so that a caller which
+    remembers the answer - shell completion caches it - cannot be handed an
+    invented list to write down as though the server had said it. Its one
+    caller falls back to DEFAULT_PRIORITY_VALUES itself.
+
     Parameters
     ----------
     phab : Phabricator
@@ -481,30 +486,19 @@ def get_api_priority_names(phab):
     list
         List of priority name strings (lowercase), e.g., ["unbreak", "high", "normal"]
     """
-    try:
-        result = phab.maniphest.priority.search()
-        priorities = []
-        for item in result.get("data", []):
-            name = item.get("fields", {}).get("name", "")
-            if name:
-                # Normalize: "Unbreak Now!" -> "unbreak"
-                normalized = name.lower().replace("!", "").replace(" now", "").strip()
-                # Also handle "wishlist" -> "wish"
-                if normalized == "wishlist":
-                    normalized = "wish"
-                priorities.append(normalized)
-        log.debug(
-            f"Fetched {len(priorities)} priorities from maniphest.priority.search"
-        )
-        return priorities if priorities else _default_priority_names()
-    except Exception as e:
-        log.debug(f"Failed to fetch priorities from API: {e}. Using fallback.")
-        return _default_priority_names()
-
-
-def _default_priority_names():
-    """Return default priority names for fallback."""
-    return ["unbreak", "triage", "high", "normal", "low", "wish"]
+    result = phab.maniphest.priority.search()
+    priorities = []
+    for item in result.get("data", []):
+        name = item.get("fields", {}).get("name", "")
+        if name:
+            # Normalize: "Unbreak Now!" -> "unbreak"
+            normalized = name.lower().replace("!", "").replace(" now", "").strip()
+            # Also handle "wishlist" -> "wish"
+            if normalized == "wishlist":
+                normalized = "wish"
+            priorities.append(normalized)
+    log.debug(f"Fetched {len(priorities)} priorities from maniphest.priority.search")
+    return priorities
 
 
 def get_api_status_map(phab):
