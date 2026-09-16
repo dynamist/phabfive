@@ -200,10 +200,13 @@ def get(namespace, key, ttl=None, directory=None):
             return MISS
 
         # Against the caller's TTL, not the one that was stored, so that
-        # lowering PHAB_CACHE_TTL takes effect at once
+        # lowering PHAB_CACHE_TTL takes effect at once. An entry is fresh for
+        # strictly less than ttl seconds: >= rather than > so that a ttl of 0
+        # means "expired" even where the clock is too coarse to have ticked
+        # since the entry was written, as on Windows.
         if ttl is None:
             ttl = ttl_for(namespace)
-        if time.time() - float(entry["created"]) > float(ttl):
+        if time.time() - float(entry["created"]) >= float(ttl):
             return MISS
 
         return entry["value"]
