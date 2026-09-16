@@ -583,9 +583,7 @@ class TestTemplateSearchHeaders:
             ),
             patch("phabfive.cli.maniphest._display_tasks", side_effect=display_tasks),
         ):
-            result = runner.invoke(
-                maniphest_app, ["search", "--with", "template.yaml"]
-            )
+            result = runner.invoke(maniphest_app, ["search", "--with", "template.yaml"])
         return result
 
     def test_single_unnamed_template_has_no_rich_header(self):
