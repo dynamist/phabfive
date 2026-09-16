@@ -26,7 +26,7 @@ from phabfive.cli.completers import (
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
 
-maniphest_app = typer.Typer(help="The maniphest app")
+maniphest_app = typer.Typer(help="The maniphest app", no_args_is_help=True)
 
 
 def _get_maniphest_app():

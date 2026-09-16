@@ -8,7 +8,7 @@ import typer
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException
 
-user_app = typer.Typer(help="Information on users, setup wizard")
+user_app = typer.Typer(help="Information on users, setup wizard", no_args_is_help=True)
 
 
 def _get_output_format(ctx: typer.Context) -> str:

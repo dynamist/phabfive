@@ -13,7 +13,7 @@ from phabfive.exceptions import (
     PhabfiveRemoteException,
 )
 
-passphrase_app = typer.Typer(help="The passphrase app")
+passphrase_app = typer.Typer(help="The passphrase app", no_args_is_help=True)
 
 
 def _get_passphrase_app():
