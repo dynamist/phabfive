@@ -87,7 +87,7 @@ phabfive cache clear
 
 ```bash
 phabfive cache info          # where the cache is, how much is in it, how old
-phabfive cache clear         # drop the configured instance's entries
+phabfive cache clear         # drop the configured instance's lookups
 phabfive cache clear users   # drop just one namespace
 phabfive cache clear users projects             # or several
 phabfive cache clear --url phorge.example.com   # drop every account's, for one host
@@ -113,10 +113,10 @@ every instance.
 
 `cache info` reports sizes and ages only; it never prints what was cached.
 
-Its `Lookups` column counts cached lookups, not objects. One lookup holds a
-whole result, and a lookup for a shorter prefix answers every longer one, so a
-single lookup can serve all project completions on the instance. `Records` says
-how many projects or users are in them:
+Its `Lookups` column counts cached lookups, not objects. One lookup is one
+stored entry: it holds a whole result, and a lookup for a shorter prefix answers
+every longer one, so a single lookup can serve all project completions on the
+instance. `Records` says how many projects or users are in them:
 
 ```text
  Namespace   Lookups   Records   Size     TTL

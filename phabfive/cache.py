@@ -422,7 +422,7 @@ def _remove(directory, namespaces=None):
 
 
 def clear_host(url, namespaces=None):
-    """Remove cached entries for the host of url, whatever the token.
+    """Remove cached lookups for the host of url, whatever the token.
 
     Destroying an instance invalidates what was cached for all of its
     accounts, not just the one whose token happens to be configured, and
@@ -460,7 +460,7 @@ def other_cached_accounts():
 
 
 def clear(all_instances=False, namespaces=None):
-    """Remove cached entries, returning how many files were removed.
+    """Remove cached lookups, returning how many files were removed.
 
     all_instances works without valid credentials, which is what somebody
     reaches for when something is wrong. namespaces limits it to those

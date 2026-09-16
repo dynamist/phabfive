@@ -5,7 +5,7 @@
 The cache directory is named from the URL and the token together, so
 `cache clear` could only find the directory belonging to the exact token
 that was configured. A token that did not match reported "Removed 0
-cached entries" and exited 0, which is indistinguishable from there
+cached lookups" and exited 0, which is indistinguishable from there
 being nothing to clear.
 
 Destroying an instance invalidates what was cached for all of its
@@ -148,7 +148,7 @@ class TestClearUrlCommand:
         result = runner.invoke(app, ["cache", "clear", "--url", "phorge.example.com"])
 
         assert result.exit_code == 0
-        assert "Removed 2 cached entries" in result.stdout
+        assert "Removed 2 cached lookups" in result.stdout
         assert _dirs() == []
 
     def test_rejects_a_value_naming_no_host(self, enabled_cache):
@@ -174,7 +174,7 @@ class TestTokenMismatchIsVisible:
         result = runner.invoke(app, ["cache", "clear"])
 
         assert result.exit_code == 0
-        assert "Removed 0 cached entries" in result.stdout
+        assert "Removed 0 cached lookups" in result.stdout
         assert "under a different token" in result.stderr
         assert "--url" in result.stderr
 
@@ -183,13 +183,13 @@ class TestTokenMismatchIsVisible:
 
         result = runner.invoke(app, ["cache", "clear"])
 
-        assert "Removed 1 cached entry" in result.stdout
+        assert "Removed 1 cached lookup" in result.stdout
         assert "different token" not in result.stderr
 
     def test_quiet_when_the_host_has_nothing_cached(self, enabled_cache):
         result = runner.invoke(app, ["cache", "clear"])
 
-        assert "Removed 0 cached entries" in result.stdout
+        assert "Removed 0 cached lookups" in result.stdout
         assert "different token" not in result.stderr
 
 
