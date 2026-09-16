@@ -66,6 +66,8 @@ phabfive P456
 # Search and filter
 phabfive maniphest search "migration tasks" --tag myproject
 phabfive maniphest search --tag myproject --order updated --limit 10
+phabfive maniphest search --author=@me          # tasks you created
+phabfive maniphest search --assigned=@me        # tasks assigned to you
 phabfive paste search "config"
 
 # Create and edit

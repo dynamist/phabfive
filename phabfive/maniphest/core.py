@@ -551,6 +551,8 @@ class Maniphest(Phabfive):
             "tag",
             "include",
             "exclude",
+            "assigned",
+            "author",
             "created-after",
             "updated-after",
             "column",
@@ -597,11 +599,72 @@ class Maniphest(Phabfive):
 
         return search_configs
 
+    def _resolve_user_filter_phids(self, value, label):
+        """
+        Resolve a user search filter into PHIDs.
+
+        Accepts "@me", a username, or a comma-separated list of either for
+        OR logic, e.g. "@me,user1,user2".
+
+        Parameters
+        ----------
+        value : str or None
+            The raw filter value. Falsy values mean "no filter".
+        label : str
+            Used in the log line, e.g. "assigned to" or "authored by".
+
+        Returns
+        -------
+        list
+            User PHIDs, in the order given. Empty if there is no filter.
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If any name cannot be resolved to a PHID. Filtering on a name
+            that does not exist would otherwise look like "no matches".
+        """
+        if not value:
+            return []
+
+        phids = []
+        resolved_names = []
+
+        for name in [n.strip() for n in value.split(",")]:
+            if name == "@me":
+                # user.whoami() is called directly because User.whoami()
+                # drops the phid from the response
+                try:
+                    whoami = self.phab.user.whoami()
+                except Exception as e:
+                    raise PhabfiveConfigException(
+                        f"Failed to get current user information: {e}"
+                    )
+                phid = whoami.get("phid")
+                if not phid:
+                    raise PhabfiveConfigException("Failed to get current user's PHID")
+                resolved_names.append(f"@me ({whoami.get('userName', 'unknown')})")
+            else:
+                phid = self._resolve_user_phid(name)
+                if not phid:
+                    raise PhabfiveConfigException(f"User '{name}' not found")
+                resolved_names.append(name)
+
+            phids.append(phid)
+
+        if len(resolved_names) > 1:
+            log.info(f"Filtering by tasks {label} any of: {', '.join(resolved_names)}")
+        else:
+            log.info(f"Filtering by tasks {label} {resolved_names[0]}")
+
+        return phids
+
     def _build_search_constraints(
         self,
         include_closed=False,
         text_query=None,
         assigned_phids=None,
+        author_phids=None,
         space_phids=None,
         created_after=None,
         created_before=None,
@@ -635,6 +698,11 @@ class Maniphest(Phabfive):
 
         if assigned_phids:
             constraints["assigned"] = assigned_phids
+
+        if author_phids:
+            # maniphest.search names this "authorPHIDs"; paste.search calls
+            # its own author filter "authors". See AGENTS.md.
+            constraints["authorPHIDs"] = author_phids
 
         if space_phids:
             constraints["spaces"] = space_phids
@@ -705,6 +773,7 @@ class Maniphest(Phabfive):
         include_task_ids=None,
         exclude_task_ids=None,
         assigned=None,
+        author=None,
         space=None,
         created_after=None,
         created_before=None,
@@ -738,6 +807,8 @@ class Maniphest(Phabfive):
                       when the filters match them. Applied before the limit, so freed
                       slots fill with other matches. Non-matching IDs are ignored.
         assigned      (str, optional): Filter by assignee. Use "@me" to filter tasks assigned to you,
+                      or provide username(s). Comma-separated for OR logic (e.g., "@me,user1,user2").
+        author        (str, optional): Filter by task author. Use "@me" to filter tasks you created,
                       or provide username(s). Comma-separated for OR logic (e.g., "@me,user1,user2").
         space         (str, optional): Space name or monogram (e.g., "S1" or "Public") to filter tasks by.
                       Limits search results to tasks in the specified Space.
@@ -773,6 +844,7 @@ class Maniphest(Phabfive):
                 text_query,
                 tag,
                 assigned,
+                author,
                 space,
                 created_after,
                 created_before,
@@ -817,46 +889,9 @@ class Maniphest(Phabfive):
             updated_before_days = parse_time_with_unit(updated_before)
             updated_before = days_ago_to_timestamp(updated_before_days)
 
-        # Resolve assigned filter - convert @me or username(s) to PHID(s)
-        # Supports OR logic with comma-separated values: @me,user1,user2
-        assigned_phids = []
-        if assigned:
-            # Split by comma to support OR logic
-            assignees = [a.strip() for a in assigned.split(",")]
-            resolved_names = []
-
-            for assignee in assignees:
-                if assignee == "@me":
-                    # Get current user's PHID using whoami
-                    try:
-                        whoami = self.phab.user.whoami()
-                        phid = whoami.get("phid")
-                        if phid:
-                            assigned_phids.append(phid)
-                            resolved_names.append(
-                                f"@me ({whoami.get('userName', 'unknown')})"
-                            )
-                        else:
-                            log.error("Failed to get current user's PHID")
-                            return {"tasks": [], "project_names": {}}
-                    except Exception as e:
-                        log.error(f"Failed to get current user information: {e}")
-                        return {"tasks": [], "project_names": {}}
-                else:
-                    # Resolve username to PHID
-                    phid = self._resolve_user_phid(assignee)
-                    if not phid:
-                        log.error(f"User '{assignee}' not found")
-                        return {"tasks": [], "project_names": {}}
-                    assigned_phids.append(phid)
-                    resolved_names.append(assignee)
-
-            if len(assignees) > 1:
-                log.info(
-                    f"Filtering by tasks assigned to any of: {', '.join(resolved_names)}"
-                )
-            else:
-                log.info(f"Filtering by tasks assigned to {resolved_names[0]}")
+        # Resolve the user filters - convert @me or username(s) to PHID(s)
+        assigned_phids = self._resolve_user_filter_phids(assigned, "assigned to")
+        author_phids = self._resolve_user_filter_phids(author, "authored by")
 
         # Resolve space filter - convert space name/monogram(s) to PHID(s)
         # Supports: glob patterns (*, S*, *Public*), comma-separated list (S9,S10)
@@ -988,6 +1023,7 @@ class Maniphest(Phabfive):
                 include_closed=include_closed,
                 text_query=text_query,
                 assigned_phids=assigned_phids,
+                author_phids=author_phids,
                 space_phids=space_phids,
                 created_after=created_after,
                 created_before=created_before,
@@ -1001,6 +1037,7 @@ class Maniphest(Phabfive):
                 include_closed=include_closed,
                 text_query=text_query,
                 assigned_phids=assigned_phids,
+                author_phids=author_phids,
                 space_phids=space_phids,
                 created_after=created_after,
                 created_before=created_before,
@@ -1251,6 +1288,8 @@ class Maniphest(Phabfive):
                 search_params["text_query"] = text_query
             if assigned:
                 search_params["assigned"] = assigned
+            if author:
+                search_params["author"] = author
             if space:
                 search_params["space"] = space
             if updated_after_original:

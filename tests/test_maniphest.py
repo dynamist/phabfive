@@ -2404,6 +2404,25 @@ class TestTaskSearchIncludeExclude:
         assert configs[0]["search"]["exclude"] == "T3"
 
     @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_load_search_config_accepts_user_filters(self, mock_init, tmp_path):
+        """YAML search templates support the assigned/author filters.
+
+        Both were readable by the CLI's get_param() but rejected by the
+        template validator, so `assigned:` in a template was an error.
+        """
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        template = tmp_path / "search.yaml"
+        template.write_text(
+            "search:\n  assigned: '@me'\n  author: alice\n", encoding="utf-8"
+        )
+
+        configs = maniphest._load_search_config(str(template))
+
+        assert configs[0]["search"]["assigned"] == "@me"
+        assert configs[0]["search"]["author"] == "alice"
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_load_search_config_accepts_include_as_yaml_list(self, mock_init, tmp_path):
         """YAML search templates support include/exclude as actual lists."""
         mock_init.return_value = None

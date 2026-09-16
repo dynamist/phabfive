@@ -60,6 +60,8 @@ Find tasks that are blocked or have been in blocking states. Useful for identify
 search:
   # Any search parameters supported by phabfive maniphest search
   tag: "project-name"
+  author: "@me"        # task author; username, @me, or "@me,alice" for OR
+  assigned: "@me"      # task assignee; same value syntax as author
   status: "in:Open"
   column: "in:In Progress"
   priority: "in:High"

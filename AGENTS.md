@@ -122,8 +122,7 @@ When implementing new Phorge apps (countdown, paste, maniphest, etc.), **verify 
 6. **Verify search constraint names per endpoint**: `*.search` constraints are
    named per application and are not interchangeable
    - author filter: `paste.search` uses `authors`, `maniphest.search` uses `authorPHIDs`
-   - `maniphest.search` has no author filter in phabfive today; it filters by
-     assignee with `assigned`
+   - assignee filter: `maniphest.search` uses `assigned`; `paste.search` has none
    - a wrong key fails with `ERR-INVALID-CONSTRAINT`, so check it against the
      instance before assuming another app's name carries over:
      ```bash
