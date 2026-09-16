@@ -374,10 +374,12 @@ def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
         Matching project names, as (name, description) tuples where a
         description applies
     """
-    # No default values for tags - they are instance-specific
-    projects = _get_values_with_api_fallback(
-        lambda phab: _fetch_projects_named(phab, incomplete), []
-    )
+    # No default values for tags - they are instance-specific. _fetch_or_none
+    # rather than the fallback helper, so that an unreachable API is not
+    # mistaken for an instance that has no matching project.
+    projects = _fetch_or_none(lambda phab: _fetch_projects_named(phab, incomplete))
+    if projects is None:
+        return []
 
     incomplete_lower = incomplete.lower()
     by_name = {}

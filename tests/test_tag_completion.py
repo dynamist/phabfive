@@ -101,8 +101,16 @@ class TestServerSideLookup:
         assert phab.project.search.call_count == fetched
 
     def test_api_failure_offers_nothing(self):
-        with patch.object(completers, "_get_values_with_api_fallback", return_value=[]):
+        with patch.object(
+            completers,
+            "_get_values_with_api_fallback",
+            side_effect=lambda fetch, default: default,
+        ):
             assert complete_tag("Kan") == []
+
+    def test_no_matches_is_not_a_failure(self):
+        """An instance with no matching project offers nothing, and says so."""
+        assert _complete_with(_phab([]), "Kan") == []
 
 
 class TestMatching:
