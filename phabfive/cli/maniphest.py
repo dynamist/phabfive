@@ -166,6 +166,12 @@ def show(
         result, output_format, maniphest, show_description=not no_description
     )
 
+    # A task that does not exist is a failed lookup, not an empty result.
+    # Exit non-zero even when some of the requested tasks were shown, so
+    # scripts can tell a partial result from a complete one.
+    if result is None or result.get("missing_ids"):
+        raise typer.Exit(1)
+
 
 @maniphest_app.command()
 def comment(
