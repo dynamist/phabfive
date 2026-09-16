@@ -63,6 +63,7 @@ search:
   status: "in:Open"
   column: "in:In Progress"
   priority: "in:High"
+  order: "updated:asc"
   created-after: "1w"  # Time units: h, d, w, m, y (or use numbers for days)
   updated-after: "1w"
   show-history: true
@@ -104,6 +105,9 @@ search:
 - `created-before`: Tasks created more than TIME ago (e.g., `"1w"`, `"2m"`, or `7` for days)
 - `updated-after`: Tasks updated within TIME (e.g., `"1w"`, `"2m"`, or `7` for days)
 - `updated-before`: Tasks updated more than TIME ago (e.g., `"1w"`, `"2m"`, or `7` for days)
+- `order`: Result ordering as `<field>[:asc|:desc]`, e.g. `"priority"`,
+  `"updated:asc"`, `"title"`. Defaults to `"priority"`. See
+  [Result Ordering](maniphest-cli.md#result-ordering)
 - `column`: Column transition patterns
 - `priority`: Priority transition patterns
 - `status`: Status transition patterns

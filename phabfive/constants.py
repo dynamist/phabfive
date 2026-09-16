@@ -143,6 +143,47 @@ PRIORITY_VALUES = {
     "wish": 0,
 }
 
+# Result ordering for `maniphest search`, expressed as "<field>[:asc|:desc]".
+#
+# Listed in the same order as Phorge's own "Order" dropdown for Maniphest, so
+# --help and shell completion read like the web UI.
+MANIPHEST_ORDER_FIELDS = [
+    "priority",
+    "updated",
+    "created",
+    "closed",
+    "title",
+    "relevance",
+]
+
+# The direction a bare field means, i.e. the one people usually want: highest
+# or newest first for the numeric fields, A-Z for the title. None marks a field
+# that takes no direction at all.
+MANIPHEST_ORDER_DIRECTIONS = {
+    "priority": "desc",
+    "updated": "desc",
+    "created": "desc",
+    "closed": "desc",
+    "title": "asc",
+    "relevance": None,
+}
+
+# Phorge picks the first builtin order when the API is given none, and for
+# Maniphest that is "priority" -- the same default as the web UI.
+MANIPHEST_ORDER_DEFAULT = "priority"
+
+# Every spelling the parser accepts, for error messages and docs. Both
+# directions exist for every directional field, so nothing is implicit-only.
+MANIPHEST_ORDER_CHOICES = [
+    value
+    for field in MANIPHEST_ORDER_FIELDS
+    for value in (
+        [field]
+        if MANIPHEST_ORDER_DIRECTIONS[field] is None
+        else [field, f"{field}:asc", f"{field}:desc"]
+    )
+]
+
 __all__ = [
     "AutoOption",
     "MISSING_CONFIG_HINTS",
@@ -152,6 +193,10 @@ __all__ = [
     "IO_NEW_URI_CHOICES",
     "COMMENTS_SUPPORTED",
     "LogLevel",
+    "MANIPHEST_ORDER_CHOICES",
+    "MANIPHEST_ORDER_DEFAULT",
+    "MANIPHEST_ORDER_DIRECTIONS",
+    "MANIPHEST_ORDER_FIELDS",
     "MONOGRAM_SHORTCUT",
     "MONOGRAMS",
     "OutputFormat",

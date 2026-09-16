@@ -3,7 +3,12 @@
 
 from typing import List, Optional
 
-from phabfive.constants import PASTE_LANGUAGES, REPO_STATUS_CHOICES
+from phabfive.constants import (
+    MANIPHEST_ORDER_DIRECTIONS,
+    MANIPHEST_ORDER_FIELDS,
+    PASTE_LANGUAGES,
+    REPO_STATUS_CHOICES,
+)
 
 # Pattern prefixes for transition filters
 PATTERN_PREFIXES = ["in:", "not:in:", "from:", "to:", "been:", "never:"]
@@ -604,3 +609,29 @@ def complete_passphrase_type(incomplete: str) -> List[str]:
         Matching credential type completions
     """
     return _complete_fixed(incomplete, PASSPHRASE_TYPES)
+
+
+def complete_order(incomplete: str) -> List[str]:
+    """Complete result ordering values for maniphest search --order.
+
+    Completes progressively rather than dumping every spelling: the bare
+    fields first, then the two directions once a ":" is typed.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching order completions
+    """
+    if ":" in incomplete:
+        field = incomplete.split(":", 1)[0]
+        if not MANIPHEST_ORDER_DIRECTIONS.get(field):
+            # Unknown field, or one that takes no direction
+            return []
+        return _complete_fixed(incomplete, [f"{field}:asc", f"{field}:desc"])
+
+    return _complete_fixed(incomplete, MANIPHEST_ORDER_FIELDS)

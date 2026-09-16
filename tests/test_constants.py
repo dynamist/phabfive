@@ -72,3 +72,24 @@ def test_phab_url_validator_invalid():
     # Invalid IPv6 (missing brackets)
     assert not re.match(pattern, "http://::1/api/")
     assert not re.match(pattern, "http://2001:db8::1/api/")
+
+
+def test_maniphest_order_tables_agree():
+    from phabfive.constants import (
+        MANIPHEST_ORDER_CHOICES,
+        MANIPHEST_ORDER_DEFAULT,
+        MANIPHEST_ORDER_DIRECTIONS,
+        MANIPHEST_ORDER_FIELDS,
+    )
+
+    assert MANIPHEST_ORDER_DEFAULT in MANIPHEST_ORDER_CHOICES
+    assert set(MANIPHEST_ORDER_DIRECTIONS) == set(MANIPHEST_ORDER_FIELDS)
+
+    for field in MANIPHEST_ORDER_FIELDS:
+        assert field in MANIPHEST_ORDER_CHOICES
+        if MANIPHEST_ORDER_DIRECTIONS[field] is None:
+            # A directionless field has exactly one spelling
+            assert f"{field}:asc" not in MANIPHEST_ORDER_CHOICES
+        else:
+            assert f"{field}:asc" in MANIPHEST_ORDER_CHOICES
+            assert f"{field}:desc" in MANIPHEST_ORDER_CHOICES

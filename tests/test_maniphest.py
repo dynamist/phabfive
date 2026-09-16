@@ -1164,7 +1164,7 @@ class TestYAMLOutput:
                     "fields": {
                         "name": "Bug: Authentication failed in api.login()",
                         "status": {"name": "Open"},
-                        "priority": {"name": "High"},
+                        "priority": {"name": "High", "value": 80},
                         "description": {
                             "raw": "Steps to reproduce:\n1. Call api.login()\n2. Check response"
                         },
@@ -1193,7 +1193,7 @@ class TestYAMLOutput:
                     "fields": {
                         "name": "Feature request: Add support for {template} variables",
                         "status": {"name": "Resolved"},
-                        "priority": {"name": "Normal"},
+                        "priority": {"name": "Normal", "value": 50},
                         "description": {"raw": ""},
                         "dateCreated": 1234567800,
                         "dateModified": 1234567850,
@@ -2212,16 +2212,22 @@ class TestTaskSearchTextQuery:
 
 
 class TestTaskSearchIncludeExclude:
-    """Test suite for --include/--exclude force-include/exclude of tasks."""
+    """Test suite for --include/--exclude force-include/exclude of tasks.
 
-    def _make_task(self, task_id):
+    Matched tasks come back in the default "priority" order, so tasks left at
+    the same priority tie-break on id, newest first. That is why the expected
+    ids below descend. Force-included tasks are appended after the limit and
+    keep the order they were requested in, so they stay at the tail regardless.
+    """
+
+    def _make_task(self, task_id, priority=50):
         return {
             "id": task_id,
             "phid": f"PHID-TASK-{task_id}",
             "fields": {
                 "name": f"Test Task {task_id}",
                 "status": {"name": "Open"},
-                "priority": {"name": "Normal"},
+                "priority": {"name": "Normal", "value": priority},
                 "description": {"raw": f"Description {task_id}"},
             },
             "attachments": {"columns": {"boards": {}}},
@@ -2307,7 +2313,10 @@ class TestTaskSearchIncludeExclude:
 
         result = maniphest.task_search(text_query="x", include_task_ids=[1, 2069])
 
-        assert self._result_ids(result) == [1, 2, 2069]
+        # T2 then T1: equal priority, so id tie-breaks newest first. T1 is the
+        # overlap and keeps its place among the matches rather than being
+        # re-appended, and T2069 is the only genuinely included task.
+        assert self._result_ids(result) == [2, 1, 2069]
 
     @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_included_tasks_survive_limit(self, mock_init):
@@ -2321,7 +2330,9 @@ class TestTaskSearchIncludeExclude:
 
         result = maniphest.task_search(text_query="x", include_task_ids=[2069], limit=2)
 
-        assert self._result_ids(result) == [1, 2, 2069]
+        # The limit keeps the top two of the ordered matches, T3 and T2, and
+        # the included task is appended past it.
+        assert self._result_ids(result) == [3, 2, 2069]
 
     @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_missing_included_task_logged(self, mock_init, caplog):
@@ -2362,7 +2373,7 @@ class TestTaskSearchIncludeExclude:
 
         result = maniphest.task_search(text_query="x", exclude_task_ids=[1], limit=2)
 
-        assert self._result_ids(result) == [2, 3]
+        assert self._result_ids(result) == [3, 2]
 
     @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_excluding_non_matching_id_is_noop(self, mock_init):
