@@ -23,7 +23,7 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Set up Python
+      - name: Set up Python 3.13
         run: uv python install 3.13
 
       - name: Build package
@@ -86,7 +86,7 @@ jobs:
         if: ${{ !matrix.skip_signing }}
         uses: sigstore/cosign-installer@v4.1.2
 
-      - name: Set up Python
+      - name: Set up Python 3.14
         uses: actions/setup-python@v6
         with:
           python-version: "3.14"
