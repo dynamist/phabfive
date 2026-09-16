@@ -843,3 +843,143 @@ def resolve_space_phids(phab, space: str, all_spaces: dict | None = None) -> lis
         raise
     except Exception as e:
         raise PhabfiveRemoteException(f"Failed to resolve space '{space}': {e}")
+
+
+def ambiguous_space_message(space, matched):
+    """
+    Describe the Spaces a pattern or a name matches more than one of.
+
+    Parameters
+    ----------
+    space : str
+        The Space as given by the user
+    matched : list
+        (monogram, entry) pairs for the matching Spaces
+
+    Returns
+    -------
+    str
+        Error message naming each match by monogram
+    """
+    described = [
+        monogram if entry["name"] == monogram else f"{monogram} ({entry['name']})"
+        for monogram, entry in matched
+    ]
+
+    return (
+        f"Space '{space}' is ambiguous, it matches: {', '.join(described)}. "
+        "Use a monogram to name one."
+    )
+
+
+def describe_space(resolved):
+    """How a resolved Space reads to a person, e.g. "S10 (Archive)".
+
+    A Space whose name is just its monogram, which is how an unnamed one comes
+    back, is described by the monogram alone rather than repeating it.
+    """
+    monogram = resolved["monogram"]
+    name = resolved.get("name", monogram)
+
+    return monogram if name == monogram else f"{monogram} ({name})"
+
+
+def _spaces_matched(all_spaces, space, phids):
+    """The Spaces a pattern picked out, paired back with their monograms.
+
+    A wildcard's matches come back as PHIDs, but a plain name resolves to a
+    single PHID even when several Spaces share that name, so the name is
+    matched again here. Filtering can live with the first of them; placing an
+    object in one cannot.
+    """
+    lowered = space.lower()
+
+    return [
+        (monogram, entry)
+        for monogram, entry in all_spaces.items()
+        if entry["phid"] in phids or entry["name"].lower() == lowered
+    ]
+
+
+def resolve_space(phab, space, all_spaces: dict | None = None) -> dict:
+    """
+    Resolve a Space to the single one an object can be placed in.
+
+    Unlike `resolve_space_phids`, which filters and may name several Spaces at
+    once, this demands exactly one: a wildcard matching two Spaces, or a name
+    two Spaces share, is an error rather than a silent pick of the first.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    space : str
+        Space name (e.g., "Archive"), monogram (e.g., "S3"), or a wildcard
+        pattern that matches exactly one Space.
+    all_spaces : dict, optional
+        Spaces already fetched by `fetch_all_spaces`, to save re-enumerating
+        them. Fetched on demand when omitted, except for a monogram, which is
+        looked up directly.
+
+    Returns
+    -------
+    dict
+        The Space as `fetch_all_spaces` describes it, plus its "monogram"
+
+    Raises
+    ------
+    PhabfiveConfigException
+        If no Space matches the pattern, or more than one does
+    PhabfiveRemoteException
+        If the Spaces could not be fetched
+    """
+    if not space:
+        raise PhabfiveConfigException("No space name provided")
+
+    log.debug(f"Resolving space '{space}' to a single Space")
+
+    try:
+        # A monogram names one Space outright, so it costs a single lookup and
+        # nothing has to be enumerated.
+        if all_spaces is None and is_exact_monogram(space):
+            monogram = space.upper()
+            entry = _space_entry(
+                monogram, _lookup_names(phab, [monogram]).get(monogram)
+            )
+            if entry is not None:
+                log.debug(f"Resolved space '{space}' to PHID: {entry['phid']}")
+                return {"monogram": monogram, **entry}
+            # Fall through, so the error can list what the viewer can see
+
+        if all_spaces is None:
+            all_spaces = fetch_all_spaces(phab)
+
+        if not all_spaces:
+            raise PhabfiveConfigException(
+                f"Space '{space}' not found: this instance has no visible spaces"
+            )
+
+        matched = _spaces_matched(
+            all_spaces,
+            space,
+            resolve_space_phids(phab, space, all_spaces=all_spaces),
+        )
+
+        if len(matched) > 1:
+            raise PhabfiveConfigException(ambiguous_space_message(space, matched))
+
+        if not matched:
+            raise PhabfiveConfigException(
+                f"Space '{space}' not found. "
+                f"Available spaces: {', '.join(all_spaces.keys())}"
+            )
+
+        monogram, entry = matched[0]
+        log.debug(f"Resolved space '{space}' to {monogram}, PHID: {entry['phid']}")
+
+        return {"monogram": monogram, **entry}
+
+    except (PhabfiveConfigException, PhabfiveRemoteException):
+        raise
+    except Exception as e:
+        raise PhabfiveRemoteException(f"Failed to resolve space '{space}': {e}")
