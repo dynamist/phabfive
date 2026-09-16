@@ -3,6 +3,7 @@
 
 from typing import List, Optional
 
+from phabfive import cache
 from phabfive.constants import (
     MANIPHEST_ORDER_DIRECTIONS,
     MANIPHEST_ORDER_FIELDS,
@@ -67,6 +68,22 @@ def _get_values_with_api_fallback(fetch_func, default_values: List[str]) -> List
             return fetch_func(pf.phab)
     except Exception:
         return default_values
+
+
+# Returned by the fallback helper when the API could not be reached at all,
+# which a caller has to tell apart from a lookup that found nothing
+_FETCH_FAILED = object()
+
+
+def _fetch_or_none(fetch_func):
+    """Return what the API gave, or None when it could not be reached.
+
+    _get_values_with_api_fallback answers any failure with the caller's
+    defaults, so an empty list means both "no matches" and "the API blew up".
+    Caching the second would silence completion for a whole TTL.
+    """
+    result = _get_values_with_api_fallback(fetch_func, _FETCH_FAILED)
+    return None if result is _FETCH_FAILED else result
 
 
 def _complete_with_prefixes(incomplete: str, values: List[str]) -> List[str]:
@@ -442,6 +459,125 @@ def _fetch_users_named(phab, incomplete: str, include_disabled: bool) -> list:
     return users
 
 
+# Namespace the user lookups are cached under
+USER_CACHE_NAMESPACE = "users"
+
+
+def _user_cache_text(incomplete: str) -> str:
+    """Normalise the typed text into the query it actually produces.
+
+    _fetch_users_named drops the nameLike constraint for whitespace-only
+    input, so that has to key the same entry as an empty string. Matching is
+    case-insensitive, so the key is lowercased.
+    """
+    return incomplete.lower() if incomplete.strip() else ""
+
+
+def _user_cache_key(text: str, include_disabled: bool) -> str:
+    """Key one user.search query. The scope is part of it: a lookup that left
+    disabled accounts out is not an answer to one that wants them."""
+    scope = "all" if include_disabled else "enabled"
+    return f"{scope}|{text}"
+
+
+def _user_records(users: list) -> list:
+    """Reduce user.search results to the fields completion actually reads.
+
+    The raw objects carry phid, id, dates and policies - roughly ten times the
+    bytes, for nothing any completer looks at.
+    """
+    records = []
+    for user in users:
+        fields = user.get("fields", {})
+        records.append(
+            {
+                "username": fields.get("username", ""),
+                "realName": fields.get("realName") or "",
+                "disabled": "disabled" in (fields.get("roles") or []),
+            }
+        )
+    return records
+
+
+def _narrowed_from_cache(text: str, include_disabled: bool, directory, ttl):
+    """Return records for text out of a cached entry, or None.
+
+    The nameLike constraint is a case-insensitive substring match, so if P is
+    a prefix of T then every user matching T also matches P. A cached result
+    for a shorter prefix is therefore a superset of the one being asked for,
+    and can be filtered down locally instead of queried again - which is what
+    makes every keystroke after the first one free.
+
+    Two things make that unsound, and both are checked here:
+
+    - a truncated entry stopped at USER_COMPLETION_LIMIT, so it is an
+      arbitrary subset rather than the whole answer, and nothing can be
+      narrowed out of it. It still answers its own key, which is exactly what
+      an uncached lookup would have returned.
+    - an entry that excluded disabled accounts is not a superset of one that
+      includes them, so the scope has to match.
+    """
+    for length in range(len(text), -1, -1):
+        prefix = text[:length]
+        entry = cache.get(
+            USER_CACHE_NAMESPACE,
+            _user_cache_key(prefix, include_disabled),
+            ttl=ttl,
+            directory=directory,
+        )
+        if entry is cache.MISS or not isinstance(entry, dict):
+            continue
+
+        records = entry.get("records")
+        if records is None:
+            continue
+
+        if prefix == text:
+            return records
+
+        if entry.get("truncated"):
+            continue
+
+        # Apply what the server would have applied for the longer text
+        return [
+            record
+            for record in records
+            if text in record["username"].lower() or text in record["realName"].lower()
+        ]
+
+    return None
+
+
+def _cached_user_records(incomplete: str, include_disabled: bool) -> list:
+    """Return user records for the typed text, from cache where possible."""
+    text = _user_cache_text(incomplete)
+
+    # Resolved once: every probe below would otherwise re-read the config,
+    # which costs more than the lookups it is meant to save
+    directory, ttl = cache.context(USER_CACHE_NAMESPACE)
+
+    cached = _narrowed_from_cache(text, include_disabled, directory, ttl)
+    if cached is not None:
+        return cached
+
+    users = _fetch_or_none(
+        lambda phab: _fetch_users_named(phab, incomplete, include_disabled)
+    )
+    if users is None:
+        # The API was unavailable; offer nothing, and do not remember that
+        return []
+
+    records = _user_records(users)
+    cache.set(
+        USER_CACHE_NAMESPACE,
+        _user_cache_key(text, include_disabled),
+        {"records": records, "truncated": len(users) >= USER_COMPLETION_LIMIT},
+        ttl=ttl,
+        directory=directory,
+    )
+    return records
+
+
 def _user_completions(incomplete: str, include_disabled: bool) -> list:
     """Return (username, real name or None) pairs matching the typed text.
 
@@ -453,25 +589,21 @@ def _user_completions(incomplete: str, include_disabled: bool) -> list:
         # No username starts with "@", so the API has nothing to add here
         return [(ME_SHORTCUT, "yourself")] if ME_SHORTCUT.startswith(incomplete) else []
 
-    users = _get_values_with_api_fallback(
-        lambda phab: _fetch_users_named(phab, incomplete, include_disabled), []
-    )
+    records = _cached_user_records(incomplete, include_disabled)
 
     # @me is only offered before a username is typed, since it can never be
     # a prefix of one
     pairs = [(ME_SHORTCUT, "yourself")] if not incomplete else []
 
     incomplete_lower = incomplete.lower()
-    for user in sorted(users, key=lambda u: u["fields"]["username"].lower()):
-        username = user["fields"]["username"]
+    for record in sorted(records, key=lambda r: r["username"].lower()):
+        username = record["username"]
         if not username.lower().startswith(incomplete_lower):
             continue
-        pairs.append(
-            (
-                _in_typed_case(incomplete, username),
-                user["fields"].get("realName") or None,
-            )
-        )
+        if record["disabled"] and not include_disabled:
+            # A cached wider lookup can carry accounts this caller must not offer
+            continue
+        pairs.append((_in_typed_case(incomplete, username), record["realName"] or None))
 
     return pairs
 
