@@ -5,6 +5,7 @@
 import difflib
 import fnmatch
 import logging
+import re
 
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -12,6 +13,19 @@ from phabfive.exceptions import (
 )
 
 log = logging.getLogger(__name__)
+
+# There is no spaces.search endpoint, so Spaces can only be found by asking
+# phid.lookup about monograms. It takes a list of names, so the range costs a
+# couple of requests rather than one per monogram. The chunk is a hedge: no
+# per-request cap on how many names Conduit accepts is documented, and none was
+# observed, so raising it to SPACE_PROBE_MAX would make this a single request.
+#
+# SPACE_PROBE_MAX only bounds matching a wildcard or a name. A Space named by
+# monogram is looked up directly, however high its number.
+SPACE_PROBE_CHUNK = 50
+SPACE_PROBE_MAX = 100
+
+_MONOGRAM = re.compile(r"^S\d+$", re.IGNORECASE)
 
 
 def parse_plus_separated(values):
@@ -638,7 +652,77 @@ def resolve_project_phids_for_create(phab, project_names):
     return {"phids": phids, "slugs": slugs}
 
 
-def resolve_space_phids(phab, space: str) -> list[str]:
+def is_exact_monogram(space: str) -> bool:
+    """Whether a Space was named by monogram, e.g. "S1", rather than by name."""
+    return bool(space) and bool(_MONOGRAM.match(space))
+
+
+def _lookup_names(phab, names: list[str]) -> dict:
+    """Look up a batch of names, keeping only the ones that came back.
+
+    Phorge answers with a JSON array rather than an object when nothing
+    matches, so the response is not always a mapping and has to be unwrapped
+    before it is indexed.
+
+    Only names that were asked for are kept, so a lookup can never be credited
+    with an answer to a question it was not asked.
+    """
+    result = phab.phid.lookup(names=names)
+    found = getattr(result, "response", result)
+    if not isinstance(found, dict):
+        return {}
+    return {name: found[name] for name in names if name in found}
+
+
+def _space_entry(monogram: str, data) -> dict | None:
+    """One Space in the shape the resolver works with, or None if unusable."""
+    if not isinstance(data, dict) or "phid" not in data:
+        return None
+    return {
+        "phid": data["phid"],
+        "name": data.get("name", monogram),
+        "fullName": data.get("fullName", monogram),
+        "uri": data.get("uri", ""),
+    }
+
+
+def fetch_all_spaces(phab) -> dict:
+    """Every Space the viewer can see, keyed by monogram in numeric order.
+
+    phid.lookup is policy-filtered: a Space the viewer lacks permission for is
+    omitted exactly as though it did not exist. Visible monograms are therefore
+    sparse, so the whole range is asked about unconditionally - nothing may
+    stop early on the basis of what has been found, or a viewer who can see S1
+    and S90 would lose S90.
+
+    Raises
+    ------
+    PhabfiveRemoteException
+        If the lookup fails. A partially probed result is never returned: it is
+        indistinguishable from a complete one, which is how a transient error
+        would silently shorten somebody's Space list.
+    """
+    all_spaces = {}
+
+    try:
+        for start in range(1, SPACE_PROBE_MAX + 1, SPACE_PROBE_CHUNK):
+            stop = min(start + SPACE_PROBE_CHUNK - 1, SPACE_PROBE_MAX)
+            names = [f"S{i}" for i in range(start, stop + 1)]
+            found = _lookup_names(phab, names)
+
+            for monogram in names:
+                entry = _space_entry(monogram, found.get(monogram))
+                if entry is not None:
+                    all_spaces[monogram] = entry
+    except Exception as e:
+        raise PhabfiveRemoteException(f"Failed to list spaces: {e}")
+
+    log.debug(f"Found {len(all_spaces)} spaces: {list(all_spaces.keys())}")
+
+    return all_spaces
+
+
+def resolve_space_phids(phab, space: str, all_spaces: dict | None = None) -> list[str]:
     """
     Resolve a Space name, monogram, or wildcard pattern to list of PHIDs.
 
@@ -649,6 +733,9 @@ def resolve_space_phids(phab, space: str) -> list[str]:
     space : str
         Space name (e.g., "Public"), monogram (e.g., "S1"), or wildcard pattern.
         Supports: "*" (all), "S*" (starts with S), "*Public*" (contains Public).
+    all_spaces : dict, optional
+        Spaces already fetched by `fetch_all_spaces`, to save re-enumerating
+        them for each of several patterns. Fetched on demand when omitted.
 
     Returns
     -------
@@ -659,44 +746,30 @@ def resolve_space_phids(phab, space: str) -> list[str]:
     ------
     PhabfiveConfigException
         If no spaces match the pattern
+    PhabfiveRemoteException
+        If the Spaces could not be fetched
     """
     if not space:
         raise PhabfiveConfigException("No space name provided")
 
     log.debug(f"Resolving space '{space}' to PHID(s)")
 
-    # Fetch all spaces by iterating through monograms
-    # Unfortunately, there's no spaces.search API
-    all_spaces = {}  # monogram -> {"phid": ..., "name": ..., "uri": ...}
-
     try:
-        # Track consecutive misses to know when to stop
-        consecutive_misses = 0
-        max_consecutive_misses = 5  # Stop after 5 consecutive missing spaces
+        # A monogram names one Space outright, so it can be looked up directly.
+        # That is the common path - every search resolves PHAB_SPACE, normally
+        # "S1" - and unlike enumerating, it has no ceiling to run into.
+        if all_spaces is None and is_exact_monogram(space):
+            monogram = space.upper()
+            entry = _space_entry(
+                monogram, _lookup_names(phab, [monogram]).get(monogram)
+            )
+            if entry is not None:
+                log.debug(f"Resolved space '{space}' to PHID: {entry['phid']}")
+                return [entry["phid"]]
+            # Fall through, so the error can list what the viewer can see
 
-        for i in range(1, 100):  # Try S1 through S99
-            monogram = f"S{i}"
-            try:
-                lookup_result = phab.phid.lookup(names=[monogram])
-                if lookup_result and monogram in lookup_result:
-                    space_data = lookup_result[monogram]
-                    all_spaces[monogram] = {
-                        "phid": space_data["phid"],
-                        "name": space_data.get("name", monogram),
-                        "fullName": space_data.get("fullName", monogram),
-                        "uri": space_data.get("uri", ""),
-                    }
-                    consecutive_misses = 0  # Reset on success
-                else:
-                    consecutive_misses += 1
-                    if consecutive_misses >= max_consecutive_misses:
-                        break
-            except Exception:
-                consecutive_misses += 1
-                if consecutive_misses >= max_consecutive_misses:
-                    break
-
-        log.debug(f"Found {len(all_spaces)} spaces: {list(all_spaces.keys())}")
+        if all_spaces is None:
+            all_spaces = fetch_all_spaces(phab)
 
         if not all_spaces:
             log.warning("No spaces found in Phabricator instance")
@@ -766,7 +839,7 @@ def resolve_space_phids(phab, space: str) -> list[str]:
             f"Space '{space}' not found. Available spaces: {', '.join(all_spaces.keys())}"
         )
 
-    except PhabfiveConfigException:
+    except (PhabfiveConfigException, PhabfiveRemoteException):
         raise
     except Exception as e:
         raise PhabfiveRemoteException(f"Failed to resolve space '{space}': {e}")

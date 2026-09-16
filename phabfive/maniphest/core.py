@@ -40,11 +40,14 @@ from phabfive.maniphest.filters import (
 from phabfive.maniphest.formatters import build_task_boards, build_task_display_data
 from phabfive.maniphest.resolvers import (
     ambiguous_project_message,
+    fetch_all_spaces,
     fetch_project_lookup_maps,
     fetch_projects_by_phid,
+    is_exact_monogram,
     parse_plus_separated,
     resolve_project_phids,
     resolve_project_phids_for_create,
+    resolve_space_phids,
     resolve_user_phid,
     resolve_user_phids,
 )
@@ -125,6 +128,33 @@ class Maniphest(Phabfive):
     def _get_api_status_map(self):
         """Get status information from Phabricator API."""
         return get_api_status_map(self.phab)
+
+    @lru_cache(maxsize=1)
+    def _get_all_spaces(self):
+        """Every Space the viewer can see, probed once per command.
+
+        A `--with` template runs a search per document, and each search can
+        name several Spaces, so without this the whole probe runs again for
+        every one of them.
+        """
+        return fetch_all_spaces(self.phab)
+
+    def _resolve_space_patterns(self, space_patterns):
+        """Resolve comma-separated Space patterns to PHIDs, in order."""
+        # Enumerating every Space is only needed to match a wildcard or a
+        # name; a monogram is resolved with a single direct lookup.
+        all_spaces = None
+        if any(not is_exact_monogram(pattern) for pattern in space_patterns):
+            all_spaces = self._get_all_spaces()
+
+        space_phids = []
+        for space_pattern in space_patterns:
+            space_phids.extend(
+                resolve_space_phids(self.phab, space_pattern, all_spaces=all_spaces)
+            )
+
+        # Remove duplicates while preserving order
+        return list(dict.fromkeys(space_phids))
 
     def _fetch_all_transactions(
         self,
@@ -905,34 +935,20 @@ class Maniphest(Phabfive):
         space_phids = []
 
         if space:
-            from phabfive.maniphest.resolvers import resolve_space_phids
-
             # Split by comma to support multiple spaces (OR logic)
             space_patterns = [s.strip() for s in space.split(",")]
 
-            for space_pattern in space_patterns:
-                resolved = resolve_space_phids(self.phab, space_pattern)
-                space_phids.extend(resolved)
-
-            # Remove duplicates while preserving order
-            space_phids = list(dict.fromkeys(space_phids))
+            space_phids = self._resolve_space_patterns(space_patterns)
 
             log.info(f"Filtering to space(s): {space}")
         else:
             # Default to configured space(s) - supports glob patterns and comma-separated
-            from phabfive.maniphest.resolvers import resolve_space_phids
-
             default_space = self.conf.get("PHAB_SPACE", "S1")
             try:
                 # Split by comma to support multiple default spaces
                 space_patterns = [s.strip() for s in default_space.split(",")]
 
-                for space_pattern in space_patterns:
-                    resolved = resolve_space_phids(self.phab, space_pattern)
-                    space_phids.extend(resolved)
-
-                # Remove duplicates while preserving order
-                space_phids = list(dict.fromkeys(space_phids))
+                space_phids = self._resolve_space_patterns(space_patterns)
 
                 log.info(
                     f"Filtering to space(s): {default_space} (from PHAB_SPACE). "
