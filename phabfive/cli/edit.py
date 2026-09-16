@@ -9,6 +9,7 @@ import typer
 from phabfive.cli.completers import (
     complete_column_change,
     complete_priority_change,
+    complete_space,
     complete_status,
     complete_tag,
     complete_user,
@@ -91,6 +92,7 @@ def edit_command(
         None,
         "--space",
         help="Move to a Space (monogram, name, or unique pattern)",
+        autocompletion=complete_space,
     ),
     dry_run: bool = typer.Option(
         False,

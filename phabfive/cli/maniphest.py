@@ -15,6 +15,8 @@ from phabfive.cli.completers import (
     complete_priority,
     complete_priority_change,
     complete_priority_filter,
+    complete_space,
+    complete_space_filter,
     complete_status,
     complete_status_filter,
     complete_tag,
@@ -250,6 +252,7 @@ def create(
         None,
         "--space",
         help="Create the task in a Space (monogram, name, or unique pattern)",
+        autocompletion=complete_space,
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview without creating task"
@@ -423,7 +426,10 @@ def search(
         autocompletion=complete_user_list_filter,
     ),
     space: Optional[str] = typer.Option(
-        None, "--space", help="Filter by Space (supports wildcards)"
+        None,
+        "--space",
+        help="Filter by Space (supports wildcards)",
+        autocompletion=complete_space_filter,
     ),
     created_after: Optional[str] = typer.Option(
         None, "--created-after", help="Tasks created within TIME (e.g., 1h, 7d, 2w)"
@@ -754,6 +760,7 @@ def edit(
         None,
         "--space",
         help="Move to a Space (monogram, name, or unique pattern)",
+        autocompletion=complete_space,
     ),
     dry_run: bool = typer.Option(
         False,

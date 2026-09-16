@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Shell completion functions for phabfive CLI options."""
 
+from collections import Counter
 from typing import List, Optional
 
 from phabfive import cache
@@ -125,6 +126,7 @@ def _complete_with_prefixes(incomplete: str, values: List[str]) -> List[str]:
 # the instance, which the cache directory already is
 PRIORITY_CACHE_NAMESPACE = "priorities"
 STATUS_CACHE_NAMESPACE = "statuses"
+SPACE_CACHE_NAMESPACE = "spaces"
 VALUES_CACHE_KEY = "all"
 
 
@@ -179,6 +181,105 @@ def _get_statuses() -> List[str]:
     return _cached_values(
         STATUS_CACHE_NAMESPACE, _fetch_status_keys, DEFAULT_STATUS_VALUES
     )
+
+
+def _fetch_spaces(phab) -> list:
+    """Every visible Space, as [monogram, name] pairs.
+
+    fetch_all_spaces raises rather than answering a half-probed instance with
+    a shortened list, which is what makes its answer safe to remember: a
+    truncated Space list cannot be told apart from a complete one once it is
+    written down.
+    """
+    from phabfive.maniphest.resolvers import fetch_all_spaces
+
+    return [
+        [monogram, entry["name"]] for monogram, entry in fetch_all_spaces(phab).items()
+    ]
+
+
+def _get_spaces() -> list:
+    """Every visible Space - tries the API, offers nothing when it fails.
+
+    There is no list of default Spaces to fall back to the way there is for
+    priorities and statuses: which Spaces exist is particular to the instance,
+    and an invented one would complete to a value that cannot resolve. An
+    instance with no Spaces at all answers with an empty list, which is not
+    remembered, so it is probed on each tab - harmless, since nothing on such
+    an instance takes --space anyway.
+    """
+    return _cached_values(SPACE_CACHE_NAMESPACE, _fetch_spaces, [])
+
+
+def _space_completions(incomplete: str) -> list:
+    """The Spaces matching what has been typed, as (value, description) pairs.
+
+    A monogram is always offered, described by the Space's name. The name is
+    offered too once something has been typed that it matches, since it
+    resolves just as well and is what somebody is likely to be typing; with
+    nothing typed yet the monograms alone are the shorter list, and carry the
+    names as their descriptions anyway.
+
+    A name several Spaces share is left out, and only their monograms offered,
+    the way an ambiguous project name is: completing to it would earn nothing
+    but the "Space 'X' is ambiguous" error.
+    """
+    spaces = [(monogram, name) for monogram, name in _get_spaces()]
+    shared = Counter(name.lower() for _, name in spaces)
+
+    typed = incomplete.lower()
+    pairs = []
+
+    for monogram, name in spaces:
+        if monogram.lower().startswith(typed):
+            pairs.append((_in_typed_case(incomplete, monogram), name))
+
+        if typed and shared[name.lower()] == 1 and name.lower().startswith(typed):
+            pairs.append((_in_typed_case(incomplete, name), monogram))
+
+    return pairs
+
+
+def complete_space(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete Spaces for placing a task in one.
+
+    Used by maniphest create --space and edit --space, where the value has to
+    name exactly one Space, so wildcards are not offered.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching monograms and names, as (value, description) tuples
+    """
+    return _as_completions(_space_completions(incomplete))
+
+
+def complete_space_filter(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete a Space filter, which takes a comma-separated list.
+
+    Used by maniphest search --space, where "S1,S3" means "tasks in either".
+    Only the Space after the last comma is completed, and the ones before it
+    are kept in the offered value, since the shell replaces the whole word. A
+    wildcard is left alone: "*rch*" is a prefix of nothing.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching Spaces, each prefixed with what was already typed
+    """
+    typed, comma, last = incomplete.rpartition(",")
+
+    return _as_completions(_space_completions(last), prefix=f"{typed}{comma}")
 
 
 def _starting_with(incomplete: str, values: List[str]) -> List[str]:
