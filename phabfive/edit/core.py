@@ -43,6 +43,7 @@ class Edit(Phabfive):
         description=None,
         subscribe=None,
         comment=None,
+        space=None,
         dry_run=False,
         force=False,
     ):
@@ -59,6 +60,7 @@ class Edit(Phabfive):
             description (str): Description text, or "" to open $EDITOR
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
+            space (str): Space to move the object to
             dry_run (bool): Show changes without applying
             force (bool): Skip confirmation prompts
 
@@ -76,6 +78,7 @@ class Edit(Phabfive):
                 description is not None,
                 subscribe,
                 comment,
+                space,
             ]
         )
         edit_description_in_editor = not has_any_option
@@ -104,6 +107,7 @@ class Edit(Phabfive):
                             description=description,
                             subscribe=subscribe,
                             comment=comment,
+                            space=space,
                             dry_run=dry_run,
                             force=force,
                             edit_description_in_editor=edit_description_in_editor,
@@ -146,6 +150,7 @@ class Edit(Phabfive):
                             description=description,
                             subscribe=subscribe,
                             comment=comment,
+                            space=space,
                             dry_run=dry_run,
                         )
                     elif object_type == "passphrase":
@@ -190,6 +195,7 @@ class Edit(Phabfive):
                         description=description,
                         subscribe=subscribe,
                         comment=comment,
+                        space=space,
                         dry_run=dry_run,
                     )
                     if retcode != 0:
@@ -232,6 +238,7 @@ class Edit(Phabfive):
         description=None,
         subscribe=None,
         comment=None,
+        space=None,
         dry_run=False,
         force=False,
         edit_description_in_editor=False,
@@ -249,6 +256,7 @@ class Edit(Phabfive):
             description (str): Description text, "" to clear, "-" to read from stdin
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
+            space (str): Space to move the task to
             dry_run (bool): Show changes without applying
             force (bool): Skip confirmation prompts
             edit_description_in_editor (bool): Open $EDITOR for description
@@ -349,6 +357,7 @@ class Edit(Phabfive):
                 description=final_description,
                 subscribe=subscribe,
                 comment=comment,
+                space=space,
                 dry_run=dry_run,
             )
 

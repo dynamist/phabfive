@@ -750,6 +750,11 @@ def edit(
         "--comment",
         help="Add comment with changes",
     ),
+    space: Optional[str] = typer.Option(
+        None,
+        "--space",
+        help="Move to a Space (monogram, name, or unique pattern)",
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -772,6 +777,7 @@ def edit(
         phabfive maniphest edit T123,T124 --status=resolved
         phabfive maniphest edit T123 T124 "New Title"
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
+        phabfive maniphest edit T123 --space=S3
     """
     # Greedy monogram parsing: leading args that are task monograms (or
     # comma-separated lists of them) are task IDs; the first non-matching
@@ -818,6 +824,7 @@ def edit(
         description=description,
         subscribe=subscribe,
         comment=comment_text,
+        space=space,
         dry_run=dry_run,
         force=force,
     )
