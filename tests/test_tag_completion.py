@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+# python std lib
+import re
+
 # 3rd party imports
 from unittest.mock import MagicMock, patch
 
@@ -33,6 +36,28 @@ def _complete_with(phab, incomplete):
         return complete_tag(incomplete)
 
 
+def _tokens(text: str) -> list:
+    """Split the way Phorge tokenises a project name: on non-word characters.
+
+    "GUNNAR-Core" is two tokens, not one, which is why a search for "Core"
+    finds it.
+    """
+    return [token for token in re.split(r"\W+", text.lower()) if token]
+
+
+def _name_matches(name: str, text: str) -> bool:
+    """Model the project.search "name" constraint.
+
+    Every token of the query has to prefix-match some token of the name - the
+    query is tokenised too, so "sprint 1" is two constraints, not one string.
+    """
+    name_tokens = _tokens(name)
+    return all(
+        any(token.startswith(wanted) for token in name_tokens)
+        for wanted in _tokens(text)
+    )
+
+
 def _phab(projects, page_size=100):
     """Fake project.search: word-prefix "name" constraint, paged by cursor."""
     phab = MagicMock()
@@ -40,13 +65,8 @@ def _phab(projects, page_size=100):
     def search(constraints, limit=100, after=None):
         matches = projects
         if "name" in constraints:
-            text = constraints["name"].lower()
-            matches = [
-                p
-                for p in projects
-                if any(w.startswith(text) for w in p["fields"]["name"].lower().split())
-                or p["fields"]["name"].lower().startswith(text)
-            ]
+            text = constraints["name"]
+            matches = [p for p in projects if _name_matches(p["fields"]["name"], text)]
         start = int(after or 0)
         size = min(limit, page_size)
         page = matches[start : start + size]
