@@ -27,18 +27,38 @@ def _connected(phab):
     return patch("phabfive.core.Phabfive", return_value=client)
 
 
-def _priorities(*names):
-    return {"data": [{"fields": {"name": name}} for name in names]}
+def _priorities(*pairs):
+    """Build a maniphest.priority.search answer in the shape Phorge sends.
+
+    Flat records with name, keywords, short, color and value - not the
+    fields/attachments shape the *.search endpoints use.
+    """
+    return {
+        "data": [
+            {
+                "name": name,
+                "keywords": list(keywords),
+                "short": name,
+                "color": "blue",
+                "value": 50,
+            }
+            for name, *keywords in pairs
+        ]
+    }
 
 
 class TestPriorityFetch:
-    def test_normalises_the_names_phorge_displays(self):
+    def test_reads_the_keyword_rather_than_the_displayed_name(self):
+        """The keyword is what a task is edited with, and "Needs Triage" is
+        "triage" - not something the displayed name can be reduced to."""
         phab = MagicMock()
         phab.maniphest.priority.search.return_value = _priorities(
-            "Unbreak Now!", "High", "Wishlist"
+            ("Unbreak Now!", "unbreak"),
+            ("Needs Triage", "triage"),
+            ("Wishlist", "wish", "wishlist"),
         )
 
-        assert get_api_priority_names(phab) == ["unbreak", "high", "wish"]
+        assert get_api_priority_names(phab) == ["unbreak", "triage", "wish"]
 
     def test_a_broken_lookup_raises_rather_than_inventing_priorities(self):
         """Its caller falls back; a caller that remembers must not be lied to."""
@@ -66,7 +86,9 @@ class TestCompletionFallback:
 
     def test_a_working_priority_lookup_is_preferred(self):
         phab = MagicMock()
-        phab.maniphest.priority.search.return_value = _priorities("Blocker", "Normal")
+        phab.maniphest.priority.search.return_value = _priorities(
+            ("Blocker", "blocker"), ("Normal", "normal")
+        )
 
         with _connected(phab):
             assert _get_priorities() == ["blocker", "normal"]

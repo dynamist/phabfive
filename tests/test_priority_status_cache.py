@@ -49,13 +49,15 @@ class Api:
             return self._complete()
 
 
-def _priority_api(*names, broken=False):
+def _priority_api(*keywords, broken=False):
     phab = MagicMock()
     if broken:
         phab.maniphest.priority.search.side_effect = RuntimeError("no such method")
     else:
         phab.maniphest.priority.search.return_value = {
-            "data": [{"fields": {"name": name}} for name in names]
+            "data": [
+                {"name": keyword.title(), "keywords": [keyword]} for keyword in keywords
+            ]
         }
     return Api(phab, _get_priorities)
 
@@ -78,7 +80,7 @@ def _calls(api):
 
 
 NAMESPACES = [
-    ("priorities", _priority_api, ("Blocker", "Normal"), ["blocker", "normal"]),
+    ("priorities", _priority_api, ("blocker", "normal"), ["blocker", "normal"]),
     ("statuses", _status_api, ("open", "onhold"), ["open", "onhold"]),
 ]
 
@@ -170,5 +172,5 @@ class TestNonAnswers:
     ):
         make_api(broken=True).complete()
 
-        api = make_api("Blocker") if namespace == "priorities" else make_api("open")
+        api = make_api("blocker") if namespace == "priorities" else make_api("open")
         assert api.complete() != default
