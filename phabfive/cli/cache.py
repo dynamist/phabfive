@@ -9,7 +9,9 @@ from phabfive import cache
 from phabfive.cli.completers import complete_cache_namespace, complete_cached_host
 from phabfive.core import Phabfive
 
-cache_app = typer.Typer(help="Inspect and clear cached completion data")
+cache_app = typer.Typer(
+    help="Inspect and clear cached completion data", no_args_is_help=True
+)
 
 
 def _get_output_format(ctx: typer.Context) -> str:

@@ -77,6 +77,10 @@ app = typer.Typer(
     name="phabfive",
     help="CLI for Phabricator and Phorge - built for humans and AI agents.",
     no_args_is_help=True,
+    # "phabfive -v" has a non-empty argv, so no_args_is_help never fires and
+    # click would answer with a bare "Missing command.". Let the callback run
+    # so it can print the command list instead.
+    invoke_without_command=True,
     add_completion=True,
 )
 
@@ -212,7 +216,7 @@ def resolve_log_level(verbose: int, quiet: int) -> str:
     return _LOG_LEVELS[index]
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     verbose: int = typer.Option(
@@ -265,6 +269,11 @@ def main(
     ctx.obj["format"] = output_format.value if output_format else None
     ctx.obj["ascii"] = ascii_when.value
     ctx.obj["hyperlink"] = hyperlink_when.value
+
+    # Global options but no command: show what the commands are
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help(), err=True)
+        raise typer.Exit(2)
 
 
 app.add_typer(cache_app, name="cache")
