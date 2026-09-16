@@ -81,6 +81,30 @@ Two milestones with the same name and the same 5-column workboards:
 
 Since they share a name, `--tag "Sprint 1"` only reaches one of them. Use the project ID (from `/project/view/<id>/`) or PHID to target a specific milestone, e.g. `--tag 9`.
 
+### Default Spaces
+
+Three spaces, at deliberately non-consecutive S numbers:
+
+- **S1 Default** - the default space, where everything lands unless told otherwise
+- **S3 Restricted**
+- **S10 Archive**
+
+The gaps are the point. Spaces have no Conduit search method, so they are found
+by probing `S1`, `S2`, `S3`... and `phid.lookup` omits a space the viewer cannot
+see exactly as though it did not exist. Visible numbers are therefore sparse on a
+real instance, and anything listing them has to probe past a gap rather than stop
+at the first miss. S10 sits more than five past S3, which is what an earlier
+implementation gave up after, so a dev instance now reproduces that case instead
+of the tidy one.
+
+Filter by them with `maniphest search --space`, and note that phabfive defaults to
+`PHAB_SPACE=S1`, so tasks in S3 and S10 are excluded until you ask for them:
+
+```bash
+phabfive maniphest search --space '*' --tag '*'
+phabfive maniphest search --space S3 --tag '*'
+```
+
 ## Configuration
 
 All settings can be customized via environment variables. Defaults are in `compose.yml` and can be overridden from the command line:

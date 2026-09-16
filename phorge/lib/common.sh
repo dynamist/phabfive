@@ -44,6 +44,17 @@ export DEFAULT_MILESTONES=(
   "QA:Sprint 1"
 )
 
+# Default spaces (S number:name:default flag). The numbers are deliberately
+# not consecutive: phid.lookup hides a Space the viewer cannot see exactly as
+# though it were absent, so visible S numbers are sparse on a real instance
+# and anything discovering them has to probe past a gap. S10 sits more than
+# five past S3, which is what an earlier implementation gave up after.
+export DEFAULT_SPACES=(
+  "1:Default:default"
+  "3:Restricted:"
+  "10:Archive:"
+)
+
 # Function to call a Conduit method in-process as the admin user.
 # Runs without the web server, so it can be used during setup.
 conduit_call() {
