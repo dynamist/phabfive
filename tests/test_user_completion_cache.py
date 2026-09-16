@@ -16,6 +16,7 @@ import pytest
 
 # phabfive imports
 from phabfive import cache
+from tests.conftest import CONF
 from phabfive.cli import completers
 from phabfive.cli.completers import (
     USER_COMPLETION_LIMIT,
@@ -24,22 +25,6 @@ from phabfive.cli.completers import (
     complete_user_filter,
 )
 from tests.test_user_completion import USERS, _phab, _user
-
-CONF = {
-    "PHAB_URL": "https://phorge.example.com/api/",
-    "PHAB_TOKEN": "api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "PHAB_CACHE": True,
-    "PHAB_CACHE_TTL": 0,
-    "PHAB_CACHE_DIR": "",
-}
-
-
-@pytest.fixture
-def enabled_cache(monkeypatch):
-    """Switch the cache on, with configuration that needs no real files."""
-    monkeypatch.setenv("PHAB_CACHE", "1")
-    with patch("phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)):
-        yield
 
 
 class Api:
