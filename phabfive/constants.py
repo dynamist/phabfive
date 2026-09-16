@@ -95,7 +95,6 @@ DISPLAY_CHOICES = ["default", "always", "hidden"]
 REPO_STATUS_CHOICES = ["active", "inactive"]
 
 CONFIGURABLES = [
-    "PHABFIVE_DEBUG",
     "PHAB_TOKEN",
     "PHAB_URL",
     "PHAB_SPACE",
@@ -105,7 +104,6 @@ CONFIGURABLES = [
     "PHAB_CACHE_DIR",
 ]
 DEFAULTS = {
-    "PHABFIVE_DEBUG": False,
     "PHAB_TOKEN": "",
     "PHAB_URL": "",
     "PHAB_SPACE": "S1",

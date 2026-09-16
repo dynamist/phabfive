@@ -11,7 +11,7 @@ every single search.
 The notices now sit at INFO alongside the other filter messages, and the
 CLI configures logging so that `-v` opts into them. These tests pin both
 halves: the level the notices are logged at, and the level the CLI
-derives from `-v` / `--log-level`.
+derives from `-v` / `-q`.
 """
 
 import logging
