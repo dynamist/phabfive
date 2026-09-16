@@ -14,6 +14,11 @@ The Makefile automatically detects whether you have podman or docker installed (
 
 **2. Stop Phorge:** When you are done, press `Ctrl+C`, then run `make down` to remove the containers.
 
+`make down` also clears phabfive's completion cache for this host. An instance keeps no data across a rebuild,
+but the cache is keyed by URL and token, neither of which changes, so a rebuilt instance would otherwise reuse
+the previous one's cached projects and users. Every account cached for this host is cleared, since a rebuild
+invalidates all of them; no other host is touched.
+
 Phorge is served at <http://phorge.localhost> and uploaded files at <http://cdn.localhost>. No `/etc/hosts` entry is needed: names under `.localhost` are reserved for the loopback address by [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761#section-6.3), and resolvers such as systemd-resolved map them automatically.
 
 If your resolver does not, add the entries yourself:
@@ -175,7 +180,7 @@ All operations are idempotent - safe to run multiple times. Container restarts w
 
 ```bash
 make up      # Start Phorge (mariadb + phorge)
-make down    # Stop containers
+make down    # Stop containers and clear this instance's completion cache
 make logs    # View container logs
 make shell   # Open shell in phorge container
 ```

@@ -8,6 +8,10 @@ CONTAINER_RUNTIME = $(or \
 
 COMPOSE_FILE := compose.yml
 
+# Same default as compose.yml, so overriding it for `make up` also points the
+# cache clearing below at the instance that was actually started
+PHORGE_URL ?= http://phorge.localhost
+
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
 	@awk 'BEGIN {FS = ":.*?## "; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} \
@@ -79,8 +83,11 @@ check-runtime: ## Checks runtime and exits if not found
 
 ##@ Phorge
 
-down: check-runtime ## stop and remove phorge containers
+down: check-runtime ## stop phorge and clear its completion cache
 	$(CONTAINER_RUNTIME) compose -f $(COMPOSE_FILE) down
+	@echo "Clearing the completion cache for $(PHORGE_URL)..."
+	@uv run phabfive cache clear --url $(PHORGE_URL) 2>/dev/null \
+		|| echo "  skipped, could not run phabfive (try: make install)"
 
 up: check-runtime ## start phorge (mariadb detached, phorge in foreground)
 	@echo "Starting mariadb in background..."
