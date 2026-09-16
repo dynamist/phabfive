@@ -38,8 +38,8 @@ phabfive passphrase search --type=password
 # Show multiple secrets at once
 phabfive passphrase show K1 K2 K3
 
-# List pastes
-phabfive paste list
+# Search pastes
+phabfive paste search "deploy"
 
 # Search Maniphest tasks
 phabfive maniphest search myproject

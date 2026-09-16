@@ -4,19 +4,18 @@
 # Usage: ./phorge/phabfive [phabfive args...]
 #
 # Examples:
-#   ./phorge/phabfive user whoami
-#   ./phorge/phabfive paste list
-#   ./phorge/phabfive maniphest search qa
+#   ./phorge/phabfive diffusion repo list
+#   ./phorge/phabfive maniphest search --tag '*'
 
 set -e
 
 # Default to local Phorge dev instance credentials
-PHAB_URL="${PHAB_URL:-http://phorge.domain.tld/api/}"
+PHAB_URL="${PHAB_URL:-http://phorge.localhost/api/}"
 PHAB_TOKEN="${PHAB_TOKEN:-api-supersecr3tapikeyfordevelop1}"
 
 # Use same hostnames as compose.yml defaults
-PHORGE_HOST="${PHORGE_HOST:-phorge.domain.tld}"
-PHORGE_CDN_HOST="${PHORGE_CDN_HOST:-cdn.domain.tld}"
+PHORGE_HOST="${PHORGE_HOST:-phorge.localhost}"
+PHORGE_CDN_HOST="${PHORGE_CDN_HOST:-cdn.localhost}"
 
 # Detect container runtime (prefer podman)
 if command -v podman &>/dev/null; then

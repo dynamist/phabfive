@@ -5,7 +5,7 @@
 set -e
 
 # Configuration - can be overridden via environment variables
-export PHORGE_URL="${PHORGE_URL:-http://phorge.domain.tld}"
+export PHORGE_URL="${PHORGE_URL:-http://phorge.localhost}"
 export PHORGE_PATH="${PHORGE_PATH:-/app/phorge}"
 export PHORGE_ADMIN_USER="${PHORGE_ADMIN_USER:-admin}"
 export PHORGE_ADMIN_PASS="${PHORGE_ADMIN_PASS:-supersecr3tpassw0rdfordevelop1}"

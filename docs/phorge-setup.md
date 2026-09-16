@@ -4,16 +4,7 @@ This guide covers setting up a local Phorge instance for **developing** and **te
 
 ## Quick Start
 
-**1. Configure your hosts file:**
-
-Add the following to `/etc/hosts`:
-
-```text
-127.0.0.1       phorge.domain.tld
-127.0.0.1       cdn.domain.tld
-```
-
-**2. Start Phorge:**
+**1. Start Phorge:**
 
 ```bash
 make up
@@ -21,7 +12,20 @@ make up
 
 The Makefile automatically detects whether you have podman or docker installed (preferring podman). It starts MariaDB in the background and Phorge in the foreground, so you can see the logs and the admin password recovery link.
 
-**3. Stop Phorge::** When you are done, press `Ctrl+C`, then run `make down` to remove the containers.
+**2. Stop Phorge:** When you are done, press `Ctrl+C`, then run `make down` to remove the containers.
+
+Phorge is served at <http://phorge.localhost> and uploaded files at <http://cdn.localhost>. No `/etc/hosts` entry is needed: names under `.localhost` are reserved for the loopback address by [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761#section-6.3), and resolvers such as systemd-resolved map them automatically.
+
+If your resolver does not, add the entries yourself:
+
+```bash
+# Check first - this should print a loopback address
+getent hosts phorge.localhost
+
+# Only if it prints nothing, add to /etc/hosts
+127.0.0.1       phorge.localhost
+127.0.0.1       cdn.localhost
+```
 
 ## What Gets Created
 
@@ -85,8 +89,8 @@ PHORGE_ADMIN_PASS=mypassword PHORGE_GIT_REF=master make up
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PHORGE_URL` | `http://phorge.domain.tld` | Base URL for Phorge |
-| `PHORGE_CDN_URL` | `http://cdn.domain.tld` | CDN URL for serving files |
+| `PHORGE_URL` | `http://phorge.localhost` | Base URL for Phorge |
+| `PHORGE_CDN_URL` | `http://cdn.localhost` | CDN URL for serving files |
 | `PHORGE_TITLE` | `RMI` | Instance title shown in UI |
 | `PHORGE_ADMIN_USER` | `admin` | Admin username |
 | `PHORGE_ADMIN_EMAIL` | `admin@domain.tld` | Admin email address |
@@ -104,7 +108,7 @@ Use the pre-configured API token:
 
 ```bash
 export PHAB_TOKEN=api-supersecr3tapikeyfordevelop1
-export PHAB_URL=http://phorge.domain.tld/api/
+export PHAB_URL=http://phorge.localhost/api/
 ```
 
 **Or configuration file:**
@@ -112,19 +116,21 @@ export PHAB_URL=http://phorge.domain.tld/api/
 ```bash
 # Linux
 echo "PHAB_TOKEN: api-supersecr3tapikeyfordevelop1" > ~/.config/phabfive.yaml
-echo "PHAB_URL: http://phorge.domain.tld/api/" >> ~/.config/phabfive.yaml
+echo "PHAB_URL: http://phorge.localhost/api/" >> ~/.config/phabfive.yaml
 
 # macOS
 echo "PHAB_TOKEN: api-supersecr3tapikeyfordevelop1" > ~/Library/Application\ Support/phabfive.yaml
-echo "PHAB_URL: http://phorge.domain.tld/api/" >> ~/Library/Application\ Support/phabfive.yaml
+echo "PHAB_URL: http://phorge.localhost/api/" >> ~/Library/Application\ Support/phabfive.yaml
 ```
 
 Test it:
 
 ```bash
-uv run phabfive user whoami
-uv run phabfive paste list
+uv run phabfive diffusion repo list
+uv run phabfive maniphest search --tag '*'
 ```
+
+Note that `phabfive user whoami` is not a test of this configuration: it reports every host in `~/.arcrc` and ignores `PHAB_URL`/`PHAB_TOKEN`.
 
 ## Create Test Tasks
 
@@ -147,7 +153,7 @@ uv run phabfive maniphest create templates/task-create/mega-2024-simulation.yml 
 The API token works immediately without logging in:
 
 ```bash
-curl "http://phorge.domain.tld/api/user.whoami" \
+curl "http://phorge.localhost/api/user.whoami" \
   -d "api.token=api-supersecr3tapikeyfordevelop1"
 ```
 
@@ -207,4 +213,4 @@ These scripts are intended for development and testing only. For production, fol
 
 - [Phorge Documentation](https://we.phorge.it/book/phorge/)
 - [Configuring Accounts and Registration](https://we.phorge.it/book/phorge/article/configuring_accounts_and_registration/)
-- [Local Phorge API Documentation](http://phorge.domain.tld/conduit/)
+- [Local Phorge API Documentation](http://phorge.localhost/conduit/)
