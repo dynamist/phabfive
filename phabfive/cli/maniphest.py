@@ -246,6 +246,11 @@ def create(
         help="Add subscriber (username or @me, repeatable)",
         autocompletion=complete_user,
     ),
+    space: Optional[str] = typer.Option(
+        None,
+        "--space",
+        help="Create the task in a Space (monogram, name, or unique pattern)",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview without creating task"
     ),
@@ -263,6 +268,7 @@ def create(
         phabfive maniphest create "New feature" --assign=@me
         phabfive maniphest create "Task" --priority=high --tag=Sprint
         phabfive maniphest create "Task" --tag=Board --column=Backlog
+        phabfive maniphest create "Task" --space=S3
         echo "Description" | phabfive maniphest create "Task" --description=-
     """
     maniphest = _get_maniphest_app()
@@ -333,6 +339,7 @@ def create(
                 subscribers=subscribe,
                 column=column,
                 board_phid=board_phid,
+                space=space,
                 dry_run=dry_run,
             )
         except PhabfiveConfigException as e:
@@ -364,6 +371,8 @@ def create(
                     print(f"  Column: {result['column']}")
                 if result.get("subscribers"):
                     print(f"  Subscribers: {', '.join(result['subscribers'])}")
+                if result.get("space"):
+                    print(f"  Space: {result['space']}")
             else:
                 typer.echo(result["uri"])
                 if result.get("tag_slugs"):

@@ -40,6 +40,7 @@ from phabfive.maniphest.filters import (
 from phabfive.maniphest.formatters import build_task_boards, build_task_display_data
 from phabfive.maniphest.resolvers import (
     ambiguous_project_message,
+    describe_space,
     fetch_all_spaces,
     fetch_project_lookup_maps,
     fetch_projects_by_phid,
@@ -47,6 +48,7 @@ from phabfive.maniphest.resolvers import (
     parse_plus_separated,
     resolve_project_phids,
     resolve_project_phids_for_create,
+    resolve_space,
     resolve_space_phids,
     resolve_user_phid,
     resolve_user_phids,
@@ -138,6 +140,10 @@ class Maniphest(Phabfive):
         every one of them.
         """
         return fetch_all_spaces(self.phab)
+
+    def _resolve_space(self, space):
+        """The one Space to place a task in, named by monogram, name or pattern."""
+        return resolve_space(self.phab, space)
 
     def _resolve_space_patterns(self, space_patterns):
         """Resolve comma-separated Space patterns to PHIDs, in order."""
@@ -1745,6 +1751,7 @@ class Maniphest(Phabfive):
         subscribers=None,
         column=None,
         board_phid=None,
+        space=None,
         dry_run=False,
     ):
         """
@@ -1770,6 +1777,11 @@ class Maniphest(Phabfive):
             Column name on board for initial placement
         board_phid : str, optional
             Board PHID for column placement (required if column is specified)
+        space : str, optional
+            Space to create the task in, by monogram, name, or a pattern that
+            matches exactly one Space. The server's default Space is used when
+            omitted; PHAB_SPACE filters searches and is deliberately not
+            consulted here.
         dry_run : bool
             If True, validate and display without creating
 
@@ -1866,6 +1878,14 @@ class Maniphest(Phabfive):
         else:
             subscriber_display = parsed_subscribers
 
+        # Resolve the Space to place the task in. Filtering may name several
+        # Spaces at once; creating in one cannot, so this demands exactly one.
+        space_display = None
+        if space:
+            resolved_space = self._resolve_space(space)
+            space_display = describe_space(resolved_space)
+            transactions.append({"type": "space", "value": resolved_space["phid"]})
+
         # Dry run - return what would be created
         if dry_run:
             log.info("Dry run mode - task would be created with these transactions:")
@@ -1879,6 +1899,7 @@ class Maniphest(Phabfive):
                 "tags": parsed_tags,
                 "column": column,
                 "subscribers": subscriber_display,
+                "space": space_display,
             }
 
         # Create the task via API
