@@ -115,7 +115,9 @@ def search(
             else:
                 sys.stderr.write(f"Error: User '{author}' not found\n")
                 raise typer.Exit(1)
-        constraints["authorPHIDs"] = [author_phid]
+        # Phorge's paste.search names this constraint "authors", not
+        # "authorPHIDs" as maniphest.search does for its own author filter
+        constraints["authors"] = [author_phid]
 
     # Get pastes with constraints
     pastes = paste.get_pastes(
