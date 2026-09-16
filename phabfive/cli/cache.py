@@ -4,6 +4,7 @@
 import typer
 
 from phabfive import cache
+from phabfive.cli.completers import complete_cached_host
 from phabfive.core import Phabfive
 
 cache_app = typer.Typer(help="Inspect and clear cached completion data")
@@ -43,13 +44,39 @@ def clear(
         "--all",
         help="Clear every instance, not just the configured one.",
     ),
+    url: str = typer.Option(
+        None,
+        "--url",
+        help="Clear every account cached for this host.",
+        autocompletion=complete_cached_host,
+    ),
 ) -> None:
     """Remove cached completion data.
 
     Completion data is advisory, so clearing it only costs one slower TAB.
     Use this after somebody joins, leaves or is renamed, rather than waiting
     for the entry to expire.
+
+    \b
+    Examples:
+        phabfive cache clear
+        phabfive cache clear --url http://phorge.localhost
+        phabfive cache clear --all
     """
+    if url is not None and all_instances:
+        typer.echo("Error: --url and --all cannot be combined", err=True)
+        raise typer.Exit(1)
+
+    # "is not None", so an empty --url is rejected rather than quietly
+    # falling through to clearing the configured instance
+    if url is not None:
+        removed = cache.clear_host(url)
+        if removed is None:
+            typer.echo(f"Error: '{url}' does not name a host to clear", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"Removed {removed} cached {_entries(removed)} for {url}")
+        return
+
     removed = cache.clear(all_instances=all_instances)
 
     if removed is None:
@@ -63,9 +90,31 @@ def clear(
     where = "every instance" if all_instances else "the configured instance"
     typer.echo(f"Removed {removed} cached {_entries(removed)} from {where}")
 
+    # Removing nothing while the same host has entries under another token
+    # means the configured token does not match what was cached. Saying so
+    # keeps that from reading as "there was nothing to clear".
+    if not all_instances and removed == 0:
+        _warn_about_other_tokens()
+
 
 def _entries(count: int) -> str:
     return "entry" if count == 1 else "entries"
+
+
+def _warn_about_other_tokens() -> None:
+    """Point out that this host has entries cached under a different token."""
+    count, url = cache.other_cached_accounts()
+    if not count:
+        return
+
+    accounts = "account" if count == 1 else "accounts"
+    typer.echo(
+        f"Note: this host has {count} other cached {accounts}, written under a "
+        f"different token and left alone. If the configured token is not the "
+        f"one those were cached with, clear them with: "
+        f"phabfive cache clear --url {url}",
+        err=True,
+    )
 
 
 @cache_app.command()

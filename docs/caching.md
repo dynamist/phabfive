@@ -88,10 +88,28 @@ phabfive cache clear
 ```bash
 phabfive cache info          # where the cache is, how much is in it, how old
 phabfive cache clear         # drop the configured instance's entries
+phabfive cache clear --url phorge.example.com   # drop every account's, for one host
 phabfive cache clear --all   # drop every instance's, works without credentials
 ```
 
 `cache info` reports sizes and ages only; it never prints what was cached.
+
+## Clearing an instance you have no token for
+
+Entries are filed under the URL *and* the token, so two accounts on the same
+host never share them and rotating a token retires what was cached under the
+old one. That also means `cache clear` only finds the directory belonging to
+the token currently configured: with a different one it removes nothing and
+says so, rather than appearing to have cleared anything.
+
+`--url` clears every account cached for a host instead, which is what a
+destroyed or rebuilt instance calls for. It needs no token, takes a bare
+hostname or a full URL, and completes from the hosts already cached:
+
+```bash
+phabfive cache clear --url phorge.example.com
+phabfive cache clear --url <TAB>
+```
 
 ## Turning it off
 

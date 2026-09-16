@@ -854,6 +854,39 @@ def _complete_fixed(incomplete: str, values: List[str]) -> List[str]:
     return [v for v in values if v.startswith(incomplete)]
 
 
+def complete_cached_host(incomplete: str) -> List[str]:
+    """Complete the hosts that have something cached, for cache clear --url.
+
+    Reads only the cache directory, so it works with no token, no
+    configuration and no reachable server, which is the situation this
+    option exists for.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching cached hostnames
+    """
+    from phabfive import cache
+
+    try:
+        hosts = cache.cached_hosts()
+    except OSError:
+        return []
+
+    # A scheme is accepted but never cached, so completions have to carry back
+    # whatever was typed: typer keeps only values that start with it
+    # (typer/core.py), so returning a bare host for "http://ph" offers nothing
+    scheme, separator, typed = incomplete.rpartition("//")
+    prefix = scheme + separator
+
+    return [f"{prefix}{host}" for host in hosts if host.startswith(typed)]
+
+
 def complete_repo_status(incomplete: str) -> List[str]:
     """Complete the repository status filter for diffusion repo list.
 
