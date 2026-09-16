@@ -115,6 +115,58 @@ class TestInfo:
         assert described["Enabled"] is True
         assert described["Namespaces"][0]["Namespace"] == "users"
 
+    def test_table_shows_how_many_records_an_entry_holds(self, enabled_cache):
+        """One entry holding many users should not read as one user."""
+        cache.set(
+            "users",
+            "key",
+            {
+                "records": [{"username": f"user{i}"} for i in range(29)],
+                "truncated": False,
+            },
+        )
+
+        result = runner.invoke(app, ["--format=rich", "cache", "info"])
+
+        assert result.exit_code == 0
+        row = next(line for line in result.stdout.splitlines() if "users" in line)
+        cells = [cell.strip() for cell in row.strip("│").split("│")]
+        # One entry, but it holds 29 users
+        assert cells[1] == "1"
+        assert cells[2] == "29"
+
+    def test_table_shows_a_dash_for_uncountable_entries(self, enabled_cache):
+        """Unknown must not render as 0, which would read as "holds nothing"."""
+        cache.set("users", "key", "not a list of records")
+
+        result = runner.invoke(app, ["--format=rich", "cache", "info"])
+
+        assert result.exit_code == 0
+        row = next(line for line in result.stdout.splitlines() if "users" in line)
+        cells = [cell.strip() for cell in row.strip("│").split("│")]
+        # Namespace, Lookups, Records, ...
+        assert cells[1] == "1"
+        assert cells[2] == "-"
+
+    def test_mentions_accounts_cached_under_another_token(self, enabled_cache):
+        """ "Nothing cached yet" is misleading when the host has entries."""
+        other = dict(CONF, PHAB_TOKEN="api-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        with patch("phabfive.core.Phabfive.read_config", return_value=(other, True)):
+            cache.set("projects", "key", {"records": [1], "truncated": False})
+
+        result = runner.invoke(app, ["--format=rich", "cache", "info"])
+
+        assert result.exit_code == 0
+        assert "Nothing cached yet" in result.stdout
+        assert "1 other cached account" in result.stdout
+
+    def test_quiet_when_no_other_account_cached_this_host(self, enabled_cache):
+        cache.set("projects", "key", {"records": [1], "truncated": False})
+
+        result = runner.invoke(app, ["--format=rich", "cache", "info"])
+
+        assert "other cached account" not in result.stdout
+
     def test_yaml_output_is_produced(self, enabled_cache):
         cache.set("users", "key", {"records": [], "truncated": False})
 

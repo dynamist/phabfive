@@ -434,9 +434,87 @@ class TestDescribe:
         assert described["Enabled"] is True
         assert "sonja.bergstrom" not in json.dumps(described)
         namespaces = {n["Namespace"]: n for n in described["Namespaces"]}
-        assert namespaces["users"]["Entries"] == 1
+        assert namespaces["users"]["Lookups"] == 1
         assert namespaces["users"]["Size"] > 0
         assert namespaces["users"]["TTL"] == cache.ttl_for("users")
+
+    def test_counts_the_records_a_whole_list_entry_holds(self, enabled_cache):
+        """One entry caches a whole lookup, so Entries alone understates it."""
+        cache.set("priorities", "all", [{"name": f"p{i}"} for i in range(7)])
+
+        namespaces = {n["Namespace"]: n for n in cache.describe()["Namespaces"]}
+
+        assert namespaces["priorities"]["Lookups"] == 1
+        assert namespaces["priorities"]["Records"] == 7
+
+    def test_counts_the_records_of_a_narrowable_entry(self, enabled_cache):
+        """Projects and users wrap their records beside the truncated flag."""
+        cache.set(
+            "projects",
+            "dev",
+            {"records": [{"name": f"proj{i}"} for i in range(4)], "truncated": False},
+        )
+
+        namespaces = {n["Namespace"]: n for n in cache.describe()["Namespaces"]}
+
+        assert namespaces["projects"]["Records"] == 4
+
+    def test_sums_records_across_entries(self, enabled_cache):
+        cache.set("projects", "a", {"records": [1, 2, 3], "truncated": False})
+        cache.set("projects", "b", {"records": [4, 5], "truncated": False})
+
+        namespaces = {n["Namespace"]: n for n in cache.describe()["Namespaces"]}
+
+        assert namespaces["projects"]["Lookups"] == 2
+        assert namespaces["projects"]["Records"] == 5
+
+    def test_unreadable_entries_do_not_count_as_zero_records(self, enabled_cache):
+        """An unknown shape is reported as unknown, not as holding nothing."""
+        cache.set("projects", "a", {"records": [1, 2], "truncated": False})
+        cache.set("projects", "b", "not a list of records")
+
+        namespaces = {n["Namespace"]: n for n in cache.describe()["Namespaces"]}
+
+        assert namespaces["projects"]["Lookups"] == 2
+        assert namespaces["projects"]["Records"] == 2
+
+    def test_records_is_none_when_no_entry_can_be_counted(self, enabled_cache):
+        cache.set("projects", "a", "not a list of records")
+
+        namespaces = {n["Namespace"]: n for n in cache.describe()["Namespaces"]}
+
+        assert namespaces["projects"]["Lookups"] == 1
+        assert namespaces["projects"]["Records"] is None
+
+    def test_reports_accounts_cached_under_another_token(self, enabled_cache):
+        """Only the configured token's entries are described, so say when
+        the host has more that none of those numbers account for."""
+        other = dict(CONF, PHAB_TOKEN="api-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        with patch("phabfive.core.Phabfive.read_config", return_value=(other, True)):
+            cache.set("projects", "key", {"records": [1], "truncated": False})
+
+        described = cache.describe()
+
+        assert described["Namespaces"] == []
+        assert described["OtherAccounts"] == 1
+
+    def test_no_other_accounts_when_only_this_token_cached(self, enabled_cache):
+        cache.set("projects", "key", {"records": [1], "truncated": False})
+
+        assert cache.describe()["OtherAccounts"] == 0
+
+    def test_counting_records_still_reveals_no_values(self, enabled_cache):
+        cache.set(
+            "users",
+            "key",
+            {"records": [{"username": "sonja.bergstrom"}], "truncated": False},
+        )
+
+        described = cache.describe()
+
+        assert "sonja.bergstrom" not in json.dumps(described)
+        namespaces = {n["Namespace"]: n for n in described["Namespaces"]}
+        assert namespaces["users"]["Records"] == 1
 
     def test_explains_why_the_cache_is_off(self, monkeypatch):
         monkeypatch.setenv("PHAB_CACHE", "0")

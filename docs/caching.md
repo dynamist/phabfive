@@ -94,6 +94,17 @@ phabfive cache clear --all   # drop every instance's, works without credentials
 
 `cache info` reports sizes and ages only; it never prints what was cached.
 
+Its `Lookups` column counts cached lookups, not objects. One lookup holds a
+whole result, and a lookup for a shorter prefix answers every longer one, so a
+single lookup can serve all project completions on the instance. `Records` says
+how many projects or users are in them:
+
+```text
+ Namespace   Lookups   Records   Size     TTL
+ projects          1        67   4.0 KB   5m
+ users             1        29   2.2 KB   1d
+```
+
 ## Clearing an instance you have no token for
 
 Entries are filed under the URL *and* the token, so two accounts on the same
