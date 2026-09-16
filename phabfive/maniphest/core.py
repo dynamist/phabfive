@@ -41,6 +41,7 @@ from phabfive.maniphest.formatters import build_task_boards, build_task_display_
 from phabfive.maniphest.resolvers import (
     ambiguous_project_message,
     describe_space,
+    describe_space_phid,
     fetch_all_spaces,
     fetch_project_lookup_maps,
     fetch_projects_by_phid,
@@ -141,9 +142,14 @@ class Maniphest(Phabfive):
         """
         return fetch_all_spaces(self.phab)
 
-    def _resolve_space(self, space):
+    def _resolve_space(self, space, all_spaces=None):
         """The one Space to place a task in, named by monogram, name or pattern."""
-        return resolve_space(self.phab, space)
+        # Enumerating every Space is only needed to match a wildcard or a
+        # name; a monogram is resolved with a single direct lookup.
+        if all_spaces is None and not is_exact_monogram(space):
+            all_spaces = self._get_all_spaces()
+
+        return resolve_space(self.phab, space, all_spaces=all_spaces)
 
     def _resolve_space_patterns(self, space_patterns):
         """Resolve comma-separated Space patterns to PHIDs, in order."""
@@ -1977,6 +1983,7 @@ class Maniphest(Phabfive):
         description=None,
         subscribe=None,
         comment=None,
+        space=None,
         dry_run=False,
     ):
         """Edit a task by ID.
@@ -2003,6 +2010,9 @@ class Maniphest(Phabfive):
             Usernames to add as subscribers (@me for current user)
         comment : str, optional
             Comment to add
+        space : str, optional
+            Space to move the task to, by monogram, name, or a pattern that
+            matches exactly one Space
         dry_run : bool
             Show changes without applying
 
@@ -2242,6 +2252,27 @@ class Maniphest(Phabfive):
                         "field": "Subscribers",
                         "old": None,
                         "new": f"Added: {', '.join(subscriber_names)}",
+                    }
+                )
+
+        # Handle space
+        if space:
+            # Enumerated once per command, which also names the Space the task
+            # is leaving without a lookup of its own.
+            all_spaces = self._get_all_spaces()
+            resolved_space = self._resolve_space(space, all_spaces=all_spaces)
+            current_space_phid = task_data["fields"].get("spacePHID")
+
+            if resolved_space["phid"] != current_space_phid:
+                transactions.append({"type": "space", "value": resolved_space["phid"]})
+                changes.append(
+                    {
+                        "field": "Space",
+                        "old": describe_space_phid(
+                            self.phab, current_space_phid, all_spaces
+                        )
+                        or "(none)",
+                        "new": describe_space(resolved_space),
                     }
                 )
 

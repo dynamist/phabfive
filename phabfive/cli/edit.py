@@ -87,6 +87,11 @@ def edit_command(
         "--comment",
         help="Add comment with changes",
     ),
+    space: Optional[str] = typer.Option(
+        None,
+        "--space",
+        help="Move to a Space (monogram, name, or unique pattern)",
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -111,6 +116,7 @@ def edit_command(
         phabfive edit T123 --priority=raise --status=resolved
         phabfive maniphest search --tag "Backend" | phabfive edit --column=Done
         phabfive edit T123 --tag="Sprint" --column=forward --comment="Moving forward"
+        phabfive edit T123 T124 --space=Archive
     """
     edit_handler = _get_edit_app()
 
@@ -124,6 +130,7 @@ def edit_command(
         description=description,
         subscribe=subscribe,
         comment=comment,
+        space=space,
         dry_run=dry_run,
         force=force,
     )

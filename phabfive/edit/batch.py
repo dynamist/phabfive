@@ -27,6 +27,7 @@ def edit_tasks_batch(
     description=None,
     subscribe=None,
     comment=None,
+    space=None,
     dry_run=False,
 ):
     """Edit multiple tasks in batch (atomic validation).
@@ -43,6 +44,7 @@ def edit_tasks_batch(
         description (str): Description text to set
         subscribe (list): Usernames to add as subscribers
         comment (str): Comment to add
+        space (str): Space to move the tasks to
         dry_run (bool): Show changes without applying
 
     Returns:
@@ -118,6 +120,7 @@ def edit_tasks_batch(
                 description=description,
                 subscribe=subscribe,
                 comment=comment,
+                space=space,
                 dry_run=dry_run,
             )
             success_count += 1

@@ -884,6 +884,40 @@ def describe_space(resolved):
     return monogram if name == monogram else f"{monogram} ({name})"
 
 
+def describe_space_phid(phab, phid, all_spaces=None):
+    """How the Space a PHID names reads to a person, e.g. "S1 (Default)".
+
+    Enumerated Spaces answer this for free. A Space numbered past
+    SPACE_PROBE_MAX is not among them, so it is asked about directly rather
+    than reported as no Space at all, and the PHID itself is the last resort.
+    """
+    if not phid:
+        return None
+
+    for monogram, entry in (all_spaces or {}).items():
+        if entry["phid"] == phid:
+            return describe_space({"monogram": monogram, **entry})
+
+    try:
+        found = phab.phid.query(phids=[phid])
+        data = found.get(phid) if isinstance(found, dict) else None
+    except Exception as e:
+        log.debug(f"Failed to describe space {phid}: {e}")
+        data = None
+
+    if not isinstance(data, dict):
+        return phid
+
+    # phid.query names the Space, and carries its monogram only in the URI
+    monogram = (data.get("uri") or "").rstrip("/").rsplit("/", 1)[-1]
+    name = data.get("name") or monogram
+
+    if monogram and name != monogram:
+        return f"{monogram} ({name})"
+
+    return name or phid
+
+
 def _spaces_matched(all_spaces, space, phids):
     """The Spaces a pattern picked out, paired back with their monograms.
 
