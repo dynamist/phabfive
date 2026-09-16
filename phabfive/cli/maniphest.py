@@ -8,6 +8,7 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.completers import (
+    complete_assignee_filter,
     complete_column,
     complete_column_change,
     complete_column_filter,
@@ -17,6 +18,7 @@ from phabfive.cli.completers import (
     complete_status,
     complete_status_filter,
     complete_tag,
+    complete_user,
 )
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
@@ -217,6 +219,7 @@ def create(
         None,
         "--assign",
         help="Set assignee (username or @me for yourself)",
+        autocompletion=complete_user,
     ),
     status: Optional[str] = typer.Option(
         None,
@@ -234,6 +237,7 @@ def create(
         None,
         "--subscribe",
         help="Add subscriber (username or @me, repeatable)",
+        autocompletion=complete_user,
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview without creating task"
@@ -391,7 +395,10 @@ def search(
         "match them (e.g., T123 or T123,T456)",
     ),
     assigned: Optional[str] = typer.Option(
-        None, "--assigned", help="Filter by assignee. Use @me for yourself."
+        None,
+        "--assigned",
+        help="Filter by assignee. Use @me for yourself.",
+        autocompletion=complete_assignee_filter,
     ),
     space: Optional[str] = typer.Option(
         None, "--space", help="Filter by Space (supports wildcards)"
@@ -683,6 +690,7 @@ def edit(
         None,
         "--assign",
         help="Set assignee (username or @me for yourself)",
+        autocompletion=complete_user,
     ),
     description: Optional[str] = typer.Option(
         None,
@@ -693,6 +701,7 @@ def edit(
         None,
         "--subscribe",
         help="Add subscriber (username or @me, repeatable)",
+        autocompletion=complete_user,
     ),
     comment_text: Optional[str] = typer.Option(
         None,

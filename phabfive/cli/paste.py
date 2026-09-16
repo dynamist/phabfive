@@ -13,7 +13,12 @@ from rich.text import Text
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
-from phabfive.cli.completers import complete_language, complete_tag
+from phabfive.cli.completers import (
+    complete_language,
+    complete_tag,
+    complete_user,
+    complete_user_filter,
+)
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
 
@@ -73,7 +78,10 @@ def search(
         None, help="Free-text search in paste title"
     ),
     author: Optional[str] = typer.Option(
-        None, "--author", help="Filter by author (username or @me)"
+        None,
+        "--author",
+        help="Filter by author (username or @me)",
+        autocompletion=complete_user_filter,
     ),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results to return"),
 ) -> None:
@@ -180,7 +188,10 @@ def create(
         autocompletion=complete_tag,
     ),
     subscribe: Optional[List[str]] = typer.Option(
-        None, "--subscribe", help="Add subscriber (username or @me, repeatable)"
+        None,
+        "--subscribe",
+        help="Add subscriber (username or @me, repeatable)",
+        autocompletion=complete_user,
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without creating"),
 ) -> None:
@@ -531,7 +542,10 @@ def edit(
         autocompletion=complete_tag,
     ),
     subscribe: Optional[List[str]] = typer.Option(
-        None, "--subscribe", help="Add subscriber (username or @me, repeatable)"
+        None,
+        "--subscribe",
+        help="Add subscriber (username or @me, repeatable)",
+        autocompletion=complete_user,
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview changes without applying"
