@@ -18,7 +18,7 @@ from phabfive.cli.maniphest import maniphest_app
 from phabfive.cli.passphrase import passphrase_app
 from phabfive.cli.paste import paste_app
 from phabfive.cli.repl import repl_app
-from phabfive.cli.shell_completion import install_bash_escaping
+from phabfive.cli.shell_completion import MonogramGroup, install_bash_escaping
 from phabfive.cli.user import user_app
 from phabfive.constants import (
     AutoOption,
@@ -41,6 +41,7 @@ install_bash_escaping()
 
 # Main app
 app = typer.Typer(
+    cls=MonogramGroup,
     name="phabfive",
     help="CLI for Phabricator and Phorge - built for humans and AI agents.",
     no_args_is_help=True,

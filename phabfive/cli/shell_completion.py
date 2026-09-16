@@ -4,6 +4,14 @@
 import os
 import re
 
+from click.shell_completion import CompletionItem
+from typer.core import TyperGroup
+
+from phabfive.constants import MONOGRAM_SHORTCUT
+
+# A monogram shortcut such as T123, K5 or R12
+_MONOGRAM = re.compile(r"^[" + "".join(MONOGRAM_SHORTCUT) + r"]\d+$")
+
 # Characters that bash would otherwise treat as word separators or syntax
 _BASH_SPECIAL_CHARS = re.compile(r"([\s\\'\"`$&;|()<>*?\[\]{}!#~])")
 
@@ -58,3 +66,33 @@ def install_bash_escaping() -> None:
             return escape_for_bash(item.value)
 
     typer_completion.BashComplete = BashComplete
+
+
+def _monogram_help(monogram: str) -> str:
+    """Describe what a monogram shortcut expands to, e.g. "maniphest show T123"."""
+    expansion = " ".join(MONOGRAM_SHORTCUT[monogram[0]])
+    return f"{expansion} {monogram}"
+
+
+class MonogramGroup(TyperGroup):
+    """Root command group that also completes monogram shortcuts.
+
+    phabfive T123 expands to "maniphest show T123" (see preprocess_monograms),
+    but shell completion only knew the subcommands. With nothing typed yet,
+    the monogram letters are offered alongside the subcommands, described
+    with an example in zsh and fish. A bare letter is not offered once typed,
+    since the shell would accept it with a trailing space before the number.
+    A complete monogram such as T123 is accepted as typed.
+    """
+
+    def shell_complete(self, ctx, incomplete):
+        if _MONOGRAM.match(incomplete):
+            return [CompletionItem(incomplete, help=_monogram_help(incomplete))]
+
+        completions = super().shell_complete(ctx, incomplete)
+        if not incomplete:
+            completions.extend(
+                CompletionItem(letter, help=_monogram_help(f"{letter}123"))
+                for letter in MONOGRAM_SHORTCUT
+            )
+        return completions
