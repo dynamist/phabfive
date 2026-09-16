@@ -8,7 +8,15 @@ from click.shell_completion import ShellComplete
 # phabfive imports
 from phabfive.cli import app
 
-SUBCOMMANDS = ["edit", "passphrase", "diffusion", "paste", "user", "maniphest"]
+SUBCOMMANDS = [
+    "edit",
+    "cache",
+    "passphrase",
+    "diffusion",
+    "paste",
+    "user",
+    "maniphest",
+]
 
 
 def _complete(args, incomplete):
