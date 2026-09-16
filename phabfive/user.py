@@ -34,6 +34,79 @@ class User(Phabfive):
             if key in ["userName", "realName", "primaryEmail", "uri"]
         }
 
+    def whoami_configured_host(self):
+        """Run whoami against the host phabfive is configured to use.
+
+        Uses the PHAB_URL/PHAB_TOKEN that came out of the normal
+        configuration chain, so it reports the host every other phabfive
+        command talks to.
+
+        Returns
+        -------
+        dict
+            Same shape as one entry of :meth:`whoami_all_hosts`.
+        """
+        return self._whoami_for_host(
+            self._normalize_url(self.conf["PHAB_URL"]),
+            self.conf.get("PHAB_TOKEN"),
+            phab=self.phab,
+        )
+
+    def _whoami_for_host(self, normalized_url, token, phab=None):
+        """Run whoami against a single host and format the result.
+
+        Parameters
+        ----------
+        normalized_url : str
+            Full API URL, e.g. "https://phorge.example.com/api/".
+        token : str or None
+            API token for this host.
+        phab : Phabricator, optional
+            Existing client to reuse. A new one is built when omitted.
+
+        Returns
+        -------
+        dict
+            With "Host", "URL" and either "User" (plus "_link") or "Error".
+        """
+        parsed = urlparse(normalized_url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+
+        result = {
+            "Host": parsed.netloc,
+            "URL": normalized_url,
+            "_base_url": base_url,
+        }
+
+        if not token:
+            result["Error"] = "No token configured for this host"
+            return result
+
+        try:
+            if phab is None:
+                phab = Phabricator(host=normalized_url, token=token)
+                phab.update_interfaces()
+            response = phab.user.whoami()
+
+            user_name = response.get("userName", "")
+
+            result["User"] = {
+                "UserName": user_name,
+                "RealName": response.get("realName", ""),
+                "PrimaryEmail": response.get("primaryEmail", ""),
+            }
+
+            # Add _link for rich format (clickable hyperlink)
+            result["_link"] = self.format_link(
+                f"{base_url}/p/{user_name}/", user_name, show_url=False
+            )
+        except APIError as e:
+            result["Error"] = str(e).replace("ERR-CONDUIT-CORE: ", "")
+        except Exception as e:
+            result["Error"] = str(e)
+
+        return result
+
     def whoami_all_hosts(self):
         """Run whoami against all hosts in ~/.arcrc.
 
@@ -71,48 +144,11 @@ class User(Phabfive):
         results = []
 
         for host_uri, host_data in hosts.items():
-            token = host_data.get("token")
-            normalized_url = self._normalize_url(host_uri)
-            parsed = urlparse(normalized_url)
-            fqdn = parsed.netloc
-            base_url = f"{parsed.scheme}://{parsed.netloc}"
-
-            result = {
-                "Host": fqdn,
-                "URL": normalized_url,
-                "_base_url": base_url,
-            }
-
-            if not token:
-                result["Error"] = "No token configured for this host"
-                results.append(result)
-                continue
-
-            try:
-                # Create a temporary Phabricator client for this host
-                phab = Phabricator(host=normalized_url, token=token)
-                phab.update_interfaces()
-                response = phab.user.whoami()
-
-                user_name = response.get("userName", "")
-                user_link = f"{base_url}/p/{user_name}/"
-
-                result["User"] = {
-                    "UserName": user_name,
-                    "RealName": response.get("realName", ""),
-                    "PrimaryEmail": response.get("primaryEmail", ""),
-                }
-
-                # Add _link for rich format (clickable hyperlink)
-                result["_link"] = self.format_link(user_link, user_name, show_url=False)
-
-            except APIError as e:
-                error_msg = str(e).replace("ERR-CONDUIT-CORE: ", "")
-                result["Error"] = error_msg
-            except Exception as e:
-                result["Error"] = str(e)
-
-            results.append(result)
+            results.append(
+                self._whoami_for_host(
+                    self._normalize_url(host_uri), host_data.get("token")
+                )
+            )
 
         return results
 

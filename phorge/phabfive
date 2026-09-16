@@ -4,6 +4,7 @@
 # Usage: ./phorge/phabfive [phabfive args...]
 #
 # Examples:
+#   ./phorge/phabfive user whoami
 #   ./phorge/phabfive diffusion repo list
 #   ./phorge/phabfive maniphest search --tag '*'
 

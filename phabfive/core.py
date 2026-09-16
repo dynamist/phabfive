@@ -627,6 +627,14 @@ class Phabfive:
             log.debug("Merging configuration from .arcconfig")
             anyconfig.merge(conf, arcconfig_conf)
 
+        # Remember whether a host was chosen by anything other than ~/.arcrc.
+        # Everything merged so far (site and user yaml, .arcconfig) plus the
+        # environment means the user pointed phabfive at a specific host; a
+        # PHAB_URL that only comes out of ~/.arcrc does not.
+        self._explicit_phab_url = bool(conf.get("PHAB_URL")) or bool(
+            environ.get("PHAB_URL")
+        )
+
         # Load from Arcanist .arcrc file (supports single or multiple hosts)
         # Include PHAB_URL from environment so .arcrc can match the right host
         # even though env vars are formally merged later
@@ -645,6 +653,21 @@ class Phabfive:
         )
 
         return conf
+
+    def has_explicit_phab_url(self):
+        """
+        Whether PHAB_URL was configured outside of ~/.arcrc.
+
+        True when the host came from an environment variable, `.arcconfig`,
+        or a phabfive yaml config, i.e. the user pointed phabfive at one
+        specific host. False when the host was only discovered by reading
+        ~/.arcrc, or when no host is configured at all.
+
+        Returns
+        -------
+        bool
+        """
+        return getattr(self, "_explicit_phab_url", False)
 
     def to_transactions(self, data):
         """
