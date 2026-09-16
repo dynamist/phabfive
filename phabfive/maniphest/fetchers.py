@@ -489,14 +489,13 @@ def get_api_priority_names(phab):
     result = phab.maniphest.priority.search()
     priorities = []
     for item in result.get("data", []):
-        name = item.get("fields", {}).get("name", "")
-        if name:
-            # Normalize: "Unbreak Now!" -> "unbreak"
-            normalized = name.lower().replace("!", "").replace(" now", "").strip()
-            # Also handle "wishlist" -> "wish"
-            if normalized == "wishlist":
-                normalized = "wish"
-            priorities.append(normalized)
+        # maniphest.priority.search answers with flat records - name, keywords,
+        # short, color, value - not the fields/attachments shape the *.search
+        # endpoints use. The first keyword is the value tasks are edited with,
+        # which is not derivable from the name: "Needs Triage" is "triage".
+        keywords = item.get("keywords") or []
+        if keywords:
+            priorities.append(keywords[0])
     log.debug(f"Fetched {len(priorities)} priorities from maniphest.priority.search")
     return priorities
 
