@@ -103,6 +103,22 @@ class TestExpiry:
         cache.set("users", "key", "value", ttl=86400)
         assert cache.get("users", "key", ttl=0) is cache.MISS
 
+    def test_a_zero_ttl_expires_an_entry_written_this_instant(self, enabled_cache):
+        """Not merely "older than ttl": on a coarse clock, as on Windows, an
+        entry written and read in the same tick has an age of exactly 0."""
+        with patch("time.time", return_value=1000.0):
+            cache.set("users", "key", "value")
+            assert cache.get("users", "key", ttl=0) is cache.MISS
+
+    def test_an_entry_expires_the_moment_it_reaches_its_ttl(self, enabled_cache):
+        with patch("time.time", return_value=1000.0):
+            cache.set("users", "key", "value")
+
+        with patch("time.time", return_value=1059.9):
+            assert cache.get("users", "key", ttl=60) == "value"
+        with patch("time.time", return_value=1060.0):
+            assert cache.get("users", "key", ttl=60) is cache.MISS
+
     def test_ttl_override_applies_to_every_namespace(self, monkeypatch):
         monkeypatch.setenv("PHAB_CACHE", "1")
         with patch(
