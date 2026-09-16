@@ -588,6 +588,102 @@ class Maniphest(Phabfive):
 
         return search_configs
 
+    def _build_search_constraints(
+        self,
+        include_closed=False,
+        text_query=None,
+        assigned_phids=None,
+        space_phids=None,
+        created_after=None,
+        created_before=None,
+        updated_after=None,
+        updated_before=None,
+    ):
+        """
+        Build the shared constraints for a maniphest.search call.
+
+        Every task_search code path applies the same filters; only the
+        project selection differs, so callers add "projects" themselves.
+
+        Returns
+        -------
+        dict
+            Constraints accepted by maniphest.search. Note that the names
+            are specific to this endpoint, see AGENTS.md.
+        """
+        constraints = {}
+
+        if not include_closed:
+            open_statuses = self._get_open_statuses()
+            constraints["statuses"] = open_statuses
+            log.info(f"Filtering to open statuses: {open_statuses}")
+
+        if text_query:
+            log.info(f"Free-text search: '{text_query}'")
+            # Note: maniphest.search doesn't have a fullText constraint
+            # We use the 'query' constraint which searches titles and descriptions
+            constraints["query"] = text_query
+
+        if assigned_phids:
+            constraints["assigned"] = assigned_phids
+
+        if space_phids:
+            constraints["spaces"] = space_phids
+
+        if created_after:
+            constraints["createdStart"] = int(created_after)
+        if created_before:
+            constraints["createdEnd"] = int(created_before)
+        if updated_after:
+            constraints["modifiedStart"] = int(updated_after)
+        if updated_before:
+            constraints["modifiedEnd"] = int(updated_before)
+
+        return constraints
+
+    def _search_all_pages(self, constraints, log_context=""):
+        """
+        Run maniphest.search, following cursors until every page is read.
+
+        The API returns at most 100 tasks per page.
+
+        Parameters
+        ----------
+        constraints : dict
+            Constraints for the search.
+        log_context : str
+            Optional prefix for the per-page debug line, e.g. a project PHID.
+
+        Returns
+        -------
+        list
+            Task dicts from every page, in the order returned.
+        """
+        tasks = []
+        after = None
+
+        while True:
+            kwargs = {"constraints": constraints, "attachments": {"columns": True}}
+            if after:
+                kwargs["after"] = after
+
+            result = self.phab.maniphest.search(**kwargs)
+            page = result.response["data"]
+            tasks.extend(page)
+
+            cursor = result.get("cursor", {})
+            after = cursor.get("after")
+            log.debug(
+                f"{log_context}fetched page with {len(page)} tasks, "
+                f"total so far: {len(tasks)}, next cursor: {after}"
+            )
+
+            if after is None:
+                # No more pages
+                break
+
+        return tasks
+
     def task_search(
         self,
         text_query=None,
@@ -856,180 +952,49 @@ class Maniphest(Phabfive):
                 log.info("Searching across all projects (tag='*', no project filter)")
             else:
                 log.info("No tag specified, searching across all projects")
-            constraints = {}
+            constraints = self._build_search_constraints(
+                include_closed=include_closed,
+                text_query=text_query,
+                assigned_phids=assigned_phids,
+                space_phids=space_phids,
+                created_after=created_after,
+                created_before=created_before,
+                updated_after=updated_after,
+                updated_before=updated_before,
+            )
 
-            if not include_closed:
-                open_statuses = self._get_open_statuses()
-                constraints["statuses"] = open_statuses
-                log.info(f"Filtering to open statuses: {open_statuses}")
-
-            if text_query:
-                log.info(f"Free-text search: '{text_query}'")
-                # Note: maniphest.search doesn't have a fullText constraint
-                # We use the 'query' constraint which searches titles and descriptions
-                constraints["query"] = text_query
-
-            if assigned_phids:
-                constraints["assigned"] = assigned_phids
-
-            if space_phids:
-                constraints["spaces"] = space_phids
-
-            if created_after:
-                constraints["createdStart"] = int(created_after)
-            if created_before:
-                constraints["createdEnd"] = int(created_before)
-            if updated_after:
-                constraints["modifiedStart"] = int(updated_after)
-            if updated_before:
-                constraints["modifiedEnd"] = int(updated_before)
-
-            # Use pagination to fetch all tasks (API returns max 100 per page)
-            result_data = []
-            after = None
-
-            while True:
-                if after:
-                    result = self.phab.maniphest.search(
-                        constraints=constraints,
-                        attachments={"columns": True},
-                        after=after,
-                    )
-                else:
-                    result = self.phab.maniphest.search(
-                        constraints=constraints, attachments={"columns": True}
-                    )
-
-                # Accumulate results from this page
-                result_data.extend(result.response["data"])
-
-                # Check if there are more pages
-                cursor = result.get("cursor", {})
-                after = cursor.get("after")
-                log.debug(
-                    f"Fetched page with {len(result.response['data'])} tasks, total so far: {len(result_data)}, next cursor: {after}"
-                )
-
-                if after is None:
-                    # No more pages
-                    break
+            result_data = self._search_all_pages(constraints)
         else:
+            base_constraints = self._build_search_constraints(
+                include_closed=include_closed,
+                text_query=text_query,
+                assigned_phids=assigned_phids,
+                space_phids=space_phids,
+                created_after=created_after,
+                created_before=created_before,
+                updated_after=updated_after,
+                updated_before=updated_before,
+            )
+
             # Handle multiple projects (make separate calls and merge)
             if len(project_phids) > 1:
                 all_tasks = {}  # task_id -> task_data
                 for phid in project_phids:
-                    constraints = {"projects": [phid]}
+                    constraints = {**base_constraints, "projects": [phid]}
 
-                    if not include_closed:
-                        open_statuses = self._get_open_statuses()
-                        constraints["statuses"] = open_statuses
-
-                    if text_query:
-                        constraints["query"] = text_query
-
-                    if assigned_phids:
-                        constraints["assigned"] = assigned_phids
-
-                    if space_phids:
-                        constraints["spaces"] = space_phids
-
-                    if created_after:
-                        constraints["createdStart"] = int(created_after)
-                    if created_before:
-                        constraints["createdEnd"] = int(created_before)
-                    if updated_after:
-                        constraints["modifiedStart"] = int(updated_after)
-                    if updated_before:
-                        constraints["modifiedEnd"] = int(updated_before)
-
-                    # Use pagination for each project (API returns max 100 per page)
-                    after = None
-                    while True:
-                        if after:
-                            result = self.phab.maniphest.search(
-                                constraints=constraints,
-                                attachments={"columns": True},
-                                after=after,
-                            )
-                        else:
-                            result = self.phab.maniphest.search(
-                                constraints=constraints, attachments={"columns": True}
-                            )
-
-                        # Merge results from this page, avoiding duplicates
-                        for item in result.response["data"]:
-                            task_id = item["id"]
-                            if task_id not in all_tasks:
-                                all_tasks[task_id] = item
-
-                        # Check if there are more pages for this project
-                        cursor = result.get("cursor", {})
-                        after = cursor.get("after")
-                        log.debug(
-                            f"Project {phid}: fetched page with {len(result.response['data'])} tasks, total unique: {len(all_tasks)}, next cursor: {after}"
-                        )
-
-                        if after is None:
-                            # No more pages for this project
-                            break
+                    # Merge each project's tasks, avoiding duplicates
+                    for item in self._search_all_pages(
+                        constraints, log_context=f"Project {phid}: "
+                    ):
+                        all_tasks.setdefault(item["id"], item)
 
                 # Convert back to list for display
                 result_data = list(all_tasks.values())
             else:
                 # Single project
-                constraints = {"projects": project_phids}
+                constraints = {**base_constraints, "projects": project_phids}
 
-                if not include_closed:
-                    open_statuses = self._get_open_statuses()
-                    constraints["statuses"] = open_statuses
-
-                if text_query:
-                    constraints["query"] = text_query
-
-                if assigned_phids:
-                    constraints["assigned"] = assigned_phids
-
-                if space_phids:
-                    constraints["spaces"] = space_phids
-
-                if created_after:
-                    constraints["createdStart"] = int(created_after)
-                if created_before:
-                    constraints["createdEnd"] = int(created_before)
-                if updated_after:
-                    constraints["modifiedStart"] = int(updated_after)
-                if updated_before:
-                    constraints["modifiedEnd"] = int(updated_before)
-
-                # Use pagination to fetch all tasks (API returns max 100 per page)
-                result_data = []
-                after = None
-
-                while True:
-                    if after:
-                        result = self.phab.maniphest.search(
-                            constraints=constraints,
-                            attachments={"columns": True},
-                            after=after,
-                        )
-                    else:
-                        result = self.phab.maniphest.search(
-                            constraints=constraints, attachments={"columns": True}
-                        )
-
-                    # Accumulate results from this page
-                    result_data.extend(result.response["data"])
-
-                    # Check if there are more pages
-                    cursor = result.get("cursor", {})
-                    after = cursor.get("after")
-                    log.debug(
-                        f"Fetched page with {len(result.response['data'])} tasks, total so far: {len(result_data)}, next cursor: {after}"
-                    )
-
-                    if after is None:
-                        # No more pages
-                        break
+                result_data = self._search_all_pages(constraints)
 
         # Initialize task_transitions_map for storing transitions (used by both filtering and display)
         task_transitions_map = {}
