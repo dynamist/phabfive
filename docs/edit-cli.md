@@ -429,6 +429,10 @@ phabfive maniphest search --assigned=@me --priority=normal | \
 # Move your in-progress tasks forward
 phabfive maniphest search --assigned=@me --column="In Progress" | \
   phabfive edit --column=forward
+
+# Triage the tasks you filed yourself (--author, not --assigned)
+phabfive maniphest search --author=@me --priority="in:Needs Triage" | \
+  phabfive edit --priority=normal
 ```
 
 ## Board/Column Validation Rules

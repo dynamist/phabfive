@@ -401,6 +401,12 @@ def search(
         help="Filter by assignee. Use @me for yourself.",
         autocompletion=complete_user_list_filter,
     ),
+    author: Optional[str] = typer.Option(
+        None,
+        "--author",
+        help="Filter by task author. Use @me for yourself.",
+        autocompletion=complete_user_list_filter,
+    ),
     space: Optional[str] = typer.Option(
         None, "--space", help="Filter by Space (supports wildcards)"
     ),
@@ -574,6 +580,7 @@ def search(
             typer.echo(f"{overlap_str} cannot be both included and excluded", err=True)
             raise typer.Exit(1)
         final_assigned = get_param(assigned, yaml_params, "assigned")
+        final_author = get_param(author, yaml_params, "author")
         final_space = get_param(space, yaml_params, "space")
         final_created_after = get_param(created_after, yaml_params, "created-after")
         final_created_before = get_param(created_before, yaml_params, "created-before")
@@ -602,6 +609,7 @@ def search(
                 final_text_query,
                 final_tag,
                 final_assigned,
+                final_author,
                 final_space,
                 final_created_after,
                 final_updated_after,
@@ -623,6 +631,7 @@ def search(
                 include_task_ids=include_task_ids,
                 exclude_task_ids=exclude_task_ids,
                 assigned=final_assigned,
+                author=final_author,
                 space=final_space,
                 created_after=final_created_after,
                 created_before=final_created_before,

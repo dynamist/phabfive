@@ -32,6 +32,7 @@ USER_PHID = "PHID-USER-cccccccccccccccccccc"
 FILTERS = {
     "text_query": "authentication bug",
     "assigned": "someone",
+    "author": "someone-else",
     "created_after": 7,
     "created_before": 1,
     "updated_after": 3,
@@ -119,6 +120,7 @@ class TestSearchFilterParity:
             "statuses",
             "query",
             "assigned",
+            "authorPHIDs",
             "createdStart",
             "createdEnd",
             "modifiedStart",
