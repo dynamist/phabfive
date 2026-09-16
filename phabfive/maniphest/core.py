@@ -631,10 +631,12 @@ class Maniphest(Phabfive):
                     f"Supported: {', '.join(sorted(supported_params))}"
                 )
 
-            # Store the search config with optional title and description
+            # Keep an omitted title distinct from a generated display label.
+            # The CLI uses this to decide whether a single template was
+            # explicitly named by its author.
             config = {
                 "search": search_params,
-                "title": data.get("title", f"Search {i + 1}"),
+                "title": data.get("title"),
                 "description": data.get("description", None),
             }
             search_configs.append(config)

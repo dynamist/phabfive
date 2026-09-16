@@ -508,13 +508,20 @@ def search(
         return yaml_params.get(yaml_key, default)
 
     # Execute each search configuration
-    for config in search_configs:
+    output_format = _get_output_format(ctx)
+
+    for index, config in enumerate(search_configs, start=1):
         yaml_params = config["search"]
 
-        # Print search header if multiple searches or if title/description provided
-        if len(search_configs) > 1 or config["title"] != "Command Line Search":
+        # Structured formats reserve stdout for machine-readable task data.
+        # A single template needs a banner only when its author supplied a
+        # title or description; multi-document templates still need labels to
+        # separate their human-readable results.
+        if output_format not in ("json", "yaml", "strict") and (
+            len(search_configs) > 1 or config["title"] or config["description"]
+        ):
             typer.echo(f"\n{'=' * 60}")
-            typer.echo(f"🔍 {config['title']}")
+            typer.echo(f"🔍 {config['title'] or f'Search {index}'}")
             if config["description"]:
                 typer.echo(f"📝 {config['description']}")
             typer.echo(f"{'=' * 60}")
@@ -671,7 +678,6 @@ def search(
             typer.echo(f"ERROR: {e}", err=True)
             raise typer.Exit(1)
 
-        output_format = _get_output_format(ctx)
         _display_tasks(result, output_format, maniphest)
 
 

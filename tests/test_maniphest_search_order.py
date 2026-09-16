@@ -12,9 +12,11 @@ The ordering is applied to the merged result before the limit, so
 `--limit N --order X` means "the top N by X".
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from phabfive.constants import (
@@ -552,3 +554,83 @@ class TestOrderInTemplates:
         configs = maniphest._load_search_config(str(template))
 
         assert configs[0]["search"]["order"] == "title:desc"
+
+    def test_omitted_template_title_stays_none(self, tmp_path):
+        """The CLI can distinguish an omitted title from an explicit one."""
+        template = tmp_path / "search.yaml"
+        template.write_text("search:\n  tag: proj\n")
+        maniphest = Maniphest.__new__(Maniphest)
+
+        configs = maniphest._load_search_config(str(template))
+
+        assert configs[0]["title"] is None
+
+
+class TestTemplateSearchHeaders:
+    def _run(self, configs, output_format="rich", payload="[]"):
+        mock_m = MagicMock()
+        mock_m.task_search.return_value = {"tasks": []}
+        mock_m._load_search_config.return_value = configs
+
+        def display_tasks(*_args, **_kwargs):
+            print(payload)
+
+        with (
+            patch("phabfive.cli.maniphest._get_maniphest_app", return_value=mock_m),
+            patch(
+                "phabfive.cli.maniphest._get_output_format",
+                return_value=output_format,
+            ),
+            patch("phabfive.cli.maniphest._display_tasks", side_effect=display_tasks),
+        ):
+            result = runner.invoke(
+                maniphest_app, ["search", "--with", "template.yaml"]
+            )
+        return result
+
+    def test_single_unnamed_template_has_no_rich_header(self):
+        result = self._run(
+            [{"search": {"tag": "project"}, "title": None, "description": None}]
+        )
+
+        assert result.exit_code == 0
+        assert result.output == "[]\n"
+
+    @pytest.mark.parametrize(
+        ("output_format", "payload"),
+        [
+            ("json", '[{"Task": {"Name": "Example"}}]'),
+            ("yaml", "- Task:\n    Name: Example"),
+        ],
+    )
+    def test_structured_output_has_no_template_header(self, output_format, payload):
+        result = self._run(
+            [
+                {
+                    "search": {"tag": "project"},
+                    "title": "Named search",
+                    "description": "A human-readable description",
+                }
+            ],
+            output_format=output_format,
+            payload=payload,
+        )
+
+        assert result.exit_code == 0
+        assert "Named search" not in result.output
+        if output_format == "json":
+            assert json.loads(result.output) == [{"Task": {"Name": "Example"}}]
+        else:
+            assert yaml.safe_load(result.output) == [{"Task": {"Name": "Example"}}]
+
+    def test_multiple_templates_keep_human_readable_labels(self):
+        result = self._run(
+            [
+                {"search": {"tag": "one"}, "title": None, "description": None},
+                {"search": {"tag": "two"}, "title": None, "description": None},
+            ]
+        )
+
+        assert result.exit_code == 0
+        assert "🔍 Search 1" in result.output
+        assert "🔍 Search 2" in result.output
