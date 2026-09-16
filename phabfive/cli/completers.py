@@ -528,13 +528,13 @@ def complete_user_filter(incomplete: str) -> list[str | tuple[str, str]]:
     return _as_completions(_user_completions(incomplete, include_disabled=True))
 
 
-def complete_assignee_filter(incomplete: str) -> list[str | tuple[str, str]]:
-    """Complete the assignee filter, which takes a comma-separated list.
+def complete_user_list_filter(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete a user filter that takes a comma-separated list.
 
-    Used by maniphest search --assigned, where "@me,user1,user2" means "any
-    of these". Only the name after the last comma is completed, and the names
-    before it are kept in the offered value, since the shell replaces the
-    whole word.
+    Used by maniphest search --assigned and --author, where "@me,user1,user2"
+    means "any of these". Only the name after the last comma is completed, and
+    the names before it are kept in the offered value, since the shell replaces
+    the whole word.
 
     Parameters
     ----------

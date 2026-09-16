@@ -9,9 +9,9 @@ import pytest
 from phabfive.cli import completers
 from phabfive.cli.completers import (
     USER_COMPLETION_LIMIT,
-    complete_assignee_filter,
     complete_user,
     complete_user_filter,
+    complete_user_list_filter,
 )
 
 
@@ -172,32 +172,34 @@ class TestMeShortcut:
         assert _complete_with(_phab(USERS), "@you") == []
 
 
-class TestAssigneeFilter:
+class TestUserListFilter:
+    """Shared by maniphest search --assigned and --author."""
+
     def test_completes_a_single_name(self):
         assert _complete_with(
-            _phab(USERS), "son", completer=complete_assignee_filter
+            _phab(USERS), "son", completer=complete_user_list_filter
         ) == [("sonja.bergstrom", "Sonja Bergstrom")]
 
     def test_keeps_the_names_already_typed(self):
         result = _complete_with(
-            _phab(USERS), "@me,son", completer=complete_assignee_filter
+            _phab(USERS), "@me,son", completer=complete_user_list_filter
         )
         assert result == [("@me,sonja.bergstrom", "Sonja Bergstrom")]
 
     def test_completes_after_a_trailing_comma(self):
         result = _complete_with(
-            _phab(USERS), "@me,", completer=complete_assignee_filter
+            _phab(USERS), "@me,", completer=complete_user_list_filter
         )
         assert ("@me,@me", "yourself") in result
         assert ("@me,sonja.bergstrom", "Sonja Bergstrom") in result
 
     def test_looks_up_only_the_name_after_the_last_comma(self):
         phab = _phab(USERS)
-        _complete_with(phab, "tommy.svensson,son", completer=complete_assignee_filter)
+        _complete_with(phab, "tommy.svensson,son", completer=complete_user_list_filter)
         assert phab.user.search.call_args.kwargs["constraints"]["nameLike"] == "son"
 
     def test_includes_disabled_accounts(self):
         result = _complete_with(
-            _phab(USERS), "@me,sven", completer=complete_assignee_filter
+            _phab(USERS), "@me,sven", completer=complete_user_list_filter
         )
         assert result == [("@me,sven.retired", "Sven Retired")]

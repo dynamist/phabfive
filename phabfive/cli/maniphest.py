@@ -8,7 +8,6 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.completers import (
-    complete_assignee_filter,
     complete_column,
     complete_column_change,
     complete_column_filter,
@@ -20,6 +19,7 @@ from phabfive.cli.completers import (
     complete_status_filter,
     complete_tag,
     complete_user,
+    complete_user_list_filter,
 )
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
@@ -399,7 +399,7 @@ def search(
         None,
         "--assigned",
         help="Filter by assignee. Use @me for yourself.",
-        autocompletion=complete_assignee_filter,
+        autocompletion=complete_user_list_filter,
     ),
     space: Optional[str] = typer.Option(
         None, "--space", help="Filter by Space (supports wildcards)"
