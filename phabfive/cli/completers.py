@@ -350,6 +350,27 @@ def _fetch_projects_named(phab, incomplete: str) -> list:
     return projects
 
 
+def _project_records(projects: list) -> list:
+    """Reduce project.search results to the fields completion actually reads.
+
+    The raw objects carry phids, dates and policies that no completer looks
+    at. The parent is flattened to its name, which is all the descriptions
+    below need.
+    """
+    records = []
+    for proj in projects:
+        fields = proj.get("fields", {})
+        parent = fields.get("parent") or {}
+        records.append(
+            {
+                "id": proj.get("id"),
+                "name": fields.get("name", ""),
+                "parent": parent.get("name") or "",
+            }
+        )
+    return records
+
+
 def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
     """Complete tag (project) names from API.
 
@@ -381,25 +402,27 @@ def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
     if projects is None:
         return []
 
+    records = _project_records(projects)
+
     incomplete_lower = incomplete.lower()
     by_name = {}
-    for proj in projects:
-        name = proj["fields"]["name"]
+    for record in records:
+        name = record["name"]
         if name.lower().startswith(incomplete_lower):
-            by_name.setdefault(name.lower(), []).append(proj)
+            by_name.setdefault(name.lower(), []).append(record)
 
     completions = []
     for _, matches in sorted(by_name.items()):
-        value = _in_typed_case(incomplete, matches[0]["fields"]["name"])
+        value = _in_typed_case(incomplete, matches[0]["name"])
 
         if len(matches) > 1:
             ids = ", ".join(
-                _describe_project_id(proj)
-                for proj in sorted(matches, key=lambda proj: proj["id"])
+                _describe_project_id(record)
+                for record in sorted(matches, key=lambda record: record["id"])
             )
             completions.append((value, f"ambiguous, use the ID: {ids}"))
-        elif matches[0]["fields"].get("parent"):
-            completions.append((value, f"in {matches[0]['fields']['parent']['name']}"))
+        elif matches[0]["parent"]:
+            completions.append((value, f"in {matches[0]['parent']}"))
         else:
             completions.append(value)
 
@@ -417,10 +440,10 @@ def _in_typed_case(incomplete: str, name: str) -> str:
     return incomplete + name[len(incomplete) :]
 
 
-def _describe_project_id(proj) -> str:
+def _describe_project_id(record) -> str:
     """Describe a project as its ID plus parent name, e.g. "9 (QA)"."""
-    parent = proj["fields"].get("parent")
-    return f"{proj['id']} ({parent['name']})" if parent else str(proj["id"])
+    parent = record["parent"]
+    return f"{record['id']} ({parent})" if parent else str(record["id"])
 
 
 # Stop fetching users for username completion after this many matches
