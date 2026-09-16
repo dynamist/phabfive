@@ -120,12 +120,44 @@ def _complete_with_prefixes(incomplete: str, values: List[str]) -> List[str]:
     return completions
 
 
+# Namespaces the instance-wide value lists are cached under, and the one key
+# each of them has: unlike users and projects there is nothing to key on but
+# the instance, which the cache directory already is
+PRIORITY_CACHE_NAMESPACE = "priorities"
+STATUS_CACHE_NAMESPACE = "statuses"
+VALUES_CACHE_KEY = "all"
+
+
+def _cached_values(namespace: str, fetch, default: List[str]) -> List[str]:
+    """Return a whole value list for the instance, from cache where possible.
+
+    Priorities and statuses are instance configuration: they change when
+    somebody reconfigures Phorge, which is why they are fresh for a week
+    rather than minutes. Only an answer is remembered - an empty list is not
+    one, since no instance has zero priorities or zero statuses, so it means
+    the lookup failed even where no exception reached us.
+    """
+    directory, ttl = cache.context(namespace)
+
+    cached = cache.get(namespace, VALUES_CACHE_KEY, ttl=ttl, directory=directory)
+    if isinstance(cached, list) and cached:
+        return cached
+
+    values = _fetch_or_none(fetch)
+    if not values:
+        return default
+
+    cache.set(namespace, VALUES_CACHE_KEY, values, ttl=ttl, directory=directory)
+    return values
+
+
 def _get_priorities() -> List[str]:
     """Get priority names - tries API first, falls back to defaults."""
     from phabfive.maniphest.fetchers import get_api_priority_names
 
-    return _get_values_with_api_fallback(
-        lambda phab: get_api_priority_names(phab),
+    return _cached_values(
+        PRIORITY_CACHE_NAMESPACE,
+        get_api_priority_names,
         DEFAULT_PRIORITY_VALUES,
     )
 
@@ -144,7 +176,9 @@ def _fetch_status_keys(phab) -> List[str]:
 
 def _get_statuses() -> List[str]:
     """Get status keys (e.g., "open", "resolved") - tries API first, falls back to defaults."""
-    return _get_values_with_api_fallback(_fetch_status_keys, DEFAULT_STATUS_VALUES)
+    return _cached_values(
+        STATUS_CACHE_NAMESPACE, _fetch_status_keys, DEFAULT_STATUS_VALUES
+    )
 
 
 def _starting_with(incomplete: str, values: List[str]) -> List[str]:
