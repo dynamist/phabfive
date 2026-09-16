@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Typer-based CLI for phabfive."""
 
-import logging
 import os
 import re
 import sys
@@ -26,7 +25,6 @@ from phabfive.cli.user import user_app
 from phabfive.constants import (
     AutoOption,
     COMMENTS_SUPPORTED,
-    LogLevel,
     MONOGRAM_SHORTCUT,
     MONOGRAMS,
     OutputFormat,
@@ -44,6 +42,7 @@ _COMMENT_PREFIXES = {MONOGRAMS[app][0] for app in COMMENTS_SUPPORTED}
 # in "phabfive -v T123" and leave it unexpanded.
 _VALUELESS_GLOBAL_FLAGS = {
     "--verbose",
+    "--quiet",
     "-V",
     "--version",
     "--help",
@@ -51,8 +50,12 @@ _VALUELESS_GLOBAL_FLAGS = {
     "--show-completion",
 }
 
-# -v is counted rather than valued, so -v, -vv and -vvv all take no value
-_COUNTED_SHORT_FLAG = re.compile(r"-v+")
+# -v and -q are counted rather than valued, so -v, -vv, -q, -qq take no value
+_COUNTED_SHORT_FLAG = re.compile(r"-(v+|q+)")
+
+# The verbosity ladder -q and -v walk, quietest first
+_LOG_LEVELS = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
+_DEFAULT_LOG_LEVEL_INDEX = _LOG_LEVELS.index("WARNING")
 
 
 def _consumes_next_arg(arg: str) -> bool:
@@ -194,37 +197,37 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-def resolve_log_level(log_level: str, verbose: int) -> str:
-    """Combine --log-level and repeated -v into one effective level.
+def resolve_log_level(verbose: int, quiet: int) -> str:
+    """Resolve repeated -v and -q into one log level.
 
-    The more verbose of the two wins, so the flags compose instead of one
-    silently overriding the other.
+    The two count against each other along one ladder, so -v and -q cancel
+    out and neither can be pushed past its end.
     """
-    candidates = [log_level]
+    step = verbose - quiet
+    index = _DEFAULT_LOG_LEVEL_INDEX + step
 
-    if verbose >= 2:
-        candidates.append("DEBUG")
-    elif verbose == 1:
-        candidates.append("INFO")
+    # Saturate rather than wrap, so -vvv stays at DEBUG and -qqq at CRITICAL
+    index = max(0, min(index, len(_LOG_LEVELS) - 1))
 
-    # Lower numeric level == more verbose
-    return min(candidates, key=lambda name: logging.getLevelName(name))
+    return _LOG_LEVELS[index]
 
 
 @app.callback()
 def main(
     ctx: typer.Context,
-    log_level: LogLevel = typer.Option(
-        LogLevel.WARNING,
-        "--log-level",
-        help="Set log level.",
-    ),
     verbose: int = typer.Option(
         0,
         "-v",
         "--verbose",
         count=True,
         help="Increase verbosity: -v for INFO, -vv for DEBUG.",
+    ),
+    quiet: int = typer.Option(
+        0,
+        "-q",
+        "--quiet",
+        count=True,
+        help="Decrease verbosity: -q for ERROR, -qq for CRITICAL.",
     ),
     output_format: Optional[OutputFormat] = typer.Option(
         None,
@@ -251,9 +254,8 @@ def main(
     ),
 ) -> None:
     """CLI for Phabricator and Phorge - built for humans and AI agents."""
-    # Configure logging before anything can log; --log-level and -v compose,
-    # with the more verbose of the two winning.
-    effective_log_level = resolve_log_level(log_level.value, verbose)
+    # Configure logging before anything can log
+    effective_log_level = resolve_log_level(verbose, quiet)
     init_logging(effective_log_level)
 
     # Store global options in context for subcommands to access

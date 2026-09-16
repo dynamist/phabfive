@@ -20,16 +20,6 @@ class AutoOption(str, Enum):
     never = "never"
 
 
-class LogLevel(str, Enum):
-    """Log level options."""
-
-    DEBUG = "DEBUG"
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
-    CRITICAL = "CRITICAL"
-
-
 # https://secure.phabricator.com/w/object_name_prefixes/
 MONOGRAMS = {
     "diffusion": "R[0-9]+",
@@ -217,7 +207,6 @@ __all__ = [
     "DISPLAY_CHOICES",
     "IO_NEW_URI_CHOICES",
     "COMMENTS_SUPPORTED",
-    "LogLevel",
     "MANIPHEST_ORDER_CHOICES",
     "MANIPHEST_ORDER_DEFAULT",
     "MANIPHEST_ORDER_DIRECTIONS",

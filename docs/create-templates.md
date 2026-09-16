@@ -23,7 +23,7 @@ phabfive maniphest create --with templates/task-create/template.yaml --dry-run
 phabfive maniphest create --with templates/task-create/template.yaml
 
 # Enable debug logging to see detailed processing
-phabfive --log-level=DEBUG maniphest create --with templates/task-create/template.yaml --dry-run
+phabfive -vv maniphest create --with templates/task-create/template.yaml --dry-run
 ```
 
 ## Template Structure
@@ -296,7 +296,7 @@ Advanced example demonstrating:
 **Use case**: Complex project setup with multiple related tasks.
 
 ```bash
-phabfive --log-level=DEBUG maniphest create --with templates/task-create/test-template-v2.yml --dry-run
+phabfive -vv maniphest create --with templates/task-create/test-template-v2.yml --dry-run
 ```
 
 ## Requirements and Setup
@@ -319,7 +319,7 @@ Always test templates before creating real tasks:
 phabfive maniphest create --with templates/task-create/your-template.yaml --dry-run
 
 # 2. Enable debug logging for detailed information
-phabfive --log-level=DEBUG maniphest create --with templates/task-create/your-template.yaml --dry-run
+phabfive -vv maniphest create --with templates/task-create/your-template.yaml --dry-run
 
 # 3. Create tasks only after verification
 phabfive maniphest create --with templates/task-create/your-template.yaml

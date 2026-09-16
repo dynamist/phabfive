@@ -82,7 +82,7 @@ phabfive maniphest create --with templates/task-create/project-setup.yaml --dry-
 phabfive maniphest create --with templates/task-create/project-setup.yaml
 
 # Debug complex templates
-phabfive --log-level=DEBUG maniphest create --with templates/task-create/sprint-planning.yaml --dry-run
+phabfive -vv maniphest create --with templates/task-create/sprint-planning.yaml --dry-run
 ```
 
 **Example template structure:**
@@ -1105,8 +1105,19 @@ Every search narrows to a Space - `PHAB_SPACE`, default `S1` - even when
 `--space` is not given, so tasks in other Spaces are silently excluded.
 Use `--space='*'` to search them all.
 
-`-vv` adds debug detail, including API resolution steps. `--log-level` sets
-a level directly; when both are given, the more verbose of the two wins.
+`-vv` adds debug detail, including API resolution steps. In the other
+direction, `-q` reports only errors and `-qq` only critical failures:
+
+| Flags    | Level    | Shows                                  |
+| -------- | -------- | -------------------------------------- |
+| `-qq`    | CRITICAL | Critical failures only                 |
+| `-q`     | ERROR    | Errors only                            |
+| *(none)* | WARNING  | Warnings and errors - the default      |
+| `-v`     | INFO     | Which filters were applied             |
+| `-vv`    | DEBUG    | API resolution steps, config loading   |
+
+Repeats past either end hold there, so `-vvv` is the same as `-vv`. Opposing
+flags cancel, so `-v -q` lands back on the default.
 
 ### Using Search Templates for Complex Queries
 

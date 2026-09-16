@@ -119,22 +119,44 @@ class TestFilterNoticeLevels:
 
 
 class TestResolveLogLevel:
-    """-v and --log-level compose; the more verbose of the two wins."""
+    """-v and -q walk one ladder, counting against each other."""
 
     @pytest.mark.parametrize(
-        "log_level,verbose,expected",
+        "verbose,quiet,expected",
         [
-            ("WARNING", 0, "WARNING"),
-            ("WARNING", 1, "INFO"),
-            ("WARNING", 2, "DEBUG"),
-            ("WARNING", 3, "DEBUG"),
-            ("DEBUG", 0, "DEBUG"),
-            ("ERROR", 1, "INFO"),
-            ("DEBUG", 1, "DEBUG"),
+            (0, 0, "WARNING"),
+            (1, 0, "INFO"),
+            (2, 0, "DEBUG"),
+            (0, 1, "ERROR"),
+            (0, 2, "CRITICAL"),
         ],
     )
-    def test_resolution(self, log_level, verbose, expected):
-        assert resolve_log_level(log_level, verbose) == expected
+    def test_each_step(self, verbose, quiet, expected):
+        assert resolve_log_level(verbose, quiet) == expected
+
+    @pytest.mark.parametrize(
+        "verbose,quiet,expected",
+        [
+            (3, 0, "DEBUG"),
+            (99, 0, "DEBUG"),
+            (0, 3, "CRITICAL"),
+            (0, 99, "CRITICAL"),
+        ],
+    )
+    def test_saturates_at_both_ends(self, verbose, quiet, expected):
+        """Past the end of the ladder the level holds instead of wrapping."""
+        assert resolve_log_level(verbose, quiet) == expected
+
+    @pytest.mark.parametrize(
+        "verbose,quiet,expected",
+        [
+            (1, 1, "WARNING"),
+            (2, 1, "INFO"),
+            (1, 2, "ERROR"),
+        ],
+    )
+    def test_opposing_flags_cancel(self, verbose, quiet, expected):
+        assert resolve_log_level(verbose, quiet) == expected
 
 
 class TestCliWiring:
@@ -153,12 +175,20 @@ class TestCliWiring:
             (["-v", "maniphest", "--help"], "INFO"),
             (["-vv", "maniphest", "--help"], "DEBUG"),
             (["--verbose", "maniphest", "--help"], "INFO"),
-            (["--log-level=DEBUG", "maniphest", "--help"], "DEBUG"),
-            (["-v", "--log-level=ERROR", "maniphest", "--help"], "INFO"),
+            (["-q", "maniphest", "--help"], "ERROR"),
+            (["-qq", "maniphest", "--help"], "CRITICAL"),
+            (["--quiet", "maniphest", "--help"], "ERROR"),
         ],
     )
     def test_level_passed_to_init_logging(self, argv, expected):
         assert self._level_for(argv) == expected
+
+    def test_log_level_option_is_gone(self):
+        """--log-level was replaced by -v/-q and must not linger."""
+        result = runner.invoke(app, ["--log-level=DEBUG", "maniphest", "--help"])
+
+        assert result.exit_code != 0
+        assert "No such option" in result.output
 
 
 class TestMonogramsAfterValuelessFlags:
@@ -176,6 +206,9 @@ class TestMonogramsAfterValuelessFlags:
             (["-v", "T123"], ["-v", "maniphest", "show", "T123"]),
             (["-vv", "T123"], ["-vv", "maniphest", "show", "T123"]),
             (["--verbose", "T123"], ["--verbose", "maniphest", "show", "T123"]),
+            (["-q", "T123"], ["-q", "maniphest", "show", "T123"]),
+            (["-qq", "T123"], ["-qq", "maniphest", "show", "T123"]),
+            (["--quiet", "T123"], ["--quiet", "maniphest", "show", "T123"]),
             (["-v", "edit", "T123"], ["-v", "maniphest", "edit", "T123"]),
             (
                 ["-v", "T123", "a comment"],
