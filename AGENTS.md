@@ -119,7 +119,19 @@ When implementing new Phorge apps (countdown, paste, maniphest, etc.), **verify 
    - paste: `fields.title`, transaction type `title`
    - description is often `fields.description.raw` (a dict, not a string)
 
-6. **Display labels should match the Phorge web UI**, not the API field names
+6. **Verify search constraint names per endpoint**: `*.search` constraints are
+   named per application and are not interchangeable
+   - author filter: `paste.search` uses `authors`, `maniphest.search` uses `authorPHIDs`
+   - `maniphest.search` has no author filter in phabfive today; it filters by
+     assignee with `assigned`
+   - a wrong key fails with `ERR-INVALID-CONSTRAINT`, so check it against the
+     instance before assuming another app's name carries over:
+     ```bash
+     curl -s "$PHAB_URL/paste.search" -d "api.token=$PHAB_TOKEN" \
+       -d 'constraints[authors][0]=PHID-USER-...'
+     ```
+
+7. **Display labels should match the Phorge web UI**, not the API field names
    - The web UI uses "Name" across all apps for the title/name field
    - So display `"Name": fields.get("title", "")` for paste (API field is "title", display label is "Name")
 
