@@ -6,29 +6,14 @@ import json
 from unittest.mock import patch
 
 # 3rd party imports
-import pytest
 from typer.testing import CliRunner
 
 # phabfive imports
 from phabfive import cache
+from tests.conftest import CONF
 from phabfive.cli import app
 
 runner = CliRunner()
-
-CONF = {
-    "PHAB_URL": "https://phorge.example.com/api/",
-    "PHAB_TOKEN": "api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "PHAB_CACHE": True,
-    "PHAB_CACHE_TTL": 0,
-    "PHAB_CACHE_DIR": "",
-}
-
-
-@pytest.fixture
-def enabled_cache(monkeypatch):
-    monkeypatch.setenv("PHAB_CACHE", "1")
-    with patch("phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)):
-        yield
 
 
 class TestClear:

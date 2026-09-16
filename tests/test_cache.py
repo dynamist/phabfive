@@ -13,14 +13,8 @@ import pytest
 
 # phabfive imports
 from phabfive import cache
+from tests.conftest import CONF
 
-CONF = {
-    "PHAB_URL": "https://phorge.example.com/api/",
-    "PHAB_TOKEN": "api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "PHAB_CACHE": True,
-    "PHAB_CACHE_TTL": 0,
-    "PHAB_CACHE_DIR": "",
-}
 
 skip_on_windows = pytest.mark.skipif(
     os.name == "nt", reason="Windows uses ACLs, not Unix permission bits"
@@ -29,14 +23,6 @@ skip_as_root = pytest.mark.skipif(
     os.name != "nt" and os.geteuid() == 0,
     reason="root ignores the permission bits this asserts on",
 )
-
-
-@pytest.fixture
-def enabled_cache(monkeypatch):
-    """Switch the cache on, with configuration that needs no real files."""
-    monkeypatch.setenv("PHAB_CACHE", "1")
-    with patch("phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)):
-        yield
 
 
 def _names_the_instance(directory):
