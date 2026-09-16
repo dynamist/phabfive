@@ -89,8 +89,15 @@ Complex features use a consistent subpackage structure:
   (`update_interfaces` + `verify_connection`) on every completion
 - Every cache operation is best effort — a miss must never raise, or completion
   breaks
-- `tests/conftest.py` disables the cache for the whole suite; tests that want it
-  set `PHAB_CACHE=1` and patch `Phabfive.read_config`
+- A cached call site must use a fetch that **fails** on error. Helpers that
+  answer a failure with invented defaults (`get_api_status_map`) must not be
+  cached through, or the defaults get stored as if the server had said them —
+  which is why completion has its own `_fetch_status_keys`
+- `_get_board_columns` is the one API-backed completion that is deliberately
+  not cached: it builds its own `Phabfive()` instead of going through
+  `_get_values_with_api_fallback`, so it needs that refactor first
+- `tests/conftest.py` disables the cache for the whole suite and provides the
+  `enabled_cache` fixture that tests wanting it opt in with
 
 ### Configuration
 

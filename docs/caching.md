@@ -10,8 +10,14 @@ one that waits.
 
 ## What is cached
 
-Only the lookups that shell completion makes. Today that is usernames, for
-`--assign`, `--assigned`, `--subscribe` and `--author`.
+Only the lookups that shell completion makes:
+
+| Lookup | Offered on |
+|---|---|
+| Usernames | `--assign`, `--assigned`, `--subscribe`, `--author` |
+| Project names | `--tag`, in `maniphest`, `paste` and `edit` |
+| Priority names | `--priority` and the priority filters |
+| Status keys | `--status` and the status filters |
 
 Nothing else is cached. Phabfive does not cache API responses in general, and
 the cache is never consulted when a command actually does something — `maniphest
@@ -26,6 +32,9 @@ completion that queries the server.
 
 ```
 ~/.cache/phabfive/v1/<instance>/users/*.json
+~/.cache/phabfive/v1/<instance>/projects/*.json
+~/.cache/phabfive/v1/<instance>/priorities/*.json
+~/.cache/phabfive/v1/<instance>/statuses/*.json
 ```
 
 Directories are created `0700` and entries `0600`. Each instance gets its own
@@ -33,30 +42,42 @@ directory, keyed by URL and API token, so two accounts on one host never share
 entries and rotating a token retires everything cached under the old one. The
 token itself is never written out — only a hash of it names the directory.
 
-Entries hold a username, a real name and whether the account is disabled. No
-PHIDs, no policies, no dates.
+Entries hold only what completion reads back: a username, a real name and
+whether the account is disabled; a project's id, name and parent name; and the
+plain lists of priority names and status keys. No PHIDs, no policies, no dates.
 
 ## How long entries live
 
 | Data | Fresh for |
 |---|---|
-| Usernames, spaces | 24 hours |
+| Usernames | 24 hours |
 | Priorities, statuses | 7 days |
-| Projects, board columns | 5 minutes |
+| Project names | 5 minutes |
 
 User lists change rarely and instance configuration barely changes at all, while
-projects and their columns come and go.
+projects come and go.
 
-Because the `nameLike` lookup matches substrings, one lookup answers every
-prefix that extends it: after `--assign <TAB>` has fetched once, `--assign
-so<TAB>` and `--assign son<TAB>` are answered from the same entry without
-touching the network.
+Both name lookups match on the server with a constraint that only ever gets
+narrower as you type, so one lookup answers every prefix that extends it: after
+`--assign <TAB>` has fetched once, `--assign so<TAB>` and `--assign son<TAB>`
+are answered from the same entry without touching the network, and the same
+goes for `--tag`.
+
+Project names match on word prefixes rather than substrings, so typing `Core`
+finds `GUNNAR-Core` on the server — though only names *starting* with what you
+typed are ever offered, because the shell discards the rest.
+
+Priorities and statuses are whole lists for the instance, so there is nothing
+to narrow: one lookup a week answers every TAB.
 
 ## Staleness
 
 Completion is advisory. A name that is not offered can still be typed, and the
 server resolves it normally — so the worst a stale entry does is make you type
-a colleague's name in full. If somebody has just joined, left or been renamed:
+a colleague's name in full. A new project shows up within five minutes, but a
+newly configured priority or status can take a week. After somebody joins,
+leaves or is renamed, after a project is created, or after the instance's
+priorities or statuses are reconfigured:
 
 ```bash
 phabfive cache clear
