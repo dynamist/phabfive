@@ -290,7 +290,8 @@ class Phabfive:
         except APIError as e:
             raise PhabfiveRemoteException(e)
 
-    def _check_secure_permissions(self, file_path):
+    @classmethod
+    def _check_secure_permissions(cls, file_path):
         """
         Check that a file has secure permissions (not readable by group/others).
 
@@ -326,7 +327,8 @@ class Phabfive:
                 f"Please run: chmod 600 {file_path}"
             )
 
-    def _load_arcrc(self, current_conf):
+    @classmethod
+    def _load_arcrc(cls, current_conf):
         """
         Load configuration from Arcanist's ~/.arcrc file.
 
@@ -363,7 +365,7 @@ class Phabfive:
             return {}
 
         # Security check: ensure file has secure permissions (0600 or stricter)
-        self._check_secure_permissions(arcrc_path)
+        cls._check_secure_permissions(arcrc_path)
 
         log.debug(f"Loading configuration from {arcrc_path}")
 
@@ -388,10 +390,10 @@ class Phabfive:
 
         if current_url:
             # PHAB_URL is already set, try to find matching token in .arcrc
-            normalized_current = self._normalize_url(current_url)
+            normalized_current = cls._normalize_url(current_url)
 
             for host_uri, host_data in hosts.items():
-                normalized_host = self._normalize_url(host_uri)
+                normalized_host = cls._normalize_url(host_uri)
                 if normalized_current == normalized_host:
                     token = host_data.get("token")
                     if token:
@@ -415,10 +417,10 @@ class Phabfive:
 
                 if default_host:
                     # Normalize the default URL and find matching host
-                    normalized_default = self._normalize_url(default_host)
+                    normalized_default = cls._normalize_url(default_host)
 
                     for host_uri, host_data in hosts.items():
-                        normalized_host = self._normalize_url(host_uri)
+                        normalized_host = cls._normalize_url(host_uri)
                         if normalized_default == normalized_host:
                             token = host_data.get("token")
                             log.debug(f"Using default host from .arcrc: {host_uri}")
@@ -461,7 +463,8 @@ class Phabfive:
 
         return result
 
-    def _load_arcconfig(self):
+    @classmethod
+    def _load_arcconfig(cls):
         """
         Load PHAB_URL from .arcconfig in the git repository root.
 
@@ -515,11 +518,22 @@ class Phabfive:
             log.debug("No phabricator.uri found in .arcconfig")
             return {}
 
-        normalized = self._normalize_url(uri)
+        normalized = cls._normalize_url(uri)
         log.debug(f"Using PHAB_URL from .arcconfig: {normalized}")
         return {"PHAB_URL": normalized}
 
     def load_config(self):
+        """
+        Load configuration and remember whether PHAB_URL was chosen explicitly.
+
+        See read_config for the search order.
+        """
+        conf, explicit_phab_url = type(self).read_config()
+        self._explicit_phab_url = explicit_phab_url
+        return conf
+
+    @classmethod
+    def read_config(cls):
         """
         Load configuration from configuration files and environment variables.
 
@@ -533,6 +547,16 @@ class Phabfive:
           6. `.arcconfig` in git root
           7. `~/.arcrc` (Arcanist configuration)
           8. environment variables
+
+        A classmethod because the cache needs PHAB_URL to key its entries, and
+        building a Phabfive() to get it would cost two API round trips
+        (update_interfaces and verify_connection) on every shell completion.
+
+        Returns
+        -------
+        tuple
+            (conf, explicit_phab_url), where explicit_phab_url is whether the
+            host came from anything other than ~/.arcrc
         """
         environ = os.environ.copy()
 
@@ -576,7 +600,7 @@ class Phabfive:
 
         user_conf_file = os.path.join(f"{appdirs.user_config_dir('phabfive')}.yaml")
         log.debug(f"Loading configuration file: {user_conf_file}")
-        self._check_secure_permissions(user_conf_file)
+        cls._check_secure_permissions(user_conf_file)
         anyconfig.merge(
             conf,
             {
@@ -597,7 +621,7 @@ class Phabfive:
         log.debug(f"Loading configuration files: {user_conf_dir}")
         # Check permissions on each file in the user config directory
         for conf_file in glob.glob(user_conf_dir):
-            self._check_secure_permissions(conf_file)
+            cls._check_secure_permissions(conf_file)
         anyconfig.merge(
             conf,
             {
@@ -622,7 +646,7 @@ class Phabfive:
             )
 
         # Load from .arcconfig in git repository root
-        arcconfig_conf = self._load_arcconfig()
+        arcconfig_conf = cls._load_arcconfig()
         if arcconfig_conf:
             log.debug("Merging configuration from .arcconfig")
             anyconfig.merge(conf, arcconfig_conf)
@@ -631,9 +655,7 @@ class Phabfive:
         # Everything merged so far (site and user yaml, .arcconfig) plus the
         # environment means the user pointed phabfive at a specific host; a
         # PHAB_URL that only comes out of ~/.arcrc does not.
-        self._explicit_phab_url = bool(conf.get("PHAB_URL")) or bool(
-            environ.get("PHAB_URL")
-        )
+        explicit_phab_url = bool(conf.get("PHAB_URL")) or bool(environ.get("PHAB_URL"))
 
         # Load from Arcanist .arcrc file (supports single or multiple hosts)
         # Include PHAB_URL from environment so .arcrc can match the right host
@@ -641,7 +663,7 @@ class Phabfive:
         arcrc_lookup_conf = dict(conf)
         if "PHAB_URL" in environ and environ["PHAB_URL"]:
             arcrc_lookup_conf["PHAB_URL"] = environ["PHAB_URL"]
-        arcrc_conf = self._load_arcrc(arcrc_lookup_conf)
+        arcrc_conf = cls._load_arcrc(arcrc_lookup_conf)
         if arcrc_conf:
             log.debug("Merging configuration from ~/.arcrc")
             anyconfig.merge(conf, arcrc_conf)
@@ -652,7 +674,7 @@ class Phabfive:
             {key: value for key, value in environ.items() if key in CONFIGURABLES},
         )
 
-        return conf
+        return conf, explicit_phab_url
 
     def has_explicit_phab_url(self):
         """
@@ -686,7 +708,8 @@ class Phabfive:
 
         return result
 
-    def _normalize_url(self, url):
+    @classmethod
+    def _normalize_url(cls, url):
         """
         Normalizes a URL by removing trailing slashes and ensuring it ends with '/api/'
 
