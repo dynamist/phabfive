@@ -24,18 +24,18 @@ class TestClear:
         result = runner.invoke(app, ["cache", "clear"])
 
         assert result.exit_code == 0
-        assert "Removed 2 cached entries" in result.stdout
+        assert "Removed 2 cached lookups" in result.stdout
         assert cache.get("users", "one") is cache.MISS
 
     def test_singular_for_one_entry(self, enabled_cache):
         cache.set("users", "one", 1)
         result = runner.invoke(app, ["cache", "clear"])
-        assert "Removed 1 cached entry from" in result.stdout
+        assert "Removed 1 cached lookup from" in result.stdout
 
     def test_an_empty_cache_is_not_an_error(self, enabled_cache):
         result = runner.invoke(app, ["cache", "clear"])
         assert result.exit_code == 0
-        assert "Removed 0 cached entries" in result.stdout
+        assert "Removed 0 cached lookups" in result.stdout
 
     def test_all_works_without_credentials(self, monkeypatch):
         """What somebody reaches for when things are broken."""
@@ -49,7 +49,7 @@ class TestClear:
             result = runner.invoke(app, ["cache", "clear", "--all"])
 
         assert result.exit_code == 0
-        assert "Removed 1 cached entry from every instance" in result.stdout
+        assert "Removed 1 cached lookup from every instance" in result.stdout
 
     def test_says_so_when_no_instance_is_configured(self, monkeypatch):
         monkeypatch.setenv("PHAB_CACHE", "1")

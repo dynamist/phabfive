@@ -21,6 +21,8 @@ itself.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from phabfive.maniphest.core import Maniphest
 
 PROJECT_A = "PHID-PROJ-aaaaaaaaaaaaaaaaaaaa"
@@ -81,6 +83,20 @@ def _first_call_for(project_phids, tag, **extra):
         f"no search issued for tag={tag!r}, project_phids={project_phids!r}"
     )
     return maniphest.phab.maniphest.search.call_args_list[0][1]
+
+
+@pytest.fixture(autouse=True)
+def frozen_clock():
+    """Stop the date filters drifting between the calls being compared.
+
+    task_search turns "7 days ago" into an absolute timestamp from the
+    current time, so two calls either side of a second boundary produce
+    constraints that differ by 1 and a parity assertion fails for a
+    reason that has nothing to do with parity.
+    """
+    with patch("phabfive.maniphest.core.days_ago_to_timestamp") as clock:
+        clock.side_effect = lambda days: 1_700_000_000 - int(days) * 86400
+        yield
 
 
 def _constraints_for(project_phids, tag):
@@ -156,6 +172,15 @@ class TestSearchFilterParity:
             assert requested.get("order") == "outdated", (
                 f"tag={tag!r} projects={len(project_phids)} lost --order"
             )
+
+    def test_the_date_filters_do_not_drift_between_paths(self, mock_init):
+        """Guards the guard: without the frozen clock these differ by 1
+        whenever a second boundary falls between the two calls, which is
+        how this file first failed in CI."""
+        expected = 1_700_000_000 - 7 * 86400
+
+        for project_phids, tag in (([], None), ([PROJECT_A], "TeamA")):
+            assert _constraints_for(project_phids, tag)["createdStart"] == expected
 
     def test_project_selection_still_differs_per_path(self, mock_init):
         """The parity checks above must not be vacuous."""

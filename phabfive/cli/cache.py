@@ -87,7 +87,7 @@ def clear(
         if removed is None:
             typer.echo(f"Error: '{url}' does not name a host to clear", err=True)
             raise typer.Exit(1)
-        typer.echo(f"Removed {removed} cached {_entries(removed)} for {url}{scope}")
+        typer.echo(f"Removed {removed} cached {_lookups(removed)} for {url}{scope}")
         return
 
     removed = cache.clear(all_instances=all_instances, namespaces=wanted)
@@ -101,7 +101,7 @@ def clear(
         raise typer.Exit(1)
 
     where = "every instance" if all_instances else "the configured instance"
-    typer.echo(f"Removed {removed} cached {_entries(removed)} from {where}{scope}")
+    typer.echo(f"Removed {removed} cached {_lookups(removed)} from {where}{scope}")
 
     # Removing nothing while the same host has entries under another token
     # means the configured token does not match what was cached. Saying so
@@ -137,8 +137,9 @@ def _namespaces(count: int) -> str:
     return "namespace" if count == 1 else "namespaces"
 
 
-def _entries(count: int) -> str:
-    return "entry" if count == 1 else "entries"
+def _lookups(count: int) -> str:
+    """One cached lookup per file, the unit `cache info` counts as Lookups."""
+    return "lookup" if count == 1 else "lookups"
 
 
 def _warn_about_other_tokens() -> None:
