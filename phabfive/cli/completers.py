@@ -130,15 +130,21 @@ def _get_priorities() -> List[str]:
     )
 
 
+def _fetch_status_keys(phab) -> List[str]:
+    """Fetch the status keys, letting a failed lookup fail.
+
+    Deliberately not get_api_status_map: that answers a broken lookup with an
+    invented map, which the commands need - they have to have a map to
+    validate and display with - but completion must not mistake for the
+    server's answer. DEFAULT_STATUS_VALUES is what completion falls back to,
+    and a caller that remembers the answer must not write fiction down.
+    """
+    return list(phab.maniphest.querystatuses().get("statusMap", {}).keys())
+
+
 def _get_statuses() -> List[str]:
     """Get status keys (e.g., "open", "resolved") - tries API first, falls back to defaults."""
-    from phabfive.maniphest.fetchers import get_api_status_map
-
-    def fetch_statuses(phab):
-        status_map = get_api_status_map(phab)
-        return list(status_map.get("statusMap", {}).keys())
-
-    return _get_values_with_api_fallback(fetch_statuses, DEFAULT_STATUS_VALUES)
+    return _get_values_with_api_fallback(_fetch_status_keys, DEFAULT_STATUS_VALUES)
 
 
 def _starting_with(incomplete: str, values: List[str]) -> List[str]:
