@@ -121,7 +121,9 @@ def _warn_about_other_tokens() -> None:
 def info(ctx: typer.Context) -> None:
     """Show where completion data is cached and how much of it there is.
 
-    Reports sizes and ages only - cached values are never printed.
+    Lookups counts cached lookups, not objects: one lookup holds the whole
+    result, so Records says how many projects, users or the like are in it.
+    Reports counts, sizes and ages only - cached values are never printed.
     """
     described = cache.describe()
     output_format = _get_output_format(ctx)
@@ -161,16 +163,27 @@ def _display_rich(described: dict) -> None:
     namespaces = described["Namespaces"]
     if not namespaces:
         console.print("\nNothing cached yet.")
+        _note_other_accounts(console, described)
         return
 
     table = Table(show_header=True, header_style="bold")
-    for column in ["Namespace", "Entries", "Size", "TTL", "Oldest", "Newest"]:
+    for column in [
+        "Namespace",
+        "Lookups",
+        "Records",
+        "Size",
+        "TTL",
+        "Oldest",
+        "Newest",
+    ]:
         table.add_column(column)
 
     for namespace in namespaces:
+        records = namespace.get("Records")
         table.add_row(
             namespace["Namespace"],
-            str(namespace["Entries"]),
+            str(namespace["Lookups"]),
+            "-" if records is None else str(records),
             _human_size(namespace["Size"]),
             _human_age(namespace["TTL"]),
             _human_age(namespace["Oldest"]),
@@ -179,3 +192,21 @@ def _display_rich(described: dict) -> None:
 
     console.print()
     console.print(table)
+    _note_other_accounts(console, described)
+
+
+def _note_other_accounts(console, described: dict) -> None:
+    """Say when this host has entries none of the above account for.
+
+    Only the configured token's entries are reported, so without this a
+    host with entries under another token reads as having none.
+    """
+    count = described.get("OtherAccounts") or 0
+    if not count:
+        return
+
+    accounts = "account" if count == 1 else "accounts"
+    console.print(
+        f"\nThis host has {count} other cached {accounts}, written under a "
+        f"different token and not counted above."
+    )

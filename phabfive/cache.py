@@ -459,10 +459,38 @@ def clear(all_instances=False):
     return removed
 
 
+def _record_count(path):
+    """How many records one entry holds, or None if that cannot be told.
+
+    One cached lookup routinely holds dozens of projects or users, so the
+    number of lookups alone reads as a nearly empty cache. Counting the
+    records is what shows a lookup as the full result set it is.
+
+    The value itself is only measured, never returned.
+    """
+    try:
+        with open(path, "r") as stream:
+            value = json.load(stream).get("value")
+    except (OSError, ValueError):
+        return None
+
+    # Narrowable lookups wrap their records alongside the truncated flag
+    if isinstance(value, dict):
+        records = value.get("records")
+        return len(records) if isinstance(records, list) else None
+
+    # Whole-list namespaces, such as priorities and statuses
+    if isinstance(value, list):
+        return len(value)
+
+    return None
+
+
 def describe():
     """Summarise what is cached, for `phabfive cache info`.
 
-    Reports sizes and ages only; cached values are never included.
+    Reports sizes, ages and how many records are held; cached values are
+    never included.
     """
     conf = _read_config() or {}
     url = conf.get("PHAB_URL")
@@ -485,6 +513,7 @@ def describe():
             if not os.path.isdir(namespace_dir):
                 continue
             ages, size, count = [], 0, 0
+            records = None
             for name in os.listdir(namespace_dir):
                 path = os.path.join(namespace_dir, name)
                 try:
@@ -493,12 +522,18 @@ def describe():
                     count += 1
                 except OSError:
                     continue
+                held = _record_count(path)
+                if held is not None:
+                    records = (records or 0) + held
             if not count:
                 continue
             namespaces.append(
                 {
                     "Namespace": namespace,
-                    "Entries": count,
+                    "Lookups": count,
+                    # None when no entry's shape was recognised, so an
+                    # unreadable namespace is not reported as holding zero
+                    "Records": records,
                     "Size": size,
                     "TTL": ttl_for(namespace),
                     "Oldest": int(max(ages)),
@@ -511,4 +546,7 @@ def describe():
         "Reason": why,
         "Path": directory or root(conf),
         "Namespaces": namespaces,
+        # Entries this host has under a different token. Without it, a report
+        # of nothing cached is as misleading as "Lookups: 1" alone.
+        "OtherAccounts": other_cached_accounts()[0],
     }
