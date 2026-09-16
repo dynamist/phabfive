@@ -11,7 +11,12 @@ from pathlib import Path
 from jinja2 import Template
 from ruamel.yaml import YAML
 
-from phabfive.constants import PRIORITY_DEFAULT
+from phabfive.constants import (
+    MANIPHEST_ORDER_DEFAULT,
+    MANIPHEST_ORDER_DIRECTIONS,
+    MANIPHEST_ORDER_FIELDS,
+    PRIORITY_DEFAULT,
+)
 from phabfive.core import Phabfive
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -44,10 +49,13 @@ from phabfive.maniphest.resolvers import (
     resolve_user_phids,
 )
 from phabfive.maniphest.utils import (
+    PHORGE_ORDER_KEYS,
     days_ago_to_timestamp,
     parse_time_with_unit,
     render_variables_with_dependency_resolution,
+    sort_tasks,
 )
+from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
 from phabfive.project_filters import parse_project_patterns
 
@@ -550,6 +558,7 @@ class Maniphest(Phabfive):
             "status",
             "show-history",
             "show-metadata",
+            "order",
         }
 
         for i, data in enumerate(documents):
@@ -641,7 +650,7 @@ class Maniphest(Phabfive):
 
         return constraints
 
-    def _search_all_pages(self, constraints, log_context=""):
+    def _search_all_pages(self, constraints, log_context="", order=None):
         """
         Run maniphest.search, following cursors until every page is read.
 
@@ -653,6 +662,9 @@ class Maniphest(Phabfive):
             Constraints for the search.
         log_context : str
             Optional prefix for the per-page debug line, e.g. a project PHID.
+        order : str, optional
+            A builtin maniphest.search order name. Cursor paging respects it,
+            so the pages stay in order as they are concatenated.
 
         Returns
         -------
@@ -664,6 +676,8 @@ class Maniphest(Phabfive):
 
         while True:
             kwargs = {"constraints": constraints, "attachments": {"columns": True}}
+            if order:
+                kwargs["order"] = order
             if after:
                 kwargs["after"] = after
 
@@ -703,6 +717,7 @@ class Maniphest(Phabfive):
         show_metadata=False,
         include_closed=False,
         limit=100,
+        order=None,
     ):
         """
         Search for Phabricator Maniphest tasks with given parameters.
@@ -748,6 +763,9 @@ class Maniphest(Phabfive):
                       (resolved, wontfix, invalid, duplicate, spite). Default is False,
                       which filters out closed tasks at API level. --status filters are additive.
         limit         (int, optional): Maximum number of tasks to return. Default is 100.
+                      Applied after ordering, so it keeps the top N of the requested order.
+        order         (str, optional): Result ordering as "<field>[:asc|:desc]", e.g.
+                      "updated:asc". Defaults to "priority", matching Phorge's own default.
         """
         # Validation - require at least one filter
         has_other_filters = any(
@@ -768,6 +786,17 @@ class Maniphest(Phabfive):
 
         if not has_other_filters and not include_task_ids:
             raise PhabfiveConfigException("No search criteria specified")
+
+        # Resolved before anything is fetched so a bad --order fails fast, and
+        # so library callers get the same validation the CLI does.
+        order_field, order_direction = parse_order(
+            order,
+            MANIPHEST_ORDER_FIELDS,
+            MANIPHEST_ORDER_DIRECTIONS,
+            MANIPHEST_ORDER_DEFAULT,
+        )
+        api_order = PHORGE_ORDER_KEYS.get((order_field, order_direction))
+        log.info(f"Ordering results by '{order_field}:{order_direction}'")
 
         # Convert date filters to Unix timestamps (preserve original values for logging)
         created_after_original = created_after
@@ -918,7 +947,10 @@ class Maniphest(Phabfive):
                         for phid_list in phids_by_name:
                             resolved_phids_set.update(phid_list)
 
-                    project_phids = list(resolved_phids_set)
+                    # Sorted, not just listed: set iteration order over strings
+                    # is randomised per process (PYTHONHASHSEED), which made the
+                    # per-project merge below come out differently on every run.
+                    project_phids = sorted(resolved_phids_set)
 
                     if not project_phids:
                         log.error(f"No projects matched the tag pattern '{tag}'")
@@ -963,7 +995,7 @@ class Maniphest(Phabfive):
                 updated_before=updated_before,
             )
 
-            result_data = self._search_all_pages(constraints)
+            result_data = self._search_all_pages(constraints, order=api_order)
         else:
             base_constraints = self._build_search_constraints(
                 include_closed=include_closed,
@@ -984,7 +1016,9 @@ class Maniphest(Phabfive):
 
                     # Merge each project's tasks, avoiding duplicates
                     for item in self._search_all_pages(
-                        constraints, log_context=f"Project {phid}: "
+                        constraints,
+                        log_context=f"Project {phid}: ",
+                        order=api_order,
                     ):
                         all_tasks.setdefault(item["id"], item)
 
@@ -994,7 +1028,13 @@ class Maniphest(Phabfive):
                 # Single project
                 constraints = {**base_constraints, "projects": project_phids}
 
-                result_data = self._search_all_pages(constraints)
+                result_data = self._search_all_pages(constraints, order=api_order)
+
+        # Order the merged result before anything downstream narrows it. The
+        # post-filters and --exclude below preserve order, so the --limit
+        # truncation keeps the top N of the requested order rather than an
+        # arbitrary slice of a project-grouped merge.
+        result_data = sort_tasks(result_data, order_field, order_direction)
 
         # Initialize task_transitions_map for storing transitions (used by both filtering and display)
         task_transitions_map = {}

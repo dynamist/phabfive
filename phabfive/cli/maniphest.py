@@ -12,6 +12,7 @@ from phabfive.cli.completers import (
     complete_column,
     complete_column_change,
     complete_column_filter,
+    complete_order,
     complete_priority,
     complete_priority_change,
     complete_priority_filter,
@@ -441,6 +442,14 @@ def search(
         False, "--show-metadata", help="Display filter match metadata"
     ),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results to return"),
+    order: Optional[str] = typer.Option(
+        None,
+        "--order",
+        "-o",
+        help="Sort results by priority|updated|created|closed|title|relevance, "
+        "optionally suffixed with :asc or :desc  [default: priority]",
+        autocompletion=complete_order,
+    ),
 ) -> None:
     """Search for Maniphest tasks."""
     from phabfive.transitions import parse_column_patterns, parse_priority_patterns
@@ -582,6 +591,10 @@ def search(
             "limit",
             100,
         )
+        # Left possibly None so task_search applies the default; giving the
+        # option a non-None default here would silently beat a template's
+        # "order:" on every run.
+        final_order = get_param(order, yaml_params, "order")
 
         # Check if any search criteria provided
         has_criteria = any(
@@ -603,25 +616,30 @@ def search(
             typer.echo("    phabfive maniphest search [<text_query>] [options]")
             return
 
-        result = maniphest.task_search(
-            text_query=final_text_query,
-            tag=final_tag,
-            include_task_ids=include_task_ids,
-            exclude_task_ids=exclude_task_ids,
-            assigned=final_assigned,
-            space=final_space,
-            created_after=final_created_after,
-            created_before=final_created_before,
-            updated_after=final_updated_after,
-            updated_before=final_updated_before,
-            column_patterns=column_patterns,
-            priority_patterns=priority_patterns,
-            status_patterns=status_patterns,
-            show_history=final_show_history,
-            show_metadata=final_show_metadata,
-            include_closed=final_include_closed,
-            limit=final_limit,
-        )
+        try:
+            result = maniphest.task_search(
+                text_query=final_text_query,
+                tag=final_tag,
+                include_task_ids=include_task_ids,
+                exclude_task_ids=exclude_task_ids,
+                assigned=final_assigned,
+                space=final_space,
+                created_after=final_created_after,
+                created_before=final_created_before,
+                updated_after=final_updated_after,
+                updated_before=final_updated_before,
+                column_patterns=column_patterns,
+                priority_patterns=priority_patterns,
+                status_patterns=status_patterns,
+                show_history=final_show_history,
+                show_metadata=final_show_metadata,
+                include_closed=final_include_closed,
+                limit=final_limit,
+                order=final_order,
+            )
+        except PhabfiveConfigException as e:
+            typer.echo(f"ERROR: {e}", err=True)
+            raise typer.Exit(1)
 
         output_format = _get_output_format(ctx)
         _display_tasks(result, output_format, maniphest)

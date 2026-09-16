@@ -45,6 +45,44 @@ class TestPassphraseTypeCompletion:
         assert _complete(["passphrase", "search", "--type"], "t") == ["token"]
 
 
+class TestOrderCompletion:
+    """--order completes progressively: fields first, directions after ":"."""
+
+    @pytest.mark.parametrize("flag", ["--order", "-o"])
+    def test_offers_the_fields(self, flag):
+        assert _complete(["maniphest", "search", flag], "") == [
+            "priority",
+            "updated",
+            "created",
+            "closed",
+            "title",
+            "relevance",
+        ]
+
+    def test_matches_field_prefix(self):
+        assert _complete(["maniphest", "search", "--order"], "c") == [
+            "created",
+            "closed",
+        ]
+
+    def test_offers_directions_after_the_colon(self):
+        assert _complete(["maniphest", "search", "--order"], "updated:") == [
+            "updated:asc",
+            "updated:desc",
+        ]
+
+    def test_narrows_the_direction(self):
+        assert _complete(["maniphest", "search", "--order"], "title:d") == [
+            "title:desc"
+        ]
+
+    def test_directionless_field_offers_nothing(self):
+        assert _complete(["maniphest", "search", "--order"], "relevance:") == []
+
+    def test_unknown_field_offers_nothing(self):
+        assert _complete(["maniphest", "search", "--order"], "bogus:") == []
+
+
 class TestPasteTagCompletion:
     @pytest.mark.parametrize(
         "args", [["paste", "create", "--tag"], ["paste", "edit", "P1", "--tag"]]

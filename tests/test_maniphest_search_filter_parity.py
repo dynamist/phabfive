@@ -71,15 +71,20 @@ def _maniphest(project_phids):
     return maniphest
 
 
-def _constraints_for(project_phids, tag):
-    """Constraints of the first maniphest.search call for one path."""
+def _first_call_for(project_phids, tag, **extra):
+    """Keyword arguments of the first maniphest.search call for one path."""
     maniphest = _maniphest(project_phids)
-    maniphest.task_search(tag=tag, **FILTERS)
+    maniphest.task_search(tag=tag, **FILTERS, **extra)
 
     assert maniphest.phab.maniphest.search.called, (
         f"no search issued for tag={tag!r}, project_phids={project_phids!r}"
     )
-    return maniphest.phab.maniphest.search.call_args_list[0][1]["constraints"]
+    return maniphest.phab.maniphest.search.call_args_list[0][1]
+
+
+def _constraints_for(project_phids, tag):
+    """Constraints of the first maniphest.search call for one path."""
+    return _first_call_for(project_phids, tag)["constraints"]
 
 
 def _shared_filters(constraints):
@@ -130,6 +135,24 @@ class TestSearchFilterParity:
             missing = expected - set(constraints)
             assert not missing, (
                 f"tag={tag!r} projects={len(project_phids)} dropped {missing}"
+            )
+
+    def test_order_reaches_every_path(self, mock_init):
+        """Ordering is a top-level argument, and no path may skip it."""
+        for project_phids, tag in (
+            ([], None),
+            ([], "*"),
+            ([PROJECT_A], "TeamA"),
+            ([PROJECT_A, PROJECT_B], "TeamA"),
+        ):
+            default = _first_call_for(project_phids, tag)
+            requested = _first_call_for(project_phids, tag, order="updated:asc")
+
+            assert default.get("order") == "priority", (
+                f"tag={tag!r} projects={len(project_phids)} lost the default order"
+            )
+            assert requested.get("order") == "outdated", (
+                f"tag={tag!r} projects={len(project_phids)} lost --order"
             )
 
     def test_project_selection_still_differs_per_path(self, mock_init):

@@ -252,6 +252,7 @@ phabfive maniphest search --include T2069,T2257
   search and is included appears once.
 - `--exclude` is applied before `--limit`, so freed slots fill with other
   matches. Excluded IDs that didn't match anything are silently ignored.
+  `--limit` keeps the top N of the [result ordering](#result-ordering).
 - Passing the same task to both `--include` and `--exclude` is an error.
 - Both are supported in [search templates](search-templates.md) as a
   comma-separated string (`include: "T2069,T2257"`) or a YAML list:
@@ -263,6 +264,60 @@ phabfive maniphest search --include T2069,T2257
       - T2257
     exclude: "T1500"
   ```
+
+### Result Ordering
+
+Results come back in a fixed order every run. The default is **priority**,
+highest first, which is the same order the Phorge web UI shows by default.
+Pick another with `--order` (`-o`):
+
+```bash
+phabfive maniphest search --tag Sprint1 --order updated
+phabfive maniphest search --tag Sprint1 --order title:desc --limit 10
+```
+
+An order is written as `<field>[:asc|:desc]`. The bare field gives the
+direction you almost always want, and both directions are available for every
+field:
+
+| Value | Order |
+|---|---|
+| `priority` *(default)* | Highest priority first |
+| `priority:asc` | Lowest priority first |
+| `updated` | Recently updated first |
+| `updated:asc` | Least recently updated first |
+| `created` | Newest task first |
+| `created:asc` | Oldest task first |
+| `closed` | Recently closed first |
+| `closed:asc` | Longest-closed first |
+| `title` | Alphabetical, A-Z |
+| `title:desc` | Alphabetical, Z-A |
+| `relevance` | Best text match first |
+
+**Behavior:**
+
+- Ordering is applied **before** `--limit`, so `--limit 20 --order priority`
+  returns the twenty highest-priority tasks rather than twenty arbitrary ones.
+- `closed` and `closed:asc` both leave open tasks at the end; they have no
+  close date to sort by.
+- `--include` tasks are appended after the limit and keep the order you listed
+  them in, so they stay at the end of the output whatever `--order` says. That
+  makes it easy to see what you pinned.
+- `relevance` uses the server's own text-match ranking, which only means
+  anything alongside a text query. It is the one order phabfive cannot re-sort
+  locally, so when a tag spans several projects those results stay grouped by
+  project (deterministically, but grouped).
+- `order` is supported in [search templates](search-templates.md):
+
+  ```yaml
+  search:
+    tag: "Sprint*"
+    order: updated:asc
+  ```
+
+- Phorge's own order names are not accepted, since `outdated` is opaque and
+  `newest` never says newest what. Typing one tells you the phabfive spelling:
+  `--order newest` suggests `created`.
 
 ### Advanced Project Filtering
 
