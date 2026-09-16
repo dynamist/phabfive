@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """Cache commands for phabfive CLI."""
 
+from typing import List, Optional
+
 import typer
 
 from phabfive import cache
-from phabfive.cli.completers import complete_cached_host
+from phabfive.cli.completers import complete_cache_namespace, complete_cached_host
 from phabfive.core import Phabfive
 
 cache_app = typer.Typer(help="Inspect and clear cached completion data")
@@ -39,6 +41,11 @@ def _human_age(seconds: int) -> str:
 
 @cache_app.command()
 def clear(
+    namespaces: Optional[List[str]] = typer.Argument(
+        None,
+        help="Namespaces to clear (e.g. users projects). Default: all of them.",
+        autocompletion=complete_cache_namespace,
+    ),
     all_instances: bool = typer.Option(
         False,
         "--all",
@@ -60,6 +67,8 @@ def clear(
     \b
     Examples:
         phabfive cache clear
+        phabfive cache clear users
+        phabfive cache clear users projects
         phabfive cache clear --url http://phorge.localhost
         phabfive cache clear --all
     """
@@ -67,17 +76,21 @@ def clear(
         typer.echo("Error: --url and --all cannot be combined", err=True)
         raise typer.Exit(1)
 
+    wanted = _checked_namespaces(namespaces)
+    # Trailing, so the sentence reads the same with and without it
+    scope = "" if wanted is None else " (" + ", ".join(wanted) + ")"
+
     # "is not None", so an empty --url is rejected rather than quietly
     # falling through to clearing the configured instance
     if url is not None:
-        removed = cache.clear_host(url)
+        removed = cache.clear_host(url, namespaces=wanted)
         if removed is None:
             typer.echo(f"Error: '{url}' does not name a host to clear", err=True)
             raise typer.Exit(1)
-        typer.echo(f"Removed {removed} cached {_entries(removed)} for {url}")
+        typer.echo(f"Removed {removed} cached {_entries(removed)} for {url}{scope}")
         return
 
-    removed = cache.clear(all_instances=all_instances)
+    removed = cache.clear(all_instances=all_instances, namespaces=wanted)
 
     if removed is None:
         typer.echo(
@@ -88,13 +101,40 @@ def clear(
         raise typer.Exit(1)
 
     where = "every instance" if all_instances else "the configured instance"
-    typer.echo(f"Removed {removed} cached {_entries(removed)} from {where}")
+    typer.echo(f"Removed {removed} cached {_entries(removed)} from {where}{scope}")
 
     # Removing nothing while the same host has entries under another token
     # means the configured token does not match what was cached. Saying so
     # keeps that from reading as "there was nothing to clear".
     if not all_instances and removed == 0:
         _warn_about_other_tokens()
+
+
+def _checked_namespaces(namespaces) -> Optional[List[str]]:
+    """Validate the namespaces asked for, or exit saying which are unknown.
+
+    A typo would otherwise clear nothing and report success, the same way a
+    mismatched token used to.
+    """
+    if not namespaces:
+        return None
+
+    known = cache.known_namespaces()
+    unknown = [name for name in namespaces if name not in known]
+    if unknown:
+        typer.echo(
+            f"Error: unknown cache {_namespaces(len(unknown))}: "
+            f"{', '.join(unknown)}. Known: {', '.join(known)}",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # Deduplicated so "users users" does not read as two namespaces
+    return sorted(dict.fromkeys(namespaces))
+
+
+def _namespaces(count: int) -> str:
+    return "namespace" if count == 1 else "namespaces"
 
 
 def _entries(count: int) -> str:
