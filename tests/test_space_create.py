@@ -216,3 +216,67 @@ class TestCreatingInASpace:
 
         with pytest.raises(PhabfiveConfigException):
             maniphest.create_task(title="Task", space="S2", dry_run=True)
+
+
+@patch("phabfive.maniphest.core.Phabfive.__init__", return_value=None)
+class TestCreatingFromATemplate:
+    """`create --with` places tasks the same way the flag does."""
+
+    def _maniphest(self, phab):
+        maniphest = Maniphest()
+        maniphest.phab = phab
+        maniphest.url = "https://phorge.example.com/"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+        phab.user.search.return_value = {"data": []}
+        phab.project.search.return_value = {"data": []}
+        phab.maniphest.edit.return_value = {"object": {"id": 5, "phid": "PHID-TASK-5"}}
+        return maniphest
+
+    def _template(self, tmp_path, body):
+        config = tmp_path / "tasks.yaml"
+        config.write_text("variables: {}\ntasks:\n" + body)
+        return str(config)
+
+    def test_a_space_in_the_template_places_the_task(self, mock_init, tmp_path):
+        phab = _phab({1: "Default", 10: "Archive"})
+        maniphest = self._maniphest(phab)
+        config = self._template(
+            tmp_path,
+            "  - title: Archive the old plans\n"
+            "    description: Somewhere out of the way\n"
+            "    space: Archive\n",
+        )
+
+        maniphest.create_tasks_from_yaml(config)
+
+        transactions = phab.maniphest.edit.call_args.kwargs["transactions"]
+        assert {"type": "space", "value": "PHID-SPCE-10"} in transactions
+
+    def test_every_task_naming_it_shares_one_resolution(self, mock_init, tmp_path):
+        # A template puts a whole batch of tasks in one Space; resolving it per
+        # task would re-probe the instance for each of them.
+        def probes_for(body):
+            phab = _phab({1: "Default", 10: "Archive"})
+            config = self._template(tmp_path, body)
+            self._maniphest(phab).create_tasks_from_yaml(config)
+            return phab.phid.lookup.call_count
+
+        one = "  - title: One\n    description: x\n    space: Archive\n"
+        two = one + "  - title: Two\n    description: y\n    space: Archive\n"
+
+        assert probes_for(two) == probes_for(one)
+
+    def test_an_ambiguous_space_creates_nothing(self, mock_init, tmp_path):
+        # Resolution happens while the template is pre-processed, before any
+        # task is committed.
+        phab = _phab({3: "Archive", 10: "Archive"})
+        maniphest = self._maniphest(phab)
+        config = self._template(
+            tmp_path,
+            "  - title: One\n    description: x\n    space: Archive\n",
+        )
+
+        with pytest.raises(PhabfiveConfigException):
+            maniphest.create_tasks_from_yaml(config)
+
+        phab.maniphest.edit.assert_not_called()

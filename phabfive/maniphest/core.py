@@ -1482,6 +1482,16 @@ class Maniphest(Phabfive):
         # Render variables that reference other variables using dependency resolution
         variables = render_variables_with_dependency_resolution(variables)
 
+        # A template can put every task in the same Space, so each one named
+        # is resolved once rather than once per task naming it
+        resolved_spaces = {}
+
+        def space_phid_for(space_name):
+            if space_name not in resolved_spaces:
+                resolved_spaces[space_name] = self._resolve_space(space_name)["phid"]
+
+            return resolved_spaces[space_name]
+
         # Helper function to slim down transaction handling
         def add_transaction(t, transaction_type, value):
             t.append({"type": transaction_type, "value": value})
@@ -1550,6 +1560,14 @@ class Maniphest(Phabfive):
 
             output["subscribers"] = user_phids
 
+            # Translate the Space to its PHID, refusing a pattern that names
+            # more than one the way --space does
+            r(output, "space", variables)
+            space_name = output.get("space")
+
+            if space_name:
+                output["space"] = space_phid_for(space_name)
+
             # Recurse down and process all child tasks
             processed_child_tasks = []
             child_tasks = task_config.get("tasks", None)
@@ -1595,6 +1613,11 @@ class Maniphest(Phabfive):
 
                 if subscribers:
                     add_transaction(transactions, "subscribers.set", subscribers)
+
+                space_phid = task_config.get("space")
+
+                if space_phid:
+                    add_transaction(transactions, "space", space_phid)
 
                 # Prepare all parent and subtasks, and check if we have a parent task from the config file
                 subtasks = task_config.get("subtasks", [])

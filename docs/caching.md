@@ -16,6 +16,7 @@ Only the lookups that shell completion makes:
 |---|---|
 | Usernames | `--assign`, `--assigned`, `--subscribe`, `--author` |
 | Project names | `--tag`, in `maniphest`, `paste` and `edit` |
+| Spaces | `--space`, in `maniphest create`, `edit` and `search` |
 | Priority names | `--priority` and the priority filters |
 | Status keys | `--status` and the status filters |
 
@@ -33,6 +34,7 @@ completion that queries the server.
 ```
 ~/.cache/phabfive/v1/<instance>/users/*.json
 ~/.cache/phabfive/v1/<instance>/projects/*.json
+~/.cache/phabfive/v1/<instance>/spaces/*.json
 ~/.cache/phabfive/v1/<instance>/priorities/*.json
 ~/.cache/phabfive/v1/<instance>/statuses/*.json
 ```
@@ -43,14 +45,15 @@ entries and rotating a token retires everything cached under the old one. The
 token itself is never written out — only a hash of it names the directory.
 
 Entries hold only what completion reads back: a username, a real name and
-whether the account is disabled; a project's id, name and parent name; and the
-plain lists of priority names and status keys. No PHIDs, no policies, no dates.
+whether the account is disabled; a project's id, name and parent name; a
+Space's monogram and name; and the plain lists of priority names and status
+keys. No PHIDs, no policies, no dates.
 
 ## How long entries live
 
 | Data | Fresh for |
 |---|---|
-| Usernames | 24 hours |
+| Usernames, Spaces | 24 hours |
 | Priorities, statuses | 7 days |
 | Project names | 5 minutes |
 
@@ -68,7 +71,10 @@ finds `GUNNAR-Core` on the server — though only names *starting* with what you
 typed are ever offered, because the shell discards the rest.
 
 Priorities and statuses are whole lists for the instance, so there is nothing
-to narrow: one lookup a week answers every TAB.
+to narrow: one lookup a week answers every TAB. Spaces are a whole list too,
+and the one that gains most from being kept: they have no search endpoint, so
+finding them means asking `phid.lookup` about `S1`, `S2`, `S3`… over the whole
+range, which is two requests before anything can be offered.
 
 ## Staleness
 

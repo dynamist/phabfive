@@ -75,6 +75,10 @@ phabfive paste search "config"
 phabfive maniphest create "Fix the bug" --priority=high --tag myproject
 phabfive maniphest edit T123 "New Title" --status=resolved
 
+# Spaces - place a new task in one, or move a task between them
+phabfive maniphest create "Quarterly cleanup" --space=Archive
+phabfive maniphest edit T123 --space=S3
+
 # Smart navigation - raise/lower priority, move columns forward/backward
 phabfive edit T123 --priority=raise
 phabfive edit T123 --tag=MyBoard --column=forward
