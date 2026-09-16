@@ -95,6 +95,12 @@ phabfive --install-completion fish
 
 After installation, restart your shell or source your profile.
 
+Completions that come from the server, such as usernames, are cached on disk so
+only the first TAB waits for a round trip. Run `phabfive cache clear` after
+somebody joins, leaves or is renamed, or set `PHAB_CACHE=0` to switch caching
+off. See [Caching](docs/caching.md) for what is cached and for how long;
+secrets never are.
+
 <details>
 <summary>Manual configuration (advanced)</summary>
 

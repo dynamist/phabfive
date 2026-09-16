@@ -8,6 +8,7 @@ nav:
     - Maniphest CLI: 'maniphest-cli.md'
     - Search Templates: 'search-templates.md'
     - Creation Templates: 'create-templates.md'
+    - Caching: 'caching.md'
     - Development: 'development.md'
     - Phorge Setup: 'phorge-setup.md'
     - Release Process: 'releasing.md'
