@@ -4,6 +4,7 @@
 
 import json
 import os
+import re
 from unittest import mock
 
 import pytest
@@ -292,8 +293,14 @@ class TestArcrcMultipleHosts:
 
         error_msg = str(exc_info.value)
         assert "Multiple hosts found" in error_msg
-        assert "phorge-a.example.com" in error_msg
-        assert "phorge-b.example.com" in error_msg
+        # The hosts are offered as a bullet list for the user to choose from.
+        # Match the list itself rather than looking for the names anywhere in
+        # the message, which the trailing "Example: export PHAB_URL=..." line
+        # can satisfy on its own.
+        assert re.findall(r"^  - (\S+)$", error_msg, re.MULTILINE) == [
+            "https://phorge-a.example.com/api/",
+            "https://phorge-b.example.com/api/",
+        ]
 
     def test_multiple_hosts_interactive_selector(self, tmp_path):
         """Test that interactive selector picks the selected host."""
