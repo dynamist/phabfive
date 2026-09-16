@@ -60,6 +60,10 @@ create_projects
 # Step 10: Create milestones (with workboards) under the default projects
 create_milestones
 
+# Step 11: Create default spaces
+source "${LIB_DIR}/setup-spaces.sh"
+create_spaces
+
 # Display final summary
 echo ""
 echo "================================"
@@ -92,6 +96,16 @@ done
 for milestone_data in "${DEFAULT_MILESTONES[@]}"; do
   IFS=':' read -r parent_name milestone_name <<< "$milestone_data"
   echo "  - ${milestone_name} (${parent_name} milestone)"
+done
+echo ""
+echo "🌌 Spaces Created:"
+for space_data in "${DEFAULT_SPACES[@]}"; do
+  IFS=':' read -r space_id space_name is_default <<< "$space_data"
+  if [ "$is_default" = "default" ]; then
+    echo "  - S${space_id} ${space_name} (default)"
+  else
+    echo "  - S${space_id} ${space_name}"
+  fi
 done
 echo ""
 echo "🌍 Your new Phorge is waiting for you at:"
