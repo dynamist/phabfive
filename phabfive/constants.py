@@ -110,6 +110,9 @@ CONFIGURABLES = [
     "PHAB_URL",
     "PHAB_SPACE",
     "PHAB_FALLBACK",
+    "PHAB_CACHE",
+    "PHAB_CACHE_TTL",
+    "PHAB_CACHE_DIR",
 ]
 DEFAULTS = {
     "PHABFIVE_DEBUG": False,
@@ -117,7 +120,26 @@ DEFAULTS = {
     "PHAB_URL": "",
     "PHAB_SPACE": "S1",
     "PHAB_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml or json)
+    "PHAB_CACHE": True,  # Cache API lookups that shell completion repeats
+    "PHAB_CACHE_TTL": 0,  # 0 means use the per-namespace CACHE_TTLS below
+    "PHAB_CACHE_DIR": "",  # Empty means appdirs.user_cache_dir("phabfive")
 }
+
+# Bumping this orphans every entry written by an older phabfive
+CACHE_SCHEMA_VERSION = 1
+
+# How long each kind of cached lookup stays fresh, in seconds. Instance
+# configuration barely changes, user lists change rarely, while projects and
+# their columns come and go.
+CACHE_TTLS = {
+    "users": 86400,  # 24 hours
+    "spaces": 86400,  # 24 hours
+    "priorities": 604800,  # 7 days
+    "statuses": 604800,  # 7 days
+    "projects": 300,  # 5 minutes
+    "columns": 300,  # 5 minutes
+}
+CACHE_TTL_DEFAULT = 300
 REQUIRED = ["PHAB_TOKEN", "PHAB_URL"]
 VALIDATORS = {
     "PHAB_URL": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
@@ -187,6 +209,9 @@ MANIPHEST_ORDER_CHOICES = [
 __all__ = [
     "AutoOption",
     "MISSING_CONFIG_HINTS",
+    "CACHE_SCHEMA_VERSION",
+    "CACHE_TTL_DEFAULT",
+    "CACHE_TTLS",
     "CONFIGURABLES",
     "DEFAULTS",
     "DISPLAY_CHOICES",
