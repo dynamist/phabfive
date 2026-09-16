@@ -371,6 +371,10 @@ def show(
     output_format = _get_output_format(ctx)
     _display_pastes(result, output_format, paste)
 
+    # A paste that does not exist is a failed lookup, not an empty result
+    if result is None or result.get("missing_ids"):
+        raise typer.Exit(1)
+
 
 def _format_timestamp(ts):
     """Convert Unix timestamp to ISO format string."""

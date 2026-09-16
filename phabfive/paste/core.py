@@ -2,6 +2,7 @@
 """Core paste functionality for phabfive."""
 
 # python std lib
+import logging
 import re
 
 # phabfive imports
@@ -11,6 +12,8 @@ from phabfive.exceptions import PhabfiveDataException
 
 # 3rd party imports
 from phabricator import APIError
+
+log = logging.getLogger(__name__)
 
 
 class Paste(Phabfive):
@@ -172,7 +175,15 @@ class Paste(Phabfive):
         )
 
         if not pastes:
-            raise PhabfiveDataException("No pastes found")
+            for paste_id in paste_ids:
+                log.error(f"Paste P{paste_id} not found")
+            return None
+
+        # Report any pastes that were not found, matching maniphest show
+        found_ids = {p["id"] for p in pastes}
+        missing_ids = [pid for pid in paste_ids if pid not in found_ids]
+        for paste_id in missing_ids:
+            log.error(f"Paste P{paste_id} not found")
 
         result = []
         for paste in pastes:
@@ -201,7 +212,8 @@ class Paste(Phabfive):
 
             result.append(paste_data)
 
-        return {"pastes": result}
+        # Let the caller tell a partial result from a complete one
+        return {"pastes": result, "missing_ids": missing_ids}
 
     def _resolve_phid_to_name(self, phid):
         """Resolve a PHID to a human-readable name."""

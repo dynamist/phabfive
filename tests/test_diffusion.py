@@ -51,8 +51,24 @@ class TestEmptyInstance:
     def test_repo_list_is_empty(self):
         assert format_repositories(_phab_with_repos([])) == []
 
-    def test_uri_list_is_empty(self):
-        assert fetch_uris(_phab_with_repos([]), repo_id="myrepo") == []
+    def test_uri_list_reports_unknown_repository(self):
+        """No repositories means the one asked for does not exist.
+
+        None rather than [] so the CLI can tell an unknown repository
+        apart from one that simply has no URIs to list.
+        """
+        assert fetch_uris(_phab_with_repos([]), repo_id="myrepo") is None
+
+    def test_uri_list_is_empty_for_repository_without_uris(self):
+        """An existing repository with no URIs is an empty result, not an error."""
+        phab = _phab_with_repos([_repo("myrepo")])
+
+        assert fetch_uris(phab, repo_id="myrepo") == []
+
+    def test_uri_list_reports_unknown_repository_among_others(self):
+        phab = _phab_with_repos([_repo("myrepo")])
+
+        assert fetch_uris(phab, repo_id="otherrepo") is None
 
     def test_repo_create_creates_first_repository(self, diffusion):
         diffusion.phab.diffusion.repository.search.return_value = {"data": []}

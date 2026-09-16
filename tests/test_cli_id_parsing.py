@@ -26,7 +26,11 @@ class TestManiphestShowIdParsing:
     @patch("phabfive.cli.maniphest._get_maniphest_app")
     def test_comma_separated_ids(self, mock_get_app):
         mock_m = MagicMock()
-        mock_m.task_show.return_value = None
+        mock_m.task_show.return_value = {
+            "tasks": [],
+            "project_names": {},
+            "missing_ids": [],
+        }
         mock_get_app.return_value = mock_m
 
         result = runner.invoke(maniphest_app, ["show", "T2069,T2257"])
@@ -37,7 +41,11 @@ class TestManiphestShowIdParsing:
     @patch("phabfive.cli.maniphest._get_maniphest_app")
     def test_space_separated_ids(self, mock_get_app):
         mock_m = MagicMock()
-        mock_m.task_show.return_value = None
+        mock_m.task_show.return_value = {
+            "tasks": [],
+            "project_names": {},
+            "missing_ids": [],
+        }
         mock_get_app.return_value = mock_m
 
         result = runner.invoke(maniphest_app, ["show", "T2069", "T2257"])
@@ -48,7 +56,11 @@ class TestManiphestShowIdParsing:
     @patch("phabfive.cli.maniphest._get_maniphest_app")
     def test_mixed_space_and_comma(self, mock_get_app):
         mock_m = MagicMock()
-        mock_m.task_show.return_value = None
+        mock_m.task_show.return_value = {
+            "tasks": [],
+            "project_names": {},
+            "missing_ids": [],
+        }
         mock_get_app.return_value = mock_m
 
         result = runner.invoke(maniphest_app, ["show", "T1,T2", "T3"])
@@ -59,7 +71,11 @@ class TestManiphestShowIdParsing:
     @patch("phabfive.cli.maniphest._get_maniphest_app")
     def test_trailing_comma_and_spaces(self, mock_get_app):
         mock_m = MagicMock()
-        mock_m.task_show.return_value = None
+        mock_m.task_show.return_value = {
+            "tasks": [],
+            "project_names": {},
+            "missing_ids": [],
+        }
         mock_get_app.return_value = mock_m
 
         result = runner.invoke(maniphest_app, ["show", "T1, T2,"])
@@ -79,7 +95,11 @@ class TestManiphestShowIdParsing:
     @patch("phabfive.cli.maniphest._get_maniphest_app")
     def test_single_id_unchanged(self, mock_get_app):
         mock_m = MagicMock()
-        mock_m.task_show.return_value = None
+        mock_m.task_show.return_value = {
+            "tasks": [],
+            "project_names": {},
+            "missing_ids": [],
+        }
         mock_get_app.return_value = mock_m
 
         result = runner.invoke(maniphest_app, ["show", "T123"])
@@ -92,7 +112,7 @@ class TestPasteShowIdParsing:
     @patch("phabfive.cli.paste._get_paste_app")
     def test_comma_separated_ids(self, mock_get_app):
         mock_p = MagicMock()
-        mock_p.paste_show.return_value = None
+        mock_p.paste_show.return_value = {"pastes": [], "missing_ids": []}
         mock_get_app.return_value = mock_p
 
         result = runner.invoke(paste_app, ["show", "P1,P2"])
@@ -103,7 +123,7 @@ class TestPasteShowIdParsing:
     @patch("phabfive.cli.paste._get_paste_app")
     def test_space_separated_ids(self, mock_get_app):
         mock_p = MagicMock()
-        mock_p.paste_show.return_value = None
+        mock_p.paste_show.return_value = {"pastes": [], "missing_ids": []}
         mock_get_app.return_value = mock_p
 
         result = runner.invoke(paste_app, ["show", "P1", "P2"])

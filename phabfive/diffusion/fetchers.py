@@ -100,23 +100,32 @@ def fetch_uris(phab, repo_id=None, clone_uri=False):
 
     Returns
     -------
-    list
-        List of URI strings
+    list or None
+        List of URI strings, empty if the repository has no matching URIs.
+        None if no such repository exists, so that callers can tell an
+        unknown repository apart from one with nothing to list.
     """
-    uris = []
     repos = fetch_repositories(phab, attachments={"uris": True})
 
+    match = None
     for repo in repos:
         if repo_id == repo["fields"]["shortName"]:
-            repo_uris = repo["attachments"]["uris"]["uris"]
+            match = repo
+            break
 
-            if clone_uri:
-                for uri in repo_uris:
-                    if "always" not in uri["fields"]["display"]["effective"]:
-                        continue
-                    uris.append(uri["fields"]["uri"]["display"])
-            else:
-                for uri in repo_uris:
-                    uris.append(uri["fields"]["uri"]["display"])
+    if match is None:
+        return None
+
+    uris = []
+    repo_uris = match["attachments"]["uris"]["uris"]
+
+    if clone_uri:
+        for uri in repo_uris:
+            if "always" not in uri["fields"]["display"]["effective"]:
+                continue
+            uris.append(uri["fields"]["uri"]["display"])
+    else:
+        for uri in repo_uris:
+            uris.append(uri["fields"]["uri"]["display"])
 
     return uris

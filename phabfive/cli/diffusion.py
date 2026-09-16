@@ -93,6 +93,13 @@ def uri_list(
     """List URIs for a repository."""
     diffusion = _get_diffusion_app()
     uris = diffusion.get_uris_formatted(repo=repo, clone_uri=clone)
+
+    # An unknown repository is a failed lookup; a repository with no URIs
+    # to show is an empty result and stays successful
+    if uris is None:
+        typer.echo(f"Repository '{repo}' not found", err=True)
+        raise typer.Exit(1)
+
     for uri in uris:
         typer.echo(uri)
 

@@ -300,13 +300,13 @@ class Maniphest(Phabfive):
         if not result_data:
             for task_id in task_ids:
                 log.error(f"Task T{task_id} not found")
-            return
+            return None
 
         # Report any tasks that were not found
         found_ids = {t["id"] for t in result_data}
-        for task_id in task_ids:
-            if task_id not in found_ids:
-                log.error(f"Task T{task_id} not found")
+        missing_ids = [tid for tid in task_ids if tid not in found_ids]
+        for task_id in missing_ids:
+            log.error(f"Task T{task_id} not found")
 
         # The API returns tasks in its own order (newest first); reorder to
         # match the order the tasks were requested in
@@ -396,7 +396,7 @@ class Maniphest(Phabfive):
                     subtasks_map[task_id] = []
 
         # Use shared method to build task data
-        return self._build_task_display_data(
+        display_data = self._build_task_display_data(
             result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
@@ -409,6 +409,12 @@ class Maniphest(Phabfive):
             show_metadata=show_metadata,
             show_comments=show_comments,
         )
+
+        # Let the caller tell a partial result from a complete one, so asking
+        # for a task that does not exist can be reported as a failure
+        display_data["missing_ids"] = missing_ids
+
+        return display_data
 
     def get_related_tasks(self, task_id, relationship_type):
         """
