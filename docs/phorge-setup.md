@@ -126,11 +126,12 @@ echo "PHAB_URL: http://phorge.localhost/api/" >> ~/Library/Application\ Support/
 Test it:
 
 ```bash
+uv run phabfive user whoami
 uv run phabfive diffusion repo list
 uv run phabfive maniphest search --tag '*'
 ```
 
-Note that `phabfive user whoami` is not a test of this configuration: it reports every host in `~/.arcrc` and ignores `PHAB_URL`/`PHAB_TOKEN`.
+`user whoami` reports the host `PHAB_URL` points at. Without `PHAB_URL` it reports every host in `~/.arcrc` instead; `--all` forces that.
 
 ## Create Test Tasks
 

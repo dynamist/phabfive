@@ -40,6 +40,7 @@ The recommended way to run phabfive during development is with `uv run`:
 ```bash
 # Run phabfive commands directly
 uv run phabfive --help
+uv run phabfive user whoami
 uv run phabfive diffusion repo list
 uv run phabfive maniphest search --tag '*'
 ```
@@ -50,6 +51,7 @@ If you need to run phabfive in a container (e.g., for testing the Docker image),
 
 ```bash
 # Run against local Phorge instance (auto-configured)
+./phorge/phabfive user whoami
 ./phorge/phabfive diffusion repo list
 ./phorge/phabfive maniphest search --tag '*'
 

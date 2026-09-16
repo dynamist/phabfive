@@ -29,8 +29,21 @@ def _setup_output_options(ctx: typer.Context) -> None:
 
 
 @user_app.command()
-def whoami(ctx: typer.Context) -> None:
-    """Show current user for all configured hosts in ~/.arcrc."""
+def whoami(
+    ctx: typer.Context,
+    all_hosts: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Query every host in ~/.arcrc, even when PHAB_URL selects one.",
+    ),
+) -> None:
+    """Show the current user for the configured host.
+
+    Reports the host phabfive is configured to use. When no host is
+    configured outside ~/.arcrc, every host in ~/.arcrc is reported
+    instead; --all forces that for a configured host too.
+    """
     import requests
 
     from phabfive.display import display_users
@@ -40,7 +53,11 @@ def whoami(ctx: typer.Context) -> None:
 
     try:
         user = User()
-        results = user.whoami_all_hosts()
+
+        if all_hosts or not user.has_explicit_phab_url():
+            results = user.whoami_all_hosts()
+        else:
+            results = [user.whoami_configured_host()]
 
         if not results:
             typer.echo("No hosts found in ~/.arcrc", err=True)
@@ -48,6 +65,10 @@ def whoami(ctx: typer.Context) -> None:
 
         output_format = _get_output_format(ctx)
         display_users(results, output_format, user)
+
+        # Every host failed, so the command did not do what was asked
+        if all(result.get("Error") for result in results):
+            raise typer.Exit(1)
     except PhabfiveConfigException as e:
         from phabfive.setup import offer_setup_on_error
 
