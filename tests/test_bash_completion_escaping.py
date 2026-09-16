@@ -52,7 +52,9 @@ def _bash_complete(monkeypatch, comp_words):
     with patch.object(
         completers,
         "_get_values_with_api_fallback",
-        side_effect=lambda fetch, default: fetch(phab) if default == [] else default,
+        # --tag is the only API-backed completion these tests drive, and it no
+        # longer passes [] as its default - it uses the _FETCH_FAILED sentinel
+        side_effect=lambda fetch, default: fetch(phab),
     ):
         return completion.complete().split("\n")
 
