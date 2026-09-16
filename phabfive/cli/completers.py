@@ -399,6 +399,153 @@ def _describe_project_id(proj) -> str:
     return f"{proj['id']} ({parent['name']})" if parent else str(proj["id"])
 
 
+# Stop fetching users for username completion after this many matches
+USER_COMPLETION_LIMIT = 500
+
+# The only completion that starts with "@"; every option taking a username
+# also takes this shortcut for the current user
+ME_SHORTCUT = "@me"
+
+
+def _fetch_users_named(phab, incomplete: str, include_disabled: bool) -> list:
+    """Fetch users whose username or real name contains the incomplete text.
+
+    Uses the user.search "nameLike" constraint so matching happens on the
+    server, and follows the result cursor up to USER_COMPLETION_LIMIT.
+    nameLike is a substring match over both the username and the real name,
+    so it returns a superset of the usernames that start with the text.
+    """
+    constraints = {}
+    if incomplete.strip():
+        constraints["nameLike"] = incomplete
+    if not include_disabled:
+        constraints["isDisabled"] = False
+
+    users = []
+    after = None
+
+    while len(users) < USER_COMPLETION_LIMIT:
+        kwargs = {"constraints": constraints, "limit": 100}
+        if after:
+            kwargs["after"] = after
+        result = phab.user.search(**kwargs)
+        users.extend(result.get("data", []))
+        after = (result.get("cursor") or {}).get("after")
+        if not after:
+            break
+
+    return users
+
+
+def _user_completions(incomplete: str, include_disabled: bool) -> list:
+    """Return (username, real name or None) pairs matching the typed text.
+
+    Only usernames that start with the typed text are offered, because Typer
+    drops the rest; the real name is offered as a description instead, so
+    searching for "Bergstrom" cannot complete "sonja.bergstrom".
+    """
+    if incomplete.startswith("@"):
+        # No username starts with "@", so the API has nothing to add here
+        return [(ME_SHORTCUT, "yourself")] if ME_SHORTCUT.startswith(incomplete) else []
+
+    users = _get_values_with_api_fallback(
+        lambda phab: _fetch_users_named(phab, incomplete, include_disabled), []
+    )
+
+    # @me is only offered before a username is typed, since it can never be
+    # a prefix of one
+    pairs = [(ME_SHORTCUT, "yourself")] if not incomplete else []
+
+    incomplete_lower = incomplete.lower()
+    for user in sorted(users, key=lambda u: u["fields"]["username"].lower()):
+        username = user["fields"]["username"]
+        if not username.lower().startswith(incomplete_lower):
+            continue
+        pairs.append(
+            (
+                _in_typed_case(incomplete, username),
+                user["fields"].get("realName") or None,
+            )
+        )
+
+    return pairs
+
+
+def _as_completions(pairs, prefix: str = "") -> list[str | tuple[str, str]]:
+    """Format (value, description) pairs for Typer, dropping empty descriptions."""
+    return [
+        (f"{prefix}{value}", description) if description else f"{prefix}{value}"
+        for value, description in pairs
+    ]
+
+
+def complete_user(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete usernames for setting an assignee or subscriber.
+
+    Used by --assign and --subscribe, where the value has to name an account
+    that can be assigned work, so disabled accounts are left out. Matching is
+    case-insensitive and completions follow the case the user typed, the same
+    way complete_tag does; the user.search "usernames" constraint that
+    resolves them is case-insensitive too. Real names are offered as
+    descriptions, which zsh and fish show.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching usernames plus the @me shortcut, as (value, description)
+        tuples where a real name is known
+    """
+    return _as_completions(_user_completions(incomplete, include_disabled=False))
+
+
+def complete_user_filter(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete usernames for a filter that takes a single username.
+
+    Used by paste search --author. Unlike complete_user this offers disabled
+    accounts, because filtering for what a former colleague left behind is a
+    reasonable thing to search for.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching usernames plus the @me shortcut
+    """
+    return _as_completions(_user_completions(incomplete, include_disabled=True))
+
+
+def complete_assignee_filter(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete the assignee filter, which takes a comma-separated list.
+
+    Used by maniphest search --assigned, where "@me,user1,user2" means "any
+    of these". Only the name after the last comma is completed, and the names
+    before it are kept in the offered value, since the shell replaces the
+    whole word.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching usernames, each prefixed with the names already typed
+    """
+    typed, comma, last = incomplete.rpartition(",")
+    pairs = _user_completions(last, include_disabled=True)
+    return _as_completions(pairs, prefix=f"{typed}{comma}")
+
+
 def complete_language(incomplete: str) -> List[str]:
     """Complete programming language values for syntax highlighting.
 

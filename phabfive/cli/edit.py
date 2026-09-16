@@ -11,6 +11,7 @@ from phabfive.cli.completers import (
     complete_priority_change,
     complete_status,
     complete_tag,
+    complete_user,
 )
 from phabfive.exceptions import PhabfiveConfigException
 
@@ -68,6 +69,7 @@ def edit_command(
         None,
         "--assign",
         help="Set assignee (username or @me for yourself)",
+        autocompletion=complete_user,
     ),
     description: Optional[str] = typer.Option(
         None,
@@ -78,6 +80,7 @@ def edit_command(
         None,
         "--subscribe",
         help="Add subscriber (username or @me, repeatable)",
+        autocompletion=complete_user,
     ),
     comment: Optional[str] = typer.Option(
         None,
