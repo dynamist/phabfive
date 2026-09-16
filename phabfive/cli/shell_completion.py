@@ -85,6 +85,22 @@ class MonogramGroup(TyperGroup):
     A complete monogram such as T123 is accepted as typed.
     """
 
+    def resolve_command(self, ctx, args):
+        """Resolve a leading monogram to the command it stands for.
+
+        Completion resolves the words the shell passes, while monograms are
+        expanded in cli_entrypoint from sys.argv, so without this
+        "phabfive T123 --<TAB>" offered the global options instead of the
+        options of "maniphest show".
+        """
+        if args and _MONOGRAM.match(args[0]):
+            # Imported here because phabfive.cli imports this module
+            from phabfive.cli import preprocess_monograms
+
+            args = preprocess_monograms(["phabfive", *args])[1:]
+
+        return super().resolve_command(ctx, args)
+
     def shell_complete(self, ctx, incomplete):
         if _MONOGRAM.match(incomplete):
             return [CompletionItem(incomplete, help=_monogram_help(incomplete))]

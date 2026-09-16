@@ -62,3 +62,48 @@ class TestRootCompletion:
 
     def test_subcommand_completion_unchanged(self):
         assert _values(["maniphest"], "s") == ["show", "search", "subtasks"]
+
+
+class TestCompletionAfterMonogram:
+    """A leading monogram resolves to the command it stands for."""
+
+    @pytest.mark.parametrize(
+        "monogram_args, expanded_args",
+        [
+            (["T123"], ["maniphest", "show", "T123"]),
+            (["K1"], ["passphrase", "show", "K1"]),
+            (["P1"], ["paste", "show", "P1"]),
+            (["R1"], ["diffusion", "branch", "list", "R1"]),
+            # T123 "text" is the comment shortcut
+            (["T123", "hello"], ["maniphest", "comment", "T123", "hello"]),
+            # Global options may come before the monogram
+            (
+                ["--format", "json", "T123"],
+                ["--format", "json", "maniphest", "show", "T123"],
+            ),
+        ],
+    )
+    def test_offers_the_same_as_the_expanded_command(
+        self, monogram_args, expanded_args
+    ):
+        expected = _values(expanded_args, "--")
+        assert expected  # the expanded command has options to offer
+        assert _values(monogram_args, "--") == expected
+
+    def test_show_options_are_offered(self):
+        assert _values(["T123"], "--show") == [
+            "--show-history",
+            "--show-metadata",
+            "--show-comments",
+        ]
+
+    def test_monogram_as_a_command_argument_is_untouched(self):
+        """Only a leading monogram expands, not one passed to a command."""
+        assert _values(["maniphest", "parents", "T123"], "--") == _values(
+            ["maniphest", "parents"], "--"
+        )
+
+    def test_edit_shortcut_still_resolves(self):
+        assert _values(["edit", "T123"], "--") == _values(
+            ["maniphest", "edit", "T123"], "--"
+        )
