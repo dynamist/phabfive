@@ -649,7 +649,7 @@ Output includes:
 
 Example output:
 ```
-- Link: http://phorge.domain.tld/T59
+- Link: http://phorge.localhost/T59
   Task:
     Name: '[FEATURE] Improved error diagnostics'
     Created: 2025-10-01T17:21:56

@@ -30,7 +30,7 @@ make up                              # start local Phorge
 make down                            # stop containers
 
 # Test against local Phorge (safe to run data-altering operations)
-PHAB_URL=http://phorge.domain.tld/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
+PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
 
 # Merge PRs (rebase only - merge and squash are disabled)
 gh pr merge --rebase --delete-branch
@@ -130,8 +130,8 @@ When implementing new Phorge apps (countdown, paste, maniphest, etc.), **verify 
 When using the local Phorge development instance, it is **safe to run data-altering operations** (create, edit, delete) without `--dry-run`:
 
 ```bash
-PHAB_URL=http://phorge.domain.tld/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest create "Test task"
-PHAB_URL=http://phorge.domain.tld/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest edit T123 --status=resolved
+PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest create "Test task"
+PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest edit T123 --status=resolved
 ```
 
 This is a disposable test environment. These specific credentials indicate a safe-to-modify development instance.

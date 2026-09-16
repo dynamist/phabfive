@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: ./Dockerfile.phorge
     environment:
-      - PHORGE_URL=${PHORGE_URL:-http://phorge.domain.tld}
-      - PHORGE_CDN_URL=${PHORGE_CDN_URL:-http://cdn.domain.tld}
+      - PHORGE_URL=${PHORGE_URL:-http://phorge.localhost}
+      - PHORGE_CDN_URL=${PHORGE_CDN_URL:-http://cdn.localhost}
       - PHORGE_TITLE=${PHORGE_TITLE:-RMI}
       - PHORGE_ADMIN_USER=${PHORGE_ADMIN_USER:-admin}
       - PHORGE_ADMIN_EMAIL=${PHORGE_ADMIN_EMAIL:-admin@domain.tld}
