@@ -4,6 +4,7 @@
 # python std lib
 import json
 import os
+import re
 import time
 from unittest.mock import patch
 
@@ -36,6 +37,17 @@ def enabled_cache(monkeypatch):
     monkeypatch.setenv("PHAB_CACHE", "1")
     with patch("phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)):
         yield
+
+
+def _names_the_instance(directory):
+    """Whether a path is the cache directory for the CONF instance.
+
+    The host is readable in the name so the directory can be recognised; the
+    digest that follows keeps two instances apart and hides the token.
+    """
+    return bool(
+        re.fullmatch(r"phorge\.example\.com-[0-9a-f]{8}", os.path.basename(directory))
+    )
 
 
 def _conf(**overrides):
@@ -248,7 +260,7 @@ class TestInstanceIsolation:
             assert cache.instance_dir() is None
 
     def test_instance_directory_name_is_recognisable(self, enabled_cache):
-        assert "phorge.example.com" in cache.instance_dir()
+        assert _names_the_instance(cache.instance_dir())
 
     def test_token_is_never_written_in_clear_text(self, enabled_cache):
         cache.set("users", "key", "value")
@@ -303,7 +315,7 @@ class TestContext:
             directory, ttl = cache.context("users")
 
         assert read_config.call_count == 1
-        assert "phorge.example.com" in directory
+        assert _names_the_instance(directory)
         assert ttl == cache.CACHE_TTLS["users"]
 
     def test_honours_the_ttl_override(self, monkeypatch):
