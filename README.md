@@ -18,6 +18,7 @@ Cross-cutting features:
 - **Batch editing** - Edit multiple objects at once: `phabfive edit T1,T2,T3 --status=resolved`
 - **Shell completion** - Tab completion for commands, options, and values
 - **Machine-readable output** - `--format=json` or `--format=yaml` for scripting and AI agents
+- **Quiet by default** - `-v` reports which filters a search actually applied
 
 For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/).
 
@@ -81,6 +82,9 @@ phabfive edit T123 --tag=MyBoard --column=forward
 # Batch operations
 phabfive edit T1,T2,T3 --status=resolved
 phabfive maniphest search --assigned=@me | phabfive edit --column=Done
+
+# Fewer results than expected? -v shows which filters were applied
+phabfive -v maniphest search --tag myproject
 ```
 
 ## Shell Completion

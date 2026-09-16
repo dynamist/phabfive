@@ -910,6 +910,8 @@ class Maniphest(Phabfive):
 
             # Remove duplicates while preserving order
             space_phids = list(dict.fromkeys(space_phids))
+
+            log.info(f"Filtering to space(s): {space}")
         else:
             # Default to configured space(s) - supports glob patterns and comma-separated
             from phabfive.maniphest.resolvers import resolve_space_phids
@@ -926,10 +928,10 @@ class Maniphest(Phabfive):
                 # Remove duplicates while preserving order
                 space_phids = list(dict.fromkeys(space_phids))
 
-                log.warning(
-                    f"Filtering to space(s): {default_space}. "
-                    "Tasks in other spaces are excluded. "
-                    "Use --space='*' to include all spaces."
+                log.info(
+                    f"Filtering to space(s): {default_space} (from PHAB_SPACE). "
+                    "Tasks in other spaces are excluded; "
+                    "use --space='*' to include all spaces."
                 )
             except Exception as e:
                 log.warning(
@@ -997,7 +999,8 @@ class Maniphest(Phabfive):
                     )
                     logic_type = "AND" if has_and_patterns else "OR"
                     log.info(
-                        f"Tag pattern '{tag}' resolved to {len(project_phids)} project(s) with {logic_type} logic"
+                        f"Filtering to tag(s): {tag} "
+                        f"({len(project_phids)} project(s), {logic_type} logic)"
                     )
                 except PhabfiveException as e:
                     log.error(f"Invalid tag pattern: {e}")
@@ -1007,6 +1010,10 @@ class Maniphest(Phabfive):
                 if not project_phids:
                     # Error already logged in _resolve_project_phids
                     return
+
+                log.info(
+                    f"Filtering to tag(s): {tag} ({len(project_phids)} project(s))"
+                )
 
         if include_task_ids and not has_other_filters:
             # --include is the only criterion: skip the general search entirely
