@@ -2,7 +2,7 @@
 
 CLI for [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https://we.phorge.it/) - built for humans and AI agents.
 
-![phabfive maniphest show](docs/maniphest-show.png)
+![phabfive maniphest show](https://raw.githubusercontent.com/dynamist/phabfive/master/docs/maniphest-show.png)
 
 ## Features
 
