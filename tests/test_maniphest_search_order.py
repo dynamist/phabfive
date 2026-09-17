@@ -586,6 +586,31 @@ class TestTemplateSearchHeaders:
             result = runner.invoke(maniphest_app, ["search", "--with", "template.yaml"])
         return result
 
+    def _run_plain_search(self, output_format="rich", payload="[]"):
+        mock_m = MagicMock()
+        mock_m.task_search.return_value = {"tasks": []}
+
+        def display_tasks(*_args, **_kwargs):
+            print(payload)
+
+        with (
+            patch("phabfive.cli.maniphest._get_maniphest_app", return_value=mock_m),
+            patch(
+                "phabfive.cli.maniphest._get_output_format",
+                return_value=output_format,
+            ),
+            patch("phabfive.cli.maniphest._display_tasks", side_effect=display_tasks),
+        ):
+            result = runner.invoke(maniphest_app, ["search", "--tag", "project"])
+        return result
+
+    def test_plain_search_has_no_rich_header(self):
+        result = self._run_plain_search()
+
+        assert result.exit_code == 0
+        assert "🔍" not in result.output
+        assert result.output == "[]\n"
+
     def test_single_unnamed_template_has_no_rich_header(self):
         result = self._run(
             [{"search": {"tag": "project"}, "title": None, "description": None}]
@@ -620,6 +645,21 @@ class TestTemplateSearchHeaders:
             assert json.loads(result.output) == [{"Task": {"Name": "Example"}}]
         else:
             assert yaml.safe_load(result.output) == [{"Task": {"Name": "Example"}}]
+
+    def test_simple_output_has_no_template_header(self):
+        result = self._run(
+            [
+                {
+                    "search": {"tag": "project"},
+                    "title": "Named search",
+                    "description": "A human-readable description",
+                }
+            ],
+            output_format="simple",
+        )
+
+        assert result.exit_code == 0
+        assert "🔍" not in result.output
 
     def test_multiple_templates_keep_human_readable_labels(self):
         result = self._run(

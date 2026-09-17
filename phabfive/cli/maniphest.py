@@ -496,7 +496,7 @@ def search(
         search_configs = [
             {
                 "search": {},
-                "title": "Command Line Search",
+                "title": None,
                 "description": None,
             }
         ]
@@ -513,11 +513,10 @@ def search(
     for index, config in enumerate(search_configs, start=1):
         yaml_params = config["search"]
 
-        # Structured formats reserve stdout for machine-readable task data.
-        # A single template needs a banner only when its author supplied a
-        # title or description; multi-document templates still need labels to
-        # separate their human-readable results.
-        if output_format not in ("json", "yaml", "strict") and (
+        # Only rich and tree formats use human-facing search banners. A single
+        # template needs one when its author supplied a title or description;
+        # multi-document templates still need labels to separate their results.
+        if output_format in ("rich", "tree") and (
             len(search_configs) > 1 or config["title"] or config["description"]
         ):
             typer.echo(f"\n{'=' * 60}")
