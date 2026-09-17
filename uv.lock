@@ -597,10 +597,12 @@ source = { editable = "." }
 dependencies = [
     { name = "anyconfig" },
     { name = "appdirs" },
+    { name = "click" },
     { name = "inquirerpy" },
     { name = "jinja2" },
     { name = "phabricator" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "rich" },
     { name = "ruamel-yaml" },
     { name = "typer" },
@@ -634,6 +636,7 @@ dev = [
 requires-dist = [
     { name = "anyconfig", specifier = ">=0.10.0" },
     { name = "appdirs", specifier = ">=1.4.0" },
+    { name = "click", specifier = ">=8.0" },
     { name = "coverage", marker = "extra == 'test'" },
     { name = "inquirerpy", specifier = ">=0.3.4" },
     { name = "jinja2", specifier = ">=3.0.0" },
@@ -643,6 +646,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-cov", marker = "extra == 'test'" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.26" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruamel-yaml", specifier = ">=0.18.0" },
     { name = "ruff", marker = "extra == 'test'" },
