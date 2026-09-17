@@ -6,11 +6,14 @@ from typing import List, Optional
 import typer
 
 from phabfive import cache
+from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_cache_namespace, complete_cached_host
 from phabfive.core import Phabfive
 
 cache_app = typer.Typer(
-    help="Inspect and clear cached completion data", no_args_is_help=True
+    cls=AgentFooterGroup,
+    help="Inspect and clear cached completion data",
+    no_args_is_help=True,
 )
 
 

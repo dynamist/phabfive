@@ -5,8 +5,8 @@ import os
 import re
 
 from click.shell_completion import CompletionItem
-from typer.core import TyperGroup
 
+from phabfive.cli.agents import AgentFooterGroup
 from phabfive.constants import MONOGRAM_SHORTCUT
 
 # A monogram shortcut such as T123, K5 or R12
@@ -74,7 +74,7 @@ def _monogram_help(monogram: str) -> str:
     return f"{expansion} {monogram}"
 
 
-class MonogramGroup(TyperGroup):
+class MonogramGroup(AgentFooterGroup):
     """Root command group that also completes monogram shortcuts.
 
     phabfive T123 expands to "maniphest show T123" (see preprocess_monograms),

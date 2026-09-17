@@ -104,6 +104,7 @@ jobs:
         run: |
           echo "from phabfive.cli import cli_entrypoint; cli_entrypoint()" > _entry.py
           pyinstaller --onefile --name phabfive _entry.py \
+            --collect-data phabfive \
             --collect-data rich \
             --copy-metadata rich \
             --collect-data phabricator \
