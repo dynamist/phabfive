@@ -52,7 +52,7 @@ smoke: ## install unlocked into a throwaway venv and run the built CLI
 	rm -rf .smoke
 
 docs: ## build and serve documentation
-	uv sync --extra docs
+	uv sync --group docs
 	uv run mkdocs serve --livereload
 
 format: ## format code using ruff

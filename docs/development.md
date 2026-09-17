@@ -129,7 +129,7 @@ For documentation updates:
 
 ```bash
 # Install with docs dependencies
-uv sync --extra docs
+uv sync --group docs
 
 # Serve the docs
 uv run mkdocs serve

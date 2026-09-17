@@ -13,7 +13,7 @@ build:
       - pip install uv
     post_install:
       # Install project dependencies with uv
-      - uv pip install --system -e ".[docs]"
+      - uv pip install --system -e . --group docs
       # Build the MkDocs site
       - mkdocs build --verbose --site-dir $READTHEDOCS_OUTPUT/html
 
