@@ -1,0 +1,84 @@
+---
+# phabfive broke once without anyone committing anything: typer 0.27 dropped
+# click, and every fresh install stopped working from one day to the next.
+# Nothing in CI resolves dependencies fresh on its own schedule, so the break
+# was invisible until a release shipped it.
+#
+# Renovate does not close this. renovate.json extends config:recommended,
+# which does not enable lockFileMaintenance, and "typer>=0.12.0" is already
+# satisfied by 0.27 -- so renovate has no reason to raise a PR refreshing
+# uv.lock, and the locked jobs can stay green indefinitely.
+name: Dependency drift
+
+on:
+  schedule:
+    # Thursdays, mid-week from renovate's Monday run, so the two sweeps of
+    # the dependency tree are spread across the week rather than stacked.
+    - cron: "0 4 * * 4"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  fresh-resolve:
+    name: Fresh unlocked install v${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install into a clean venv, unlocked
+        run: |
+          python -m venv /tmp/fresh
+          /tmp/fresh/bin/python -m pip install --upgrade pip
+          /tmp/fresh/bin/pip install .
+
+      - name: Record what today's resolve produced
+        run: /tmp/fresh/bin/pip freeze
+
+      - name: Smoke test
+        run: python scripts/smoke.py --venv /tmp/fresh
+
+  report:
+    name: Report drift
+    needs: fresh-resolve
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      # A red scheduled run is an email nobody opens. An issue is not.
+      - name: Open or update the drift issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="A fresh install of phabfive no longer runs"
+          body=$(printf '%s\n' \
+            "The scheduled unlocked resolve installed phabfive from pyproject alone and the" \
+            "smoke test failed. No phabfive commit is needed for this: it means a dependency" \
+            "changed underneath us, the way typer 0.27 dropping click broke every install." \
+            "" \
+            "Run: ${RUN_URL}" \
+            "" \
+            "The failing job's pip freeze output shows what today's resolve picked.")
+
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body" --label dependencies
+          fi

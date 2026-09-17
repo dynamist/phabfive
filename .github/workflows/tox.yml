@@ -5,7 +5,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - master
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -46,3 +46,37 @@ jobs:
         run: |
           uv run ruff check phabfive/ tests/
           uv run ruff format --check phabfive/ tests/
+
+  fresh-install:
+    name: Fresh unlocked install v${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # The ends of the supported range. 3.10 also matters because
+        # tests/test_declared_dependencies.py skips there for want of
+        # tomllib, so on that leg this is the only cover.
+        python-version: ["3.10", "3.14"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Deliberately plain pip, not uv: uv sync installs uv.lock, which
+      # pinned a typer old enough to still pull click in and hid the
+      # undeclared dependency from every other job. This resolves from
+      # pyproject alone, the way a release does.
+      - name: Install into a clean venv, unlocked
+        run: |
+          python -m venv /tmp/fresh
+          /tmp/fresh/bin/python -m pip install --upgrade pip
+          /tmp/fresh/bin/pip install .
+
+      - name: Smoke test
+        run: python scripts/smoke.py --venv /tmp/fresh
