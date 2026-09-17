@@ -221,4 +221,4 @@ git push origin v0.7.0
   - musl tags: `X.Y.Z-musl`, `X.Y-musl`, `latest-musl`
   - signed with cosign; build locally with `make image` or `make image LIBC=musl`
 
-**RC tags** (containing `-rc`) skip PyPI and the `X.Y`/`latest` image tags, but still build executables, push the image and create GitHub releases.
+**RC tags** (containing `-rc`) skip PyPI and the `X.Y`/`latest` image tags, but still build executables, push the image and create GitHub releases marked as prereleases.

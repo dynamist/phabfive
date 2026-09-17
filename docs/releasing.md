@@ -95,7 +95,7 @@ This triggers the GitHub Actions workflow which will:
 5. Publish to PyPI using trusted publishing
 6. Create GitHub Release with auto-generated notes and all artifacts
 
-**Testing with RC tags:** Tags containing `-rc` (e.g., `v0.7.0-rc.1`) will skip PyPI publishing but still build executables, push the container image (without the `X.Y` and `latest` tags) and create a GitHub Release. Useful for testing the release process.
+**Testing with RC tags:** Tags containing `-rc` (e.g., `v0.7.0-rc.1`) will skip PyPI publishing but still build executables, push the container image (without the `X.Y` and `latest` tags) and create a GitHub Release marked as a prerelease. Useful for testing the release process.
 
 **Verifying signatures:** Users can verify downloaded executables with [cosign](https://docs.sigstore.dev/):
 
