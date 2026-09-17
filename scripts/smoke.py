@@ -209,13 +209,18 @@ def check_skill(executable, home, timeout):
 
 
 def completion_var(program):
-    """Name the completion variable the way click derives it.
+    """Name the completion variable the way typer derives it.
 
-    click maps "-" and "." in the program name to "_" (dots since click 8.2)
-    and upper-cases the result.
+    typer.core builds it as
+
+        f"_{prog_name}_COMPLETE".replace("-", "_").upper()
+
+    which is click's pre-8.2 rule: "-" becomes "_" and a "." is left alone.
+    click 8.2 started mapping dots too, so the two rules agree on every name
+    without a dot and disagree on exactly one asset -- the Windows .exe. Since
+    phabfive is a typer app, typer's TyperGroup is what runs, so follow typer.
     """
-    name = program.replace("-", "_").replace(".", "_")
-    return f"_{name}_COMPLETE".upper()
+    return f"_{program}_COMPLETE".replace("-", "_").upper()
 
 
 def program_name(executable, home, timeout):
