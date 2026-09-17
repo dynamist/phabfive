@@ -50,6 +50,36 @@ uv run ruff format phabfive/ tests/
 
 CI will fail if files are not properly formatted. Run these commands before every commit to avoid CI failures.
 
+## The Kubernetes Check Is Gated
+
+`Kubernetes / Deploy and test in k3d` builds a k3d cluster and a Phorge image, so it costs about
+four minutes, and `coexistence` far more. The `decide` job in `.github/workflows/k8s.yml` decides
+whether a pull request pays for it:
+
+- a push to `master` or a `workflow_dispatch` run always deploys
+- the `ci:k8s` label always deploys, draft or not
+- a draft pull request otherwise never deploys
+- otherwise it deploys only when the pull request touches `k8s/`, `phorge/`, `tests/k8s/`,
+  `tests/e2e/`, `phabfive/`, `Makefile`, `mise.toml`, `pyproject.toml`, `uv.lock` or
+  `.github/workflows/k8s.yml`
+
+The job summary always states which rule fired. So **a green pull request does not mean the CLI was
+exercised against a real Phorge** - check whether `Deploy and test in k3d` ran, and add `ci:k8s` if
+you need it:
+
+```bash
+gh pr edit <number> --add-label ci:k8s
+```
+
+The label is the manual override rather than an `/e2e-test` comment on purpose: it is sticky, so it
+survives later pushes and "Re-run failed jobs", and it keeps the safe `pull_request` event. An
+`issue_comment` trigger would run the default branch's copy of the workflow with a writable token
+and report no check on the pull request. If a comment command is ever wanted, it should only add
+this label, not run the job.
+
+`Validate manifests` is never gated - it is five seconds, and it is what catches a broken overlay
+on a pull request that skips the deployment.
+
 ## Architecture
 
 ### CLI Layer (`cli/`)

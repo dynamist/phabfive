@@ -3,6 +3,7 @@ name: Kubernetes
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
   push:
     branches:
       - master
@@ -19,6 +20,73 @@ env:
   KUBECTL: mise exec -- kubectl --context k3d-dynamist-dev
 
 jobs:
+  # Deploying costs about four minutes of k3d, and coexistence far more, so a
+  # pull request only pays for it when it changes something that can break the
+  # deployment, or when it carries the ci:k8s label.
+  #
+  # The label, and not a /command comment, is deliberately the manual override:
+  # it is sticky, so it survives later pushes and "Re-run failed jobs", it is
+  # visible in the pull request header, and it keeps the safe pull_request
+  # event. An issue_comment trigger would instead run the default branch's copy
+  # of this file with a writable token, and report no check on the pull request.
+  decide:
+    name: Should we deploy?
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      deploy: ${{ steps.decide.outputs.deploy }}
+    steps:
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'ci:k8s') }}
+        run: |
+          set -euo pipefail
+
+          decide() {
+            echo "deploy=$1" >> "$GITHUB_OUTPUT"
+            echo "$2" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+
+          if [ "$EVENT" != pull_request ]; then
+            decide true "Deploying: a $EVENT run is never gated."
+          fi
+
+          if [ "$LABELLED" = true ]; then
+            decide true 'Deploying: the pull request is labelled `ci:k8s`.'
+          fi
+
+          if [ "$DRAFT" = true ]; then
+            decide false 'Skipped: draft pull request. Mark it ready for review, or label it `ci:k8s`.'
+          fi
+
+          # Fail open. Four minutes wasted is cheaper than a deployment break
+          # that reaches master because the API blipped and the gate said no.
+          if ! changed=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[].filename'); then
+            decide true 'Deploying: could not list the changed files, so not guessing.'
+          fi
+
+          # Everything that changes what is deployed, or what the tests drive.
+          # ci-test runs tests/k8s and tests/e2e, and the latter installs and
+          # calls the CLI, which is why phabfive/ and the lock file are here.
+          if hits=$(printf '%s\n' "$changed" | grep -E \
+              -e '^(k8s|phorge|phabfive)/' \
+              -e '^tests/(k8s|e2e)/' \
+              -e '^(Makefile|mise\.toml|pyproject\.toml|uv\.lock)$' \
+              -e '^\.github/workflows/k8s\.yml$'); then
+            decide true "$(printf 'Deploying, because these changed files affect it:\n\n```\n%s\n```\n' "$hits")"
+          fi
+
+          decide false 'Skipped: nothing affecting the deployment changed. Label the PR `ci:k8s` to run it anyway.'
+
   validate:
     name: Validate manifests
     runs-on: ubuntu-latest
@@ -30,7 +98,8 @@ jobs:
   deploy:
     name: Deploy and test in k3d
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [validate, decide]
+    if: needs.decide.outputs.deploy == 'true'
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,8 +150,8 @@ jobs:
   coexistence:
     name: Coexistence with other apps in one cluster
     runs-on: ubuntu-latest
-    needs: validate
-    if: vars.COEXISTENCE_REPOS != ''
+    needs: [validate, decide]
+    if: vars.COEXISTENCE_REPOS != '' && needs.decide.outputs.deploy == 'true'
     timeout-minutes: 120
     env:
       MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}

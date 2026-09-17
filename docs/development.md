@@ -123,6 +123,24 @@ With `tox-uv`, tox automatically uses uv for fast dependency resolution and isol
 
 For instructions on setting up a local Phorge instance for testing, see [Phorge Setup Guide](phorge-setup.md).
 
+## Continuous Integration
+
+`Tests` runs on every pull request. The `Kubernetes` workflow builds a k3d cluster and a Phorge
+image to run `make ci-test` against it, which takes about four minutes, so it is gated: it deploys
+on pushes to `master`, and on a pull request only when the pull request is not a draft and touches
+something that can affect the deployment (`k8s/`, `phorge/`, `tests/k8s/`, `tests/e2e/`,
+`phabfive/`, `Makefile`, `mise.toml`, `pyproject.toml`, `uv.lock`, or the workflow itself).
+
+To run it on a pull request the rules would skip - a draft, or a change it does not consider
+relevant - add the `ci:k8s` label:
+
+```bash
+gh pr edit <number> --add-label ci:k8s
+```
+
+The label sticks, so later pushes to the same branch keep deploying. The `Should we deploy?` job
+summary always says which rule decided.
+
 ## Building the Docs
 
 For documentation updates:
