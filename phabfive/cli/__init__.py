@@ -4,6 +4,7 @@
 import os
 import re
 import sys
+from importlib import resources
 from importlib.metadata import version
 from typing import Optional
 
@@ -48,6 +49,7 @@ _VALUELESS_GLOBAL_FLAGS = {
     "--help",
     "--install-completion",
     "--show-completion",
+    "--skill",
 }
 
 # -v and -q are counted rather than valued, so -v, -vv, -q, -qq take no value
@@ -201,6 +203,18 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def skill_callback(value: bool) -> None:
+    """Print the agent skill file and exit.
+
+    Printed verbatim, trailing newline and all, so the output can be written
+    straight to a SKILL.md an agent loads.
+    """
+    if value:
+        skill = resources.files("phabfive").joinpath("SKILL.md")
+        typer.echo(skill.read_text(encoding="utf-8"), nl=False)
+        raise typer.Exit()
+
+
 def resolve_log_level(verbose: int, quiet: int) -> str:
     """Resolve repeated -v and -q into one log level.
 
@@ -255,6 +269,13 @@ def main(
         callback=version_callback,
         is_eager=True,
         help="Display the version number and exit",
+    ),
+    skill: bool = typer.Option(
+        False,
+        "--skill",
+        callback=skill_callback,
+        is_eager=True,
+        help="Print the agent skill file and exit",
     ),
 ) -> None:
     """CLI for Phabricator and Phorge - built for humans and AI agents."""

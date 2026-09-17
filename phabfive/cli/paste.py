@@ -13,6 +13,7 @@ from rich.text import Text
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
+from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import (
     complete_language,
     complete_tag,
@@ -22,7 +23,9 @@ from phabfive.cli.completers import (
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
 
-paste_app = typer.Typer(help="The paste app", no_args_is_help=True)
+paste_app = typer.Typer(
+    cls=AgentFooterGroup, help="The paste app", no_args_is_help=True
+)
 
 
 def _get_output_format(ctx: typer.Context):

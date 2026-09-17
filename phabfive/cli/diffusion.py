@@ -6,14 +6,21 @@ from typing import Optional
 
 import typer
 
+from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_repo_status
 from phabfive.constants import REPO_STATUS_CHOICES
 from phabfive.exceptions import PhabfiveConfigException
 
-diffusion_app = typer.Typer(help="The diffusion app", no_args_is_help=True)
-repo_app = typer.Typer(help="Repository commands", no_args_is_help=True)
-uri_app = typer.Typer(help="URI commands", no_args_is_help=True)
-branch_app = typer.Typer(help="Branch commands", no_args_is_help=True)
+diffusion_app = typer.Typer(
+    cls=AgentFooterGroup, help="The diffusion app", no_args_is_help=True
+)
+repo_app = typer.Typer(
+    cls=AgentFooterGroup, help="Repository commands", no_args_is_help=True
+)
+uri_app = typer.Typer(cls=AgentFooterGroup, help="URI commands", no_args_is_help=True)
+branch_app = typer.Typer(
+    cls=AgentFooterGroup, help="Branch commands", no_args_is_help=True
+)
 
 diffusion_app.add_typer(repo_app, name="repo")
 diffusion_app.add_typer(uri_app, name="uri")
