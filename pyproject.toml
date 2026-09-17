@@ -53,7 +53,7 @@ test = [
   "pytest>=9.0.3",
   "pytest-cov>=7.1.0",
   # Capped until dynamist/phabfive#322, 0.16 widened the default rule set
-  "ruff>=0.15.20,<0.16",
+  "ruff>=0.15.22,<0.16",
 ]
 dev = [{ include-group = "test" }, "tox>=4.22", "tox-uv>=1.35.2"]
 
