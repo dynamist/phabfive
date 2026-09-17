@@ -16,7 +16,7 @@ def test_import_version():
 
 def test_import_phabfive():
     try:
-        from phabfive.core import Phabfive  # noqa
+        from phabfive.core import Phabfive  # noqa: F401
     except ImportError:
         pytest.fail("Unexpected ImportError")
 
