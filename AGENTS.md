@@ -212,6 +212,11 @@ Renovate (Mend app, `renovate.json`) is the only bot, batching everything into o
   until #322. 0.16 widened the default rule set and there is no explicit `[tool.ruff] select`, so
   it reports 385 errors against a tree that 0.15.x calls clean. Lift both at the same time.
 - `dynamist/phorge` is built from this repo and tagged at deploy time, so it is disabled.
+- `.github/workflows/drift.yml` covers what the lock file structurally cannot: it installs
+  unlocked with plain `pip` on a weekly schedule and runs `scripts/smoke.py`, so a release too
+  new for `minimumReleaseAge`/`exclude-newer` is still seen. It opens an issue rather than just
+  failing. If those two floors are ever removed, this job's remaining value is only that it does
+  not depend on Renovate running at all.
 - Leave `osvVulnerabilityAlerts` off. The hosted app cannot download the OSV database, so it only
   logs "Unable to read vulnerability information" as a repository problem
   (renovatebot/renovate#22502).
