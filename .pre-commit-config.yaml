@@ -45,6 +45,15 @@ repos:
         args: [--markdown-linebreak-ext=md]
         exclude: .patch
 
+  - repo: local
+    hooks:
+      - id: trufflehog
+        name: scan for secrets (trufflehog)
+        entry: trufflehog git file://. --since-commit HEAD --results=verified,unknown --fail --no-update
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.11.25
     hooks:
