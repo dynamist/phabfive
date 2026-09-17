@@ -609,9 +609,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-docs = [
-    { name = "mkdocs" },
-]
 repl = [
     { name = "ptpython" },
 ]
@@ -624,6 +621,9 @@ dev = [
     { name = "ruff" },
     { name = "tox" },
     { name = "tox-uv" },
+]
+docs = [
+    { name = "mkdocs" },
 ]
 test = [
     { name = "coverage" },
@@ -639,16 +639,15 @@ requires-dist = [
     { name = "click", specifier = ">=8.0" },
     { name = "inquirerpy", specifier = ">=0.3.4" },
     { name = "jinja2", specifier = ">=3.0.0" },
-    { name = "mkdocs", marker = "extra == 'docs'" },
     { name = "phabricator", specifier = ">=0.7.0" },
-    { name = "ptpython", marker = "extra == 'repl'" },
+    { name = "ptpython", marker = "extra == 'repl'", specifier = ">=3.0.32" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.26" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruamel-yaml", specifier = ">=0.18.0" },
     { name = "typer", specifier = ">=0.12.0" },
 ]
-provides-extras = ["docs", "repl"]
+provides-extras = ["repl"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -659,6 +658,7 @@ dev = [
     { name = "tox", specifier = ">=4.22" },
     { name = "tox-uv", specifier = ">=1.35.2" },
 ]
+docs = [{ name = "mkdocs", specifier = ">=1.6.1" }]
 test = [
     { name = "coverage", specifier = ">=7.13.5" },
     { name = "pytest", specifier = ">=9.0.3" },

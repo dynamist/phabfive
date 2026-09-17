@@ -198,8 +198,9 @@ Renovate (Mend app, `renovate.json`) is the only bot, batching everything into o
 - Runtime deps under `[project.dependencies]` keep loose `>=` floors: phabfive ships as a wheel and
   must not over-constrain consumers. Renovate never bumps them; `lockFileMaintenance` (weekly
   `uv lock --upgrade`) is what keeps the resolved versions and transitive deps current.
-- Dev/test tooling lives only in `[dependency-groups]` (`uv sync --group dev`, and tox installs the
-  `test` group), never as a published extra, and uses `rangeStrategy: bump` so the floors track the
+- Dev/test/docs tooling lives only in `[dependency-groups]` (`uv sync --group dev`, and tox installs
+  the `test` and `docs` groups), never as a published extra - `repl` stays an extra because
+  ptpython is a runtime opt-in a user installs with `phabfive[repl]`, and uses `rangeStrategy: bump` so the floors track the
   revs pinned in `.pre-commit-config.yaml`. That is what makes the `ruff` and `uv` groups update
   both files in one PR.
 - `minimumReleaseAge: "5 days"` exists to stay behind `[tool.uv] exclude-newer = "4 days"` in
