@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+# Local overrides such as PHORGE_GIT_REF=master (gitignored, created empty by `make up`)
+configMapGenerator:
+  - name: phorge-config
+    behavior: merge
+    envs: [config.local.env]

@@ -7,19 +7,17 @@ This guide covers setting up a local Phorge instance for **developing** and **te
 **1. Start Phorge:**
 
 ```bash
+mise trust && make tools     # k3d, kubectl and kubeconform, pinned in mise.toml
 make up
 ```
 
-The Makefile automatically detects whether you have podman or docker installed (preferring podman). It starts MariaDB in the background and Phorge in the foreground, so you can see the logs and the admin password recovery link.
+`make up` creates the shared k3d cluster `dynamist-dev` (or reuses it), builds the `dynamist/phorge` image, imports it into the cluster, deploys `k8s/overlays/local` into the namespace `phorge` and follows the logs until Phorge is ready, including the admin password recovery link. Docker is required, the cluster runs in it. See [Kubernetes Setup](#kubernetes-setup).
 
-**2. Stop Phorge:** When you are done, press `Ctrl+C`, then run `make down` to remove the containers.
+**2. Stop Phorge:** `make down` stops Phorge and MariaDB and keeps the data. `make reset` deletes the `phorge` namespace with all its data.
 
-`make down` also clears phabfive's completion cache for this host. An instance keeps no data across a rebuild,
-but the cache is keyed by URL and token, neither of which changes, so a rebuilt instance would otherwise reuse
-the previous one's cached projects and users. Every account cached for this host is cleared, since a rebuild
-invalidates all of them; no other host is touched.
+`make reset` also clears phabfive's completion cache for this host. The cache is keyed by URL and token, neither of which changes, so a fresh instance would otherwise reuse the previous one's cached projects and users. Every account cached for this host is cleared, since a fresh instance invalidates all of them; no other host is touched. `make destroy` clears it too.
 
-Phorge is served at <http://phorge.localhost> and uploaded files at <http://cdn.localhost>. No `/etc/hosts` entry is needed: names under `.localhost` are reserved for the loopback address by [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761#section-6.3), and resolvers such as systemd-resolved map them automatically.
+Phorge is served at <http://phorge.localhost> and uploaded files at <http://cdn.localhost>, both through the cluster's Traefik ingress on `127.0.0.1:80`. No `/etc/hosts` entry is needed: names under `.localhost` are reserved for the loopback address by [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761#section-6.3), and resolvers such as systemd-resolved map them automatically.
 
 If your resolver does not, add the entries yourself:
 
@@ -115,14 +113,14 @@ phabfive maniphest edit T1 --space=S3
 
 ## Configuration
 
-All settings can be customized via environment variables. Defaults are in `compose.yml` and can be overridden from the command line:
+The settings are in `k8s/base/config.env` and, for credentials, `k8s/base/secret.env`. To override settings locally, put them in the gitignored `k8s/overlays/local/config.local.env` and run `make up`:
 
 ```bash
-PHORGE_GIT_REF=master make up
-PHORGE_ADMIN_PASS=mypassword PHORGE_GIT_REF=master make up
+echo PHORGE_GIT_REF=master >> k8s/overlays/local/config.local.env
+make up
 ```
 
-### Environment Variables
+### Settings
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -132,10 +130,13 @@ PHORGE_ADMIN_PASS=mypassword PHORGE_GIT_REF=master make up
 | `PHORGE_ADMIN_USER` | `admin` | Admin username |
 | `PHORGE_ADMIN_EMAIL` | `admin@domain.tld` | Admin email address |
 | `PHORGE_ADMIN_NAME` | `Administrator` | Admin display name |
-| `PHORGE_ADMIN_PASS` | `supersecr3tpassw0rdfordevelop1` | Admin password (enables immediate login) |
-| `PHORGE_ADMIN_TOKEN` | `api-supersecr3tapikeyfordevelop1` | Pre-configured API token |
+| `PHORGE_ADMIN_PASS` | `supersecr3tpassw0rdfordevelop1` | Admin password, enables immediate login (secret) |
+| `PHORGE_ADMIN_TOKEN` | `api-supersecr3tapikeyfordevelop1` | Pre-configured API token (secret) |
 | `PHORGE_GIT_REF` | `stable` | Git branch/tag/commit for Phorge |
 | `ARCANIST_GIT_REF` | `stable` | Git branch/tag/commit for Arcanist |
+| `MYSQL_PASS` / `MARIADB_ROOT_PASSWORD` | `supersecr3tpassw0rdfordatabase1` | MariaDB root password (secret) |
+
+The Git refs are fetched and checked out when the pod starts. The `ci` overlay leaves them empty, which tests the Phorge and Arcanist baked into the image instead.
 
 ## Configure phabfive
 
@@ -197,7 +198,7 @@ curl "http://phorge.localhost/api/user.whoami" \
 
 ## How It Works
 
-The script runs automatically during container startup and:
+The script runs automatically when the Phorge pod starts and:
 
 1. Enables username/password authentication
 2. Creates admin and test user accounts with verified emails
@@ -206,16 +207,39 @@ The script runs automatically during container startup and:
 5. Creates default milestones with workboard columns
 6. Sets passwords for all users (if `PHORGE_ADMIN_PASS` is set) or generates a recovery link
 
-All operations are idempotent - safe to run multiple times. Container restarts won't duplicate data.
+All operations are idempotent - safe to run multiple times. Pod restarts won't duplicate data.
+
+## Kubernetes Setup
+
+Phorge runs in a local [k3d](https://k3d.io) cluster, which is k3s in Docker. The cluster can be shared with other Dynamist dev apps, and each app keeps to its own namespace:
+
+- **Cluster:** `k8s/cluster/k3d.yaml`, identical in every repo that uses it. It pins the k3s version and publishes the bundled Traefik ingress on `127.0.0.1:80` and `:443`. Whichever app starts first creates the cluster, the others reuse it.
+- **Routing:** each app has a standard `Ingress` with its own hostnames, here `phorge.localhost` and `cdn.localhost` to the `phorge` Service.
+- **Phorge:** `k8s/base` holds the `phorge` namespace, MariaDB (StatefulSet `mariadb`), Phorge (Deployment `phorge`, `Recreate` so two pods never upgrade the same database), the Ingress, a ResourceQuota with default limits and NetworkPolicies. Only Traefik reaches Phorge and only Phorge reaches MariaDB, whose port is not published on the host. Overlays: `local` (with `config.local.env`) and `ci`.
+- **Images:** `make phorge-image` builds `dynamist/phorge`, tags it by content and imports it with `k3d image import`, no registry is involved.
+
+Every `make` target passes `--context k3d-dynamist-dev`, so it never acts on another cluster.
 
 ## Useful Commands
 
 ```bash
-make up      # Start Phorge (mariadb + phorge)
-make down    # Stop containers and clear this instance's completion cache
-make logs    # View container logs
-make shell   # Open shell in phorge container
+make up                  # Create/reuse the cluster, build and deploy Phorge, follow logs
+make down                # Stop Phorge and MariaDB, keep data
+make reset               # Delete the phorge namespace and its data, clear the completion cache
+make destroy             # Delete the whole cluster (FORCE=1 if other apps run)
+make logs / make ps      # Follow Phorge logs / show pods, ingress, volumes
+make shell               # Open a shell in the Phorge pod
+make validate            # Validate the rendered manifests with kubeconform
+make test-k8s            # Smoke, seed data and isolation tests against the deployed Phorge
 ```
+
+## Testing Against the Cluster
+
+The tests only run when asked for, a plain `pytest` skips them:
+
+- **`make test-k8s`** (`tests/k8s`): the home page, the file domain and the API token work through Traefik, unknown hosts get a 404, the users, projects, milestones and spaces from `phorge/lib/common.sh` exist, and pods in other namespaces cannot reach Phorge or MariaDB.
+
+CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d cluster on the runner, deploys the `ci` overlay and runs `make test-k8s`. A coexistence job deploys the apps listed in the repository variable `COEXISTENCE_REPOS` (space separated `owner/name`) into the same cluster and runs every app's tests, which also checks that the apps cannot reach each other and that all repos pin the same `k8s/cluster/k3d.yaml`. Each of those repos must provide the make targets `ci-deploy` and `ci-test`.
 
 ## Troubleshooting
 
@@ -230,16 +254,13 @@ make logs | grep "one-time link"
 ### Generate a new recovery link
 
 ```bash
-# With podman
-podman exec <container-name> /app/phorge/bin/auth recover admin
-
-# With docker
-docker exec <container-name> /app/phorge/bin/auth recover admin
+make shell
+/app/phorge/bin/auth recover admin
 ```
 
 ### Data Persistence
 
-By default the instance won't persist data. If the MariaDB container is shut down, data is lost and you'll need to restart fresh.
+The database and Phorge's repositories and files are PersistentVolumeClaims in the `phorge` namespace, stored by k3s's `local-path` provisioner inside the cluster's Docker container. `make down` and restarting Docker keep them, `make reset` deletes them and `make destroy` deletes them along with the cluster.
 
 ## Security Notes
 

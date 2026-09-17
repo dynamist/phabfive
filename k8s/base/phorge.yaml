@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: phorge
+spec:
+  selector:
+    app.kubernetes.io/name: phorge
+  ports:
+    - name: http
+      port: 80
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: phorge-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phorge
+spec:
+  replicas: 1
+  # The default of 10 minutes is too short, the first start upgrades storage and runs the init scripts
+  progressDeadlineSeconds: 3600
+  # Never run two pods at once, both would upgrade the same database
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: phorge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: phorge
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: phorge
+          image: dynamist/phorge
+          envFrom:
+            - configMapRef:
+                name: phorge-config
+            - secretRef:
+                name: phorge-secret
+          ports:
+            - name: http
+              containerPort: 80
+          # Storage upgrade and the init scripts run before Apache listens
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            failureThreshold: 180
+          readinessProbe:
+            httpGet:
+              path: /status/
+              port: http
+              # Phorge answers "Site Not Found" for hosts other than PHORGE_URL
+              httpHeaders:
+                - name: Host
+                  value: phorge.localhost
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /app/repo
+              subPath: repo
+            - name: data
+              mountPath: /app/files
+              subPath: files
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: phorge-data

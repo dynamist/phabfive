@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: phorge
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: phorge.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: phorge
+                port:
+                  name: http
+    # Phorge serves uploaded files from a separate domain (security.alternate-file-domain)
+    - host: cdn.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: phorge
+                port:
+                  name: http

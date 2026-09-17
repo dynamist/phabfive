@@ -1,0 +1,24 @@
+# Shared local cluster for Dynamist dev apps.
+#
+# Contract: keep this file identical in every repo that uses the cluster. Apps
+# only add namespaced resources and their own Ingress hosts, nothing here may
+# be app-specific. Bump the k3s image in all repos at once.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: dynamist-dev
+servers: 1
+agents: 0
+image: rancher/k3s:v1.36.4-k3s1
+ports:
+  # Traefik ingress, on loopback only
+  - port: 127.0.0.1:80:80
+    nodeFilters: [loadbalancer]
+  - port: 127.0.0.1:443:443
+    nodeFilters: [loadbalancer]
+options:
+  k3d:
+    wait: true
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: false

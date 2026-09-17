@@ -65,6 +65,8 @@ mkdir -p /app/repo
 # Configure large file storage
 echo "Configuring large file storage..."
 mkdir -p /app/files
+# Volumes are mounted owned by root, Apache and the daemons write as www-data
+chown www-data:www-data /app/repo /app/files
 ./bin/config set storage.local-disk.path /app/files
 
 # Configure PHP settings

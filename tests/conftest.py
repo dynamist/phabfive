@@ -9,10 +9,17 @@ every test; the cache tests opt back in with the enabled_cache fixture.
 """
 
 # python std lib
+import os
 from unittest.mock import patch
 
 # 3rd party imports
 import pytest
+
+
+# Tests against a live Phorge in the k3d cluster only run when asked for, see
+# `make test-k8s`
+if not os.environ.get("PHABFIVE_LIVE_TESTS"):
+    collect_ignore = ["k8s"]
 
 
 CONF = {

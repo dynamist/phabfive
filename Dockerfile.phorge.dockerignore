@@ -1,0 +1,4 @@
+# Build context of Dockerfile.phorge, which only needs phorge/
+# (.dockerignore excludes it for the phabfive image)
+*
+!phorge

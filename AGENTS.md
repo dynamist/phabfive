@@ -25,9 +25,11 @@ uv run tox                           # test all Python versions (3.10-3.14)
 uv run ruff check phabfive/ tests/
 uv run ruff format phabfive/ tests/
 
-# Local Phorge instance for testing
-make up                              # start local Phorge
-make down                            # stop containers
+# Local Phorge instance for testing, in the shared k3d cluster (see docs/phorge-setup.md)
+make up                              # create/reuse the cluster, build and deploy Phorge
+make down                            # stop, keep data
+make reset                           # delete the phorge namespace and its data
+make test-k8s                        # smoke, seed data and isolation tests against the cluster
 
 # Test against local Phorge (safe to run data-altering operations)
 PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
