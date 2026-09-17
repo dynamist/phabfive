@@ -6,6 +6,7 @@ from typing import List, Optional
 
 import typer
 
+from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_passphrase_type
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -13,7 +14,9 @@ from phabfive.exceptions import (
     PhabfiveRemoteException,
 )
 
-passphrase_app = typer.Typer(help="The passphrase app", no_args_is_help=True)
+passphrase_app = typer.Typer(
+    cls=AgentFooterGroup, help="The passphrase app", no_args_is_help=True
+)
 
 
 def _get_passphrase_app():

@@ -7,6 +7,7 @@ from typing import List, Optional
 
 import typer
 
+from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import (
     complete_column,
     complete_column_change,
@@ -26,7 +27,9 @@ from phabfive.cli.completers import (
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
 
-maniphest_app = typer.Typer(help="The maniphest app", no_args_is_help=True)
+maniphest_app = typer.Typer(
+    cls=AgentFooterGroup, help="The maniphest app", no_args_is_help=True
+)
 
 
 def _get_maniphest_app():
