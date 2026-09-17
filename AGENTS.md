@@ -191,6 +191,31 @@ phabfive --format=json maniphest search --tag=projectname
 phabfive --format=json T123 | jq '.Task.Title'
 ```
 
+## Dependency Updates
+
+Renovate (Mend app, `renovate.json`) is the only bot, batching everything into one Monday window.
+
+- Runtime deps under `[project.dependencies]` keep loose `>=` floors: phabfive ships as a wheel and
+  must not over-constrain consumers. Renovate never bumps them; `lockFileMaintenance` (weekly
+  `uv lock --upgrade`) is what keeps the resolved versions and transitive deps current.
+- Dev/test tooling lives only in `[dependency-groups]` (`uv sync --group dev`, and tox installs the
+  `test` group), never as a published extra, and uses `rangeStrategy: bump` so the floors track the
+  revs pinned in `.pre-commit-config.yaml`. That is what makes the `ruff` and `uv` groups update
+  both files in one PR.
+- `minimumReleaseAge: "5 days"` exists to stay behind `[tool.uv] exclude-newer = "4 days"` in
+  `pyproject.toml`. uv resolves as if four days ago, so a fresher version would be proposed but
+  could not be locked. Change the two together or lock file updates start failing.
+- `k8s/cluster/k3d.yaml` is shared verbatim with every repo in the `dynamist-dev` cluster, and the
+  `coexistence` job diffs it, so `kubectl` (mise) and the k3s image move together in the
+  `kubernetes toolchain` group - and the PR has to be merged in every such repo in the same window.
+- `ruff` is capped below 0.16 in both `pyproject.toml` and the `ruff` group's `allowedVersions`
+  until #322. 0.16 widened the default rule set and there is no explicit `[tool.ruff] select`, so
+  it reports 385 errors against a tree that 0.15.x calls clean. Lift both at the same time.
+- `dynamist/phorge` is built from this repo and tagged at deploy time, so it is disabled.
+- Leave `osvVulnerabilityAlerts` off. The hosted app cannot download the OSV database, so it only
+  logs "Unable to read vulnerability information" as a repository problem
+  (renovatebot/renovate#22502).
+
 ## Version Management
 
 Version is defined only in `pyproject.toml`. Access it via:

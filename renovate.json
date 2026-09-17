@@ -10,10 +10,32 @@
   "labels": [
     "dependencies"
   ],
+  "minimumReleaseAge": "5 days",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ]
+  },
   "pre-commit": {
     "enabled": true
   },
+  "kubernetes": {
+    "managerFilePatterns": [
+      "/^k8s/.+\\.yaml$/"
+    ]
+  },
   "packageRules": [
+    {
+      "description": "Bump the floors of dev/test tooling so they track what we pin elsewhere (pre-commit revs, CI), which makes the ruff and uv lockstep groups update both sides. Runtime deps under project.dependencies keep their loose floors on purpose: phabfive ships as a wheel and must not over-constrain consumers, so uv.lock (see lockFileMaintenance) is what keeps those current.",
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchDepTypes": [
+        "dependency-groups"
+      ],
+      "rangeStrategy": "bump"
+    },
     {
       "description": "Group dev/test tooling (Python) into one PR",
       "matchManagers": [
@@ -43,12 +65,20 @@
       "groupName": "pre-commit hooks"
     },
     {
-      "description": "Keep ruff and ruff-pre-commit in lockstep (same upstream release, two managers). Listed after the generic pre-commit group so it wins for ruff-pre-commit.",
+      "description": "Group the pinned CLI tools into one PR",
+      "matchManagers": [
+        "mise"
+      ],
+      "groupName": "mise tools"
+    },
+    {
+      "description": "Keep ruff and ruff-pre-commit in lockstep (same upstream release, two managers). Listed after the generic pre-commit group so it wins for ruff-pre-commit. Held below 0.16 until dynamist/phabfive#322: 0.16 widened the default rule set and the repo has no explicit [tool.ruff] select, so it reports 385 errors and CI fails.",
       "matchPackageNames": [
         "ruff",
         "astral-sh/ruff-pre-commit"
       ],
-      "groupName": "ruff"
+      "groupName": "ruff",
+      "allowedVersions": "<0.16"
     },
     {
       "description": "Keep uv and uv-pre-commit in lockstep (same upstream release, two managers). Listed after the generic pre-commit group so it wins for uv-pre-commit.",
@@ -58,6 +88,24 @@
         "ghcr.io/astral-sh/uv"
       ],
       "groupName": "uv"
+    },
+    {
+      "description": "Keep kubectl and the k3s image in lockstep (same upstream release, two managers). Listed after the generic mise group so it wins for kubectl.",
+      "matchDepNames": [
+        "kubectl",
+        "rancher/k3s"
+      ],
+      "groupName": "kubernetes toolchain",
+      "prBodyNotes": [
+        ":warning: `k8s/cluster/k3d.yaml` is shared verbatim with every repo using the `dynamist-dev` cluster. Bump it in all of them in the same window, or the `coexistence` job fails on the diff. Recreate the cluster with `make destroy` + `make up` afterwards."
+      ]
+    },
+    {
+      "description": "dynamist/phorge is built from this repo and tagged at deploy time, there is nothing upstream to track",
+      "matchDepNames": [
+        "dynamist/phorge"
+      ],
+      "enabled": false
     }
   ]
 }
