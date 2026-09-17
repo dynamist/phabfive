@@ -208,20 +208,54 @@ def check_skill(executable, home, timeout):
     return f"{lines} lines"
 
 
+def completion_var(program):
+    """Name the completion variable the way click derives it.
+
+    click maps "-" and "." in the program name to "_" (dots since click 8.2)
+    and upper-cases the result.
+    """
+    name = program.replace("-", "_").replace(".", "_")
+    return f"_{name}_COMPLETE".upper()
+
+
+def program_name(executable, home, timeout):
+    """Ask the binary what it calls itself, rather than guessing.
+
+    click derives the completion variable from sys.argv[0], so the variable
+    follows whatever the binary is named -- and the release renames every
+    executable to phabfive-<os>-<arch> before smoke testing it. A hardcoded
+    _PHABFIVE_COMPLETE reaches none of them: the renamed binary never sees an
+    instruction, falls through to an ordinary run with no arguments, prints
+    usage and exits 2, which reads exactly like broken completion.
+
+    Deriving the name from the file name instead would be a second guess:
+    console scripts trim a ".exe" off sys.argv[0] and frozen binaries do not,
+    so the two disagree on Windows. The "Usage:" line is what click itself
+    resolved, so it is right on every platform.
+    """
+    code, output = run(executable, ["--help"], home, timeout)
+    match = re.search(r"^Usage:\s+(\S+)", output, re.MULTILINE)
+    if code != 0 or not match:
+        # Not fatal on its own -- check_help reports a broken --help.
+        return os.path.basename(executable)
+    return match.group(1)
+
+
 def check_completion(executable, home, timeout):
     """Drive click's completion protocol the way a shell does.
 
     This is the code path that broke: phabfive/cli/shell_completion.py builds
     click CompletionItems, and MonogramGroup offers the monogram letters.
     """
+    program = program_name(executable, home, timeout)
     code, output = run(
         executable,
         [],
         home,
         timeout,
         env_extra={
-            "_PHABFIVE_COMPLETE": "complete_bash",
-            "COMP_WORDS": "phabfive ",
+            completion_var(program): "complete_bash",
+            "COMP_WORDS": f"{program} ",
             "COMP_CWORD": "1",
         },
     )
