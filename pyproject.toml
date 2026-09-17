@@ -46,10 +46,16 @@ dependencies = [
 [project.optional-dependencies]
 docs = ["mkdocs"]
 repl = ["ptpython"]
-test = ["coverage", "pytest", "pytest-cov", "ruff"]
 
 [dependency-groups]
-dev = ["coverage", "pytest", "pytest-cov", "ruff", "tox>=4.0", "tox-uv"]
+test = [
+  "coverage>=7.13.5",
+  "pytest>=9.0.3",
+  "pytest-cov>=7.1.0",
+  # Capped until dynamist/phabfive#322, 0.16 widened the default rule set
+  "ruff>=0.15.20,<0.16",
+]
+dev = [{ include-group = "test" }, "tox>=4.22", "tox-uv>=1.35.2"]
 
 [project.scripts]
 phabfive = "phabfive.cli:cli_entrypoint"
