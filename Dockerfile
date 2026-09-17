@@ -39,10 +39,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && mkdir /opt/phabfive/bin \
     && ln -s ../venv/bin/phabfive /opt/phabfive/bin/phabfive
 
-# Smoke test the tree in a clean image, without uv or the sources
+# Smoke test the tree in a clean image, without uv or the sources. The same
+# script gates the wheel and the standalone executables, so all three
+# artifacts are held to one standard. Run with the venv's interpreter: the
+# base images have no Python of their own.
 FROM base-${LIBC} AS test
 COPY --from=builder /opt/phabfive /opt/phabfive
-RUN /opt/phabfive/bin/phabfive --version
+COPY scripts/smoke.py /tmp/smoke.py
+RUN /opt/phabfive/venv/bin/python /tmp/smoke.py --executable /opt/phabfive/bin/phabfive
 
 FROM scratch
 LABEL org.opencontainers.image.source="https://github.com/dynamist/phabfive" \

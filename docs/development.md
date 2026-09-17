@@ -48,7 +48,7 @@ uv run phabfive maniphest search --tag '*'
 
 ### Building the container image
 
-The `Dockerfile` builds a scratch image holding phabfive and a uv-managed Python under `/opt/phabfive`. The build smoke tests the result with `phabfive --version`.
+The `Dockerfile` builds a scratch image holding phabfive and a uv-managed Python under `/opt/phabfive`. The build runs `scripts/smoke.py` against the result in a `test` stage, and the final `scratch` stage copies from that stage -- so an image that cannot run is never produced.
 
 ```bash
 make image             # phabfive:gnu, for glibc based images
@@ -62,6 +62,27 @@ printf 'FROM debian:trixie-slim\nCOPY --from=phabfive:gnu /opt/phabfive /opt/pha
   | docker build -t phabfive-try -
 docker run --rm phabfive-try --help
 ```
+
+## Smoke Test a Build
+
+The unit tests run against the source tree in the locked dev environment. That is not
+what users get, and it is why an undeclared `click` dependency stayed invisible until
+a release shipped six executables that could not start.
+
+`scripts/smoke.py` runs a *built* phabfive and checks it actually works: `--version`
+and `--help`, every command group's help, `--skill`, shell completion, and two real
+commands against an unreachable endpoint to prove they fail on the network rather
+than on a missing import. It only uses the standard library, so it runs anywhere --
+on a bare CI runner and inside the container image alike.
+
+```bash
+make smoke                                      # unlocked install into a throwaway venv, then check it
+python scripts/smoke.py --venv .venv            # check an existing venv
+python scripts/smoke.py --executable dist/phabfive   # check a PyInstaller build
+```
+
+The same script gates every artifact in the release workflow and the container image
+build, so what you run locally is what CI runs.
 
 ## Run Unit Tests
 

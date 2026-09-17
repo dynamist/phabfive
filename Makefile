@@ -1,4 +1,4 @@
-.PHONY: help install tools test docs format lock upgrade clean cleanpy cleanall cleantox cleanvenv sdist bdist image check-runtime check-tools clear-cache cluster destroy phorge-image deploy up down reset logs ps shell validate test-k8s test-e2e ci-deploy ci-test
+.PHONY: help install tools test smoke docs format lock upgrade clean cleanpy cleanall cleantox cleanvenv sdist bdist image check-runtime check-tools clear-cache cluster destroy phorge-image deploy up down reset logs ps shell validate test-k8s test-e2e ci-deploy ci-test
 
 # Detect container runtime (prefer podman)
 CONTAINER_RUNTIME = $(or \
@@ -42,6 +42,14 @@ tools: ## install pinned CLI tools (k3d, kubectl, kubeconform) with mise
 
 test: install ## run test suite
 	uv run tox --skip-missing-interpreters
+
+smoke: ## install unlocked into a throwaway venv and run the built CLI
+	rm -rf .smoke
+	python3 -m venv .smoke
+	.smoke/bin/python -m pip install --quiet --upgrade pip
+	.smoke/bin/pip install --quiet .
+	python3 scripts/smoke.py --venv .smoke
+	rm -rf .smoke
 
 docs: ## build and serve documentation
 	uv sync --extra docs

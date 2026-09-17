@@ -95,6 +95,17 @@ This triggers the GitHub Actions workflow which will:
 5. Publish to PyPI using trusted publishing
 6. Create GitHub Release with auto-generated notes and all artifacts
 
+**Every artifact is run before it goes anywhere.** `scripts/smoke.py` executes each
+standalone executable before it is signed, the wheel and sdist after installing them
+into a clean venv with plain `pip`, and the image tree inside the Dockerfile's `test`
+stage. Publishing to PyPI and creating the release both depend on those checks
+passing, so a build that cannot start stops the release instead of shipping.
+
+This exists because v0.10.0-rc.1 shipped six executables that could not start at all
+and every job still reported success: phabfive imported `click` without declaring it,
+and nothing in the pipeline ever ran what it built. Run the same checks yourself at
+any time with `make smoke`.
+
 **Testing with RC tags:** Tags containing `-rc` (e.g., `v0.7.0-rc.1`) will skip PyPI publishing but still build executables, push the container image (without the `X.Y` and `latest` tags) and create a GitHub Release marked as a prerelease. Useful for testing the release process.
 
 **Verifying signatures:** Users can verify downloaded executables with [cosign](https://docs.sigstore.dev/):
@@ -198,21 +209,27 @@ ls -lh dist/
 **5. Test the Build**
 
 Before uploading anywhere, verify the build works locally to catch issues early:
+
 ```bash
-# Create test environment
-uv venv test-env
-source test-env/bin/activate  # or test-env\Scripts\activate on Windows
-
-# Install from wheel
-uv pip install dist/phabfive-0.5.0-py3-none-any.whl
-
-# Quick smoke test
-phabfive --help
-
-# Cleanup
-deactivate
-rm -rf test-env
+make smoke
 ```
+
+That installs phabfive unlocked into a throwaway venv and runs `scripts/smoke.py`
+against it -- the same script the release workflow runs on every artifact, so the
+manual check and CI cannot drift apart. To check a specific built distribution
+instead:
+
+```bash
+python -m venv /tmp/test-env
+/tmp/test-env/bin/pip install dist/phabfive-0.5.0-py3-none-any.whl
+python scripts/smoke.py --venv /tmp/test-env
+rm -rf /tmp/test-env
+```
+
+Use plain `pip` rather than `uv pip`: uv applies `uv.lock` and the `exclude-newer`
+window, which is what hid the missing `click` declaration from every test run. The
+point of this check is to resolve dependencies the way a user installing from PyPI
+does.
 
 **6. Upload to TestPyPI (MANDATORY)**
 
