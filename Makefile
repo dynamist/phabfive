@@ -1,4 +1,4 @@
-.PHONY: help install tools test docs format lock upgrade clean cleanpy cleanall cleantox cleanvenv sdist bdist image check-runtime check-tools clear-cache cluster destroy phorge-image deploy up down reset logs ps shell validate test-k8s ci-deploy ci-test
+.PHONY: help install tools test docs format lock upgrade clean cleanpy cleanall cleantox cleanvenv sdist bdist image check-runtime check-tools clear-cache cluster destroy phorge-image deploy up down reset logs ps shell validate test-k8s test-e2e ci-deploy ci-test
 
 # Detect container runtime (prefer podman)
 CONTAINER_RUNTIME = $(or \
@@ -193,6 +193,10 @@ test-k8s: ## run the smoke, seed data and isolation tests in tests/k8s against t
 	PHABFIVE_LIVE_TESTS=1 mise exec -- uv run --no-project --with pytest --with requests --with pyyaml \
 		pytest tests/k8s -p no:cacheprovider $(PYTEST_ARGS)
 
+test-e2e: install ## run phabfive's end-to-end tests (the CLI against the deployed phorge, PYTEST_ARGS="-k whoami" for pytest)
+	PHABFIVE_LIVE_TESTS=1 PHAB_URL=$(PHORGE_URL)/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 \
+		uv run pytest tests/e2e $(PYTEST_ARGS)
+
 ##@ CI
 
 # Every app repo using the shared cluster provides ci-deploy and ci-test, so CI
@@ -205,3 +209,4 @@ ci-deploy: cluster phorge-image ## build and deploy the ci overlay, wait until i
 
 ci-test: ## run every test against the deployed ci overlay
 	$(MAKE) --no-print-directory test-k8s PYTEST_ARGS="-v"
+	$(MAKE) --no-print-directory test-e2e PYTEST_ARGS="-v"

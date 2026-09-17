@@ -231,15 +231,17 @@ make logs / make ps      # Follow Phorge logs / show pods, ingress, volumes
 make shell               # Open a shell in the Phorge pod
 make validate            # Validate the rendered manifests with kubeconform
 make test-k8s            # Smoke, seed data and isolation tests against the deployed Phorge
+make test-e2e            # End-to-end tests of the phabfive CLI against the deployed Phorge
 ```
 
 ## Testing Against the Cluster
 
-The tests only run when asked for, a plain `pytest` skips them:
+Both test suites only run when asked for, a plain `pytest` skips them:
 
 - **`make test-k8s`** (`tests/k8s`): the home page, the file domain and the API token work through Traefik, unknown hosts get a 404, the users, projects, milestones and spaces from `phorge/lib/common.sh` exist, and pods in other namespaces cannot reach Phorge or MariaDB.
+- **`make test-e2e`** (`tests/e2e`): end-to-end tests of phabfive itself, running the CLI against the instance and creating and editing real tasks.
 
-CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d cluster on the runner, deploys the `ci` overlay and runs `make test-k8s`. A coexistence job deploys the apps listed in the repository variable `COEXISTENCE_REPOS` (space separated `owner/name`) into the same cluster and runs every app's tests, which also checks that the apps cannot reach each other and that all repos pin the same `k8s/cluster/k3d.yaml`. Each of those repos must provide the make targets `ci-deploy` and `ci-test`.
+CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d cluster on the runner, deploys the `ci` overlay and runs both suites. A coexistence job deploys the apps listed in the repository variable `COEXISTENCE_REPOS` (space separated `owner/name`) into the same cluster and runs every app's tests, which also checks that the apps cannot reach each other and that all repos pin the same `k8s/cluster/k3d.yaml`. Each of those repos must provide the make targets `ci-deploy` and `ci-test`.
 
 ## Troubleshooting
 
