@@ -1,4 +1,4 @@
-# Use PHP 8.1 with Apache (matches guide's PHP 8.0+ requirement)
+# PHP with Apache, tag kept current by Renovate (Phorge requires PHP 7.2.25+)
 FROM php:8.5-apache
 
 WORKDIR /app
