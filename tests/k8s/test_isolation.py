@@ -14,27 +14,38 @@ from tests.k8s.conftest import KUBE_CONTEXT, NAMESPACE, ROOT
 
 
 def probe_from(kubectl, namespace, host, port):
-    """Try a TCP connection from a throwaway pod, return True when it connects."""
-    result = kubectl(
+    """Try a TCP connection from a throwaway pod, return True when it connects.
+
+    The pod runs to completion before its log is read: `kubectl run -i` loses
+    the output when the container exits before kubectl attaches.
+    """
+    name = f"probe-{uuid.uuid4().hex[:8]}"
+    command = f"nc -z -w 5 {host} {port} && echo OPEN || echo CLOSED"
+    kubectl(
         "run",
-        f"probe-{uuid.uuid4().hex[:8]}",
-        "--rm",
-        "-i",
-        "--quiet",
+        name,
         "--restart=Never",
         "--image=busybox:1.37",
         "--",
         "sh",
         "-c",
-        f"nc -z -w 5 {host} {port} && echo OPEN || echo CLOSED",
+        command,
         namespace=namespace,
-        check=False,
-        timeout=180,
     )
-    assert "OPEN" in result.stdout or "CLOSED" in result.stdout, (
-        result.stdout + result.stderr
-    )
-    return "OPEN" in result.stdout
+    try:
+        kubectl(
+            "wait",
+            f"pod/{name}",
+            "--for=jsonpath={.status.phase}=Succeeded",
+            "--timeout=180s",
+            namespace=namespace,
+            timeout=200,
+        )
+        output = kubectl("logs", name, namespace=namespace).stdout
+    finally:
+        kubectl("delete", "pod", name, "--wait=false", namespace=namespace, check=False)
+    assert output.strip() in ("OPEN", "CLOSED"), output
+    return output.strip() == "OPEN"
 
 
 def other_namespaces(kubectl):
