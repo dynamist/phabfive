@@ -212,5 +212,10 @@ git push origin v0.7.0
   - `phabfive-macos-amd64`, `phabfive-macos-arm64`
   - `phabfive-windows-amd64.exe`, `phabfive-windows-arm64.exe`
 - Sigstore signatures (`.sigstore.json`) for all executables except Windows ARM64
+- Scratch container image `ghcr.io/dynamist/phabfive` (`linux/amd64`, `linux/arm64`) holding
+  phabfive and a uv-managed Python under `/opt/phabfive`, meant to be copied into other images:
+  - glibc tags: `X.Y.Z`, `X.Y`, `latest`
+  - musl tags: `X.Y.Z-musl`, `X.Y-musl`, `latest-musl`
+  - signed with cosign; build locally with `make image` or `make image LIBC=musl`
 
-**RC tags** (containing `-rc`) skip PyPI but still build executables and create GitHub releases.
+**RC tags** (containing `-rc`) skip PyPI and the `X.Y`/`latest` image tags, but still build executables, push the image and create GitHub releases.

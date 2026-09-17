@@ -8,6 +8,9 @@ CONTAINER_RUNTIME = $(or \
 
 COMPOSE_FILE := compose.yml
 
+# libc of the phabfive image built by `make image` (gnu or musl)
+LIBC ?= gnu
+
 # Same default as compose.yml, so overriding it for `make up` also points the
 # cache clearing below at the instance that was actually started
 PHORGE_URL ?= http://phorge.localhost
@@ -70,8 +73,8 @@ sdist: clean ## make a source distribution
 bdist: clean ## build a wheel distribution
 	uv build --wheel
 
-image: check-runtime ## build phabfive container image
-	$(CONTAINER_RUNTIME) build -f Dockerfile -t phabfive .
+image: check-runtime ## build phabfive scratch image (LIBC=gnu|musl)
+	$(CONTAINER_RUNTIME) build --build-arg LIBC=$(LIBC) -t phabfive:$(LIBC) .
 
 check-runtime: ## Checks runtime and exits if not found
 	@echo "Checking runtime..."

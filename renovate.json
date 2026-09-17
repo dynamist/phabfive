@@ -54,7 +54,8 @@
       "description": "Keep uv and uv-pre-commit in lockstep (same upstream release, two managers). Listed after the generic pre-commit group so it wins for uv-pre-commit.",
       "matchPackageNames": [
         "uv",
-        "astral-sh/uv-pre-commit"
+        "astral-sh/uv-pre-commit",
+        "ghcr.io/astral-sh/uv"
       ],
       "groupName": "uv"
     }
