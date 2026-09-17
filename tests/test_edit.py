@@ -3,6 +3,7 @@
 """Tests for phabfive edit command."""
 
 # python std lib
+import contextlib
 from unittest import mock
 
 # 3rd party imports
@@ -542,6 +543,92 @@ Task:
         with mock.patch("sys.stdin", StringIO(yaml_data)):
             with pytest.raises(ValueError, match="missing 'Link' field"):
                 parse_yaml_from_stdin(edit_app.parse_monogram)
+
+    def test_parse_list_document_from_yaml(self):
+        """Test parsing one document holding a list of tasks.
+
+        This is the shape "--format=yaml" emits, so it is what
+        "phabfive maniphest search | phabfive edit" actually pipes in. Before
+        this was accepted the documented pipeline failed with
+        "YAML document missing 'Link' field", because the Link lived one level
+        down inside the list.
+        """
+        from io import StringIO
+
+        from phabfive.edit import Edit
+        from phabfive.yaml_utils import parse_yaml_from_stdin
+
+        edit_app = Edit()
+
+        yaml_data = """- Link: https://example.com/T123
+  Task:
+    Name: Task 1
+- Link: https://example.com/T456
+  Task:
+    Name: Task 2
+"""
+
+        with mock.patch("sys.stdin", StringIO(yaml_data)):
+            objects = parse_yaml_from_stdin(edit_app.parse_monogram)
+
+        assert len(objects) == 2
+        assert objects[0]["object_id"] == "123"
+        assert objects[1]["object_id"] == "456"
+        assert objects[0]["data"]["Task"]["Name"] == "Task 1"
+
+    def test_parse_list_document_missing_link_raises_error(self):
+        """A list entry without a Link is reported like a bare document is."""
+        from io import StringIO
+
+        from phabfive.edit import Edit
+        from phabfive.yaml_utils import parse_yaml_from_stdin
+
+        edit_app = Edit()
+
+        yaml_data = """- Task:
+    Name: Test Task
+"""
+
+        with mock.patch("sys.stdin", StringIO(yaml_data)):
+            with pytest.raises(ValueError, match="missing 'Link' field"):
+                parse_yaml_from_stdin(edit_app.parse_monogram)
+
+    def test_parses_what_display_tasks_yaml_emits(self):
+        """Round-trip the real emitter into the real parser.
+
+        The two used to disagree: display_tasks_yaml emits one document
+        holding a sequence, parse_yaml_from_stdin looked for a mapping per
+        document, and every documented "search | edit" pipeline failed with
+        "YAML document missing 'Link' field". The old tests fed the parser a
+        hand-written literal, so nothing noticed. Feed it the emitter instead.
+        """
+        from io import StringIO
+
+        from phabfive.display import display_tasks_yaml
+        from phabfive.edit import Edit
+        from phabfive.yaml_utils import parse_yaml_from_stdin
+
+        edit_app = Edit()
+
+        task_dicts = [
+            {
+                "_url": "https://example.com/T123",
+                "Task": {"Name": "Task 1", "Status": "Open"},
+            },
+            {
+                "_url": "https://example.com/T456",
+                "Task": {"Name": "Task 2", "Status": "Open"},
+            },
+        ]
+
+        emitted = StringIO()
+        with contextlib.redirect_stdout(emitted):
+            display_tasks_yaml(task_dicts)
+
+        with mock.patch("sys.stdin", StringIO(emitted.getvalue())):
+            objects = parse_yaml_from_stdin(edit_app.parse_monogram)
+
+        assert [obj["object_id"] for obj in objects] == ["123", "456"]
 
 
 class TestGroupObjectsByType:

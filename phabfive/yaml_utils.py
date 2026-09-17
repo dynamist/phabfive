@@ -34,16 +34,23 @@ def parse_yaml_from_stdin(parse_monogram_func):
             if doc is None:
                 continue
 
-            # Extract monogram from Link field
-            if "Link" not in doc:
-                raise ValueError("YAML document missing 'Link' field")
+            # "--format=yaml" emits one document holding a list of objects,
+            # which is what "phabfive maniphest search | phabfive edit" pipes
+            # in. A hand-written file tends to be one mapping per document
+            # instead. Accept both.
+            entries = doc if isinstance(doc, list) else [doc]
 
-            link = doc["Link"]
-            object_type, object_id = parse_monogram_func(link)
+            for entry in entries:
+                # Extract monogram from Link field
+                if "Link" not in entry:
+                    raise ValueError("YAML document missing 'Link' field")
 
-            objects.append(
-                {"object_type": object_type, "object_id": object_id, "data": doc}
-            )
+                link = entry["Link"]
+                object_type, object_id = parse_monogram_func(link)
+
+                objects.append(
+                    {"object_type": object_type, "object_id": object_id, "data": entry}
+                )
 
     except Exception as e:
         raise ValueError(f"Failed to parse YAML from stdin: {e}")
