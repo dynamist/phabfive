@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: phorge
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: phorge
+resources:
+  - namespace.yaml
+  - quota.yaml
+  - mariadb.yaml
+  - phorge.yaml
+  - ingress.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  - name: phorge-config
+    envs: [config.env]
+secretGenerator:
+  - name: phorge-secret
+    envs: [secret.env]

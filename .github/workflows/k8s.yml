@@ -1,0 +1,141 @@
+---
+name: Kubernetes
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  KUBECTL: mise exec -- kubectl --context k3d-dynamist-dev
+
+jobs:
+  validate:
+    name: Validate manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: make validate
+
+  deploy:
+    name: Deploy and test in k3d
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Deploy
+        run: make ci-deploy
+
+      # Do not depend on the runner's resolver for *.localhost
+      - name: Resolve the ingress hostnames
+        run: |
+          hosts=$($KUBECTL get ingress -A -o jsonpath='{.items[*].spec.rules[*].host}')
+          echo "127.0.0.1 $hosts nope.localhost" | sudo tee -a /etc/hosts
+
+      - name: Test
+        run: make ci-test
+
+      - name: Collect diagnostics
+        if: failure()
+        run: &diagnostics |
+          mkdir -p diagnostics
+          $KUBECTL get all,ingress,pvc,netpol,events -A -o wide > diagnostics/resources.txt 2>&1 || true
+          for ns in $($KUBECTL get ns -l dynamist.se/dev-app -o jsonpath='{.items[*].metadata.name}') kube-system; do
+            $KUBECTL -n "$ns" describe pods > "diagnostics/$ns-pods.txt" 2>&1 || true
+            for pod in $($KUBECTL -n "$ns" get pods -o name); do
+              $KUBECTL -n "$ns" logs "$pod" --all-containers > "diagnostics/$ns-${pod#pod/}.log" 2>&1 || true
+            done
+          done
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: k8s-diagnostics
+          path: diagnostics/
+
+      - name: Delete cluster
+        if: always()
+        run: make destroy FORCE=1
+
+  # Deploys the apps in the repository variable COEXISTENCE_REPOS (space
+  # separated owner/name) into the same cluster, and runs every app's tests.
+  # Each of them must provide the make targets ci-deploy and ci-test.
+  coexistence:
+    name: Coexistence with other apps in one cluster
+    runs-on: ubuntu-latest
+    needs: validate
+    if: vars.COEXISTENCE_REPOS != ''
+    timeout-minutes: 120
+    env:
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: self
+
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          working_directory: self
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Check out the other apps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for repo in ${{ vars.COEXISTENCE_REPOS }}; do
+            gh repo clone "$repo" "apps/${repo#*/}" -- --depth 1
+            # The cluster contract must be identical in every repo
+            diff self/k8s/cluster/k3d.yaml "apps/${repo#*/}/k8s/cluster/k3d.yaml"
+          done
+
+      - name: Deploy all apps
+        run: |
+          make -C self ci-deploy
+          for app in apps/*/; do mise install -C "$app" && make -C "$app" ci-deploy; done
+
+      - name: Resolve the ingress hostnames
+        working-directory: self
+        run: |
+          hosts=$($KUBECTL get ingress -A -o jsonpath='{.items[*].spec.rules[*].host}')
+          echo "127.0.0.1 $hosts nope.localhost" | sudo tee -a /etc/hosts
+
+      - name: Test all apps, including isolation from each other
+        run: |
+          make -C self ci-test
+          for app in apps/*/; do make -C "$app" ci-test; done
+
+      - name: Collect diagnostics
+        if: failure()
+        working-directory: self
+        run: *diagnostics
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coexistence-diagnostics
+          path: self/diagnostics/
+
+      - name: Delete cluster
+        if: always()
+        run: make -C self destroy FORCE=1

@@ -10,7 +10,8 @@ Get from zero to working development environment in 2 steps:
 # 1. Set up development environment
 make install         # or: uv sync --group dev
 
-# 2. Start local Phorge test instance
+# 2. Start local Phorge test instance (needs docker and mise, see docs/phorge-setup.md)
+mise trust && make tools
 make up
 ```
 

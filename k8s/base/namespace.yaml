@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: phorge
+  labels:
+    # Marks namespaces of dev apps in the shared cluster, see `make destroy`
+    dynamist.se/dev-app: phorge
