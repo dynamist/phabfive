@@ -140,7 +140,7 @@ destroy: check-tools ## DELETE the shared cluster with every app and all data (F
 ##@ Phorge
 
 phorge-image: check-tools ## build the phorge image and import it into the cluster
-	docker build -f Dockerfile.phorge -t $(PHORGE_IMAGE):dev .
+	docker build -t $(PHORGE_IMAGE):dev phorge
 	@mkdir -p $(BUILD_DIR)
 	@# Tag by content, so the deployment only rolls out when the image changed
 	@tag=dev-$$(docker image inspect -f '{{.Id}}' $(PHORGE_IMAGE):dev | cut -d: -f2 | cut -c1-12); \
