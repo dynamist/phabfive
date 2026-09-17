@@ -17,9 +17,9 @@ import pytest
 
 
 # Tests against a live Phorge in the k3d cluster only run when asked for, see
-# `make test-k8s`
+# `make test-k8s` and `make test-e2e`
 if not os.environ.get("PHABFIVE_LIVE_TESTS"):
-    collect_ignore = ["k8s"]
+    collect_ignore = ["k8s", "e2e"]
 
 
 CONF = {

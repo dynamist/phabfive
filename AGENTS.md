@@ -30,6 +30,7 @@ make up                              # create/reuse the cluster, build and deplo
 make down                            # stop, keep data
 make reset                           # delete the phorge namespace and its data
 make test-k8s                        # smoke, seed data and isolation tests against the cluster
+make test-e2e                        # end-to-end tests of the CLI against the deployed Phorge
 
 # Test against local Phorge (safe to run data-altering operations)
 PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
