@@ -592,7 +592,7 @@ wheels = [
 
 [[package]]
 name = "phabfive"
-version = "0.10.0rc4"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyconfig" },
