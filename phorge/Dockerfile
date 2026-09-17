@@ -19,16 +19,16 @@ RUN git config --system --add safe.directory /app/phorge
 RUN git config --system --add safe.directory /app/arcanist
 
 # Set up Apache and PHP for Phorge
-COPY phorge/phorge.conf /etc/apache2/conf-enabled/phorge.conf
-COPY phorge/phorge.ini /usr/local/etc/php/conf.d/phorge.ini
+COPY phorge.conf /etc/apache2/conf-enabled/phorge.conf
+COPY phorge.ini /usr/local/etc/php/conf.d/phorge.ini
 
 # Copy and set up entrypoint script
-COPY phorge/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Copy initialization scripts (main + lib modules)
-COPY phorge/init-phorge.sh /usr/local/bin/init-phorge.sh
-COPY phorge/lib/ /usr/local/bin/lib/
+COPY init-phorge.sh /usr/local/bin/init-phorge.sh
+COPY lib/ /usr/local/bin/lib/
 RUN chmod +x /usr/local/bin/* /usr/local/bin/lib/*
 
 # Create configuration directory and storage directories
