@@ -45,21 +45,22 @@ uv run phabfive diffusion repo list
 uv run phabfive maniphest search --tag '*'
 ```
 
-### Running in Docker
+### Building the container image
 
-If you need to run phabfive in a container (e.g., for testing the Docker image), use the wrapper script:
+The `Dockerfile` builds a scratch image holding phabfive and a uv-managed Python under `/opt/phabfive`. The build smoke tests the result with `phabfive --version`.
 
 ```bash
-# Run against local Phorge instance (auto-configured)
-./phorge/phabfive user whoami
-./phorge/phabfive diffusion repo list
-./phorge/phabfive maniphest search --tag '*'
-
-# Or build the image manually
-make image
+make image             # phabfive:gnu, for glibc based images
+make image LIBC=musl   # phabfive:musl, for Alpine based images
 ```
 
-The wrapper script automatically uses the local Phorge credentials and sets up host routing.
+The image can't run by itself. To try it, copy it into another image:
+
+```bash
+printf 'FROM debian:trixie-slim\nCOPY --from=phabfive:gnu /opt/phabfive /opt/phabfive\nENTRYPOINT ["/opt/phabfive/bin/phabfive"]\n' \
+  | docker build -t phabfive-try -
+docker run --rm phabfive-try --help
+```
 
 ## Run Unit Tests
 

@@ -1,0 +1,11 @@
+.git
+.venv
+.tox
+.ruff_cache
+.pytest_cache
+**/__pycache__
+dist
+site
+phorge
+tests
+docs

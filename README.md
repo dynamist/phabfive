@@ -47,6 +47,18 @@ curl https://mise.run | sh
 mise use --global --pin pipx:phabfive
 ```
 
+### Container image
+
+`ghcr.io/dynamist/phabfive` is a scratch image containing only phabfive and its own Python. It can't run by itself. Instead, copy phabfive from it into your own image, for example in CI:
+
+```dockerfile
+FROM debian:trixie-slim
+COPY --from=ghcr.io/dynamist/phabfive:latest /opt/phabfive /opt/phabfive
+ENV PATH=/opt/phabfive/bin:$PATH
+```
+
+Use the `-musl` tags (e.g. `latest-musl`) for Alpine based images. The files must stay at `/opt/phabfive`, because the install contains absolute paths.
+
 ## Quick Start
 
 Run the interactive setup wizard:

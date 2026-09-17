@@ -44,6 +44,12 @@ In repository **Settings** > **Environments**:
 1. Create environment named `pypi`
 2. (Optional) Add protection rules requiring reviewer approval
 
+#### 3. Make the Container Image Public
+
+The first release pushes `ghcr.io/dynamist/phabfive` as a private package. In the
+organization's **Packages** > **phabfive** > **Package settings**, change the
+visibility to public.
+
 ### Release Steps
 
 **1. Update Version**
@@ -83,16 +89,27 @@ This triggers the GitHub Actions workflow which will:
    - macOS (AMD64, ARM64)
    - Windows (AMD64, ARM64)
 3. Sign executables with [Sigstore](https://www.sigstore.dev/) (keyless OIDC signing)
-4. Publish to PyPI using trusted publishing
-5. Create GitHub Release with auto-generated notes and all artifacts
+4. Build, push and sign the scratch container image `ghcr.io/dynamist/phabfive` for
+   `linux/amd64` and `linux/arm64`, tagged `X.Y.Z`, `X.Y` and `latest` (glibc) and
+   `X.Y.Z-musl`, `X.Y-musl` and `latest-musl` (musl)
+5. Publish to PyPI using trusted publishing
+6. Create GitHub Release with auto-generated notes and all artifacts
 
-**Testing with RC tags:** Tags containing `-rc` (e.g., `v0.7.0-rc.1`) will skip PyPI publishing but still build executables and create a GitHub Release. Useful for testing the release process.
+**Testing with RC tags:** Tags containing `-rc` (e.g., `v0.7.0-rc.1`) will skip PyPI publishing but still build executables, push the container image (without the `X.Y` and `latest` tags) and create a GitHub Release. Useful for testing the release process.
 
 **Verifying signatures:** Users can verify downloaded executables with [cosign](https://docs.sigstore.dev/):
 
 ```bash
 cosign verify-blob phabfive-linux-amd64 \
   --bundle phabfive-linux-amd64.sigstore.json \
+  --certificate-identity-regexp="https://github.com/dynamist/phabfive" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+```
+
+The container image is verified the same way:
+
+```bash
+cosign verify ghcr.io/dynamist/phabfive:0.7.0 \
   --certificate-identity-regexp="https://github.com/dynamist/phabfive" \
   --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
 ```
