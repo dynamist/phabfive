@@ -1,0 +1,11 @@
+[
+  {"name": "Management Team", "admin": true, "members": ["mikael.wallin"]},
+  {"name": "Sales Team", "members": ["ove.pettersson", "sonja.bergstrom"]},
+  {"name": "Marketing Team", "members": ["sonja.bergstrom"]},
+  {"name": "Recruitment Team", "members": ["viola.larsson"]},
+  {"name": "SOC", "description": "Security Operations Center",
+   "members": ["tommy.svensson", "sebastian.soderberg"]},
+  {"name": "Human Resources", "members": ["viola.larsson", "gabriel.blomqvist"]},
+  {"name": "Onboarding Team", "members": ["gabriel.blomqvist"]},
+  {"name": "Offboarding Team", "members": ["daniel.lindgren"]}
+]

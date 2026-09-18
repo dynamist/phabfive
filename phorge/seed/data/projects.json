@@ -1,0 +1,16 @@
+{
+  "columns": ["Up Next", "In Progress", "In Review", "Done"],
+  "projects": [
+    {"name": "GUNNAR-Core", "description": "Main chip blueprint development and secure design"},
+    {"name": "Architecture", "description": "System architecture and design specifications"},
+    {"name": "Infrastructure", "description": "Servers, virtualization, and network management"},
+    {"name": "Development", "description": "Development tools and environment setup",
+     "members": ["mikael.wallin", "viola.larsson"],
+     "milestones": [{"name": "Sprint 1"}]},
+    {"name": "QA", "description": "Testing, quality assurance, and compliance validation",
+     "milestones": [{"name": "Sprint 1"}]},
+    {"name": "SharePoint", "description": "Windows SharePoint integration and document management"},
+    {"name": "Security", "description": "Security compliance, hardening, and vulnerability assessment",
+     "icon": "policy", "color": "red"}
+  ]
+}

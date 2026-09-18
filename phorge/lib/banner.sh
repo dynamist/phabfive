@@ -1,9 +1,29 @@
 #!/bin/bash
 # Print the credentials summary, with --wait only once Phorge answers
+#
+# Sourced by entrypoint.sh after seeding, and run directly by `make creds`.
 
-LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=phorge/lib/common.sh
-source "${LIB_DIR}/common.sh"
+set -e
+
+# Configuration - the deployment sets these, see k8s/base/config.env
+export PHORGE_URL="${PHORGE_URL:-http://phorge.localhost}"
+export PHORGE_ADMIN_USER="${PHORGE_ADMIN_USER:-admin}"
+export PHORGE_ADMIN_PASS="${PHORGE_ADMIN_PASS:-supersecr3tpassw0rdfordevelop1}"
+export PHORGE_ADMIN_EMAIL="${PHORGE_ADMIN_EMAIL:-admin@domain.tld}"
+export PHORGE_ADMIN_TOKEN="${PHORGE_ADMIN_TOKEN:-api-supersecr3tapikeyfordevelop1}"
+
+# Read rows from the database, tab separated. A failure is a non-zero status
+# rather than a row, so a caller can tell an empty result from an unreachable
+# database. utf8mb4 because the client default would mangle a name like "Sonja
+# Bergström" on the way out, and the connect timeout keeps this from hanging
+# when the database is not there at all.
+mysql_rows() {
+  local database=$1
+  local query=$2
+  mysql --default-character-set=utf8mb4 --connect-timeout=5 \
+    -h"${MYSQL_HOST:-mariadb}" -P"${MYSQL_PORT:-3306}" \
+    -u"${MYSQL_USER:-root}" -p"$MYSQL_PASS" "$database" -N -B -e "$query" 2>/dev/null
+}
 
 # Phorge answers "Site Not Found" for any host but its base URI, so /status/ is
 # asked for with that host, the way the readiness probe does
@@ -21,10 +41,11 @@ wait_for_http() {
   done
 }
 
-# The three lists below are read from the database rather than from the arrays
-# in common.sh, so the banner describes the instance that is actually running.
-# The two disagree whenever the deployed data was seeded by a different branch,
-# and the arrays are only what this branch would create on a fresh instance.
+# The three lists below are read from the database, so the banner describes the
+# instance that is actually running. The data files under phorge/seed/ are the
+# input to seeding, not a report of what is deployed: the two disagree the
+# moment another branch seeds an instance that keeps its volume across a
+# `make up`.
 db_unreachable() {
   echo "  (could not read from the database)"
 }
@@ -107,7 +128,7 @@ print_spaces() {
   done <<< "$rows"
 }
 
-# RECOVERY_LINK is only set while init-phorge.sh runs, a later `make creds` has
+# RECOVERY_LINK is only set while entrypoint.sh runs, a later `make creds` has
 # no one-time link to show and leaves that line out
 print_banner() {
   echo ""
