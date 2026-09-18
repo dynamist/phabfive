@@ -44,9 +44,17 @@ If you prefer [mise-en-place](https://mise.jdx.dev/) the polyglot tool version m
 # Install mise if you haven't already
 curl https://mise.run | sh
 
-# Install from pypi.org
+# Install from pypi.org, needs a Python toolchain
 mise use --global --pin pipx:phabfive
+
+# Install the standalone executable instead, needs nothing
+mise use --global github:dynamist/phabfive
 ```
+
+The two differ in what they fetch. `pipx:` resolves the wheel from pypi.org and so needs Python
+present, the same as uv above. `github:` downloads the release executable described below, which
+bundles its own Python, so it is the one to reach for on a machine without a toolchain. Either way
+mise handles pinning and upgrades.
 
 ### Standalone executable
 
@@ -67,8 +75,10 @@ The asset names are `phabfive-linux-amd64`, `phabfive-linux-arm64`, `phabfive-ma
 [releases page](https://github.com/dynamist/phabfive/releases).
 
 The executable unpacks itself on every run, so it starts in about two seconds against a fraction of
-that for an installed phabfive. Prefer uv or mise where a Python toolchain is available, and keep
-this for machines where one is not, such as a bare CI image or a locked down workstation.
+that for an installed phabfive. Where a Python toolchain is available, prefer an installed phabfive
+via uv or `mise use pipx:phabfive`, and keep the executable for machines without one, such as a
+bare CI image or a locked down workstation. `mise use github:dynamist/phabfive` installs this same
+executable, and is the easier route to it if you already run mise.
 
 **macOS:** the binaries are not notarized, so Gatekeeper refuses them after a browser download.
 Clear the quarantine flag with `xattr -d com.apple.quarantine phabfive-macos-arm64`.

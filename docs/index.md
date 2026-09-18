@@ -25,6 +25,19 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv tool install phabfive
 ```
 
+With [mise](https://mise.jdx.dev/) instead:
+
+```bash
+# From pypi.org, needs a Python toolchain
+mise use --global --pin pipx:phabfive
+
+# Or the standalone executable, which bundles its own Python
+mise use --global github:dynamist/phabfive
+```
+
+See the [README](https://github.com/dynamist/phabfive#installation) for the standalone executables
+and the container image.
+
 ### Basic Usage
 
 ```bash
