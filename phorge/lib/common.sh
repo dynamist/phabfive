@@ -91,6 +91,20 @@ mysql_query() {
   mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASS" "$database" -N -e "$query" 2>/dev/null || echo "0"
 }
 
+# Function to execute MySQL query and return the rows, tab separated.
+# Unlike mysql_query it answers a failure with a non-zero status rather than
+# "0", so a caller can tell an empty result from an unreachable database, and
+# it asks for utf8mb4 because the client would otherwise mangle a name like
+# "Sonja Bergström" on the way out. The connect timeout keeps a caller such as
+# banner.sh from hanging when the database is not there at all.
+mysql_rows() {
+  local database=$1
+  local query=$2
+  mysql --default-character-set=utf8mb4 --connect-timeout=5 \
+    -h"$MYSQL_HOST" -P"$MYSQL_PORT" \
+    -u"$MYSQL_USER" -p"$MYSQL_PASS" "$database" -N -B -e "$query" 2>/dev/null
+}
+
 # Function to hash a password using bcrypt (PHP's password_hash)
 hash_password() {
   local password="$1"

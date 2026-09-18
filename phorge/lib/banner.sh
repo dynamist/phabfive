@@ -21,6 +21,92 @@ wait_for_http() {
   done
 }
 
+# The three lists below are read from the database rather than from the arrays
+# in common.sh, so the banner describes the instance that is actually running.
+# The two disagree whenever the deployed data was seeded by a different branch,
+# and the arrays are only what this branch would create on a fresh instance.
+db_unreachable() {
+  echo "  (could not read from the database)"
+}
+
+print_users() {
+  echo "🤖 Users:"
+  local rows username realname
+  if ! rows=$(mysql_rows phabricator_user "
+        SELECT userName, IFNULL(realName, '')
+        FROM user
+        WHERE isSystemAgent = 0
+          AND isMailingList = 0
+          AND userName != '${PHORGE_ADMIN_USER}'
+        ORDER BY id"); then
+    db_unreachable
+    return
+  fi
+  while IFS=$'\t' read -r username realname; do
+    [ -n "$username" ] || continue
+    if [ -n "$realname" ]; then
+      echo "  - ${username} (${realname})"
+    else
+      echo "  - ${username}"
+    fi
+  done <<< "$rows"
+}
+
+print_projects() {
+  echo "🗂️ Projects:"
+  # A milestone is a child with a milestoneNumber, and is shown under its
+  # parent's name the way the web UI does. A plain subproject just lists
+  # itself. status 100 is archived.
+  local rows name parent archived
+  if ! rows=$(mysql_rows phabricator_project "
+        SELECT p.name,
+               IF(p.milestoneNumber IS NULL, '', IFNULL(parent.name, '')),
+               IF(p.status = 100, 'archived', '')
+        FROM project p
+        LEFT JOIN project parent ON parent.phid = p.parentProjectPHID
+        ORDER BY p.id"); then
+    db_unreachable
+    return
+  fi
+  while IFS=$'\t' read -r name parent archived; do
+    [ -n "$name" ] || continue
+    local line="  - ${name}"
+    if [ -n "$parent" ]; then
+      line="${line} (${parent} milestone)"
+    fi
+    if [ -n "$archived" ]; then
+      line="${line} [archived]"
+    fi
+    echo "$line"
+  done <<< "$rows"
+}
+
+print_spaces() {
+  echo "🌌 Spaces:"
+  local rows space_id name is_default archived
+  if ! rows=$(mysql_rows phabricator_spaces "
+        SELECT id,
+               namespaceName,
+               IF(isDefaultNamespace = 1, 'default', ''),
+               IF(isArchived = 1, 'archived', '')
+        FROM spaces_namespace
+        ORDER BY id"); then
+    db_unreachable
+    return
+  fi
+  while IFS=$'\t' read -r space_id name is_default archived; do
+    [ -n "$space_id" ] || continue
+    local line="  - S${space_id} ${name}"
+    if [ -n "$is_default" ]; then
+      line="${line} (default)"
+    fi
+    if [ -n "$archived" ]; then
+      line="${line} [archived]"
+    fi
+    echo "$line"
+  done <<< "$rows"
+}
+
 # RECOVERY_LINK is only set while init-phorge.sh runs, a later `make creds` has
 # no one-time link to show and leaves that line out
 print_banner() {
@@ -41,40 +127,17 @@ print_banner() {
     echo "   $RECOVERY_LINK"
   fi
   echo ""
-  echo "🤖 Users Created:"
-  local username email realname
-  for user_data in "${FAKE_USERS[@]}"; do
-    IFS=':' read -r username email realname <<< "$user_data"
-    echo "  - ${username} (${realname})"
-  done
+  print_users
   echo ""
-  echo "🗂️ Projects Created:"
-  local name description parent_name milestone_name
-  for project_data in "${DEFAULT_PROJECTS[@]}"; do
-    IFS=':' read -r name description <<< "$project_data"
-    echo "  - ${name}"
-  done
-  for milestone_data in "${DEFAULT_MILESTONES[@]}"; do
-    IFS=':' read -r parent_name milestone_name <<< "$milestone_data"
-    echo "  - ${milestone_name} (${parent_name} milestone)"
-  done
+  print_projects
   echo ""
-  echo "🌌 Spaces Created:"
-  local space_id space_name is_default
-  for space_data in "${DEFAULT_SPACES[@]}"; do
-    IFS=':' read -r space_id space_name is_default <<< "$space_data"
-    if [ "$is_default" = "default" ]; then
-      echo "  - S${space_id} ${space_name} (default)"
-    else
-      echo "  - S${space_id} ${space_name}"
-    fi
-  done
+  print_spaces
   echo ""
   echo "🌍 Your new Phorge is waiting for you at:"
   echo "   $PHORGE_URL"
   echo ""
   echo "💡 TIP: The API token works immediately without logging in!"
-  echo "   PHAB_URL=${PHORGE_URL}/api/ PHAB_TOKEN=${PHORGE_ADMIN_TOKEN} phabfive whoami"
+  echo "   PHAB_URL=${PHORGE_URL}/api/ PHAB_TOKEN=${PHORGE_ADMIN_TOKEN} phabfive user whoami"
   echo "================================"
 }
 
