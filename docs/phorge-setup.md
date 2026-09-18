@@ -32,7 +32,7 @@ getent hosts phorge.localhost
 
 ## What Gets Created
 
-The `init-phorge.sh` script automatically creates:
+On every start the container seeds sample data from [`phorge/seed/`](#sample-data), creating:
 
 ### Admin Account
 
@@ -68,7 +68,7 @@ Seven projects with 5-column workboards (Backlog → Up Next → In Progress →
 - **SharePoint** - Windows SharePoint integration and document management
 - **Security** - Security compliance, hardening, and vulnerability assessment
 
-The admin user is automatically joined to all projects.
+The admin user is a member of every project, and so are a few of the test users.
 
 ### Default Milestones
 
@@ -79,21 +79,51 @@ Two milestones with the same name and the same 5-column workboards:
 
 Since they share a name, `--tag "Sprint 1"` only reaches one of them. Use the project ID (from `/project/view/<id>/`) or PHID to target a specific milestone, e.g. `--tag 9`.
 
+### Teams
+
+Eight projects used as groups rather than for work: Management Team, Sales Team,
+Marketing Team, Recruitment Team, SOC, Human Resources, Onboarding Team and
+Offboarding Team. They have no workboards, and each one owns a space, below.
+
+### Sample Tasks
+
+A handful of tasks, one of them in the SOC space where the admin cannot see it.
+For a fuller set, see [Create Test Tasks](#create-test-tasks).
+
 ### Default Spaces
 
-Three spaces, at deliberately non-consecutive S numbers:
+Ten spaces, S1 to S10. Most are restricted to a team, a project whose members are
+the only ones who can see and edit that space:
 
-- **S1 Default** - the default space, where everything lands unless told otherwise
-- **S3 Restricted**
-- **S10 Archive**
+| Space | Visible to | Admin sees it |
+|-------|------------|---------------|
+| **S1 Default** | all users; where everything lands unless told otherwise | yes |
+| **S2 Sales Team** | ove.pettersson, sonja.bergstrom | no |
+| **S3 Management Team** | admin, mikael.wallin | yes |
+| **S4 Marketing Team** | sonja.bergstrom | no |
+| **S5 Recruitment Team** | viola.larsson | no |
+| **S6 SOC** | tommy.svensson, sebastian.soderberg | no |
+| **S7 Human Resources** | viola.larsson, gabriel.blomqvist | no |
+| **S8 Onboarding Team** | gabriel.blomqvist | no |
+| **S9 Offboarding Team** | daniel.lindgren | no |
+| **S10 Archive** | all users | yes |
 
-The gaps are the point. Spaces have no Conduit search method, so they are found
-by probing `S1`, `S2`, `S3`... and `phid.lookup` omits a space the viewer cannot
-see exactly as though it did not exist. Visible numbers are therefore sparse on a
-real instance, and anything listing them has to probe past a gap rather than stop
-at the first miss. S10 sits more than five past S3, which is what an earlier
-implementation gave up after, so a dev instance now reproduces that case instead
-of the tidy one.
+The teams are ordinary projects, so they also show up in project searches and
+completion.
+
+Which spaces the admin cannot see is the point. Spaces have no Conduit search
+method, so they are found by probing `S1`, `S2`, `S3`... and `phid.lookup` omits
+a space the viewer cannot see exactly as though it did not exist. Visible numbers
+are therefore sparse on a real instance, and anything listing them has to probe
+past a gap rather than stop at the first miss. Through the admin's API token the
+spaces are S1, S3 and S10: S10 sits more than five past S3, which is what an
+earlier implementation gave up after, so a dev instance reproduces that case
+instead of the tidy one. S3 covers the other side, a restricted space the viewer
+is allowed into.
+
+To see the instance as a team member instead, log in to the web UI as one (they
+share the admin password) and create an API token under **Settings → Conduit API
+Tokens**. With tommy.svensson's token, S6 SOC is listed and its tasks are found.
 
 Filter by them with `maniphest search --space`, and note that phabfive defaults to
 `PHAB_SPACE=S1`, so tasks in S3 and S10 are excluded until you ask for them:
@@ -134,6 +164,7 @@ make up
 | `PHORGE_ADMIN_TOKEN` | `api-supersecr3tapikeyfordevelop1` | Pre-configured API token (secret) |
 | `PHORGE_GIT_REF` | `stable` | Git branch/tag/commit for Phorge |
 | `ARCANIST_GIT_REF` | `stable` | Git branch/tag/commit for Arcanist |
+| `PHORGE_SEED` | *(all)* | Seed modules to run, space-separated, e.g. `users projects` |
 | `MYSQL_PASS` / `MARIADB_ROOT_PASSWORD` | `supersecr3tpassw0rdfordatabase1` | MariaDB root password (secret) |
 
 The Git refs are fetched and checked out when the pod starts. The `ci` overlay leaves them empty, which tests the Phorge and Arcanist baked into the image instead.
@@ -196,18 +227,68 @@ curl "http://phorge.localhost/api/user.whoami" \
   -d "api.token=api-supersecr3tapikeyfordevelop1"
 ```
 
-## How It Works
+## Sample Data
 
-The script runs automatically when the Phorge pod starts and:
+The Phorge pod runs `phorge/seed/seed.php` on every start, after upgrading the
+database. It writes through Phorge's own editors and in-process Conduit calls
+rather than SQL, so objects get the PHIDs, slugs, memberships, search index and
+transaction history the web UI would have given them.
 
-1. Enables username/password authentication
-2. Creates admin and test user accounts with verified emails
-3. Generates API token for immediate use
-4. Creates default projects with workboard columns
-5. Creates default milestones with workboard columns
-6. Sets passwords for all users (if `PHORGE_ADMIN_PASS` is set) or generates a recovery link
+The seeder logs only what it creates. What the instance actually holds is what
+the banner prints afterwards, and `make creds` again later, both read back from
+the database - the data files below say what a fresh instance would get, which
+is a different thing as soon as another branch seeds one that keeps its volume.
 
-All operations are idempotent - safe to run multiple times. Pod restarts won't duplicate data.
+```text
+phorge/seed/
+  seed.php                    runner: orders modules by dependency, logs what it creates
+  src/PhabfiveSeedModule.php  base class with the shared helpers
+  modules/<key>.php           one module per kind of data
+  data/<key>.json             the records that module creates
+```
+
+| Module | Needs | Creates |
+|--------|-------|---------|
+| `auth` | | password login, admin account, API token (from `PHORGE_ADMIN_*`) |
+| `users` | auth | test users |
+| `teams` | users | team projects |
+| `spaces` | auth, teams | spaces, in data file order |
+| `projects` | users, spaces | projects, milestones, workboards |
+| `tasks` | users, projects, spaces | tasks, through `maniphest.edit` |
+
+Every module is idempotent - it creates only what is missing - so restarting the
+pod duplicates nothing. To seed only part of it, name the modules; their
+dependencies come along:
+
+```bash
+PHORGE_SEED="users projects" make up
+```
+
+From a shell in the pod (`make shell`) the runner can be used directly:
+
+```bash
+php /usr/local/share/phabfive-seed/seed.php --list
+php /usr/local/share/phabfive-seed/seed.php tasks
+```
+
+### Adding Sample Data
+
+To add records of a kind that is already seeded, edit its `data/<key>.json`.
+
+To seed something new, add `data/<key>.json` and a `modules/<key>.php` holding a
+class that extends `PhabfiveSeedModule`, with `getKey()`, `getDependencies()`
+and `seed()`. The runner picks it up without being told about it. `seed()` has
+to check for what already exists before creating it. Rebuild the image to use
+it (`make up` does).
+
+Two things Phorge enforces that are easy to trip over:
+
+- The editor refuses a policy that would lock out whoever applies it. An object
+  the admin must not see has to be created as someone who can, which is why a
+  team's space is created by a member of the team.
+- A seed run is a single request, and Phorge caches some lookups for the length
+  of one. The runner clears that cache between modules; within a module, load
+  what you create rather than trusting an earlier query.
 
 ## Kubernetes Setup
 
@@ -239,7 +320,7 @@ make test-e2e            # End-to-end tests of the phabfive CLI against the depl
 
 Both test suites only run when asked for, a plain `pytest` skips them:
 
-- **`make test-k8s`** (`tests/k8s`): the home page, the file domain and the API token work through Traefik, unknown hosts get a 404, the users, projects, milestones and spaces from `phorge/lib/common.sh` exist, and pods in other namespaces cannot reach Phorge or MariaDB.
+- **`make test-k8s`** (`tests/k8s`): the home page, the file domain and the API token work through Traefik, unknown hosts get a 404, the users, teams, projects, milestones and spaces from `phorge/seed/data/` exist, and pods in other namespaces cannot reach Phorge or MariaDB.
 - **`make test-e2e`** (`tests/e2e`): end-to-end tests of phabfive itself, running the CLI against the instance and creating and editing real tasks.
 
 CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d cluster on the runner, deploys the `ci` overlay and runs both suites. A coexistence job deploys the apps listed in the repository variable `COEXISTENCE_REPOS` (space separated `owner/name`) into the same cluster and runs every app's tests, which also checks that the apps cannot reach each other and that all repos pin the same `k8s/cluster/k3d.yaml`. Each of those repos must provide the make targets `ci-deploy` and `ci-test`.
@@ -253,7 +334,10 @@ make creds
 ```
 
 It runs `phorge/lib/banner.sh` in the pod, the same summary the logs print at the
-end of the setup, so it always matches `phorge/lib/common.sh` and the manifests.
+end of the setup. The credentials come from the deployment's own environment and
+the user, project and Space lists are read back from the database, so both
+describe the instance that is running rather than what this branch would seed
+into an empty one.
 
 ### Get admin password recovery link
 

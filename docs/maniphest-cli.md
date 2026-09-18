@@ -1024,7 +1024,7 @@ anything naming more than one, whether a wildcard or a name two Spaces share:
 
 ```console
 $ phabfive maniphest create "Task" --space='*'
-Error: Space '*' is ambiguous, it matches: S1 (Default), S3 (Restricted), S10 (Archive). Use a monogram to name one.
+Error: Space '*' is ambiguous, it matches: S1 (Default), S3 (Management Team), S10 (Archive). Use a monogram to name one.
 ```
 
 A pattern that leaves no doubt is accepted, and `edit` shows both ends of the
