@@ -56,7 +56,7 @@ CI will fail if files are not properly formatted. Run these commands before ever
 four minutes, and `coexistence` far more. The `decide` job in `.github/workflows/k8s.yml` decides
 whether a pull request pays for it:
 
-- a push to `master` or a `workflow_dispatch` run always deploys
+- a push to `main` or a `workflow_dispatch` run always deploys
 - the `ci:k8s` label always deploys, draft or not
 - a draft pull request otherwise never deploys
 - otherwise it deploys only when the pull request touches `k8s/`, `phorge/`, `tests/k8s/`,

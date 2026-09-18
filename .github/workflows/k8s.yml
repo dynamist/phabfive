@@ -6,7 +6,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
   push:
     branches:
-      - master
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -72,7 +72,7 @@ jobs:
           fi
 
           # Fail open. Four minutes wasted is cheaper than a deployment break
-          # that reaches master because the API blipped and the gate said no.
+          # that reaches main because the API blipped and the gate said no.
           if ! changed=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[].filename'); then
             decide true 'Deploying: could not list the changed files, so not guessing.'
           fi

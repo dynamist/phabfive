@@ -45,7 +45,7 @@ phabfive paste search "deploy"
 phabfive maniphest search myproject
 ```
 
-For detailed setup instructions, see the [README](https://github.com/dynamist/phabfive/blob/master/README.md).
+For detailed setup instructions, see the [README](https://github.com/dynamist/phabfive/blob/main/README.md).
 
 ## Documentation Sections
 
@@ -71,7 +71,7 @@ For the complete CLI command reference and API documentation, explore the sectio
 
 - **[GitHub Repository](https://github.com/dynamist/phabfive)** - Source code, issues, and pull requests
 - **[PyPI Package](https://pypi.org/project/phabfive/)** - Official Python package
-- **[License](https://github.com/dynamist/phabfive/blob/master/LICENSE)** - Open source license information
+- **[License](https://github.com/dynamist/phabfive/blob/main/LICENSE)** - Open source license information
 
 ## Contributing
 

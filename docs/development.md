@@ -127,7 +127,7 @@ For instructions on setting up a local Phorge instance for testing, see [Phorge 
 
 `Tests` runs on every pull request. The `Kubernetes` workflow builds a k3d cluster and a Phorge
 image to run `make ci-test` against it, which takes about four minutes, so it is gated: it deploys
-on pushes to `master`, and on a pull request only when the pull request is not a draft and touches
+on pushes to `main`, and on a pull request only when the pull request is not a draft and touches
 something that can affect the deployment (`k8s/`, `phorge/`, `tests/k8s/`, `tests/e2e/`,
 `phabfive/`, `Makefile`, `mise.toml`, `pyproject.toml`, `uv.lock`, or the workflow itself).
 
