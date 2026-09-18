@@ -164,7 +164,7 @@ make up
 | `PHORGE_ADMIN_TOKEN` | `api-supersecr3tapikeyfordevelop1` | Pre-configured API token (secret) |
 | `PHORGE_GIT_REF` | `stable` | Git branch/tag/commit for Phorge |
 | `ARCANIST_GIT_REF` | `stable` | Git branch/tag/commit for Arcanist |
-| `PHORGE_SEED` | *(all)* | Seed modules to run, space-separated, e.g. `users projects` |
+| `PHORGE_SEED` | `all` | Seed modules to run, space-separated, or `all` / `none` |
 | `MYSQL_PASS` / `MARIADB_ROOT_PASSWORD` | `supersecr3tpassw0rdfordatabase1` | MariaDB root password (secret) |
 
 The Git refs are fetched and checked out when the pod starts. The `ci` overlay leaves them empty, which tests the Phorge and Arcanist baked into the image instead.
@@ -257,8 +257,9 @@ phorge/seed/
 | `tasks` | users, projects, spaces | tasks, through `maniphest.edit` |
 
 Every module is idempotent - it creates only what is missing - so restarting the
-pod duplicates nothing. To seed only part of it, name the modules; their
-dependencies come along:
+pod duplicates nothing. `PHORGE_SEED` is `all` by default; to seed only part of
+it, name the modules and their dependencies come along, or `none` for an empty
+instance:
 
 ```bash
 echo 'PHORGE_SEED=users projects' >> k8s/overlays/local/config.local.env
@@ -266,7 +267,8 @@ make up
 ```
 
 `PHORGE_SEED` reaches the pod through the ConfigMap, like every other setting,
-so setting it only in the shell that runs `make up` has no effect.
+so setting it only in the shell that runs `make up` has no effect. An unset or
+empty value seeds everything, the same as `all`.
 
 From a shell in the pod (`make shell`) the runner can be used directly:
 
