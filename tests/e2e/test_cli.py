@@ -34,10 +34,10 @@ def test_search_by_tag(phabfive, create_task):
     assert title in [task["Task"]["Name"] for task in tasks]
 
 
-def test_create_in_a_space(phabfive, create_task):
+def test_create_in_a_space(phabfive, create_task, space_name):
     task_id, _title = create_task("--space", "S3")
     [task] = phabfive("maniphest", "show", task_id, json_output=True)
-    assert task["Space"] == "Restricted"
+    assert task["Space"] == space_name("S3")
 
 
 def test_jsonl_is_one_task_per_line(phabfive, create_task):
