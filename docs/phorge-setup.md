@@ -261,8 +261,12 @@ pod duplicates nothing. To seed only part of it, name the modules; their
 dependencies come along:
 
 ```bash
-PHORGE_SEED="users projects" make up
+echo 'PHORGE_SEED=users projects' >> k8s/overlays/local/config.local.env
+make up
 ```
+
+`PHORGE_SEED` reaches the pod through the ConfigMap, like every other setting,
+so setting it only in the shell that runs `make up` has no effect.
 
 From a shell in the pod (`make shell`) the runner can be used directly:
 
