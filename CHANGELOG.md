@@ -1,3 +1,24 @@
+# Unreleased
+
+## New Features
+
+### Newline-Delimited JSON Output
+* **`--format=jsonl`** - Emits one JSON object per line with no wrapping array
+  ([JSON Lines](https://jsonlines.org/)), written and flushed per record. Works
+  everywhere `--format=json` does: `maniphest show`/`search`, `paste show`/`search`,
+  `passphrase show`/`search`, `user whoami` and `cache info`
+* **`--format=ndjson`** - Accepted as a spelling of `jsonl`, the same way `strict`
+  is accepted for `yaml`
+* **`PHAB_FALLBACK=jsonl`** - The non-TTY default format now accepts `jsonl` alongside
+  `yaml` and `json`
+
+## Other Notes
+
+* All JSON serialization now goes through `phabfive/json_output.py`, so `json` and
+  `jsonl` are built from the same record builders and cannot drift apart
+* Paste and passphrase JSON output gained builder/printer splits, matching what
+  maniphest and user already had
+
 # 0.9.0 (2026-05-04)
 
 ## Prelude

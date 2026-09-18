@@ -26,6 +26,7 @@ from phabfive.cli.user import user_app
 from phabfive.constants import (
     AutoOption,
     COMMENTS_SUPPORTED,
+    FORMAT_ALIASES,
     MONOGRAM_SHORTCUT,
     MONOGRAMS,
     OutputFormat,
@@ -88,16 +89,24 @@ app = typer.Typer(
 
 
 def preprocess_format_alias(argv: list[str]) -> list[str]:
-    """Replace --format=strict with --format=yaml for backwards compatibility."""
+    """Rewrite accepted --format spellings to the OutputFormat they mean.
+
+    --format=strict is the old name for yaml, --format=ndjson the other
+    common name for jsonl. Rewriting here, before Typer parses, keeps both
+    out of the enum and out of every branch that tests the format.
+    """
     result = []
     i = 0
     while i < len(argv):
         arg = argv[i]
-        if arg == "--format=strict":
-            result.append("--format=yaml")
-        elif arg == "--format" and i + 1 < len(argv) and argv[i + 1] == "strict":
+        alias = None
+        if arg.startswith("--format="):
+            alias = FORMAT_ALIASES.get(arg.removeprefix("--format="))
+        if alias is not None:
+            result.append(f"--format={alias}")
+        elif arg == "--format" and i + 1 < len(argv) and argv[i + 1] in FORMAT_ALIASES:
             result.append("--format")
-            result.append("yaml")
+            result.append(FORMAT_ALIASES[argv[i + 1]])
             i += 1  # Skip the next arg since we handled it
         else:
             result.append(arg)

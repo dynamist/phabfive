@@ -2,6 +2,7 @@
 """The phabfive CLI against a live Phorge, see docs/phorge-setup.md."""
 
 # python std lib
+import json
 from urllib.parse import urlparse
 
 
@@ -37,3 +38,19 @@ def test_create_in_a_space(phabfive, create_task):
     task_id, _title = create_task("--space", "S3")
     [task] = phabfive("maniphest", "show", task_id, json_output=True)
     assert task["Space"] == "Restricted"
+
+
+def test_jsonl_is_one_task_per_line(phabfive, create_task):
+    first, first_title = create_task()
+    second, second_title = create_task()
+
+    # The fixture puts positional args straight after the interpreter, so a
+    # global option passed here still lands before the subcommand
+    output = phabfive("--format", "jsonl", "maniphest", "show", first, second)
+
+    lines = output.splitlines()
+    assert len(lines) == 2
+    assert [json.loads(line)["Task"]["Name"] for line in lines] == [
+        first_title,
+        second_title,
+    ]

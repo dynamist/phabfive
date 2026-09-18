@@ -94,8 +94,8 @@ def _display_tasks(result, output_format, maniphest_instance, show_description=T
 
     try:
         tasks = result["tasks"]
-        if output_format == "json":
-            display_tasks_json(tasks, show_description=show_description)
+        if output_format in ("json", "jsonl"):
+            display_tasks_json(tasks, output_format, show_description=show_description)
         elif output_format == "tree":
             display_tasks_tree(
                 console, tasks, maniphest_instance, show_description=show_description

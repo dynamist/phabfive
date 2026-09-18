@@ -22,6 +22,7 @@ from phabfive.cli.completers import (
 )
 from phabfive.constants import MONOGRAMS
 from phabfive.exceptions import PhabfiveConfigException
+from phabfive.json_output import emit_records
 
 paste_app = typer.Typer(
     cls=AgentFooterGroup, help="The paste app", no_args_is_help=True
@@ -142,11 +143,9 @@ def search(
     # Format output
     output_format = _get_output_format(ctx)
 
-    if output_format == "json":
-        import json
-
+    if output_format in ("json", "jsonl"):
         result = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
-        print(json.dumps(result, indent=2))
+        emit_records(result, output_format)
     elif output_format in ("yaml", "strict"):
         result = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
         yaml = YAML()
@@ -386,32 +385,34 @@ def _format_timestamp(ts):
     return None
 
 
+def _build_paste_json_output(paste_data):
+    """Build a clean JSON-serializable dict for a single paste.
+
+    Uses capitalized keys like passphrase/maniphest.
+    """
+    item = {
+        "Link": paste_data.get("url", ""),
+        "Name": paste_data.get("title", ""),
+        "Author": paste_data.get("author", ""),
+        "Language": paste_data.get("language", "text"),
+        "Status": paste_data.get("status", ""),
+        "Created": _format_timestamp(paste_data.get("dateCreated")),
+        "Modified": _format_timestamp(paste_data.get("dateModified")),
+    }
+    if "content" in paste_data:
+        item["Content"] = paste_data.get("content", "")
+    return item
+
+
 def _display_pastes(result, output_format, paste_instance):
     """Display paste results in the specified format."""
-    import json
-
     if not result or not result.get("pastes"):
         return
 
     pastes = result["pastes"]
 
-    if output_format == "json":
-        # Use capitalized keys like passphrase/maniphest
-        output = []
-        for p in pastes:
-            item = {
-                "Link": p.get("url", ""),
-                "Name": p.get("title", ""),
-                "Author": p.get("author", ""),
-                "Language": p.get("language", "text"),
-                "Status": p.get("status", ""),
-                "Created": _format_timestamp(p.get("dateCreated")),
-                "Modified": _format_timestamp(p.get("dateModified")),
-            }
-            if "content" in p:
-                item["Content"] = p.get("content", "")
-            output.append(item)
-        print(json.dumps(output, indent=2, default=str))
+    if output_format in ("json", "jsonl"):
+        emit_records([_build_paste_json_output(p) for p in pastes], output_format)
     elif output_format in ("yaml", "strict"):
         yaml = YAML()
         yaml.default_flow_style = False

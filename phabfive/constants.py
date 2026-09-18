@@ -9,7 +9,17 @@ class OutputFormat(str, Enum):
     tree = "tree"  # Tree view with Rich Tree
     yaml = "yaml"  # Machine-readable YAML
     json = "json"  # Machine-readable JSON
+    jsonl = "jsonl"  # Machine-readable newline-delimited JSON
     simple = "simple"  # Minimal output (e.g., just the secret for passphrase)
+
+
+# Spellings accepted for --format and PHAB_FALLBACK that are not members of
+# OutputFormat. They are rewritten before anything branches on the format, so
+# no display code ever has to know about them.
+FORMAT_ALIASES = {
+    "strict": "yaml",
+    "ndjson": "jsonl",
+}
 
 
 class AutoOption(str, Enum):
@@ -107,7 +117,7 @@ DEFAULTS = {
     "PHAB_TOKEN": "",
     "PHAB_URL": "",
     "PHAB_SPACE": "S1",
-    "PHAB_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml or json)
+    "PHAB_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml, json or jsonl)
     "PHAB_CACHE": True,  # Cache API lookups that shell completion repeats
     "PHAB_CACHE_TTL": 0,  # 0 means use the per-namespace CACHE_TTLS below
     "PHAB_CACHE_DIR": "",  # Empty means appdirs.user_cache_dir("phabfive")
@@ -132,7 +142,7 @@ REQUIRED = ["PHAB_TOKEN", "PHAB_URL"]
 VALIDATORS = {
     "PHAB_URL": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
     "PHAB_TOKEN": "^[a-zA-Z0-9-]{32}$",
-    "PHAB_FALLBACK": "^(yaml|json)$",
+    "PHAB_FALLBACK": "^(yaml|json|jsonl|ndjson)$",
 }
 VALIDATION_HINTS = {"PHAB_URL": "example: https://we.phorge.it/api/"}
 MISSING_CONFIG_HINTS = {
@@ -203,6 +213,7 @@ __all__ = [
     "CONFIGURABLES",
     "DEFAULTS",
     "DISPLAY_CHOICES",
+    "FORMAT_ALIASES",
     "IO_NEW_URI_CHOICES",
     "COMMENTS_SUPPORTED",
     "MANIPHEST_ORDER_CHOICES",

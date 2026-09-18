@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Display functions for Maniphest tasks."""
 
-import json
 import sys
 from io import StringIO
 
@@ -10,6 +9,8 @@ from rich.text import Text
 from rich.tree import Tree
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
+
+from phabfive.json_output import emit_records
 
 
 def _escape_for_rich(content):
@@ -567,13 +568,15 @@ def display_tasks_yaml(task_dicts, show_description=True):
         _display_task_yaml(task_dict, show_description=show_description)
 
 
-def display_tasks_json(task_dicts, show_description=True):
-    """Display tasks as a valid JSON array.
+def display_tasks_json(task_dicts, output_format="json", show_description=True):
+    """Display tasks as a JSON array, or one object per line for jsonl.
 
     Parameters
     ----------
     task_dicts : list[dict]
         List of task data dictionaries.
+    output_format : str
+        Either 'json' or 'jsonl'.
     show_description : bool
         If True, include task description in output
     """
@@ -581,7 +584,7 @@ def display_tasks_json(task_dicts, show_description=True):
         _build_task_json_output(td, show_description=show_description)
         for td in task_dicts
     ]
-    print(json.dumps(outputs, indent=2))
+    emit_records(outputs, output_format)
 
 
 def display_tasks(result, output_format, phabfive_instance):
@@ -592,7 +595,7 @@ def display_tasks(result, output_format, phabfive_instance):
     result : dict
         Result from task_search() or task_show() containing 'tasks' list
     output_format : str
-        One of 'rich', 'tree', 'yaml', or 'json'
+        One of 'rich', 'tree', 'yaml', 'json', or 'jsonl'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     """
@@ -603,8 +606,8 @@ def display_tasks(result, output_format, phabfive_instance):
 
     try:
         tasks = result["tasks"]
-        if output_format == "json":
-            display_tasks_json(tasks)
+        if output_format in ("json", "jsonl"):
+            display_tasks_json(tasks, output_format)
         elif output_format == "tree":
             display_tasks_tree(console, tasks, phabfive_instance)
         elif output_format in ("yaml", "strict"):
@@ -765,16 +768,18 @@ def display_users_yaml(user_dicts):
     print(stream.getvalue(), end="")
 
 
-def display_users_json(user_dicts):
-    """Display users as a valid JSON array.
+def display_users_json(user_dicts, output_format="json"):
+    """Display users as a JSON array, or one object per line for jsonl.
 
     Parameters
     ----------
     user_dicts : list[dict]
         List of user data dictionaries.
+    output_format : str
+        Either 'json' or 'jsonl'.
     """
     outputs = [_build_user_json_output(ud) for ud in user_dicts]
-    print(json.dumps(outputs, indent=2))
+    emit_records(outputs, output_format)
 
 
 def display_users(user_dicts, output_format, phabfive_instance):
@@ -785,7 +790,7 @@ def display_users(user_dicts, output_format, phabfive_instance):
     user_dicts : list[dict]
         List of user data dictionaries from whoami_all_hosts()
     output_format : str
-        One of 'rich', 'yaml', or 'json'
+        One of 'rich', 'yaml', 'json', or 'jsonl'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     """
@@ -795,8 +800,8 @@ def display_users(user_dicts, output_format, phabfive_instance):
     console = phabfive_instance.get_console()
 
     try:
-        if output_format == "json":
-            display_users_json(user_dicts)
+        if output_format in ("json", "jsonl"):
+            display_users_json(user_dicts, output_format)
         elif output_format in ("yaml", "strict"):
             display_users_yaml(user_dicts)
         else:  # "rich" (default)
