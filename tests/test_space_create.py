@@ -58,14 +58,14 @@ class TestNamingOneSpace:
         ],
     )
     def test_it_resolves_to_that_space(self, given, expected):
-        phab = _phab({1: "Default", 3: "Restricted", 10: "Archive"})
+        phab = _phab({1: "Default", 3: "Management Team", 10: "Archive"})
 
         assert resolve_space(phab, given)["phid"] == expected
 
     def test_a_monogram_costs_one_lookup(self):
         # The whole range is probed only to match a name or a wildcard; a
         # monogram names one Space outright.
-        phab = _phab({1: "Default", 3: "Restricted", 10: "Archive"})
+        phab = _phab({1: "Default", 3: "Management Team", 10: "Archive"})
 
         resolve_space(phab, "S3")
 
@@ -126,7 +126,7 @@ class TestNoSuchSpace:
     """The error says what is there, as the search resolver does."""
 
     def test_an_unknown_space_lists_the_visible_ones(self):
-        phab = _phab({1: "Default", 3: "Restricted", 10: "Archive"})
+        phab = _phab({1: "Default", 3: "Management Team", 10: "Archive"})
 
         with pytest.raises(PhabfiveConfigException) as excinfo:
             resolve_space(phab, "S2")
