@@ -176,7 +176,7 @@ uv run phabfive maniphest search --tag '*'
 After configuring phabfive, you can populate Phorge with ~70 realistic test tasks:
 
 ```bash
-uv run phabfive maniphest create templates/task-create/mega-2024-simulation.yml
+uv run phabfive maniphest create --with templates/task-create/mega-2024-simulation.yml
 ```
 
 This creates a full year simulation of project work for the RMI GUNNAR team, including EPICs with subtasks, varied priorities, and assignments across the default projects.
@@ -184,7 +184,7 @@ This creates a full year simulation of project work for the RMI GUNNAR team, inc
 Use `--dry-run` to preview without creating:
 
 ```bash
-uv run phabfive maniphest create templates/task-create/mega-2024-simulation.yml --dry-run
+uv run phabfive maniphest create --with templates/task-create/mega-2024-simulation.yml --dry-run
 ```
 
 ## Using the API Token
