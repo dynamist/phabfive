@@ -18,6 +18,15 @@
   `jsonl` are built from the same record builders and cannot drift apart
 * Paste and passphrase JSON output gained builder/printer splits, matching what
   maniphest and user already had
+* The dev Phorge instance seeds its sample data with `phorge/seed/`, a PHP seeder
+  that writes through Phorge's own editors and Conduit rather than raw SQL, in
+  place of the bash scripts in `phorge/lib/`. One module and one JSON data file
+  per kind of data, selected with `PHORGE_SEED`, documented in
+  [docs/phorge-setup.md](docs/phorge-setup.md#sample-data)
+* The dev Phorge now has eight teams and ten Spaces, most of them readable only
+  by their team. The admin token still sees S1, S3 and S10, but the gaps between
+  them are access rules rather than skipped numbers, which is what probing for
+  Spaces meets on a real instance
 * The dev Phorge banner (`make creds`) printed `phabfive whoami`, which is not a
   command - it now prints `phabfive user whoami`. Its user, project and space
   lists are read from the database instead of the static arrays in
