@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Display functions for Passphrase credentials."""
 
+import json
 import sys
 from datetime import datetime
 from io import StringIO
@@ -10,7 +11,7 @@ from rich.tree import Tree
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
-from phabfive.json_output import emit_record, emit_records
+from phabfive.json_output import iter_records
 
 
 def _format_timestamp(ts):
@@ -248,10 +249,12 @@ def display_passphrase_json(passphrase_dict):
     passphrase_dict : dict
         Passphrase data dictionary with url, type, name, username, secret
     """
-    # Intentional: a top-level object, not an array, for a single credential
-    emit_record(  # lgtm[py/clear-text-logging-sensitive-data]
-        _build_passphrase_json_output(passphrase_dict), "json"
-    )
+    output = _build_passphrase_json_output(passphrase_dict)
+    # Intentional: a top-level object, not an array, for a single credential.
+    # The print stays in this module rather than in phabfive/json_output.py so
+    # the clear-text-logging suppression covers only the code that is meant to
+    # write secrets, instead of blinding the shared emitter for every caller.
+    print(json.dumps(output, indent=2))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
 
 
 def display_passphrase_simple(passphrase_dict):
@@ -457,10 +460,12 @@ def display_passphrases_json(credentials, show_secrets=True, output_format="json
     output_format : str
         Either 'json' or 'jsonl'.
     """
-    # Intentional: output secrets for piping
-    emit_records(  # lgtm[py/clear-text-logging-sensitive-data]
-        _build_passphrases_json_output(credentials, show_secrets), output_format
-    )
+    records = _build_passphrases_json_output(credentials, show_secrets)
+    # Intentional: output secrets for piping. Serialisation is shared with
+    # every other app, the printing is not - see display_passphrase_json above
+    for chunk in iter_records(records, output_format):
+        print(chunk)  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
+        sys.stdout.flush()
 
 
 def display_passphrases_list(

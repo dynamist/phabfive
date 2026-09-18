@@ -21,7 +21,7 @@ from typer.testing import CliRunner
 from phabfive.cli import app, preprocess_format_alias
 from phabfive.constants import FORMAT_ALIASES, OutputFormat, VALIDATORS
 from phabfive.core import Phabfive
-from phabfive.json_output import emit_record, emit_records
+from phabfive.json_output import emit_record, emit_records, iter_records
 from phabfive.maniphest import Maniphest
 from tests.conftest import CONF
 
@@ -460,6 +460,24 @@ class TestPassphrases:
         assert len(output.splitlines()) == 2
         assert parse_jsonl(output)[1]["Secret"] == "-----BEGIN-----\nkey\n-----END-----"
 
+    def test_a_closed_pipe_is_still_quiet(self):
+        """Passphrase prints its own lines, so it needs its own handler.
+
+        The print lives in passphrase/display.py rather than in the shared
+        emitter, so that the clear-text-logging suppression covers only the
+        code meant to write secrets. That means the shared emitter's own
+        BrokenPipeError handling does not apply here.
+        """
+        from phabfive.passphrase.display import display_passphrases
+
+        stdout = MagicMock()
+        stdout.write.side_effect = BrokenPipeError(32, "Broken pipe")
+        with patch("sys.stdout", stdout):
+            with patch("sys.stderr"):
+                with pytest.raises(SystemExit) as exit_info:
+                    display_passphrases(self._credentials(), "jsonl", MagicMock())
+        assert exit_info.value.code == 0
+
     def test_a_single_credential_has_the_same_shape_as_many(self, capsys):
         from phabfive.passphrase.display import (
             display_passphrase,
@@ -547,3 +565,21 @@ class TestClosedPipe:
                 with pytest.raises(SystemExit) as exit_info:
                     emit_records([{"a": 1}], "json")
         assert exit_info.value.code == 0
+
+
+class TestSerialisationIsShared:
+    """json and jsonl are decided in one place, even where printing is not."""
+
+    def test_iter_records_yields_one_chunk_per_record_for_jsonl(self):
+        chunks = list(iter_records([{"a": 1}, {"a": 2}], "jsonl"))
+        assert [json.loads(chunk) for chunk in chunks] == [{"a": 1}, {"a": 2}]
+
+    def test_iter_records_yields_one_array_for_json(self):
+        [chunk] = list(iter_records([{"a": 1}, {"a": 2}], "json"))
+        assert json.loads(chunk) == [{"a": 1}, {"a": 2}]
+
+    def test_no_chunk_contains_a_newline_for_jsonl(self):
+        records = [{"text": "one\ntwo\nthree"}]
+        [chunk] = list(iter_records(records, "jsonl"))
+        assert "\n" not in chunk
+        assert json.loads(chunk)["text"] == "one\ntwo\nthree"
