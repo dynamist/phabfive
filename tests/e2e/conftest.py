@@ -88,11 +88,15 @@ def conduit(live_env):
 def space_name(conduit):
     """What this instance calls a space monogram.
 
-    The seed data is whatever branch last ran `make up`, so a space's
-    name is not something a test can hard-code: S3 is "Restricted" on a
-    fresh seed from this branch and "Management Team" on an instance
-    seeded from modular-samples. Asking the instance keeps a test about
-    the --space flag from failing over which data happens to be there.
+    A space's name is not something a test can hard-code. The monogram
+    is positional: S3 is whatever sits third in
+    phorge/seed/data/spaces.json, which carries no ids, so inserting or
+    reordering a space silently changes what S3 means. An instance also
+    keeps its MariaDB volume across `make up`, so deployed data can
+    predate the seed file it is compared against.
+
+    Asking the instance keeps a test about the --space flag from failing
+    over which data happens to be there.
     """
 
     def name(monogram):
