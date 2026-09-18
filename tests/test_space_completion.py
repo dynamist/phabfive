@@ -68,7 +68,7 @@ class Api:
             return complete_func(incomplete)
 
 
-SEEDED = {1: "Default", 3: "Restricted", 10: "Archive"}
+SEEDED = {1: "Default", 3: "Management Team", 10: "Archive"}
 
 
 class TestWhatIsOffered:
@@ -79,7 +79,7 @@ class TestWhatIsOffered:
         # the shorter list loses nothing.
         assert Api(SEEDED).complete(complete_space) == [
             ("S1", "Default"),
-            ("S3", "Restricted"),
+            ("S3", "Management Team"),
             ("S10", "Archive"),
         ]
 
@@ -134,7 +134,7 @@ class TestTheCache:
         api = Api(SEEDED)
         assert api.complete() == [
             ["S1", "Default"],
-            ["S3", "Restricted"],
+            ["S3", "Management Team"],
             ["S10", "Archive"],
         ]
         after_first = api.probes
@@ -148,7 +148,7 @@ class TestTheCache:
 
         assert cache.get("spaces", "all") == [
             ["S1", "Default"],
-            ["S3", "Restricted"],
+            ["S3", "Management Team"],
             ["S10", "Archive"],
         ]
 
