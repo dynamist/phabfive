@@ -228,6 +228,7 @@ make down                # Stop Phorge and MariaDB, keep data
 make reset               # Delete the phorge namespace and its data, clear the completion cache
 make destroy             # Delete the whole cluster (FORCE=1 if other apps run)
 make logs / make ps      # Follow Phorge logs / show pods, ingress, volumes
+make creds               # Print the credentials of the running Phorge
 make shell               # Open a shell in the Phorge pod
 make validate            # Validate the rendered manifests with kubeconform
 make test-k8s            # Smoke, seed data and isolation tests against the deployed Phorge
@@ -245,9 +246,19 @@ CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d clu
 
 ## Troubleshooting
 
+### Forgot the credentials
+
+```bash
+make creds
+```
+
+It runs `phorge/lib/banner.sh` in the pod, the same summary the logs print at the
+end of the setup, so it always matches `phorge/lib/common.sh` and the manifests.
+
 ### Get admin password recovery link
 
-The link is displayed in logs when Phorge starts. If you miss it:
+The link is one-time and only exists while the setup runs, so `make creds` cannot
+show it. It is displayed in logs when Phorge starts:
 
 ```bash
 make logs | grep "one-time link"

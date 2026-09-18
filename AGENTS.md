@@ -29,6 +29,7 @@ uv run ruff format phabfive/ tests/
 make up                              # create/reuse the cluster, build and deploy Phorge
 make down                            # stop, keep data
 make reset                           # delete the phorge namespace and its data
+make creds                           # print the credentials of the running Phorge
 make test-k8s                        # smoke, seed data and isolation tests against the cluster
 make test-e2e                        # end-to-end tests of the CLI against the deployed Phorge
 

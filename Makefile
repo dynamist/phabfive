@@ -1,4 +1,4 @@
-.PHONY: help install tools test smoke docs format lock upgrade clean cleanpy cleanall cleantox cleanvenv sdist bdist image check-runtime check-tools clear-cache cluster destroy phorge-image deploy up down reset logs ps shell validate test-k8s test-e2e ci-deploy ci-test
+.PHONY: help install tools test smoke docs format lock upgrade clean cleanpy cleanall cleantox cleanvenv sdist bdist image check-runtime check-tools clear-cache cluster destroy phorge-image deploy up down reset logs ps shell creds validate test-k8s test-e2e ci-deploy ci-test
 
 # Detect container runtime (prefer podman)
 CONTAINER_RUNTIME = $(or \
@@ -188,6 +188,9 @@ ps: check-tools ## show pods, services, ingress and volumes
 
 shell: check-tools ## open shell in the phorge pod
 	$(KUBECTL) exec -it deploy/phorge -- /bin/bash
+
+creds: check-tools ## print credentials of the running phorge
+	@$(KUBECTL) exec deploy/phorge -- /usr/local/bin/lib/banner.sh
 
 ##@ Test
 
