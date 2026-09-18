@@ -48,6 +48,47 @@ curl https://mise.run | sh
 mise use --global --pin pipx:phabfive
 ```
 
+### Standalone executable
+
+Every release ships a single file executable that bundles its own Python, so it needs nothing
+installed. Download it, make it executable and put it on your `PATH`:
+
+```bash
+# Linux amd64 - swap the asset name for your platform
+curl -LO https://github.com/dynamist/phabfive/releases/latest/download/phabfive-linux-amd64
+chmod +x phabfive-linux-amd64
+sudo install phabfive-linux-amd64 /usr/local/bin/phabfive
+```
+
+The asset names are `phabfive-linux-amd64`, `phabfive-linux-arm64`, `phabfive-macos-amd64`,
+`phabfive-macos-arm64`, `phabfive-windows-amd64.exe` and `phabfive-windows-arm64.exe`.
+`latest/download/` always resolves to the newest release; pin a version by using
+`download/v0.10.0/` instead. All builds are listed on the
+[releases page](https://github.com/dynamist/phabfive/releases).
+
+The executable unpacks itself on every run, so it starts in about two seconds against a fraction of
+that for an installed phabfive. Prefer uv or mise where a Python toolchain is available, and keep
+this for machines where one is not, such as a bare CI image or a locked down workstation.
+
+**macOS:** the binaries are not notarized, so Gatekeeper refuses them after a browser download.
+Clear the quarantine flag with `xattr -d com.apple.quarantine phabfive-macos-arm64`.
+
+<details>
+<summary>Verifying signatures</summary>
+
+Every executable except `phabfive-windows-arm64.exe` is signed with
+[Sigstore](https://www.sigstore.dev/) and ships a `.sigstore.json` bundle beside it. Download both
+files and verify with [cosign](https://docs.sigstore.dev/):
+
+```bash
+cosign verify-blob phabfive-linux-amd64 \
+  --bundle phabfive-linux-amd64.sigstore.json \
+  --certificate-identity-regexp="https://github.com/dynamist/phabfive" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+```
+
+</details>
+
 ### Container image
 
 `ghcr.io/dynamist/phabfive` is a scratch image containing only phabfive and its own Python. It can't run by itself. Instead, copy phabfive from it into your own image, for example in CI:
