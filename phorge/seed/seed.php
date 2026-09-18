@@ -3,8 +3,9 @@
 
 // Seed a Phorge instance with phabfive's sample data.
 //
-//   seed.php                 run every module
+//   seed.php all             run every module, the same as no arguments
 //   seed.php users projects  run these (and what they depend on)
+//   seed.php none            run nothing
 //   seed.php --list          show the modules
 
 $phorge = getenv('PHORGE_PATH') ? getenv('PHORGE_PATH') : '/app/phorge';
@@ -18,13 +19,21 @@ foreach ($files as $file) {
   require_once $file;
 }
 
+// "all" and "none" name a selection rather than a module, so no module may
+// take those keys
+$reserved = array('all', 'none');
+
 $modules = array();
 foreach (array_diff(get_declared_classes(), $declared) as $class) {
   $reflection = new ReflectionClass($class);
   if ($reflection->isSubclassOf('PhabfiveSeedModule') &&
       !$reflection->isAbstract()) {
     $module = new $class();
-    $modules[$module->getKey()] = $module;
+    $key = $module->getKey();
+    if (in_array($key, $reserved)) {
+      throw new Exception(pht('Seed module key "%s" is reserved.', $key));
+    }
+    $modules[$key] = $module;
   }
 }
 
@@ -38,9 +47,23 @@ if (in_array('--list', $args)) {
   exit(0);
 }
 
+// An empty PHORGE_SEED arrives as no arguments at all, which seeds everything,
+// the same as "all"
+if (!$args || in_array('all', $args)) {
+  $args = array_keys($modules);
+}
+
+if (in_array('none', $args)) {
+  if (count($args) > 1) {
+    throw new Exception(pht('"none" cannot be combined with other modules.'));
+  }
+  echo tsprintf("**<bg:blue> SEED </bg>** %s\n", pht('nothing, PHORGE_SEED is "none"'));
+  exit(0);
+}
+
 // Resolve the selection, pulling in dependencies depth first so each module
 // runs after everything it needs
-$selected = $args ? $args : array_keys($modules);
+$selected = $args;
 $order = array();
 $visit = function ($key, array $path) use (&$visit, &$order, $modules) {
   if (!isset($modules[$key])) {
