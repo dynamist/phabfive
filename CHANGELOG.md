@@ -18,6 +18,11 @@
   `jsonl` are built from the same record builders and cannot drift apart
 * Paste and passphrase JSON output gained builder/printer splits, matching what
   maniphest and user already had
+* The dev Phorge banner (`make creds`) printed `phabfive whoami`, which is not a
+  command - it now prints `phabfive user whoami`. Its user, project and space
+  lists are read from the database instead of the static arrays in
+  `phorge/lib/common.sh`, so they describe the instance that is running rather
+  than what the current branch would seed
 
 # 0.9.0 (2026-05-04)
 
