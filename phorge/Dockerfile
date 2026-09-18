@@ -26,10 +26,12 @@ COPY phorge.ini /usr/local/etc/php/conf.d/phorge.ini
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Copy initialization scripts (main + lib modules)
-COPY init-phorge.sh /usr/local/bin/init-phorge.sh
+# Sample data seeder, run by the entrypoint (see phorge/seed/)
+COPY seed/ /usr/local/share/phabfive-seed/
+
+# banner.sh prints the credentials summary, also run by `make creds`
 COPY lib/ /usr/local/bin/lib/
-RUN chmod +x /usr/local/bin/* /usr/local/bin/lib/*
+RUN chmod +x /usr/local/bin/lib/*
 
 # Create configuration directory and storage directories
 RUN mkdir -p /app/phorge/conf/local /app/repo /app/files && \

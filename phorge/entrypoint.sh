@@ -85,11 +85,23 @@ echo "Building static resource map..."
 echo "Initializing Phorge storage..."
 ./bin/storage upgrade --force
 
-# Run custom initialization script
-if [ -f /usr/local/bin/init-phorge.sh ]; then
-  echo "Running custom initialization script..."
-  bash /usr/local/bin/init-phorge.sh
+# Seed sample data: every module, or only those PHORGE_SEED names (and what
+# they depend on). Safe to rerun, so a container restart creates nothing new.
+echo "Seeding sample data..."
+# shellcheck disable=SC2086
+php /usr/local/share/phabfive-seed/seed.php $PHORGE_SEED
+
+# Without a password there is no way in except a one-time link
+if [ -z "$PHORGE_ADMIN_PASS" ]; then
+  RECOVERY_LINK=$(./bin/auth recover "${PHORGE_ADMIN_USER:-admin}" 2>&1 |
+    grep -o 'http[s]*://[^[:space:]]*' || true)
+  export RECOVERY_LINK
 fi
+
+# The banner reads the users, projects and Spaces back from the database, so it
+# describes this instance rather than what the seed data would have created
+source /usr/local/bin/lib/banner.sh
+print_banner
 
 # Print git refs with history links
 PHORGE_REF=$(cd /app/phorge && git rev-parse --abbrev-ref HEAD 2>/dev/null || git rev-parse --short HEAD)

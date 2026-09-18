@@ -1,0 +1,12 @@
+[
+  {"name": "Default", "default": true},
+  {"name": "Sales Team", "team": "Sales Team"},
+  {"name": "Management Team", "team": "Management Team"},
+  {"name": "Marketing Team", "team": "Marketing Team"},
+  {"name": "Recruitment Team", "team": "Recruitment Team"},
+  {"name": "SOC", "team": "SOC"},
+  {"name": "Human Resources", "team": "Human Resources"},
+  {"name": "Onboarding Team", "team": "Onboarding Team"},
+  {"name": "Offboarding Team", "team": "Offboarding Team"},
+  {"name": "Archive"}
+]

@@ -6,6 +6,7 @@ PATH.
 """
 
 # python std lib
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -84,16 +85,13 @@ def kubectl():
 
 @pytest.fixture(scope="session")
 def seed():
-    """FAKE_USERS, DEFAULT_PROJECTS, DEFAULT_MILESTONES and DEFAULT_SPACES from phorge/lib/common.sh."""
-    arrays = ["FAKE_USERS", "DEFAULT_PROJECTS", "DEFAULT_MILESTONES", "DEFAULT_SPACES"]
-    script = f"source {ROOT / 'phorge/lib/common.sh'}; " + "; ".join(
-        f'printf "{name}\\t%s\\n" "${{{name}[@]}}"' for name in arrays
-    )
-    output = subprocess.run(
-        ["bash", "-c", script], check=True, capture_output=True, text=True
-    ).stdout
-    data = {name: [] for name in arrays}
-    for line in output.splitlines():
-        name, value = line.split("\t", 1)
-        data[name].append(value.split(":"))
+    """The records phorge/seed/ creates, keyed by module: users, teams, ..."""
+    data = {}
+    for path in sorted((ROOT / "phorge/seed/data").glob("*.json")):
+        data[path.stem] = json.loads(path.read_text(encoding="utf-8"))
     return data
+
+
+@pytest.fixture(scope="session")
+def admin_username():
+    return os.environ.get("PHORGE_ADMIN_USER", "admin")
