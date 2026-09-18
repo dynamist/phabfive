@@ -65,51 +65,5 @@ source "${LIB_DIR}/setup-spaces.sh"
 create_spaces
 
 # Display final summary
-echo ""
-echo "================================"
-echo "Phorge Automated Setup Complete!"
-echo "================================"
-echo ""
-echo "👨‍💻 Username: $PHORGE_ADMIN_USER"
-if [ ! -z "$PHORGE_ADMIN_PASS" ]; then
-  echo "🔑 Password: $PHORGE_ADMIN_PASS"
-fi
-echo "🔐 API Token: $PHORGE_ADMIN_TOKEN"
-echo "✉️ Email: $PHORGE_ADMIN_EMAIL"
-if [ ! -z "$RECOVERY_LINK" ]; then
-  echo ""
-  echo "⚡ Use this one-time link to set your password:"
-  echo "   $RECOVERY_LINK"
-fi
-echo ""
-echo "🤖 Users Created:"
-for user_data in "${FAKE_USERS[@]}"; do
-  IFS=':' read -r username email realname <<< "$user_data"
-  echo "  - ${username} (${realname})"
-done
-echo ""
-echo "🗂️ Projects Created:"
-for project_data in "${DEFAULT_PROJECTS[@]}"; do
-  IFS=':' read -r name description <<< "$project_data"
-  echo "  - ${name}"
-done
-for milestone_data in "${DEFAULT_MILESTONES[@]}"; do
-  IFS=':' read -r parent_name milestone_name <<< "$milestone_data"
-  echo "  - ${milestone_name} (${parent_name} milestone)"
-done
-echo ""
-echo "🌌 Spaces Created:"
-for space_data in "${DEFAULT_SPACES[@]}"; do
-  IFS=':' read -r space_id space_name is_default <<< "$space_data"
-  if [ "$is_default" = "default" ]; then
-    echo "  - S${space_id} ${space_name} (default)"
-  else
-    echo "  - S${space_id} ${space_name}"
-  fi
-done
-echo ""
-echo "🌍 Your new Phorge is waiting for you at:"
-echo "   $PHORGE_URL"
-echo ""
-echo "💡 TIP: The API token works immediately without logging in!"
-echo "================================"
+source "${LIB_DIR}/banner.sh"
+print_banner
