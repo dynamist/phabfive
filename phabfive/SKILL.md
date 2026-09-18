@@ -51,21 +51,26 @@ returns.
 ```bash
 phabfive --format=json maniphest show T123
 phabfive --format=yaml maniphest search --tag Backend
+phabfive --format=jsonl maniphest show T123 T456   # one object per line
 ```
 
 Global options must come **before** the subcommand. `phabfive maniphest show T123
 --format=json` is a parse error; `phabfive --format=json maniphest show T123` is correct.
 
-- `json` and `yaml` are the machine-readable formats. Both emit a list of objects with the
-  same keys.
+- `json`, `jsonl` and `yaml` are the machine-readable formats. All three emit the same
+  objects with the same keys.
+- `json` and `yaml` wrap them in a list. `jsonl` does not: it writes one object per line
+  with no wrapper, which is what `jq -c`, `while read` loops and appended log files want.
+  Nothing in a `jsonl` line is ever split across lines, so counting lines counts records.
 - `rich` and `tree` are for humans. `rich` refuses to render a line longer than 4096
   characters and raises instead, which real task descriptions do hit.
 - `simple` only means something for `passphrase` (prints the bare secret) and `paste`
   (prints bare content). For maniphest it silently falls back to `rich`.
-- `strict` is accepted as an alias for `yaml`.
+- `strict` is accepted as an alias for `yaml`, and `ndjson` as an alias for `jsonl`.
 
 When stdout is not a terminal phabfive already defaults to YAML, but pass `--format`
-explicitly so the output does not change under you.
+explicitly so the output does not change under you. `PHAB_FALLBACK` changes that default
+to `json` or `jsonl`.
 
 Data goes to stdout; logging, diagnostics and group help go to stderr. Capturing stdout
 alone is safe.
@@ -319,7 +324,8 @@ touches the server.
 - Read with `maniphest show`, never with the bare-monogram form, which comments when a
   word follows it.
 - Pass `--show-comments` before concluding anything about a task's discussion or decisions.
-- Pass `--format=json` or `--format=yaml` before parsing, and put it before the subcommand.
+- Pass `--format=json`, `--format=jsonl` or `--format=yaml` before parsing, and put it
+  before the subcommand.
 - Add `--space='*'` before reporting that a task or project does not exist.
 - Dry-run every create, edit and batch, and show the user the preview before applying it.
 - Pass `--force` only for a change the user has asked for; it exists to skip a confirmation

@@ -32,6 +32,10 @@ phabfive maniphest show T123 --all
 
 # Pretty-print all fields
 phabfive maniphest show T123 --pp
+
+# Machine-readable: one JSON array, or one object per line
+phabfive --format=json maniphest show T123 T456
+phabfive --format=jsonl maniphest show T123 T456 | jq -c '.Task.Name'
 ```
 
 When using `--all`, the output includes complete workboard transition history showing:
@@ -1151,7 +1155,7 @@ If a filter pattern doesn't return expected results:
 ### Verbose Output
 
 Searches are quiet by default. `-v` reports which filters were applied,
-on stderr, so stdout stays clean for `--format=json` consumers:
+on stderr, so stdout stays clean for `--format=json` and `--format=jsonl` consumers:
 
 ```bash
 # Which Space and project(s) did this actually search?

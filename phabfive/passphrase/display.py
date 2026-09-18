@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Display functions for Passphrase credentials."""
 
-import json
 import sys
 from datetime import datetime
 from io import StringIO
@@ -10,6 +9,8 @@ from rich.text import Text
 from rich.tree import Tree
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
+
+from phabfive.json_output import emit_record, emit_records
 
 
 def _format_timestamp(ts):
@@ -194,16 +195,18 @@ def display_passphrase_yaml(passphrase_dict):
     print(stream.getvalue(), end="")
 
 
-def display_passphrase_json(passphrase_dict):
-    """Display passphrase as JSON.
-
-    Machine-readable JSON output for piping to jq or other tools.
-    No hyperlinks, no Rich formatting.
+def _build_passphrase_json_output(passphrase_dict):
+    """Build a clean JSON-serializable dict for a single passphrase.
 
     Parameters
     ----------
     passphrase_dict : dict
         Passphrase data dictionary with url, type, name, username, secret
+
+    Returns
+    -------
+    dict
+        Clean dictionary ready for JSON serialization.
     """
     output = {
         "Link": passphrase_dict.get("url", ""),
@@ -231,7 +234,24 @@ def display_passphrase_json(passphrase_dict):
     if modified:
         output["Modified"] = modified
 
-    print(json.dumps(output, indent=2))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
+    return output
+
+
+def display_passphrase_json(passphrase_dict):
+    """Display passphrase as JSON.
+
+    Machine-readable JSON output for piping to jq or other tools.
+    No hyperlinks, no Rich formatting.
+
+    Parameters
+    ----------
+    passphrase_dict : dict
+        Passphrase data dictionary with url, type, name, username, secret
+    """
+    # Intentional: a top-level object, not an array, for a single credential
+    emit_record(  # lgtm[py/clear-text-logging-sensitive-data]
+        _build_passphrase_json_output(passphrase_dict), "json"
+    )
 
 
 def display_passphrase_simple(passphrase_dict):
@@ -254,7 +274,7 @@ def display_passphrase(passphrase_dict, output_format, phabfive_instance):
     passphrase_dict : dict
         Passphrase data from get_passphrase()
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', or 'simple'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or 'simple'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     """
@@ -269,6 +289,10 @@ def display_passphrase(passphrase_dict, output_format, phabfive_instance):
             display_passphrase_yaml(passphrase_dict)
         elif output_format == "json":
             display_passphrase_json(passphrase_dict)
+        elif output_format == "jsonl":
+            # Deliberately the list builder: jsonl emits the same object shape
+            # whether one credential was asked for or several
+            display_passphrases_json([passphrase_dict], output_format="jsonl")
         else:  # "rich" (default)
             display_passphrase_rich(console, passphrase_dict, phabfive_instance)
     except BrokenPipeError:
@@ -287,7 +311,7 @@ def display_passphrases(
     credentials : list
         List of passphrase data dictionaries
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', or 'simple'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or 'simple'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     show_secrets : bool
@@ -306,8 +330,10 @@ def display_passphrases(
                 display_passphrase_tree(console, cred, phabfive_instance)
         elif output_format in ("yaml", "strict"):
             display_passphrases_yaml(credentials, show_secrets)
-        elif output_format == "json":
-            display_passphrases_json(credentials, show_secrets)
+        elif output_format in ("json", "jsonl"):
+            display_passphrases_json(
+                credentials, show_secrets, output_format=output_format
+            )
         else:  # "rich" (default)
             for cred in credentials:
                 display_passphrase_rich(console, cred, phabfive_instance)
@@ -370,8 +396,11 @@ def display_passphrases_yaml(credentials, show_secrets=True):
     print(stream.getvalue(), end="")
 
 
-def display_passphrases_json(credentials, show_secrets=True):
-    """Display multiple passphrases as JSON.
+def _build_passphrases_json_output(credentials, show_secrets=True):
+    """Build clean JSON-serializable dicts for a list of passphrases.
+
+    Kept separate from the single-credential builder above: that one always
+    carries a Secret key, this one only when secrets were asked for.
 
     Parameters
     ----------
@@ -379,6 +408,11 @@ def display_passphrases_json(credentials, show_secrets=True):
         List of passphrase data dictionaries
     show_secrets : bool
         Whether to include secret values
+
+    Returns
+    -------
+    list[dict]
+        Clean dictionaries ready for JSON serialization.
     """
     output = []
     for cred in credentials:
@@ -408,7 +442,25 @@ def display_passphrases_json(credentials, show_secrets=True):
 
         output.append(item)
 
-    print(json.dumps(output, indent=2))
+    return output
+
+
+def display_passphrases_json(credentials, show_secrets=True, output_format="json"):
+    """Display multiple passphrases as JSON, or one object per line for jsonl.
+
+    Parameters
+    ----------
+    credentials : list
+        List of passphrase data dictionaries
+    show_secrets : bool
+        Whether to include secret values
+    output_format : str
+        Either 'json' or 'jsonl'.
+    """
+    # Intentional: output secrets for piping
+    emit_records(  # lgtm[py/clear-text-logging-sensitive-data]
+        _build_passphrases_json_output(credentials, show_secrets), output_format
+    )
 
 
 def display_passphrases_list(
@@ -421,7 +473,7 @@ def display_passphrases_list(
     credentials : list
         List of credential dictionaries
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', 'simple'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', 'simple'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     show_secrets : bool
@@ -430,8 +482,10 @@ def display_passphrases_list(
     console = phabfive_instance.get_console()
 
     try:
-        if output_format == "json":
-            display_passphrases_json(credentials, show_secrets)
+        if output_format in ("json", "jsonl"):
+            display_passphrases_json(
+                credentials, show_secrets, output_format=output_format
+            )
         elif output_format in ("yaml", "strict"):
             display_passphrases_yaml(credentials, show_secrets)
         elif output_format == "tree":

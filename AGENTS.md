@@ -93,7 +93,11 @@ on a pull request that skips the deployment.
 - `Phabfive` class: central configuration and API client management
 - Loads config from `.arcconfig`, `~/.arcrc`, `~/.config/phabfive.yaml`, and environment variables
 - Uses the `phabricator` library for Conduit API calls
-- Output formatting: supports `rich` (terminal), `yaml`, and `strict` (machine-readable) modes
+- Output formatting: `rich` and `tree` (terminal), `yaml`, `json` and `jsonl`
+  (machine-readable), `simple` (bare value). `strict` is an alias for `yaml` and
+  `ndjson` for `jsonl`, both rewritten in argv by `preprocess_format_alias()`
+- Every JSON emitter goes through `phabfive/json_output.py`, which is what keeps
+  `json` and `jsonl` emitting the same records from the same builders
 
 ### Feature Modules
 Complex features use a consistent subpackage structure:
@@ -205,7 +209,7 @@ This is a disposable test environment. These specific credentials indicate a saf
 
 ### Machine-Readable Output
 
-Use `--format=yaml` or `--format=json` for machine-readable output:
+Use `--format=yaml`, `--format=json` or `--format=jsonl` for machine-readable output:
 
 ```bash
 # Get task details as YAML
@@ -220,6 +224,24 @@ phabfive --format=json maniphest search --tag=projectname
 # Pipe JSON to jq
 phabfive --format=json T123 | jq '.Task.Title'
 ```
+
+`jsonl` emits the same objects as `json` but one per line with no wrapping array
+(https://jsonlines.org/), flushed as each is written. Use it when a reader consumes
+records one at a time, or when appending to a file:
+
+```bash
+# One object per line, straight into jq -c
+phabfive --format=jsonl maniphest show T123 T456 | jq -c '.Task.Name'
+
+# Counting lines counts records - nothing is ever split across lines
+phabfive --format=jsonl maniphest search --tag=projectname | wc -l
+
+# Append a run to a log
+phabfive --format=jsonl maniphest search --assigned=@me >> tasks.jsonl
+```
+
+`--format=ndjson` is accepted as a spelling of `jsonl`. `PHAB_FALLBACK` sets the format
+used when stdout is not a TTY and accepts `yaml`, `json` and `jsonl`.
 
 ## Dependency Updates
 

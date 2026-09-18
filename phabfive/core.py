@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 # phabfive imports
 from phabfive.constants import (
+    FORMAT_ALIASES,
     REQUIRED,
     MISSING_CONFIG_HINTS,
     VALIDATORS,
@@ -267,8 +268,11 @@ class Phabfive:
 
                 raise PhabfiveConfigException(error)
 
-        # Set fallback format from config (used when stdout is not a TTY)
-        Phabfive._fallback_format = self.conf.get("PHAB_FALLBACK", "yaml")
+        # Set fallback format from config (used when stdout is not a TTY).
+        # Resolve aliases here so the rest of the program only ever sees a
+        # real OutputFormat value, exactly as --format=ndjson is resolved.
+        fallback = self.conf.get("PHAB_FALLBACK", "yaml")
+        Phabfive._fallback_format = FORMAT_ALIASES.get(fallback, fallback)
 
         self.phab = Phabricator(
             host=self._normalize_url(self.conf.get("PHAB_URL")),

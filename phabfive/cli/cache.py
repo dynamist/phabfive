@@ -9,6 +9,7 @@ from phabfive import cache
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_cache_namespace, complete_cached_host
 from phabfive.core import Phabfive
+from phabfive.json_output import emit_record
 
 cache_app = typer.Typer(
     cls=AgentFooterGroup,
@@ -174,10 +175,9 @@ def info(ctx: typer.Context) -> None:
     described = cache.describe()
     output_format = _get_output_format(ctx)
 
-    if output_format == "json":
-        import json
-
-        print(json.dumps(described, indent=2))
+    if output_format in ("json", "jsonl"):
+        # A single top-level object, so jsonl is one line rather than an array
+        emit_record(described, output_format)
         return
 
     if output_format in ("yaml", "strict"):

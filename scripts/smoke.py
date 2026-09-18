@@ -362,6 +362,15 @@ def main() -> int:
                 args.timeout,
             ),
         ),
+        (
+            "maniphest show jsonl (offline)",
+            lambda home: check_offline_command(
+                executable,
+                ["--format=jsonl", "maniphest", "show", "T1"],
+                home,
+                args.timeout,
+            ),
+        ),
     ]
 
     failures = []

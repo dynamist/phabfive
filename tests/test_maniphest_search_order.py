@@ -623,6 +623,7 @@ class TestTemplateSearchHeaders:
         ("output_format", "payload"),
         [
             ("json", '[{"Task": {"Name": "Example"}}]'),
+            ("jsonl", '{"Task": {"Name": "Example"}}'),
             ("yaml", "- Task:\n    Name: Example"),
         ],
     )
@@ -643,6 +644,11 @@ class TestTemplateSearchHeaders:
         assert "Named search" not in result.output
         if output_format == "json":
             assert json.loads(result.output) == [{"Task": {"Name": "Example"}}]
+        elif output_format == "jsonl":
+            lines = result.output.splitlines()
+            assert [json.loads(line) for line in lines] == [
+                {"Task": {"Name": "Example"}}
+            ]
         else:
             assert yaml.safe_load(result.output) == [{"Task": {"Name": "Example"}}]
 

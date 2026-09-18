@@ -17,7 +17,7 @@ Cross-cutting features:
 - **Monogram shortcuts** - `phabfive T123` expands to `phabfive maniphest show T123`
 - **Batch editing** - Edit multiple objects at once: `phabfive edit T1,T2,T3 --status=resolved`
 - **Shell completion** - Tab completion for commands, options, and values
-- **Machine-readable output** - `--format=json` or `--format=yaml` for scripting and AI agents
+- **Machine-readable output** - `--format=json`, `--format=jsonl` or `--format=yaml` for scripting and AI agents
 - **Agent skill** - `phabfive --skill` prints a ready-to-use skill file for AI agents
 - **Quiet by default** - `-v` reports which filters a search actually applied
 
