@@ -2,7 +2,7 @@
 
 CLI for [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https://we.phorge.it/) - built for humans and AI agents.
 
-![phabfive maniphest show](https://raw.githubusercontent.com/dynamist/phabfive/master/docs/maniphest-show.png)
+![phabfive maniphest show](https://raw.githubusercontent.com/dynamist/phabfive/main/docs/maniphest-show.png)
 
 ## Features
 
@@ -35,7 +35,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv tool install phabfive
 
 # Install from Github to get unreleased features and fixes
-uv tool install git+https://github.com/dynamist/phabfive@master
+uv tool install git+https://github.com/dynamist/phabfive
 ```
 
 If you prefer [mise-en-place](https://mise.jdx.dev/) the polyglot tool version manager:

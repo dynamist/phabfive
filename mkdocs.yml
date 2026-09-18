@@ -2,6 +2,7 @@
 site_name: Phabfive
 theme: readthedocs
 repo_url: https://github.com/dynamist/phabfive
+edit_uri: edit/main/docs/
 
 nav:
     - Introduction: 'index.md'

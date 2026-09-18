@@ -71,7 +71,7 @@ Add release notes to `CHANGELOG.md`.
 ```bash
 git add pyproject.toml CHANGELOG.md
 git commit -m "Release v0.6.0"
-git push origin master
+git push origin main
 ```
 
 **4. Create and Push Tag**
@@ -131,7 +131,7 @@ cosign verify ghcr.io/dynamist/phabfive:0.7.0 \
 # Edit pyproject.toml to "0.7.0-dev.0"
 git add pyproject.toml
 git commit -m "Bump version to 0.7.0-dev.0"
-git push origin master
+git push origin main
 ```
 
 ## Manual Release (Legacy)
