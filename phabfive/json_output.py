@@ -26,6 +26,35 @@ def _exit_on_closed_pipe():
     sys.exit(0)
 
 
+def iter_records(records, output_format):
+    """Serialise records, yielding each chunk that should be printed.
+
+    ``jsonl`` yields one compact object per line, ``json`` yields the whole
+    indented array as a single string. Callers that must keep the printing
+    themselves - passphrase, which intentionally writes secrets to stdout and
+    carries the static-analysis suppression for it - iterate this instead of
+    calling :func:`emit_records`, so no suppression has to live in this
+    module and blind it for every other caller.
+
+    Parameters
+    ----------
+    records : list
+        JSON-serialisable dictionaries, already stripped of internal keys.
+    output_format : str
+        Either 'jsonl' or anything else, which is treated as 'json'.
+
+    Yields
+    ------
+    str
+        A line for 'jsonl', or the one array for 'json'.
+    """
+    if output_format == "jsonl":
+        for record in records:
+            yield json.dumps(record, default=str)
+    else:
+        yield json.dumps(records, indent=2, default=str)
+
+
 def emit_records(records, output_format):
     """Print already-built records.
 
@@ -41,12 +70,9 @@ def emit_records(records, output_format):
         Either 'jsonl' or anything else, which is treated as 'json'.
     """
     try:
-        if output_format == "jsonl":
-            for record in records:
-                print(json.dumps(record, default=str))
-                sys.stdout.flush()
-        else:
-            print(json.dumps(records, indent=2, default=str))
+        for chunk in iter_records(records, output_format):
+            print(chunk)
+            sys.stdout.flush()
     except BrokenPipeError:
         _exit_on_closed_pipe()
 
@@ -64,8 +90,8 @@ def emit_record(record, output_format):
     try:
         if output_format == "jsonl":
             print(json.dumps(record, default=str))
-            sys.stdout.flush()
         else:
             print(json.dumps(record, indent=2, default=str))
+        sys.stdout.flush()
     except BrokenPipeError:
         _exit_on_closed_pipe()
