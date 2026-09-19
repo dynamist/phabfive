@@ -319,6 +319,21 @@ catches a binary built from the wrong revision. It imports `canonical_version` f
 as the same version - tag `v0.11.0-rc.1` and the `0.11.0rc1` hatchling builds compare
 equal.
 
+**The runner label decides the architecture, not the asset name.** `macos-14` and
+`macos-latest` are both arm64, which is how v0.10.0 published an arm64 binary as
+`phabfive-macos-amd64`. The macOS rows are pinned to `macos-15-intel` (x86_64) and
+`macos-15` (arm64); `macos-15-intel` is the last x86_64 image Actions will offer and goes
+away in August 2027. `scripts/check_arch.py` reads each built binary's ELF, Mach-O or PE
+header and refuses one that does not match the `arch` its matrix row claims - reading the
+header rather than shelling out to `file`, which the Windows runners do not have.
+`scripts/smoke.py` structurally cannot catch this, because it runs each binary on the
+machine that built it, where the architecture is native whatever the runner turned out to
+be. Verify a release the same way:
+
+```bash
+gh release download v0.10.0 -R dynamist/phabfive -p 'phabfive-macos-*' && file phabfive-macos-*
+```
+
 **Artifacts produced:**
 - Python wheel and sdist → PyPI
 - Standalone executables for 6 platforms → GitHub Releases:

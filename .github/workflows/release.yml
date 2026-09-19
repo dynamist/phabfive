@@ -74,9 +74,14 @@ jobs:
             runner: ubuntu-latest
             artifact_name: phabfive
             asset_name: phabfive-linux-amd64
+          # macos-14 and macos-latest are both arm64 labels, so this row used
+          # to build an arm64 binary and publish it as phabfive-macos-amd64 --
+          # "Bad CPU type in executable" on the Intel Macs it was meant for.
+          # macos-15-intel is the x86_64 image, and the last one Actions will
+          # offer: it goes away in August 2027.
           - os: macos
             arch: amd64
-            runner: macos-14
+            runner: macos-15-intel
             artifact_name: phabfive
             asset_name: phabfive-macos-amd64
           - os: windows
@@ -90,9 +95,12 @@ jobs:
             runner: ubuntu-24.04-arm
             artifact_name: phabfive
             asset_name: phabfive-linux-arm64
+          # Pinned rather than macos-latest: a release binary should be built
+          # on the oldest macOS it targets, and the alias raises that floor
+          # silently whenever GitHub moves it.
           - os: macos
             arch: arm64
-            runner: macos-latest
+            runner: macos-15
             artifact_name: phabfive
             asset_name: phabfive-macos-arm64
           - os: windows
@@ -143,6 +151,16 @@ jobs:
       - name: Rename artifact
         shell: bash
         run: mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
+
+      # The asset name is the only thing a user picking a download has to go
+      # on, and until now nothing tied it to what was actually built: v0.10.0
+      # published an arm64 binary as phabfive-macos-amd64, because macos-14 is
+      # an arm64 label. The smoke test below cannot see this -- it runs the
+      # binary on the machine that built it, which is native whatever that
+      # machine is -- so the header is read instead.
+      - name: Check the executable matches its name
+        shell: bash
+        run: python scripts/check_arch.py --expect ${{ matrix.arch }} dist/${{ matrix.asset_name }}
 
       # v0.10.0-rc.1 shipped six executables that could not start, and every
       # job still reported success, because nothing ran what it built. Each
