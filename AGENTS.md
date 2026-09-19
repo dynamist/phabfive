@@ -292,6 +292,33 @@ git tag -a v0.7.0 -m "Release v0.7.0"
 git push origin v0.7.0
 ```
 
+**The tag has to agree with `pyproject.toml`.** Every artifact is named after
+`pyproject.toml` while the release is named after the tag, so the two disagreeing
+publishes a release full of artifacts for another version - which is how `v0.10.0-rc.1`
+went out over a `pyproject.toml` that still read `0.10.0-dev.0`, with every job green.
+From rc.2 on they were kept in step by hand, which is a convention, not a check. The
+same slip on a final tag publishes to PyPI, where a version cannot be replaced.
+
+`scripts/check_version.py` is the check. It has its own job that `build`,
+`build-executables` and `build-image` all `needs:`, so a mismatch is answered in seconds
+rather than after six PyInstaller runs and two image builds, and it is named explicitly
+in `github-release`'s `if:` because `always()` makes an unlisted job no gate at all. It
+also refuses any `dev` version outright: `docs/releasing.md` ends a release by bumping
+the tree to one, so a tag pushed before the next release's bump is the easy mistake, and
+equality alone would pass it. Run it before tagging:
+
+```bash
+python3 scripts/check_version.py v0.11.0
+```
+
+Both release `scripts/smoke.py` runs pass `--expect-version "${GITHUB_REF_NAME#v}"`,
+which is the same check from the other end: `check_version.py` compares the sources,
+`--expect-version` compares what the built artifact reports at runtime, which is what
+catches a binary built from the wrong revision. It imports `canonical_version` from
+`smoke.py` rather than restating the rule, so the two ends cannot drift on what counts
+as the same version - tag `v0.11.0-rc.1` and the `0.11.0rc1` hatchling builds compare
+equal.
+
 **Artifacts produced:**
 - Python wheel and sdist → PyPI
 - Standalone executables for 6 platforms → GitHub Releases:
