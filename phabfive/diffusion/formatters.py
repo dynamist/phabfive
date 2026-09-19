@@ -16,7 +16,7 @@ def format_uris(phab, repo, clone_uri=False):
     phab : Phabricator
         Phabricator API client
     repo : str
-        Repository ID (e.g., "R123") or short name
+        Repository monogram (e.g., "R123"), callsign or short name
     clone_uri : bool, optional
         If True, only return clone URIs
 
@@ -25,8 +25,8 @@ def format_uris(phab, repo, clone_uri=False):
     list
         List of URI strings
     """
-    if validate_repo_identifier(repo):
-        repo = repo.replace("R", "")
+    # Passed whole: fetch_uris matches the monogram itself, and stripping the
+    # "R" here would leave it comparing a bare number against short names.
     return fetch_uris(phab, repo_id=repo, clone_uri=clone_uri)
 
 
@@ -85,7 +85,7 @@ def format_branches(phab, repo):
     phab : Phabricator
         Phabricator API client
     repo : str
-        Repository ID (e.g., "R123") or short name
+        Repository monogram (e.g., "R123"), callsign or short name
 
     Returns
     -------

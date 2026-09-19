@@ -505,3 +505,80 @@ class TestRepositoryPagination:
         from phabfive.diffusion.fetchers import fetch_repositories
 
         assert len(fetch_repositories(_phab_with_repos([_repo("only")]))) == 1
+
+
+class TestRepositoryIdentifiers:
+    """A repository is addressable by monogram and callsign, not just shortName."""
+
+    def _repos(self):
+        nameless = _repo("nameless")
+        nameless["id"] = 42
+        nameless["fields"]["shortName"] = None
+        nameless["fields"]["callsign"] = "TRON"
+        return [_repo("plain"), nameless]
+
+    def test_resolves_by_short_name(self):
+        from phabfive.diffusion.fetchers import match_repository
+
+        found = match_repository(self._repos(), "plain")
+
+        assert found["fields"]["name"] == "plain"
+
+    def test_resolves_by_monogram(self):
+        from phabfive.diffusion.fetchers import match_repository
+
+        found = match_repository(self._repos(), "R42")
+
+        assert found["id"] == 42
+
+    def test_resolves_by_callsign(self):
+        from phabfive.diffusion.fetchers import match_repository
+
+        found = match_repository(self._repos(), "TRON")
+
+        assert found["id"] == 42
+
+    def test_a_repository_without_a_short_name_is_still_reachable(self):
+        """A repository created without a short name is not hypothetical."""
+        from phabfive.diffusion.fetchers import match_repository
+
+        assert match_repository(self._repos(), "R42")["fields"]["shortName"] is None
+
+    def test_unknown_identifier_is_none(self):
+        from phabfive.diffusion.fetchers import match_repository
+
+        assert match_repository(self._repos(), "R999") is None
+
+    def test_uri_edit_resolves_a_nameless_repository(self):
+        from phabfive.diffusion.resolvers import resolve_uri_record
+
+        nameless = _repo("nameless")
+        nameless["id"] = 42
+        nameless["fields"]["shortName"] = None
+        nameless["attachments"]["uris"]["uris"] = [
+            {"id": 7, "fields": {"uri": {"display": "git@example.com:x.git"}}}
+        ]
+
+        found = resolve_uri_record(
+            _phab_with_repos([nameless]), "R42", "git@example.com:x.git"
+        )
+
+        assert found["id"] == 7
+
+    def test_uri_list_accepts_a_monogram(self):
+        """SKILL.md documents `diffusion uri list R5 --clone`."""
+        from phabfive.diffusion.formatters import format_uris
+
+        repo = _repo("anything")
+        repo["id"] = 5
+        repo["attachments"]["uris"]["uris"] = [
+            {
+                "id": 1,
+                "fields": {
+                    "uri": {"display": "git@example.com:x.git"},
+                    "display": {"effective": "always"},
+                },
+            }
+        ]
+
+        assert format_uris(_phab_with_repos([repo]), "R5") == ["git@example.com:x.git"]
