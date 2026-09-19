@@ -21,6 +21,7 @@ from phabfive.cli.completers import (
     complete_user_filter,
 )
 from phabfive.constants import MONOGRAMS
+from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
 from phabfive.json_output import emit_records
 
@@ -558,8 +559,14 @@ def edit(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview changes without applying"
     ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Apply title/content changes without confirming (required for non-interactive use)",
+    ),
     force: bool = typer.Option(
-        False, "--force", help="Apply changes without confirmation"
+        False, "--force", hidden=True, help="Deprecated alias for --yes"
     ),
 ) -> None:
     """Edit an existing paste.
@@ -576,6 +583,7 @@ def edit(
     """
     from phabfive.editor import confirm_text_change, edit_text
 
+    force = resolve_assume_yes(yes, force)
     _setup_output_options(ctx)
     paste = _get_paste_app()
 
@@ -637,7 +645,7 @@ def edit(
     # Show diff for content changes
     if final_content is not None and not dry_run:
         confirmed, return_code = confirm_text_change(
-            current_paste["content"], final_content, force
+            current_paste["content"], final_content, force, filename="content"
         )
         if not confirmed:
             raise typer.Exit(return_code or 0)

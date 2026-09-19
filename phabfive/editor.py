@@ -100,14 +100,30 @@ def show_diff(old_text, new_text, filename="description"):
             print(line, end="")
 
 
-def confirm_text_change(old_text, new_text, force, filename="description"):
-    """Show diff and get confirmation for text change.
+def resolve_assume_yes(yes, force):
+    """Combine --yes with the deprecated --force alias.
 
     Args:
-        old_text (str): Current text content
-        new_text (str): New text content
-        force (bool): Skip confirmation prompt
-        filename (str): Name to show in diff header (e.g., "title", "description")
+        yes (bool): Value of --yes
+        force (bool): Value of the hidden --force alias
+
+    Returns:
+        bool: Whether confirmation prompts should be answered automatically
+    """
+    if force:
+        sys.stderr.write("WARNING: --force is deprecated, use --yes instead.\n")
+    return yes or force
+
+
+def confirm_apply(assume_yes, prompt="Apply changes?"):
+    """Ask for confirmation, or take it from assume_yes.
+
+    This only answers a prompt. It never decides whether a write happens - that
+    stays with --dry-run, which short-circuits before the API call.
+
+    Args:
+        assume_yes (bool): Skip the prompt and confirm
+        prompt (str): Question to ask when there is a terminal
 
     Returns:
         tuple: (confirmed: bool, return_code: int or None)
@@ -115,22 +131,44 @@ def confirm_text_change(old_text, new_text, force, filename="description"):
     """
     import typer
 
-    print()
-    show_diff(old_text, new_text, filename=filename)
-    print()
-
-    if force:
+    if assume_yes:
         return (True, None)
 
+    # The diff went to stdout; flush it so a merged capture keeps the order.
+    sys.stdout.flush()
+
     if not sys.stdin.isatty():
-        sys.stderr.write("Error: --force required for non-interactive mode\n")
+        sys.stderr.write("Error: --yes required for non-interactive mode\n")
         return (False, 1)
 
     try:
-        if typer.confirm("Apply changes?"):
+        if typer.confirm(prompt):
             return (True, None)
         else:
             return (False, 0)
     except typer.Abort:
         print("Cancelled")
         return (False, 0)
+
+
+def confirm_text_change(
+    old_text, new_text, assume_yes, filename="description", dry_run=False
+):
+    """Show diff and get confirmation for text change.
+
+    Args:
+        old_text (str): Current text content
+        new_text (str): New text content
+        assume_yes (bool): Skip confirmation prompt
+        filename (str): Name to show in diff header (e.g., "title", "description")
+        dry_run (bool): Previewing only, so there is nothing to confirm
+
+    Returns:
+        tuple: (confirmed: bool, return_code: int or None)
+               If confirmed is False, return_code indicates exit code
+    """
+    print()
+    show_diff(old_text, new_text, filename=filename)
+    print()
+
+    return confirm_apply(assume_yes or dry_run)

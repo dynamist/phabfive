@@ -11,8 +11,55 @@ from phabfive.edit.validators import (
     get_task_boards,
     validate_board_column_context,
 )
+from phabfive.editor import confirm_apply, show_diff
 
 log = logging.getLogger(__name__)
+
+
+def _confirm_batch_text_changes(validated_tasks, title, description, force, dry_run):
+    """Show one diff per task for a title/description rewrite, then confirm once.
+
+    Args:
+        validated_tasks (list): Dicts with 'task_id' and 'task_data' keys
+        title (str): New title, or None
+        description (str): New description, or None
+        force (bool): Skip the confirmation prompt
+        dry_run (bool): Previewing only, so there is nothing to confirm
+
+    Returns:
+        tuple: (confirmed: bool, return_code: int or None)
+    """
+    if dry_run or (title is None and description is None):
+        return (True, None)
+
+    changing = 0
+    for task in validated_tasks:
+        fields = task["task_data"]["fields"]
+        task_id = task["task_id"]
+        changed = False
+
+        if description is not None:
+            current = fields.get("description", {}).get("raw", "")
+            if current != description:
+                print()
+                show_diff(current, description, filename=f"T{task_id}/description")
+                changed = True
+
+        if title is not None:
+            current = fields.get("name", "")
+            if current != title:
+                print()
+                show_diff(current, title, filename=f"T{task_id}/title")
+                changed = True
+
+        if changed:
+            changing += 1
+
+    if not changing:
+        return (True, None)
+
+    print()
+    return confirm_apply(force, prompt=f"Apply changes to {changing} task(s)?")
 
 
 def edit_tasks_batch(
@@ -29,6 +76,7 @@ def edit_tasks_batch(
     comment=None,
     space=None,
     dry_run=False,
+    force=False,
 ):
     """Edit multiple tasks in batch (atomic validation).
 
@@ -46,6 +94,7 @@ def edit_tasks_batch(
         comment (str): Comment to add
         space (str): Space to move the tasks to
         dry_run (bool): Show changes without applying
+        force (bool): Skip confirmation prompts
 
     Returns:
         int: Return code (0 for success, 1 for failure)
@@ -104,6 +153,15 @@ def edit_tasks_batch(
 
         sys.stderr.write("\nNo tasks were modified (atomic batch failure).\n")
         return 1
+
+    # Phase 1.5: confirm title/description rewrites, as the single-task path does.
+    # Column, status and priority edits stay promptless.
+    confirmed, return_code = _confirm_batch_text_changes(
+        validated_tasks, title, description, force, dry_run
+    )
+    if not confirmed:
+        sys.stderr.write("No tasks were modified.\n")
+        return return_code
 
     # Phase 2: Process all validated tasks
     success_count = 0
