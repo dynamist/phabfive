@@ -14,6 +14,7 @@ from phabfive.cli.completers import (
     complete_tag,
     complete_user,
 )
+from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
 
 
@@ -99,10 +100,17 @@ def edit_command(
         "--dry-run",
         help="Show changes without applying them",
     ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Apply title/description changes without confirming (required for non-interactive use)",
+    ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="Skip confirmation prompt (required for non-interactive use)",
+        hidden=True,
+        help="Deprecated alias for --yes",
     ),
 ) -> None:
     """Edit monograms (routes to app-specific edit command)
@@ -120,6 +128,7 @@ def edit_command(
         phabfive edit T123 --tag="Sprint" --column=forward --comment="Moving forward"
         phabfive edit T123 T124 --space=Archive
     """
+    force = resolve_assume_yes(yes, force)
     edit_handler = _get_edit_app()
 
     retcode = edit_handler.edit_objects(

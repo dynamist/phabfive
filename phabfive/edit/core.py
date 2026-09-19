@@ -152,6 +152,7 @@ class Edit(Phabfive):
                             comment=comment,
                             space=space,
                             dry_run=dry_run,
+                            force=force,
                         )
                     elif object_type == "passphrase":
                         sys.stderr.write(
@@ -197,6 +198,7 @@ class Edit(Phabfive):
                         comment=comment,
                         space=space,
                         dry_run=dry_run,
+                        force=force,
                     )
                     if retcode != 0:
                         return retcode
@@ -282,7 +284,7 @@ class Edit(Phabfive):
                     return 0
 
                 confirmed, return_code = confirm_text_change(
-                    current_desc, new_desc, force
+                    current_desc, new_desc, force, dry_run=dry_run
                 )
                 if not confirmed:
                     return return_code
@@ -298,7 +300,7 @@ class Edit(Phabfive):
                 new_desc = sys.stdin.read().rstrip()
 
                 confirmed, return_code = confirm_text_change(
-                    current_desc, new_desc, force
+                    current_desc, new_desc, force, dry_run=dry_run
                 )
                 if not confirmed:
                     return return_code
@@ -307,7 +309,7 @@ class Edit(Phabfive):
             elif description is not None:
                 # Use provided description (including empty string to clear)
                 confirmed, return_code = confirm_text_change(
-                    current_desc, description, force
+                    current_desc, description, force, dry_run=dry_run
                 )
                 if not confirmed:
                     return return_code

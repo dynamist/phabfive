@@ -56,7 +56,7 @@ def create_task(phabfive):
 
     def create(*args):
         title = f"E2E test {uuid.uuid4().hex[:8]}"
-        output = phabfive("maniphest", "create", title, "--force", *args)
+        output = phabfive("maniphest", "create", title, "--yes", *args)
         match = re.search(r"/(T\d+)\b", output)
         assert match, f"no task link in output: {output}"
         return match.group(1), title

@@ -445,6 +445,171 @@ class TestBoardColumnValidation:
         assert error is None
 
 
+class TestBatchConfirmation:
+    """Tests that the non-interactive guard covers N tasks, not just one."""
+
+    @staticmethod
+    def _tasks(n=2):
+        return [{"object_id": str(100 + i)} for i in range(n)]
+
+    @staticmethod
+    def _maniphest(description="current", name="current title", boards=None):
+        m = mock.MagicMock()
+        m._get_task_data.return_value = {
+            "fields": {
+                "name": name,
+                "description": {"raw": description},
+            },
+            "attachments": {"columns": {"boards": boards or {}}},
+        }
+        m.edit_task_by_id.return_value = {"task_id": "100", "changes": []}
+        return m
+
+    def test_description_batch_refuses_without_yes(self, capsys):
+        """The single-task guard must not disappear once there are two targets."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with mock.patch("sys.stdin.isatty", return_value=False):
+            retcode = edit_tasks_batch(
+                self._tasks(), maniphest, description="new", force=False
+            )
+
+        assert retcode == 1
+        maniphest.edit_task_by_id.assert_not_called()
+        err = capsys.readouterr().err
+        assert "--yes required for non-interactive mode" in err
+        assert "No tasks were modified." in err
+
+    def test_title_batch_refuses_without_yes(self, capsys):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with mock.patch("sys.stdin.isatty", return_value=False):
+            retcode = edit_tasks_batch(
+                self._tasks(), maniphest, title="new title", force=False
+            )
+
+        assert retcode == 1
+        maniphest.edit_task_by_id.assert_not_called()
+        assert "--yes required" in capsys.readouterr().err
+
+    def test_description_batch_applies_with_yes(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with mock.patch("sys.stdin.isatty", return_value=False):
+            retcode = edit_tasks_batch(
+                self._tasks(3), maniphest, description="new", force=True
+            )
+
+        assert retcode == 0
+        assert maniphest.edit_task_by_id.call_count == 3
+
+    def test_column_batch_never_prompts(self):
+        """Column, status and priority edits stay promptless - a stray --yes is a no-op."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest(
+            boards={"PHID-PROJ-board1": {"columns": [{"phid": "PHID-PCOL-1"}]}}
+        )
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=False),
+            mock.patch("typer.confirm") as mock_confirm,
+        ):
+            retcode = edit_tasks_batch(
+                self._tasks(), maniphest, column="Done", status="resolved", force=False
+            )
+
+        assert retcode == 0
+        assert maniphest.edit_task_by_id.call_count == 2
+        mock_confirm.assert_not_called()
+
+    def test_dry_run_beats_yes(self):
+        """--dry-run decides whether a write happens; --yes only answers a prompt."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=False),
+            mock.patch("typer.confirm") as mock_confirm,
+        ):
+            retcode = edit_tasks_batch(
+                self._tasks(), maniphest, description="new", force=True, dry_run=True
+            )
+
+        assert retcode == 0
+        mock_confirm.assert_not_called()
+        for call in maniphest.edit_task_by_id.call_args_list:
+            assert call.kwargs["dry_run"] is True
+
+    def test_dry_run_does_not_require_yes(self):
+        """Preview changes nothing, so it must not demand the flag."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with mock.patch("sys.stdin.isatty", return_value=False):
+            retcode = edit_tasks_batch(
+                self._tasks(), maniphest, description="new", force=False, dry_run=True
+            )
+
+        assert retcode == 0
+        assert maniphest.edit_task_by_id.call_count == 2
+
+    def test_unchanged_text_does_not_prompt(self):
+        """Nothing to confirm when every task already holds the new value."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest(description="same")
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=False),
+            mock.patch("typer.confirm") as mock_confirm,
+        ):
+            retcode = edit_tasks_batch(
+                self._tasks(), maniphest, description="same", force=False
+            )
+
+        assert retcode == 0
+        mock_confirm.assert_not_called()
+
+    def test_interactive_decline_modifies_nothing(self, capsys):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=True),
+            mock.patch("typer.confirm", return_value=False),
+        ):
+            retcode = edit_tasks_batch(
+                self._tasks(), maniphest, description="new", force=False
+            )
+
+        assert retcode == 0
+        maniphest.edit_task_by_id.assert_not_called()
+        assert "No tasks were modified." in capsys.readouterr().err
+
+    def test_prompt_counts_only_changing_tasks(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=True),
+            mock.patch("typer.confirm", return_value=True) as mock_confirm,
+        ):
+            edit_tasks_batch(self._tasks(3), maniphest, description="new", force=False)
+
+        mock_confirm.assert_called_once_with("Apply changes to 3 task(s)?")
+
+
 class TestStdinAutoDetection:
     """Tests for stdin auto-detection."""
 

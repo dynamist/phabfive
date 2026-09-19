@@ -25,6 +25,7 @@ from phabfive.cli.completers import (
     complete_user_list_filter,
 )
 from phabfive.constants import MONOGRAMS
+from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
 
 maniphest_app = typer.Typer(
@@ -260,10 +261,17 @@ def create(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview without creating task"
     ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Create without confirming the $EDITOR description (required for non-interactive use)",
+    ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="Skip confirmation prompt (required for non-interactive use)",
+        hidden=True,
+        help="Deprecated alias for --yes",
     ),
 ) -> None:
     """Create a new Maniphest task.
@@ -277,6 +285,7 @@ def create(
         phabfive maniphest create "Task" --space=S3
         echo "Description" | phabfive maniphest create "Task" --description=-
     """
+    force = resolve_assume_yes(yes, force)
     maniphest = _get_maniphest_app()
 
     # Merge positional and option title (positional takes precedence)
@@ -775,10 +784,17 @@ def edit(
         "--dry-run",
         help="Show changes without applying them",
     ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Apply title/description changes without confirming (required for non-interactive use)",
+    ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="Skip confirmation prompt (required for non-interactive use)",
+        hidden=True,
+        help="Deprecated alias for --yes",
     ),
 ) -> None:
     """Edit one or more Maniphest tasks.
@@ -826,6 +842,7 @@ def edit(
     final_title = positional_title or title_opt
 
     # Delegate to Edit class for processing
+    force = resolve_assume_yes(yes, force)
     edit_handler = _get_edit_app()
 
     retcode = edit_handler.edit_objects(

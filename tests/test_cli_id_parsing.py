@@ -245,3 +245,38 @@ class TestManiphestEditIdParsing:
         kwargs = mock_edit.edit_objects.call_args[1]
         assert kwargs["object_id"] == "T123"
         assert kwargs["title"] == "New Title"
+
+    def test_no_confirmation_flag(self):
+        result, mock_edit = self._invoke(["T123", "--status=resolved"])
+
+        assert result.exit_code == 0
+        assert mock_edit.edit_objects.call_args[1]["force"] is False
+
+    def test_yes_flag(self):
+        result, mock_edit = self._invoke(["T123", "--status=resolved", "--yes"])
+
+        assert result.exit_code == 0
+        assert mock_edit.edit_objects.call_args[1]["force"] is True
+        assert "deprecated" not in _output(result)
+
+    def test_yes_short_flag(self):
+        result, mock_edit = self._invoke(["T123", "--status=resolved", "-y"])
+
+        assert result.exit_code == 0
+        assert mock_edit.edit_objects.call_args[1]["force"] is True
+
+    def test_force_still_works_but_warns(self):
+        result, mock_edit = self._invoke(["T123", "--status=resolved", "--force"])
+
+        assert result.exit_code == 0
+        assert mock_edit.edit_objects.call_args[1]["force"] is True
+        assert "--force is deprecated, use --yes instead." in _output(result)
+
+    def test_force_is_hidden_from_help(self):
+        result = runner.invoke(maniphest_app, ["edit", "--help"])
+
+        assert result.exit_code == 0
+        output = _output(result)
+        assert "--yes" in output
+        assert "-y" in output
+        assert "--force" not in output

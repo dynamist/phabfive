@@ -229,13 +229,14 @@ moment you run them.
 - `paste create` with no file and no `--content`, and `paste comment` with no text, do the
   same.
 - Any change to a title, description or paste content prints a diff and asks to confirm.
-  Pass `--force` to apply it non-interactively; without a terminal and without `--force`
-  the command fails with `--force required for non-interactive mode`.
+  Pass `--yes` to apply it non-interactively; without a terminal and without `--yes`
+  the command fails with `--yes required for non-interactive mode`. This holds whether you
+  edit one task or many. `--dry-run` never asks, so it never needs `--yes`.
 
 Feed long text through stdin instead of an editor:
 
 ```bash
-printf '%s\n' "$body" | phabfive maniphest edit T123 --description=- --force
+printf '%s\n' "$body" | phabfive maniphest edit T123 --description=- --yes
 ```
 
 ### Directional edits
@@ -328,7 +329,9 @@ touches the server.
   before the subcommand.
 - Add `--space='*'` before reporting that a task or project does not exist.
 - Dry-run every create, edit and batch, and show the user the preview before applying it.
-- Pass `--force` only for a change the user has asked for; it exists to skip a confirmation
-  prompt, not to override a validation error.
+- Pass `--yes` when applying a title, description or paste-content change without a
+  terminal; it answers the confirmation prompt and nothing else. It is not needed for
+  `--status`, `--priority`, `--tag`, `--column`, `--assign`, `--space` or `--comment`, and
+  it does not override a validation error. `--force` is a deprecated alias for it.
 - Never run a data-altering command against an instance the user has not named.
 - Never print a Passphrase secret anywhere except a direct answer to a request for it.

@@ -23,7 +23,7 @@ def test_create_on_a_workboard(phabfive, create_task):
 
 def test_edit_status(phabfive, create_task):
     task_id, _title = create_task()
-    phabfive("maniphest", "edit", task_id, "--status", "resolved", "--force")
+    phabfive("maniphest", "edit", task_id, "--status", "resolved")
     [task] = phabfive("maniphest", "show", task_id, json_output=True)
     assert task["Task"]["Status"] == "Resolved"
 
