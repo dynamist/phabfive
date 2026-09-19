@@ -168,9 +168,17 @@ def edit(
     cred: Optional[str] = typer.Option(
         None, "--cred", "-c", help="Change credential (e.g., K2)"
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show the change without making it"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirming"),
+    # No -i here: it already means --io on this command.
+    interactive: bool = typer.Option(
+        False, "--interactive", help="Review the change and confirm"
+    ),
 ) -> None:
     """Edit a URI for a repository."""
-    diffusion = _get_diffusion_app()
+    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
 
     if enable and disable:
         typer.echo("ERROR: Cannot specify both --enable and --disable", err=True)
@@ -186,19 +194,44 @@ def edit(
         typer.echo("Please input minimum one option", err=True)
         raise typer.Exit(1)
 
-    object_id = diffusion.get_object_identifier(repo_name=repo, uri_name=uri)
+    try:
+        assume_yes = resolve_assume_yes(yes, False, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
 
-    result = diffusion.edit_uri(
+    diffusion = _get_diffusion_app()
+
+    uri_record = diffusion.get_uri_record(repo_name=repo, uri_name=uri)
+    object_id = uri_record["id"]
+
+    transactions, changes = diffusion.build_uri_edit(
+        uri_record,
         uri=new_uri,
         io=io,
         display=display,
         credential=cred,
         disable=disable_flag,
-        object_identifier=object_id,
     )
 
-    if result:
-        typer.echo("OK")
+    if not transactions:
+        typer.echo(f"{uri}: No changes (already at target state)")
+        return
+
+    if dry_run:
+        render_changes(uri, changes, header=f"[DRY RUN] Would apply to {uri}:")
+        return
+
+    if interactive:
+        render_changes(uri, changes, header=f"Would apply to {uri}:")
+        confirmed, return_code = confirm_apply(assume_yes)
+        if not confirmed:
+            typer.echo("Nothing was changed.", err=True)
+            raise typer.Exit(return_code or 0)
+
+    diffusion.apply_uri_edit(object_id, transactions)
+
+    render_changes(uri, changes)
 
 
 # Branch commands

@@ -125,3 +125,284 @@ class TestRepoList:
             {"name": "alpha"},
             {"name": "zeta"},
         ]
+
+
+def _uri(
+    uri="https://github.com/dynamist/phabfive.git",
+    io="observe",
+    display="never",
+    disabled=False,
+    credential_phid=None,
+):
+    """A repository URI shaped the way diffusion.repository.search returns it."""
+    return {
+        "id": 10,
+        "phid": "PHID-RURI-test",
+        "fields": {
+            "repositoryPHID": "PHID-REPO-test",
+            "uri": {"raw": uri, "display": uri, "effective": uri},
+            "io": {"raw": io, "default": "none", "effective": io},
+            "display": {"raw": display, "default": "never", "effective": display},
+            "credentialPHID": credential_phid,
+            "disabled": disabled,
+        },
+    }
+
+
+def _phab_with_uri(uri_record, repo_short_name="myrepo"):
+    repo = _repo("myrepo", short_name=repo_short_name)
+    repo["attachments"]["uris"]["uris"] = [uri_record]
+    return _phab_with_repos([repo])
+
+
+class TestResolveUriRecord:
+    """Fetching a URI in full, so an edit can be shown before it is made."""
+
+    def test_returns_the_matching_uri(self):
+        from phabfive.diffusion.resolvers import resolve_uri_record
+
+        record = _uri()
+        phab = _phab_with_uri(record)
+
+        found = resolve_uri_record(
+            phab, "myrepo", "https://github.com/dynamist/phabfive.git"
+        )
+
+        assert found is record
+
+    def test_unknown_uri_raises(self):
+        from phabfive.diffusion.resolvers import resolve_uri_record
+
+        phab = _phab_with_uri(_uri())
+
+        with pytest.raises(PhabfiveDataException, match="Uri does not exist"):
+            resolve_uri_record(phab, "myrepo", "https://elsewhere/x.git")
+
+    def test_unknown_repo_raises(self):
+        from phabfive.diffusion.resolvers import resolve_uri_record
+
+        phab = _phab_with_uri(_uri())
+
+        with pytest.raises(PhabfiveDataException, match="does not exist"):
+            resolve_uri_record(phab, "nope", "https://github.com/dynamist/phabfive.git")
+
+
+class TestBuildUriEdit:
+    """`uri edit` has to say what it would change before changing it."""
+
+    def test_display_change_is_described(self, diffusion):
+        transactions, changes = diffusion.build_uri_edit(_uri(), display="always")
+
+        assert transactions == [{"type": "display", "value": "always"}]
+        assert changes == [{"field": "Display", "old": "never", "new": "always"}]
+
+    def test_value_already_set_is_not_a_change(self, diffusion):
+        transactions, changes = diffusion.build_uri_edit(_uri(), display="never")
+
+        assert transactions == []
+        assert changes == []
+
+    def test_disable_is_described_from_its_current_state(self, diffusion):
+        transactions, changes = diffusion.build_uri_edit(_uri(), disable=True)
+
+        assert transactions == [{"type": "disable", "value": True}]
+        assert changes == [{"field": "Disabled", "old": "False", "new": "True"}]
+
+    def test_several_options_at_once(self, diffusion):
+        transactions, changes = diffusion.build_uri_edit(
+            _uri(), io="read", display="always"
+        )
+
+        assert len(transactions) == 2
+        assert [c["field"] for c in changes] == ["I/O", "Display"]
+
+    def test_nothing_asked_for_is_no_change(self, diffusion):
+        assert diffusion.build_uri_edit(_uri()) == ([], [])
+
+    def test_building_never_calls_the_api(self, diffusion):
+        diffusion.build_uri_edit(_uri(), display="always")
+
+        diffusion.phab.diffusion.uri.edit.assert_not_called()
+
+
+class TestUriEditCredentialSecrecy:
+    """A credential is named by monogram; its secret never reaches the output."""
+
+    SECRET = "-----BEGIN OPENSSH PRIVATE KEY-----\nhunter2\n"
+
+    def _diffusion(self, diffusion):
+        diffusion.passphrase.get_secret = MagicMock(
+            return_value={
+                "id": 2,
+                "monogram": "K2",
+                "type": "ssh-key-text",
+                "material": {"privateKey": self.SECRET},
+            }
+        )
+        diffusion._validate_credential_type = MagicMock(
+            return_value="PHID-CDTL-newcred"
+        )
+        return diffusion
+
+    def test_the_change_names_the_monogram_not_the_secret(self, diffusion):
+        diffusion = self._diffusion(diffusion)
+        diffusion.phab.phid.query.return_value = {"PHID-CDTL-oldcred": {"name": "K1"}}
+
+        transactions, changes = diffusion.build_uri_edit(
+            _uri(credential_phid="PHID-CDTL-oldcred"), credential="K2"
+        )
+
+        assert transactions == [{"type": "credential", "value": "PHID-CDTL-newcred"}]
+        assert changes == [{"field": "Credential", "old": "K1", "new": "K2"}]
+
+        rendered = repr(changes)
+        assert self.SECRET not in rendered
+        assert "hunter2" not in rendered
+
+    def test_a_uri_with_no_credential_says_none(self, diffusion):
+        diffusion = self._diffusion(diffusion)
+
+        _, changes = diffusion.build_uri_edit(_uri(), credential="K2")
+
+        assert changes == [{"field": "Credential", "old": "(none)", "new": "K2"}]
+
+    def test_an_unnameable_credential_falls_back_to_its_phid(self, diffusion):
+        diffusion = self._diffusion(diffusion)
+        diffusion.phab.phid.query.side_effect = Exception("lookup failed")
+
+        _, changes = diffusion.build_uri_edit(
+            _uri(credential_phid="PHID-CDTL-oldcred"), credential="K2"
+        )
+
+        # Naming it is a convenience; it must never fail the edit.
+        assert changes == [
+            {"field": "Credential", "old": "PHID-CDTL-oldcred", "new": "K2"}
+        ]
+
+
+class TestEditUriComposition:
+    """edit_uri keeps its old shape on top of the new build/apply split."""
+
+    def test_dry_run_builds_but_does_not_apply(self, diffusion):
+        result = diffusion.edit_uri(
+            display="always", object_identifier=10, uri_record=_uri(), dry_run=True
+        )
+
+        assert result["dry_run"] is True
+        assert result["changes"] == [
+            {"field": "Display", "old": "never", "new": "always"}
+        ]
+        diffusion.phab.diffusion.uri.edit.assert_not_called()
+
+    def test_applying_sends_the_built_transactions(self, diffusion):
+        diffusion.edit_uri(display="always", object_identifier=10, uri_record=_uri())
+
+        diffusion.phab.diffusion.uri.edit.assert_called_once_with(
+            transactions=[{"type": "display", "value": "always"}],
+            objectIdentifier=10,
+        )
+
+    def test_no_change_applies_nothing(self, diffusion):
+        result = diffusion.edit_uri(
+            display="never", object_identifier=10, uri_record=_uri()
+        )
+
+        assert result["changes"] == []
+        diffusion.phab.diffusion.uri.edit.assert_not_called()
+
+    def test_apply_wraps_api_errors(self, diffusion):
+        from phabricator import APIError
+
+        diffusion.phab.diffusion.uri.edit.side_effect = APIError("ERR", "nope")
+
+        with pytest.raises(PhabfiveDataException):
+            diffusion.apply_uri_edit(10, [{"type": "display", "value": "always"}])
+
+
+class TestUriEditCli:
+    """The flags `uri edit` never had: --dry-run, --yes and --interactive."""
+
+    def _invoke(self, args, built=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.get_uri_record.return_value = _uri()
+        mock_diffusion.build_uri_edit.return_value = built or (
+            [{"type": "display", "value": "always"}],
+            [{"field": "Display", "old": "never", "new": "always"}],
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, ["uri", "edit", *args])
+        return result, mock_diffusion
+
+    URI = "https://github.com/dynamist/phabfive.git"
+
+    def test_dry_run_shows_the_change_without_making_it(self):
+        result, diffusion = self._invoke(
+            ["myrepo", self.URI, "--display=always", "--dry-run"]
+        )
+
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+        assert "Display: never → always" in result.output
+        diffusion.apply_uri_edit.assert_not_called()
+
+    def test_applying_prints_what_changed(self):
+        result, diffusion = self._invoke(["myrepo", self.URI, "--display=always"])
+
+        assert result.exit_code == 0
+        assert "Display: never → always" in result.output
+        diffusion.apply_uri_edit.assert_called_once()
+
+    def test_no_change_says_so_and_applies_nothing(self):
+        result, diffusion = self._invoke(
+            ["myrepo", self.URI, "--display=never"], built=([], [])
+        )
+
+        assert result.exit_code == 0
+        assert "No changes (already at target state)" in result.output
+        diffusion.apply_uri_edit.assert_not_called()
+
+    def test_yes_and_interactive_are_rejected(self):
+        result, diffusion = self._invoke(
+            ["myrepo", self.URI, "--display=always", "--yes", "--interactive"]
+        )
+
+        assert result.exit_code == 1
+        diffusion.apply_uri_edit.assert_not_called()
+
+    def test_interactive_declined_changes_nothing(self):
+        with patch("phabfive.editor.confirm_apply", return_value=(False, 0)):
+            result, diffusion = self._invoke(
+                ["myrepo", self.URI, "--display=always", "--interactive"]
+            )
+
+        assert result.exit_code == 0
+        diffusion.apply_uri_edit.assert_not_called()
+
+    def test_interactive_accepted_applies(self):
+        with patch("phabfive.editor.confirm_apply", return_value=(True, None)):
+            result, diffusion = self._invoke(
+                ["myrepo", self.URI, "--display=always", "--interactive"]
+            )
+
+        assert result.exit_code == 0
+        diffusion.apply_uri_edit.assert_called_once()
+
+    def test_io_keeps_its_short_flag(self):
+        """-i already means --io here, so --interactive has no short form."""
+        result, diffusion = self._invoke(["myrepo", self.URI, "-i", "read"])
+
+        assert result.exit_code == 0
+        assert diffusion.build_uri_edit.call_args.kwargs["io"] == "read"
+
+    def test_still_requires_at_least_one_option(self):
+        result, diffusion = self._invoke(["myrepo", self.URI])
+
+        assert result.exit_code == 1
+        diffusion.get_uri_record.assert_not_called()

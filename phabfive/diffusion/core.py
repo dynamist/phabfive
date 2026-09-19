@@ -18,6 +18,7 @@ from phabfive.diffusion.formatters import (
 from phabfive.diffusion.resolvers import (
     resolve_object_identifier,
     resolve_shortname_to_id,
+    resolve_uri_record,
 )
 from phabfive.diffusion.validators import (
     validate_credential_type,
@@ -322,6 +323,154 @@ class Diffusion(Phabfive):
 
         return new_uri
 
+    def get_uri_record(self, repo_name, uri_name):
+        """Fetch one repository URI in full.
+
+        Parameters
+        ----------
+        repo_name : str
+            Repository short name
+        uri_name : str
+            URI as displayed
+
+        Returns
+        -------
+        dict
+            The URI object
+        """
+        return resolve_uri_record(self.phab, repo_name, uri_name)
+
+    def _describe_credential(self, credential_phid):
+        """Name a credential for display, never revealing its secret.
+
+        Parameters
+        ----------
+        credential_phid : str or None
+            PHID of the currently bound credential
+
+        Returns
+        -------
+        str
+            The credential's monogram, its PHID, or "(none)"
+        """
+        if not credential_phid:
+            return "(none)"
+
+        try:
+            found = self.phab.phid.query(phids=[credential_phid])
+            return found[credential_phid].get("name") or credential_phid
+        except Exception:
+            # Naming it is a convenience; never fail an edit over it.
+            return credential_phid
+
+    def build_uri_edit(
+        self,
+        uri_record,
+        uri=None,
+        io=None,
+        display=None,
+        credential=None,
+        disable=None,
+    ):
+        """Compute the transactions for a URI edit, without applying them.
+
+        Parameters
+        ----------
+        uri_record : dict
+            The URI as it stands, from get_uri_record
+        uri : str, optional
+            New URI value
+        io : str, optional
+            New I/O mode
+        display : str, optional
+            New display mode
+        credential : str, optional
+            Credential monogram (e.g. "K2")
+        disable : bool, optional
+            Whether to disable the URI
+
+        Returns
+        -------
+        tuple
+            (transactions, changes) - the Conduit transactions to apply and a
+            human-readable description of each one. The credential is named by
+            its monogram; its secret never reaches the description.
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the credential is missing or of an unusable type
+        """
+        fields = uri_record.get("fields", {})
+
+        credential_phid = None
+        if credential:
+            secret = self.passphrase.get_secret(credential)
+            credential_phid = self._validate_credential_type(credential=secret)
+
+        candidates = [
+            ("uri", uri, "URI", fields.get("uri", {}).get("display"), None),
+            ("io", io, "I/O", fields.get("io", {}).get("raw"), None),
+            ("display", display, "Display", fields.get("display", {}).get("raw"), None),
+            ("disable", disable, "Disabled", fields.get("disabled"), None),
+            # The credential travels as a PHID but is shown by monogram, so its
+            # secret never reaches the description of the change.
+            (
+                "credential",
+                credential_phid,
+                "Credential",
+                fields.get("credentialPHID"),
+                credential,
+            ),
+        ]
+
+        transactions = []
+        changes = []
+
+        for kind, value, label, current, shown_new in candidates:
+            if value is None or current == value:
+                # Not asked for, or already at the target value.
+                continue
+
+            transactions.append({"type": kind, "value": value})
+
+            if kind == "credential":
+                old_shown = self._describe_credential(current)
+            else:
+                old_shown = "(none)" if current is None else str(current)
+
+            changes.append(
+                {
+                    "field": label,
+                    "old": old_shown,
+                    "new": str(shown_new if shown_new is not None else value),
+                }
+            )
+
+        return transactions, changes
+
+    def apply_uri_edit(self, object_identifier, transactions):
+        """Send prepared transactions to Diffusion.
+
+        Parameters
+        ----------
+        object_identifier : str
+            URI object identifier
+        transactions : list
+            Transactions from build_uri_edit
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the API rejects the edit
+        """
+        try:
+            self.phab.diffusion.uri.edit(
+                transactions=transactions, objectIdentifier=object_identifier
+            )
+        except APIError:
+            raise PhabfiveDataException("No valid input or other error")
+
     def edit_uri(
         self,
         uri=None,
@@ -330,9 +479,14 @@ class Diffusion(Phabfive):
         credential=None,
         disable=None,
         object_identifier=None,
+        uri_record=None,
+        dry_run=False,
     ):
         """
         Edit an existing URI.
+
+        Thin composition of build_uri_edit and the Conduit call, so a caller
+        that wants to show the change before making it can stop in between.
 
         Parameters
         ----------
@@ -343,44 +497,41 @@ class Diffusion(Phabfive):
         display : str, optional
             Display mode
         credential : str, optional
-            Credential ID
+            Credential monogram (e.g. "K2")
         disable : bool, optional
             Disable the URI
         object_identifier : str, optional
             URI object identifier
+        uri_record : dict, optional
+            The URI as it stands; only needed to describe the change
+        dry_run : bool
+            Show the change without making it
 
         Returns
         -------
-        bool
-            True on success
+        dict
+            {'changes': [...], 'dry_run': bool}
 
         Raises
         ------
         PhabfiveDataException
             If API error occurs
         """
-        if credential:
-            credential = self.passphrase.get_secret(credential)
-            credential = self._validate_credential_type(credential=credential)
+        transactions, changes = self.build_uri_edit(
+            uri_record or {},
+            uri=uri,
+            io=io,
+            display=display,
+            credential=credential,
+            disable=disable,
+        )
 
-        transactions = []
-        transactions_values = [
-            {"type": "uri", "value": uri},
-            {"type": "io", "value": io},
-            {"type": "display", "value": display},
-            {"type": "disable", "value": disable},
-            {"type": "credential", "value": credential},
-        ]
+        if not transactions:
+            return {"changes": [], "dry_run": dry_run}
 
-        for item in transactions_values:
-            if None not in item.values():
-                transactions.append(item)
+        if dry_run:
+            return {"changes": changes, "dry_run": True}
 
-        try:
-            self.phab.diffusion.uri.edit(
-                transactions=transactions, objectIdentifier=object_identifier
-            )
-        except APIError:
-            raise PhabfiveDataException("No valid input or other error")
+        self.apply_uri_edit(object_identifier, transactions)
 
-        return True
+        return {"changes": changes, "dry_run": False}

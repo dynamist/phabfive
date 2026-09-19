@@ -35,6 +35,51 @@ def resolve_shortname_to_id(phab, shortname):
     return repo_ids[0] if repo_ids else None
 
 
+def resolve_uri_record(phab, repo_name, uri_name):
+    """
+    Fetch a repository URI in full, so an edit can be shown before it is made.
+
+    resolve_object_identifier already reads this record but keeps only the id.
+    Editing needs the rest of it to say what each value is changing from.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    repo_name : str
+        Repository short name
+    uri_name : str
+        URI as displayed
+
+    Returns
+    -------
+    dict
+        The URI object, with 'id', 'phid' and 'fields' keys
+
+    Raises
+    ------
+    PhabfiveDataException
+        If the repository or URI does not exist
+    """
+    response = phab.diffusion.repository.search(
+        queryKey="all",
+        attachments={"uris": True},
+        constraints={},
+    )
+
+    for repo in response.get("data", {}):
+        if repo["fields"]["shortName"] != repo_name:
+            continue
+
+        for uri in repo["attachments"]["uris"]["uris"]:
+            if uri["fields"]["uri"]["display"] == uri_name:
+                return uri
+
+        raise PhabfiveDataException("Uri does not exist or other error")
+
+    raise PhabfiveDataException(f"Repository '{repo_name}' does not exist")
+
+
 def resolve_object_identifier(phab, repo_name=None, uri_name=None):
     """
     Identify repository or URI object identifier.
