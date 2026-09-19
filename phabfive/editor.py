@@ -100,19 +100,119 @@ def show_diff(old_text, new_text, filename="description"):
             print(line, end="")
 
 
-def resolve_assume_yes(yes, force):
-    """Combine --yes with the deprecated --force alias.
+def render_changes(monogram, changes, header=None):
+    """Print one object's pending changes.
+
+    Args:
+        monogram (str): Object monogram (e.g., "T123")
+        changes (list): Dicts with 'field', 'old' and 'new' keys
+        header (str): Line to print first; defaults to "<monogram>:"
+    """
+    print(header if header is not None else f"{monogram}:")
+
+    for change in changes:
+        field = change["field"]
+        old = change["old"]
+        new = change["new"]
+
+        if field == "Title":
+            # A title is free text, so a diff reads better than "old → new"
+            print()
+            show_diff(old, new, filename="title")
+        elif old is None:
+            print(f"  {field}: {new}")
+        else:
+            print(f"  {field}: {old} → {new}")
+
+
+def resolve_assume_yes(yes, force, interactive=False):
+    """Combine --yes with the deprecated --force alias, rejecting --yes --interactive.
 
     Args:
         yes (bool): Value of --yes
         force (bool): Value of the hidden --force alias
+        interactive (bool): Value of --interactive
 
     Returns:
         bool: Whether confirmation prompts should be answered automatically
+
+    Raises:
+        ValueError: If the caller asked both to skip and to make every prompt
     """
     if force:
         sys.stderr.write("WARNING: --force is deprecated, use --yes instead.\n")
-    return yes or force
+
+    assume_yes = yes or force
+    if assume_yes and interactive:
+        raise ValueError("--yes and --interactive are mutually exclusive")
+
+    return assume_yes
+
+
+def open_tty():
+    """Open the controlling terminal for reading and writing.
+
+    Lets a review prompt work when stdin is a pipe, the way git does. Returns
+    None when there is no controlling terminal, which is the case in CI and in
+    most agent subprocesses - the caller must then not prompt.
+
+    Returns:
+        io.TextIOWrapper or None
+    """
+    try:
+        return open("/dev/tty", "r+")
+    except OSError:
+        return None
+
+
+REVIEW_KEYS = {
+    "y": "apply this change",
+    "n": "skip it",
+    "a": "apply this and all remaining",
+    "q": "quit, applying nothing further",
+}
+
+
+def prompt_each(monogram, stream=None):
+    """Ask what to do with one object's changes.
+
+    Reads a line rather than a raw keypress, so it needs no termios and works
+    when stdin is a pipe.
+
+    Args:
+        monogram (str): Object monogram (e.g., "T123")
+        stream: Terminal to read from and write to; defaults to stdin/stdout
+
+    Returns:
+        str: One of "y", "n", "a", "q". EOF is treated as "q".
+    """
+    prompt = f"Apply {monogram}? [y,n,a,q,?] "
+
+    while True:
+        if stream is None:
+            sys.stdout.write(prompt)
+            sys.stdout.flush()
+            answer = sys.stdin.readline()
+        else:
+            stream.write(prompt)
+            stream.flush()
+            answer = stream.readline()
+
+        if not answer:
+            # EOF - stop rather than guess at consent
+            print()
+            return "q"
+
+        key = answer.strip().lower()[:1]
+        if key in REVIEW_KEYS:
+            return key
+
+        for review_key, meaning in REVIEW_KEYS.items():
+            line = f"{review_key} - {meaning}\n"
+            if stream is None:
+                sys.stdout.write(line)
+            else:
+                stream.write(line)
 
 
 def confirm_apply(assume_yes, prompt="Apply changes?"):

@@ -1996,9 +1996,10 @@ class Maniphest(Phabfive):
 
         return result["data"][0]
 
-    def edit_task_by_id(
+    def build_task_edit(
         self,
         task_id,
+        task_data=None,
         title=None,
         priority=None,
         status=None,
@@ -2009,14 +2010,16 @@ class Maniphest(Phabfive):
         subscribe=None,
         comment=None,
         space=None,
-        dry_run=False,
     ):
-        """Edit a task by ID.
+        """Compute the transactions for a task edit, without applying them.
 
         Parameters
         ----------
         task_id : str
             Numeric task ID (e.g., "123")
+        task_data : dict, optional
+            Already-fetched task data. Fetched here when omitted, so a caller
+            that has it already does not pay for a second round trip.
         title : str, optional
             New title for the task
         priority : str, optional
@@ -2038,16 +2041,20 @@ class Maniphest(Phabfive):
         space : str, optional
             Space to move the task to, by monogram, name, or a pattern that
             matches exactly one Space
-        dry_run : bool
-            Show changes without applying
+        Returns
+        -------
+        tuple
+            (transactions, changes) - the Conduit transactions to apply and a
+            human-readable description of each one.
 
         Raises
         ------
         ValueError
             On validation or API errors
         """
-        # Fetch current task state
-        task_data = self._get_task_data(task_id)
+        # Fetch current task state unless the caller already has it
+        if task_data is None:
+            task_data = self._get_task_data(task_id)
         current_priority = task_data["fields"]["priority"]["value"]
         current_priority_name = task_data["fields"]["priority"].get("name", "Unknown")
         current_status = task_data["fields"]["status"]["value"]
@@ -2301,34 +2308,88 @@ class Maniphest(Phabfive):
                     }
                 )
 
+        return transactions, changes
+
+    def edit_task_by_id(
+        self,
+        task_id,
+        title=None,
+        priority=None,
+        status=None,
+        board_phid=None,
+        column=None,
+        assign=None,
+        description=None,
+        subscribe=None,
+        comment=None,
+        space=None,
+        dry_run=False,
+        task_data=None,
+    ):
+        """Edit a task by ID.
+
+        Thin composition of :meth:`build_task_edit` and the Conduit call, so a
+        caller that wants to show the changes before applying them can stop in
+        between.
+
+        Parameters
+        ----------
+        task_id : str
+            Numeric task ID (e.g., "123")
+        dry_run : bool
+            Show changes without applying
+        task_data : dict, optional
+            Already-fetched task data, passed through to build_task_edit
+
+        Raises
+        ------
+        ValueError
+            On validation or API errors
+        """
+        transactions, changes = self.build_task_edit(
+            task_id,
+            task_data,
+            title=title,
+            priority=priority,
+            status=status,
+            board_phid=board_phid,
+            column=column,
+            assign=assign,
+            description=description,
+            subscribe=subscribe,
+            comment=comment,
+            space=space,
+        )
+
         if not transactions:
             log.info(f"No changes to apply for T{task_id}")
             return {"task_id": task_id, "changes": []}
 
         if dry_run:
-            from phabfive.editor import show_diff
+            from phabfive.editor import render_changes
 
-            print(f"[DRY RUN] Would apply to T{task_id}:")
-            for change in changes:
-                field = change["field"]
-                old = change["old"]
-                new = change["new"]
-                if field == "Title":
-                    # Show unified diff for title
-                    print()
-                    show_diff(old, new, filename="title")
-                elif old is None:
-                    print(f"  {field}: {new}")
-                else:
-                    print(f"  {field}: {old} → {new}")
+            render_changes(
+                f"T{task_id}", changes, header=f"[DRY RUN] Would apply to T{task_id}:"
+            )
             return {"task_id": task_id, "changes": changes, "dry_run": True}
 
-        # Apply transactions
+        self.apply_task_edit(task_id, transactions)
+
+        return {"task_id": task_id, "changes": changes}
+
+    def apply_task_edit(self, task_id, transactions):
+        """Send prepared transactions to Maniphest.
+
+        Parameters
+        ----------
+        task_id : str
+            Numeric task ID (e.g., "123")
+        transactions : list
+            Transactions from :meth:`build_task_edit`
+        """
         self.phab.maniphest.edit(
             objectIdentifier=f"T{task_id}", transactions=transactions
         )
-
-        return {"task_id": task_id, "changes": changes}
 
     def _format_description_preview(self, text):
         """Format description for change display.

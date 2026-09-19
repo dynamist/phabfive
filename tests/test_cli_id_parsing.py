@@ -279,4 +279,34 @@ class TestManiphestEditIdParsing:
         output = _output(result)
         assert "--yes" in output
         assert "-y" in output
+        assert "--interactive" in output
+        assert "-i" in output
         assert "--force" not in output
+
+    def test_interactive_flag(self):
+        result, mock_edit = self._invoke(["T123", "--status=resolved", "-i"])
+
+        assert result.exit_code == 0
+        kwargs = mock_edit.edit_objects.call_args[1]
+        assert kwargs["interactive"] is True
+        assert kwargs["force"] is False
+
+    def test_no_interactive_flag(self):
+        result, mock_edit = self._invoke(["T123", "--status=resolved"])
+
+        assert result.exit_code == 0
+        assert mock_edit.edit_objects.call_args[1]["interactive"] is False
+
+    def test_yes_and_interactive_are_rejected(self):
+        result, mock_edit = self._invoke(["T123", "--status=resolved", "-y", "-i"])
+
+        assert result.exit_code == 1
+        assert "mutually exclusive" in _output(result)
+        mock_edit.edit_objects.assert_not_called()
+
+    def test_force_and_interactive_are_rejected(self):
+        result, mock_edit = self._invoke(["T123", "--status=resolved", "--force", "-i"])
+
+        assert result.exit_code == 1
+        assert "mutually exclusive" in _output(result)
+        mock_edit.edit_objects.assert_not_called()

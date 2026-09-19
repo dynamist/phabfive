@@ -265,7 +265,13 @@ def create(
         False,
         "--yes",
         "-y",
-        help="Create without confirming the $EDITOR description (required for non-interactive use)",
+        help="Create without confirming",
+    ),
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        "-i",
+        help="Review each change and confirm",
     ),
     force: bool = typer.Option(
         False,
@@ -285,7 +291,12 @@ def create(
         phabfive maniphest create "Task" --space=S3
         echo "Description" | phabfive maniphest create "Task" --description=-
     """
-    force = resolve_assume_yes(yes, force)
+    try:
+        force = resolve_assume_yes(yes, force, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
     maniphest = _get_maniphest_app()
 
     # Merge positional and option title (positional takes precedence)
@@ -788,7 +799,13 @@ def edit(
         False,
         "--yes",
         "-y",
-        help="Apply title/description changes without confirming (required for non-interactive use)",
+        help="Apply without confirming",
+    ),
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        "-i",
+        help="Review each change and confirm",
     ),
     force: bool = typer.Option(
         False,
@@ -842,7 +859,12 @@ def edit(
     final_title = positional_title or title_opt
 
     # Delegate to Edit class for processing
-    force = resolve_assume_yes(yes, force)
+    try:
+        force = resolve_assume_yes(yes, force, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
     edit_handler = _get_edit_app()
 
     retcode = edit_handler.edit_objects(
@@ -859,6 +881,7 @@ def edit(
         space=space,
         dry_run=dry_run,
         force=force,
+        interactive=interactive,
     )
 
     raise typer.Exit(retcode)

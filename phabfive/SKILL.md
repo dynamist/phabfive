@@ -228,15 +228,20 @@ moment you run them.
   confirmation. Always pass `--description`.
 - `paste create` with no file and no `--content`, and `paste comment` with no text, do the
   same.
-- Any change to a title, description or paste content prints a diff and asks to confirm.
-  Pass `--yes` to apply it non-interactively; without a terminal and without `--yes`
-  the command fails with `--yes required for non-interactive mode`. This holds whether you
-  edit one task or many. `--dry-run` never asks, so it never needs `--yes`.
+- Editing **one** task applies straight away. Editing **two or more** reviews them one at a
+  time when you are at a terminal: each task's changes are printed, then `[y,n,a,q,?]` -
+  apply it, skip it, apply all the rest, or quit. Nothing you skip is touched.
+- Without a terminal there is nobody to ask, so a batch applies unreviewed - except a title
+  or description change, which fails with `--yes required for non-interactive mode` rather
+  than rewriting text nobody has read.
+- `--dry-run` never asks, so it never needs `--yes`.
+- `--interactive` forces the review for a single task, and reaches past a piped stdin to the
+  terminal. With no terminal to show the changes on it fails rather than applying unreviewed.
 
 Feed long text through stdin instead of an editor:
 
 ```bash
-printf '%s\n' "$body" | phabfive maniphest edit T123 --description=- --yes
+printf '%s\n' "$body" | phabfive maniphest edit T123 --description=-
 ```
 
 ### Directional edits
@@ -329,9 +334,9 @@ touches the server.
   before the subcommand.
 - Add `--space='*'` before reporting that a task or project does not exist.
 - Dry-run every create, edit and batch, and show the user the preview before applying it.
-- Pass `--yes` when applying a title, description or paste-content change without a
-  terminal; it answers the confirmation prompt and nothing else. It is not needed for
-  `--status`, `--priority`, `--tag`, `--column`, `--assign`, `--space` or `--comment`, and
-  it does not override a validation error. `--force` is a deprecated alias for it.
+- One task applies without asking. Two or more are reviewed one at a time when there is a
+  terminal. Pass `--yes` to skip the review, `--interactive` to force it for a single task
+  or for piped input. Neither overrides a validation error, and `--force` is a deprecated
+  alias for `--yes`.
 - Never run a data-altering command against an instance the user has not named.
 - Never print a Passphrase secret anywhere except a direct answer to a request for it.
