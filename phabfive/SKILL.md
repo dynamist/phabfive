@@ -220,9 +220,6 @@ phabfive maniphest edit T123 --status=resolved --dry-run
 `comment` command, nor on `diffusion repo create` or `diffusion uri create` — those write
 the moment you run them, and a repository cannot be removed afterwards.
 
-On `diffusion uri edit`, `--interactive` has no `-i` short form: `-i` already means `--io`
-there.
-
 ### Things that will hang you
 
 - `phabfive edit T123` with **no other option** means "edit the description in `$EDITOR`".
