@@ -114,6 +114,19 @@ passing, so a build that cannot start stops the release instead of shipping. The
 release smoke runs are also given `--expect-version`, which catches from the other end
 what a source-level comparison cannot see: a binary built from the wrong revision.
 
+**Each executable is checked against its own name.** `scripts/check_arch.py` reads the
+header of every built binary and refuses one whose architecture is not the one the asset
+name promises. v0.10.0 published an arm64 binary as `phabfive-macos-amd64` -- `macos-14`
+and `macos-latest` are both arm64 labels, so the row meant for Intel Macs was building on
+Apple silicon, and an Intel Mac downloading it got "Bad CPU type in executable". The smoke
+tests cannot see this: they run each binary on the machine that built it, where the
+architecture is native whatever the runner turned out to be.
+
+The macOS rows are pinned to `macos-15-intel` (x86_64) and `macos-15` (arm64) rather than
+`macos-14` and `macos-latest`. Note that `macos-15-intel` is the last x86_64 image GitHub
+will offer: it goes away in August 2027, and after that a macOS Intel binary cannot be
+built on Actions at all.
+
 This exists because v0.10.0-rc.1 shipped six executables that could not start at all
 and every job still reported success: phabfive imported `click` without declaring it,
 and nothing in the pipeline ever ran what it built. Run the same checks yourself at
