@@ -4,13 +4,17 @@
 
 from phabricator import APIError
 
-from phabfive.diffusion.resolvers import resolve_shortname_to_id
 from phabfive.exceptions import PhabfiveDataException
 
 
 def fetch_repositories(phab, query_key=None, attachments=None, constraints=None):
     """
     Fetch repository data from Phabricator API.
+
+    Follows the result cursor to the end, so callers see every repository
+    rather than the first page. Conduit returns 100 rows per page, and an
+    instance past that limit would otherwise hide repositories from every
+    lookup that goes through here.
 
     Parameters
     ----------
@@ -32,13 +36,26 @@ def fetch_repositories(phab, query_key=None, attachments=None, constraints=None)
     attachments = attachments or {}
     constraints = constraints or {}
 
-    response = phab.diffusion.repository.search(
-        queryKey=query_key,
-        attachments=attachments,
-        constraints=constraints,
-    )
+    repos = []
+    after = None
 
-    return response.get("data", {})
+    while True:
+        kwargs = {
+            "queryKey": query_key,
+            "attachments": attachments,
+            "constraints": constraints,
+        }
+
+        if after is not None:
+            kwargs["after"] = after
+
+        response = phab.diffusion.repository.search(**kwargs)
+        repos.extend(response.get("data") or [])
+
+        after = (response.get("cursor") or {}).get("after")
+
+        if not after:
+            return repos
 
 
 def fetch_branches(phab, repo_id=None, repo_callsign=None, repo_shortname=None):
@@ -75,7 +92,12 @@ def fetch_branches(phab, repo_id=None, repo_callsign=None, repo_shortname=None):
         # TODO: probably catch APIError here as well
         return phab.diffusion.branchquery(callsign=repo_callsign)
     else:
-        resolved = resolve_shortname_to_id(phab, repo_shortname)
+        resolved = None
+
+        for repo in fetch_repositories(phab):
+            if repo["fields"]["shortName"] == repo_shortname:
+                resolved = repo["id"]
+                break
 
         if resolved:
             return phab.diffusion.branchquery(repository=resolved)
