@@ -4,6 +4,7 @@
 
 from phabricator import APIError
 
+from phabfive.diffusion.validators import validate_repo_identifier
 from phabfive.exceptions import PhabfiveDataException
 
 
@@ -58,6 +59,65 @@ def fetch_repositories(phab, query_key=None, attachments=None, constraints=None)
             return repos
 
 
+def match_repository(repos, repo_id):
+    """
+    Pick the repository that an identifier names.
+
+    Accepts an "R123" monogram, a callsign, or a short name, tried in that
+    order. A repository with no short name set is only reachable by the first
+    two, which is why the short name is not the only thing compared.
+
+    Parameters
+    ----------
+    repos : list
+        Repository data dicts, as returned by fetch_repositories
+    repo_id : str
+        Repository monogram, callsign or short name
+
+    Returns
+    -------
+    dict or None
+        The matching repository, or None if nothing matches
+    """
+    if validate_repo_identifier(repo_id):
+        wanted = int(repo_id[1:])
+
+        for repo in repos:
+            if repo["id"] == wanted:
+                return repo
+
+    for repo in repos:
+        if repo["fields"].get("callsign") == repo_id:
+            return repo
+
+    for repo in repos:
+        if repo["fields"].get("shortName") == repo_id:
+            return repo
+
+    return None
+
+
+def find_repository(phab, repo_id, attachments=None):
+    """
+    Fetch repositories and return the one an identifier names.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    repo_id : str
+        Repository monogram, callsign or short name
+    attachments : dict, optional
+        Attachments to include
+
+    Returns
+    -------
+    dict or None
+        The matching repository, or None if nothing matches
+    """
+    return match_repository(fetch_repositories(phab, attachments=attachments), repo_id)
+
+
 def fetch_branches(phab, repo_id=None, repo_callsign=None, repo_shortname=None):
     """
     Fetch branches for a repository from Phabricator API.
@@ -92,15 +152,10 @@ def fetch_branches(phab, repo_id=None, repo_callsign=None, repo_shortname=None):
         # TODO: probably catch APIError here as well
         return phab.diffusion.branchquery(callsign=repo_callsign)
     else:
-        resolved = None
-
-        for repo in fetch_repositories(phab):
-            if repo["fields"]["shortName"] == repo_shortname:
-                resolved = repo["id"]
-                break
+        resolved = find_repository(phab, repo_shortname)
 
         if resolved:
-            return phab.diffusion.branchquery(repository=resolved)
+            return phab.diffusion.branchquery(repository=resolved["id"])
         else:
             raise PhabfiveDataException(
                 f"Repository '{repo_shortname}' is not a valid repository"
@@ -116,7 +171,7 @@ def fetch_uris(phab, repo_id=None, clone_uri=False):
     phab : Phabricator
         Phabricator API client
     repo_id : str
-        Repository ID or short name
+        Repository monogram, callsign or short name
     clone_uri : bool, optional
         If True, only return clone URIs (display=always)
 
@@ -129,11 +184,7 @@ def fetch_uris(phab, repo_id=None, clone_uri=False):
     """
     repos = fetch_repositories(phab, attachments={"uris": True})
 
-    match = None
-    for repo in repos:
-        if repo_id == repo["fields"]["shortName"]:
-            match = repo
-            break
+    match = match_repository(repos, repo_id)
 
     if match is None:
         return None

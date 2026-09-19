@@ -290,6 +290,9 @@ phabfive --format=json diffusion repo list active
 phabfive diffusion uri list R5 --clone
 ```
 
+A repository is addressable by monogram (`R5`), callsign or short name. Not every
+repository has a short name, so prefer the monogram when scripting.
+
 Search constraints are named per application and are not interchangeable: `paste search`
 has `--author` but no `--assigned`, and a constraint borrowed from another app fails with
 `ERR-INVALID-CONSTRAINT`.
