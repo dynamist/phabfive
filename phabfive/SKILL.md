@@ -216,9 +216,12 @@ phabfive maniphest edit T123 --status=resolved --dry-run
 ```
 
 `--dry-run` exists on `maniphest create`, `maniphest edit`, top-level `edit`,
-`paste create` and `paste edit`. It does **not** exist on any `comment` command, nor on
-`diffusion repo create`, `diffusion uri create` or `diffusion uri edit` — those write the
-moment you run them.
+`paste create`, `paste edit` and `diffusion uri edit`. It does **not** exist on any
+`comment` command, nor on `diffusion repo create` or `diffusion uri create` — those write
+the moment you run them, and a repository cannot be removed afterwards.
+
+On `diffusion uri edit`, `--interactive` has no `-i` short form: `-i` already means `--io`
+there.
 
 ### Things that will hang you
 
