@@ -155,26 +155,26 @@ def edit(
     uri: str = typer.Argument(..., help="URI to edit"),
     enable: bool = typer.Option(False, "--enable", help="Enable the URI"),
     disable: bool = typer.Option(False, "--disable", help="Disable the URI"),
-    new_uri: Optional[str] = typer.Option(None, "--new-uri", "-n", help="Change URI"),
+    new_uri: Optional[str] = typer.Option(
+        None, "--uri", help="Set the URI to this value"
+    ),
     io: Optional[str] = typer.Option(
-        None, "--io", "-i", help="Adjust I/O behavior (default, read, write, never)"
+        None, "--io", help="Adjust I/O behavior (default, read, write, never)"
     ),
     display: Optional[str] = typer.Option(
         None,
         "--display",
-        "-d",
         help="Change display behavior (default, always, hidden)",
     ),
     cred: Optional[str] = typer.Option(
-        None, "--cred", "-c", help="Change credential (e.g., K2)"
+        None, "--cred", help="Change credential (e.g., K2)"
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show the change without making it"
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirming"),
-    # No -i here: it already means --io on this command.
     interactive: bool = typer.Option(
-        False, "--interactive", help="Review the change and confirm"
+        False, "--interactive", "-i", help="Review the change and confirm"
     ),
 ) -> None:
     """Edit a URI for a repository."""

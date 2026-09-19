@@ -394,12 +394,49 @@ class TestUriEditCli:
         assert result.exit_code == 0
         diffusion.apply_uri_edit.assert_called_once()
 
-    def test_io_keeps_its_short_flag(self):
-        """-i already means --io here, so --interactive has no short form."""
-        result, diffusion = self._invoke(["myrepo", self.URI, "-i", "read"])
+    def test_interactive_owns_the_i_short_flag(self):
+        """-i used to mean --io; it means --interactive now, like everywhere else."""
+        with patch("phabfive.editor.confirm_apply", return_value=(True, None)):
+            result, diffusion = self._invoke(
+                ["myrepo", self.URI, "--display=always", "-i"]
+            )
 
         assert result.exit_code == 0
-        assert diffusion.build_uri_edit.call_args.kwargs["io"] == "read"
+        diffusion.apply_uri_edit.assert_called_once()
+
+    def test_io_has_no_short_flag(self):
+        result, diffusion = self._invoke(["myrepo", self.URI, "-i", "read"])
+
+        assert result.exit_code != 0
+        diffusion.apply_uri_edit.assert_not_called()
+
+    def test_uri_is_set_with_its_own_option(self):
+        result, diffusion = self._invoke(
+            ["myrepo", self.URI, "--uri", "https://elsewhere/x.git", "--dry-run"]
+        )
+
+        assert result.exit_code == 0
+        assert (
+            diffusion.build_uri_edit.call_args.kwargs["uri"]
+            == "https://elsewhere/x.git"
+        )
+
+    def test_the_old_new_uri_spelling_is_gone(self):
+        result, diffusion = self._invoke(
+            ["myrepo", self.URI, "--new-uri", "https://elsewhere/x.git"]
+        )
+
+        assert result.exit_code != 0
+        diffusion.apply_uri_edit.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "flag,value", [("-n", "x"), ("-d", "always"), ("-c", "K2")]
+    )
+    def test_removed_short_flags(self, flag, value):
+        result, diffusion = self._invoke(["myrepo", self.URI, flag, value])
+
+        assert result.exit_code != 0
+        diffusion.apply_uri_edit.assert_not_called()
 
     def test_still_requires_at_least_one_option(self):
         result, diffusion = self._invoke(["myrepo", self.URI])

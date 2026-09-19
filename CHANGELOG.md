@@ -1,6 +1,32 @@
 # Unreleased
 
+## Upgrade Notes
+
+* **Breaking change: `diffusion uri edit` lost its short flags.** `-n`, `-i`, `-d` and `-c`
+  are gone; spell out `--uri`, `--io`, `--display` and `--cred`. `-i` now means
+  `--interactive`, as it does on every other edit command
+* **Breaking change: `diffusion uri edit --new-uri` is now `--uri`.** It sets the URI to the
+  given value; the old spelling is not accepted
+* **Confirmation now depends on how many tasks you edit, not which field.** One task applies
+  without asking - the single-task title/description prompt, and its
+  `--force required for non-interactive mode` error, are gone. Two or more are reviewed one
+  at a time at a terminal. `--dry-run` still previews anything
+* **`--force` is deprecated in favour of `--yes`.** It still works, hidden, and warns
+
 ## New Features
+
+### Reviewing Edits
+* **Per-task review for batch edits** - Editing two or more tasks at a terminal shows each
+  task's changes and asks `[y,n,a,q,?]`: apply it, skip it, apply all the rest, or quit.
+  Skipping and quitting are not failures, and nothing skipped is touched
+* **`--yes` / `-y`** - Apply without confirming. Replaces `--force`
+* **`--interactive` / `-i`** - Review the change and confirm, for a single task or for input
+  piped from `maniphest search`, where it reads `/dev/tty`. With no terminal to show the
+  changes on it fails rather than applying unreviewed
+* **`diffusion uri edit --dry-run`** - The command could rewrite a URI, flip its I/O mode,
+  disable it or swap its SSH credential with no preview and no confirmation. It now has
+  `--dry-run`, `--yes` and `--interactive`, and reports each value it would change and what
+  it would change it from. A credential is named by its monogram; its secret is never printed
 
 ### Newline-Delimited JSON Output
 * **`--format=jsonl`** - Emits one JSON object per line with no wrapping array
