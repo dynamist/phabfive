@@ -2,7 +2,7 @@
 # This is useful for identifying tasks that need to be properly closed in workboards
 
 search:
-  tag: "dynatron"
+  tag: "*"
   status: "in:Resolved,in:Duplicate"
   column: "not:in:Done"
   show-history: true
