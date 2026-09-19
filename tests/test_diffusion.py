@@ -443,3 +443,65 @@ class TestUriEditCli:
 
         assert result.exit_code == 1
         diffusion.get_uri_record.assert_not_called()
+
+
+def _paged_phab(pages):
+    """A client whose repository.search answers across several pages.
+
+    Conduit caps a page at 100 rows and hands back a cursor; a client that
+    reads only the first response silently loses everything after it.
+    """
+    phab = MagicMock()
+    responses = [
+        {"data": page, "cursor": {"after": str(i + 1) if i + 1 < len(pages) else None}}
+        for i, page in enumerate(pages)
+    ]
+
+    def search(**kwargs):
+        after = kwargs.get("after")
+        index = 0 if after is None else int(after)
+        return responses[index]
+
+    phab.diffusion.repository.search.side_effect = search
+    return phab
+
+
+class TestRepositoryPagination:
+    """Every repository is seen, not just the first page."""
+
+    def test_fetch_repositories_follows_the_cursor(self):
+        from phabfive.diffusion.fetchers import fetch_repositories
+
+        phab = _paged_phab([[_repo("first")], [_repo("second")]])
+
+        names = [r["fields"]["name"] for r in fetch_repositories(phab)]
+
+        assert names == ["first", "second"]
+
+    def test_a_repository_on_a_later_page_still_resolves(self):
+        from phabfive.diffusion.resolvers import resolve_shortname_to_id
+
+        far = _repo("faraway")
+        far["id"] = 77
+        phab = _paged_phab([[_repo("first")], [far]])
+
+        assert resolve_shortname_to_id(phab, "faraway") == 77
+
+    def test_a_uri_on_a_later_page_still_resolves(self):
+        from phabfive.diffusion.resolvers import resolve_uri_record
+
+        far = _repo("faraway")
+        far["attachments"]["uris"]["uris"] = [
+            {"id": 9, "fields": {"uri": {"display": "git@example.com:far.git"}}}
+        ]
+        phab = _paged_phab([[_repo("first")], [far]])
+
+        found = resolve_uri_record(phab, "faraway", "git@example.com:far.git")
+
+        assert found["id"] == 9
+
+    def test_a_single_page_response_without_a_cursor_still_works(self):
+        """The Conduit shape used by every other test must keep working."""
+        from phabfive.diffusion.fetchers import fetch_repositories
+
+        assert len(fetch_repositories(_phab_with_repos([_repo("only")]))) == 1

@@ -2,6 +2,7 @@
 
 """PHID and identifier resolution functions for Diffusion module."""
 
+from phabfive.diffusion.fetchers import fetch_repositories
 from phabfive.exceptions import PhabfiveDataException
 
 
@@ -21,12 +22,7 @@ def resolve_shortname_to_id(phab, shortname):
     int or None
         Repository ID if found, None otherwise
     """
-    response = phab.diffusion.repository.search(
-        queryKey="all",
-        attachments={},
-        constraints={},
-    )
-    repos = response.get("data", {})
+    repos = fetch_repositories(phab)
 
     repo_ids = [
         repo["id"] for repo in repos if repo["fields"]["shortName"] == shortname
@@ -61,13 +57,9 @@ def resolve_uri_record(phab, repo_name, uri_name):
     PhabfiveDataException
         If the repository or URI does not exist
     """
-    response = phab.diffusion.repository.search(
-        queryKey="all",
-        attachments={"uris": True},
-        constraints={},
-    )
+    repos = fetch_repositories(phab, attachments={"uris": True})
 
-    for repo in response.get("data", {}):
+    for repo in repos:
         if repo["fields"]["shortName"] != repo_name:
             continue
 
@@ -104,12 +96,7 @@ def resolve_object_identifier(phab, repo_name=None, uri_name=None):
         If URI does not exist
     """
     object_identifier = ""
-    response = phab.diffusion.repository.search(
-        queryKey="all",
-        attachments={"uris": True},
-        constraints={},
-    )
-    repos = response.get("data", {})
+    repos = fetch_repositories(phab, attachments={"uris": True})
 
     for repo in repos:
         name = repo["fields"]["shortName"]
