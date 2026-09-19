@@ -9,7 +9,7 @@ import typer
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_repo_status
 from phabfive.constants import REPO_STATUS_CHOICES
-from phabfive.exceptions import PhabfiveConfigException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 
 diffusion_app = typer.Typer(
     cls=AgentFooterGroup, help="The diffusion app", no_args_is_help=True
@@ -202,7 +202,12 @@ def edit(
 
     diffusion = _get_diffusion_app()
 
-    uri_record = diffusion.get_uri_record(repo_name=repo, uri_name=uri)
+    try:
+        uri_record = diffusion.get_uri_record(repo_name=repo, uri_name=uri)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
     object_id = uri_record["id"]
 
     transactions, changes = diffusion.build_uri_edit(

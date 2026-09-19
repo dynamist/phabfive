@@ -4,7 +4,7 @@
 title: "🔥 High Priority Open Tasks"
 description: "Tasks that need immediate attention"
 search:
-  tag: "dynatron"
+  tag: "*"
   priority: "in:High,in:Unbreak Now!,in:Triage"
   status: "in:Open"
   show-history: true
@@ -13,7 +13,7 @@ search:
 title: "✅ Recently Resolved Tasks"
 description: "Tasks completed in the last week"
 search:
-  tag: "dynatron"
+  tag: "*"
   status: "in:Resolved"
   updated-after: 7
   show-metadata: true
@@ -22,7 +22,7 @@ search:
 title: "🚫 Blocked or Stalled Work"
 description: "Tasks that might need intervention"
 search:
-  tag: "dynatron"
+  tag: "*"
   column: "in:Blocked,been:Waiting"
   updated-after: 14
   show-history: true
@@ -31,7 +31,7 @@ search:
 title: "📈 Priority Escalations"
 description: "Tasks that had priority raised recently"
 search:
-  tag: "dynatron"
+  tag: "*"
   priority: "raised"
   updated-after: 30
   show-history: true

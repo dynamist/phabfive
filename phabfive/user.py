@@ -114,8 +114,8 @@ class User(Phabfive):
         -------
         list[dict]
             List of user info dicts, one per host. Each contains:
-            - Host: FQDN only (e.g., "dynamist.phacility.com")
-            - URL: Full API URL for PHAB_URL (e.g., "https://dynamist.phacility.com/api/")
+            - Host: FQDN only (e.g., "phabricator.example.com")
+            - URL: Full API URL for PHAB_URL (e.g., "https://phabricator.example.com/api/")
             - User: dict with UserName, RealName, PrimaryEmail, Link
             - _link: Rich hyperlink to user profile (for rich format)
             - Error: error message if whoami failed for this host (optional)

@@ -582,3 +582,39 @@ class TestRepositoryIdentifiers:
         ]
 
         assert format_uris(_phab_with_repos([repo]), "R5") == ["git@example.com:x.git"]
+
+
+class TestMissingRepositoryIsNotATraceback:
+    """A lookup that fails is a message, not a stack trace."""
+
+    def _invoke(self, argv, method):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        getattr(mock_diffusion, method).side_effect = PhabfiveDataException(
+            "Repository 'R42' does not exist"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            return CliRunner().invoke(diffusion_app, argv)
+
+    def test_uri_edit_reports_a_missing_repository_cleanly(self):
+        result = self._invoke(
+            ["uri", "edit", "R42", "someuri", "--io=read"], "get_uri_record"
+        )
+
+        assert result.exit_code == 1
+        assert "does not exist" in result.output
+        assert "Traceback" not in result.output
+
+    def test_uri_edit_reports_a_missing_uri_cleanly(self):
+        result = self._invoke(
+            ["uri", "edit", "myrepo", "nosuchuri", "--io=read"], "get_uri_record"
+        )
+
+        assert result.exit_code == 1
+        assert "Traceback" not in result.output

@@ -135,8 +135,8 @@ def task_matches_project_patterns(task, project_patterns, resolved_phids_by_patt
         List of ProjectPattern objects
     resolved_phids_by_pattern : list
         Either a list of PHIDs (for OR logic) or list of tuples (for AND logic)
-        For 'dyn127*,dynatron': [['PHID-1', 'PHID-2', 'PHID-3'], ['PHID-4']]
-        For 'dyn127*+dynatron': [[('PHID-1', 'PHID-4'), ('PHID-2', 'PHID-4'), ...]]
+        For 'backend-*,platform': [['PHID-1', 'PHID-2', 'PHID-3'], ['PHID-4']]
+        For 'backend-*+platform': [[('PHID-1', 'PHID-4'), ('PHID-2', 'PHID-4'), ...]]
 
     Returns
     -------
