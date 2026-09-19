@@ -83,23 +83,36 @@ git push origin v0.6.0
 
 This triggers the GitHub Actions workflow which will:
 
-1. Build the Python package (wheel and sdist)
-2. Build standalone executables for 6 platforms:
+1. Check that the tag matches the version in `pyproject.toml`
+2. Build the Python package (wheel and sdist)
+3. Build standalone executables for 6 platforms:
    - Linux (AMD64, ARM64)
    - macOS (AMD64, ARM64)
    - Windows (AMD64, ARM64)
-3. Sign executables with [Sigstore](https://www.sigstore.dev/) (keyless OIDC signing)
-4. Build, push and sign the scratch container image `ghcr.io/dynamist/phabfive` for
+4. Sign executables with [Sigstore](https://www.sigstore.dev/) (keyless OIDC signing)
+5. Build, push and sign the scratch container image `ghcr.io/dynamist/phabfive` for
    `linux/amd64` and `linux/arm64`, tagged `X.Y.Z`, `X.Y` and `latest` (glibc) and
    `X.Y.Z-musl`, `X.Y-musl` and `latest-musl` (musl)
-5. Publish to PyPI using trusted publishing
-6. Create GitHub Release with auto-generated notes and all artifacts
+6. Publish to PyPI using trusted publishing
+7. Create GitHub Release with auto-generated notes and all artifacts
+
+**The tag and `pyproject.toml` have to agree.** Every artifact is named after
+`pyproject.toml` while the release is named after the tag, so if the two disagree the
+release goes out full of artifacts for another version. That is what happened to
+v0.10.0-rc.1, tagged over a `pyproject.toml` that still read `0.10.0-dev.0`: a
+prerelease whose wheel, sdist and six executables were all named for the dev version,
+with every job green. `scripts/check_version.py` now compares them before anything is
+built, and refuses a `dev` version outright -- step 5 below leaves the tree on one, so
+a tag pushed before the release bump is the easy mistake. Check it yourself with
+`python3 scripts/check_version.py v0.11.0`.
 
 **Every artifact is run before it goes anywhere.** `scripts/smoke.py` executes each
 standalone executable before it is signed, the wheel and sdist after installing them
 into a clean venv with plain `pip`, and the image tree inside the Dockerfile's `test`
 stage. Publishing to PyPI and creating the release both depend on those checks
-passing, so a build that cannot start stops the release instead of shipping.
+passing, so a build that cannot start stops the release instead of shipping. The two
+release smoke runs are also given `--expect-version`, which catches from the other end
+what a source-level comparison cannot see: a binary built from the wrong revision.
 
 This exists because v0.10.0-rc.1 shipped six executables that could not start at all
 and every job still reported success: phabfive imported `click` without declaring it,

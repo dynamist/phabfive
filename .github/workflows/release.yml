@@ -11,8 +11,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Every artifact is named after pyproject.toml while the release is named
+  # after the tag, so a disagreement publishes a release full of artifacts for
+  # another version -- which is how v0.10.0-rc.1 went out over a pyproject.toml
+  # that still read 0.10.0-dev.0, with every job green. Its own job, gating the
+  # builds, so the answer arrives in seconds rather than after six PyInstaller
+  # runs and two image builds. The smoke tests below check the same thing again
+  # from the other end, against the version the built artifact reports.
+  check-version:
+    name: Check the tag matches pyproject.toml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compare the tag with the declared version
+        run: python3 scripts/check_version.py "$GITHUB_REF_NAME"
+
   build:
     name: Build distribution
+    needs: check-version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,6 +59,7 @@ jobs:
 
   build-executables:
     name: Build ${{ matrix.os }} ${{ matrix.arch }} executable
+    needs: check-version
     runs-on: ${{ matrix.runner }}
     permissions:
       id-token: write
@@ -129,7 +150,9 @@ jobs:
       # platform it targets.
       - name: Smoke test executable
         shell: bash
-        run: python scripts/smoke.py --executable dist/${{ matrix.asset_name }}
+        run: |
+          python scripts/smoke.py --executable dist/${{ matrix.asset_name }} \
+            --expect-version "${GITHUB_REF_NAME#v}"
 
       - name: Sign executable with Sigstore
         if: ${{ !matrix.skip_signing }}
@@ -157,6 +180,7 @@ jobs:
 
   build-image:
     name: Build ${{ matrix.libc }} container image
+    needs: check-version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -277,7 +301,9 @@ jobs:
 
       - name: Smoke test
         shell: bash
-        run: python scripts/smoke.py --venv fresh
+        run: |
+          python scripts/smoke.py --venv fresh \
+            --expect-version "${GITHUB_REF_NAME#v}"
 
   publish-pypi:
     name: Publish to PyPI
@@ -301,10 +327,10 @@ jobs:
 
   github-release:
     name: Create GitHub Release
-    needs: [build, verify-wheel, publish-pypi, build-executables]
+    needs: [check-version, build, verify-wheel, publish-pypi, build-executables]
     # always() means an unlisted job is not a gate at all -- every job this
     # release depends on has to be named here explicitly.
-    if: ${{ always() && needs.build.result == 'success' && needs.verify-wheel.result == 'success' && needs.build-executables.result == 'success' && (needs.publish-pypi.result == 'success' || needs.publish-pypi.result == 'skipped') }}
+    if: ${{ always() && needs.check-version.result == 'success' && needs.build.result == 'success' && needs.verify-wheel.result == 'success' && needs.build-executables.result == 'success' && (needs.publish-pypi.result == 'success' || needs.publish-pypi.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
