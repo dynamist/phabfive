@@ -104,7 +104,13 @@ def edit_command(
         False,
         "--yes",
         "-y",
-        help="Apply title/description changes without confirming (required for non-interactive use)",
+        help="Apply without confirming",
+    ),
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        "-i",
+        help="Review each change and confirm",
     ),
     force: bool = typer.Option(
         False,
@@ -128,7 +134,12 @@ def edit_command(
         phabfive edit T123 --tag="Sprint" --column=forward --comment="Moving forward"
         phabfive edit T123 T124 --space=Archive
     """
-    force = resolve_assume_yes(yes, force)
+    try:
+        force = resolve_assume_yes(yes, force, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
     edit_handler = _get_edit_app()
 
     retcode = edit_handler.edit_objects(
@@ -144,6 +155,7 @@ def edit_command(
         space=space,
         dry_run=dry_run,
         force=force,
+        interactive=interactive,
     )
 
     raise typer.Exit(retcode)

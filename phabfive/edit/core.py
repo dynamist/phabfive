@@ -16,7 +16,6 @@ from phabfive.edit.validators import (
     get_task_boards,
     validate_board_column_context,
 )
-from phabfive.editor import confirm_text_change
 from phabfive.maniphest import Maniphest
 from phabfive.yaml_utils import group_objects_by_type, parse_yaml_from_stdin
 
@@ -46,6 +45,7 @@ class Edit(Phabfive):
         space=None,
         dry_run=False,
         force=False,
+        interactive=False,
     ):
         """Edit one or more Phabricator objects.
 
@@ -63,6 +63,7 @@ class Edit(Phabfive):
             space (str): Space to move the object to
             dry_run (bool): Show changes without applying
             force (bool): Skip confirmation prompts
+            interactive (bool): Review every change, even for a single task
 
         Returns:
             int: Return code (0 for success, 1 for failure)
@@ -110,6 +111,7 @@ class Edit(Phabfive):
                             space=space,
                             dry_run=dry_run,
                             force=force,
+                            interactive=interactive,
                             edit_description_in_editor=edit_description_in_editor,
                         )
                     elif object_type == "passphrase":
@@ -153,6 +155,7 @@ class Edit(Phabfive):
                             space=space,
                             dry_run=dry_run,
                             force=force,
+                            interactive=interactive,
                         )
                     elif object_type == "passphrase":
                         sys.stderr.write(
@@ -199,6 +202,7 @@ class Edit(Phabfive):
                         space=space,
                         dry_run=dry_run,
                         force=force,
+                        interactive=interactive,
                     )
                     if retcode != 0:
                         return retcode
@@ -243,6 +247,7 @@ class Edit(Phabfive):
         space=None,
         dry_run=False,
         force=False,
+        interactive=False,
         edit_description_in_editor=False,
     ):
         """Edit a single task.
@@ -261,6 +266,7 @@ class Edit(Phabfive):
             space (str): Space to move the task to
             dry_run (bool): Show changes without applying
             force (bool): Skip confirmation prompts
+            interactive (bool): Review every change, even for a single task
             edit_description_in_editor (bool): Open $EDITOR for description
 
         Returns:
@@ -272,9 +278,10 @@ class Edit(Phabfive):
 
             # Handle description
             final_description = None
-            current_desc = task_data["fields"].get("description", {}).get("raw", "")
 
             if edit_description_in_editor:
+                current_desc = task_data["fields"].get("description", {}).get("raw", "")
+
                 # Open editor with current description
                 from phabfive.editor import edit_text
 
@@ -282,12 +289,6 @@ class Edit(Phabfive):
                 if new_desc is None:
                     print("Description edit cancelled")
                     return 0
-
-                confirmed, return_code = confirm_text_change(
-                    current_desc, new_desc, force, dry_run=dry_run
-                )
-                if not confirmed:
-                    return return_code
 
                 final_description = new_desc
             elif description == "-":
@@ -298,33 +299,30 @@ class Edit(Phabfive):
                     )
                     return 1
                 new_desc = sys.stdin.read().rstrip()
-
-                confirmed, return_code = confirm_text_change(
-                    current_desc, new_desc, force, dry_run=dry_run
-                )
-                if not confirmed:
-                    return return_code
-
                 final_description = new_desc
             elif description is not None:
                 # Use provided description (including empty string to clear)
-                confirmed, return_code = confirm_text_change(
-                    current_desc, description, force, dry_run=dry_run
-                )
-                if not confirmed:
-                    return return_code
-
                 final_description = description
 
-            # Handle title confirmation
-            if title is not None and not dry_run:
-                current_title = task_data["fields"].get("name", "")
-                if title != current_title:
-                    confirmed, return_code = confirm_text_change(
-                        current_title, title, force, filename="title"
-                    )
-                    if not confirmed:
-                        return return_code
+            if interactive:
+                # --interactive gives one task the same review as a batch, so
+                # there is a single review implementation to reason about.
+                return edit_tasks_batch(
+                    [{"object_type": "task", "object_id": task_id, "data": {}}],
+                    self.maniphest,
+                    title=title,
+                    priority=priority,
+                    status=status,
+                    tag=tag,
+                    column=column,
+                    assign=assign,
+                    description=final_description,
+                    subscribe=subscribe,
+                    comment=comment,
+                    space=space,
+                    dry_run=dry_run,
+                    interactive=True,
+                )
 
             # Validate board/column context
             board_phid, error = validate_board_column_context(

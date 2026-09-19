@@ -11,55 +11,53 @@ from phabfive.edit.validators import (
     get_task_boards,
     validate_board_column_context,
 )
-from phabfive.editor import confirm_apply, show_diff
+from phabfive.editor import confirm_apply, open_tty, prompt_each, render_changes
 
 log = logging.getLogger(__name__)
 
 
-def _confirm_batch_text_changes(validated_tasks, title, description, force, dry_run):
-    """Show one diff per task for a title/description rewrite, then confirm once.
+def _open_review_stream(task_count, assume_yes, interactive, dry_run):
+    """Decide whether to review each task, and on what terminal.
 
     Args:
-        validated_tasks (list): Dicts with 'task_id' and 'task_data' keys
-        title (str): New title, or None
-        description (str): New description, or None
-        force (bool): Skip the confirmation prompt
+        task_count (int): Number of tasks that passed validation
+        assume_yes (bool): --yes was given, so never ask
+        interactive (bool): --interactive was given, so always ask
         dry_run (bool): Previewing only, so there is nothing to confirm
 
     Returns:
-        tuple: (confirmed: bool, return_code: int or None)
+        A terminal to prompt on, True to prompt on stdin, or None to not review.
     """
-    if dry_run or (title is None and description is None):
-        return (True, None)
+    if assume_yes or dry_run:
+        return None
 
-    changing = 0
+    if interactive:
+        # Explicitly asked for review, so reach past a piped stdin to the
+        # terminal. No terminal means no human, so do not prompt.
+        return sys.stdin if sys.stdin.isatty() else open_tty()
+
+    # By default a single task applies directly, and a pipe is not reviewed:
+    # prompting there would hang an agent that cannot answer.
+    if task_count < 2 or not sys.stdin.isatty():
+        return None
+
+    return sys.stdin
+
+
+def _needs_text_confirmation(validated_tasks, title, description):
+    """Whether any task's title or description would actually change."""
+    if title is None and description is None:
+        return False
+
     for task in validated_tasks:
         fields = task["task_data"]["fields"]
-        task_id = task["task_id"]
-        changed = False
-
         if description is not None:
-            current = fields.get("description", {}).get("raw", "")
-            if current != description:
-                print()
-                show_diff(current, description, filename=f"T{task_id}/description")
-                changed = True
+            if fields.get("description", {}).get("raw", "") != description:
+                return True
+        if title is not None and fields.get("name", "") != title:
+            return True
 
-        if title is not None:
-            current = fields.get("name", "")
-            if current != title:
-                print()
-                show_diff(current, title, filename=f"T{task_id}/title")
-                changed = True
-
-        if changed:
-            changing += 1
-
-    if not changing:
-        return (True, None)
-
-    print()
-    return confirm_apply(force, prompt=f"Apply changes to {changing} task(s)?")
+    return False
 
 
 def edit_tasks_batch(
@@ -77,6 +75,7 @@ def edit_tasks_batch(
     space=None,
     dry_run=False,
     force=False,
+    interactive=False,
 ):
     """Edit multiple tasks in batch (atomic validation).
 
@@ -95,6 +94,7 @@ def edit_tasks_batch(
         space (str): Space to move the tasks to
         dry_run (bool): Show changes without applying
         force (bool): Skip confirmation prompts
+        interactive (bool): Review every change, even for a single task
 
     Returns:
         int: Return code (0 for success, 1 for failure)
@@ -154,21 +154,45 @@ def edit_tasks_batch(
         sys.stderr.write("\nNo tasks were modified (atomic batch failure).\n")
         return 1
 
-    # Phase 1.5: confirm title/description rewrites, as the single-task path does.
-    # Column, status and priority edits stay promptless.
-    confirmed, return_code = _confirm_batch_text_changes(
-        validated_tasks, title, description, force, dry_run
+    # Phase 1.5: decide how (and whether) to review each task
+    review_stream = _open_review_stream(
+        len(validated_tasks), force, interactive, dry_run
     )
-    if not confirmed:
+
+    if interactive and not dry_run and review_stream is None:
+        # Asked to see every change, but there is no terminal to show them on.
+        # Applying unreviewed would be the opposite of what was asked.
+        sys.stderr.write(
+            "Error: --interactive needs a terminal and none is available\n"
+        )
         sys.stderr.write("No tasks were modified.\n")
-        return return_code
+        return 1
+
+    if (
+        review_stream is None
+        and not dry_run
+        and _needs_text_confirmation(validated_tasks, title, description)
+    ):
+        # No terminal to show N diffs on, so make the caller say so explicitly.
+        confirmed, return_code = confirm_apply(force)
+        if not confirmed:
+            sys.stderr.write("No tasks were modified.\n")
+            return return_code
 
     # Phase 2: Process all validated tasks
     success_count = 0
+    skipped_count = 0
+    error_count = 0
+    quit_early = False
+
     for task in validated_tasks:
+        task_id = task["task_id"]
+        monogram = f"T{task_id}"
+
         try:
-            result = maniphest.edit_task_by_id(
-                task_id=task["task_id"],
+            transactions, changes = maniphest.build_task_edit(
+                task_id,
+                task["task_data"],
                 title=title,
                 priority=priority,
                 status=status,
@@ -179,15 +203,66 @@ def edit_tasks_batch(
                 subscribe=subscribe,
                 comment=comment,
                 space=space,
-                dry_run=dry_run,
+            )
+        except Exception as e:
+            log.debug(f"Failed to prepare edit for {monogram}: {e}")
+            sys.stderr.write(f"Error editing {monogram}: {e}\n")
+            error_count += 1
+            continue
+
+        if not transactions:
+            print(f"{monogram}: No changes (already at target state)")
+            success_count += 1
+            continue
+
+        if review_stream is not None:
+            stream = None if review_stream is sys.stdin else review_stream
+            render_changes(monogram, changes, header=f"Would apply to {monogram}:")
+            answer = prompt_each(monogram, stream)
+
+            if answer == "n":
+                skipped_count += 1
+                continue
+            if answer == "q":
+                quit_early = True
+                break
+            if answer == "a":
+                review_stream = None
+
+        if dry_run:
+            render_changes(
+                monogram, changes, header=f"[DRY RUN] Would apply to {monogram}:"
             )
             success_count += 1
-            display_changes(f"T{task['task_id']}", result)
+            continue
+
+        try:
+            maniphest.apply_task_edit(task_id, transactions)
+            success_count += 1
+            display_changes(monogram, {"task_id": task_id, "changes": changes})
 
         except Exception as e:
-            log.debug(f"Failed to edit task T{task['task_id']}: {e}")
-            sys.stderr.write(f"Error editing T{task['task_id']}: {e}\n")
+            log.debug(f"Failed to edit task {monogram}: {e}")
+            sys.stderr.write(f"Error editing {monogram}: {e}\n")
+            error_count += 1
             # Continue processing other tasks
 
-    print(f"\nEdited {success_count}/{len(validated_tasks)} tasks")
-    return 0 if success_count == len(validated_tasks) else 1
+    if review_stream is not None and review_stream is not sys.stdin:
+        review_stream.close()
+
+    _print_summary(success_count, skipped_count, len(validated_tasks), quit_early)
+
+    # Skipping and quitting are choices, not failures.
+    return 1 if error_count else 0
+
+
+def _print_summary(applied, skipped, total, quit_early):
+    """Report what happened, naming anything left untouched."""
+    parts = [f"Edited {applied}/{total} tasks"]
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    if quit_early:
+        remaining = total - applied - skipped
+        parts.append(f"{remaining} left unchanged (quit)")
+
+    print(f"\n{', '.join(parts)}")

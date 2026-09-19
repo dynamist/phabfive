@@ -563,7 +563,10 @@ def edit(
         False,
         "--yes",
         "-y",
-        help="Apply title/content changes without confirming (required for non-interactive use)",
+        help="Apply without confirming",
+    ),
+    interactive: bool = typer.Option(
+        False, "--interactive", "-i", help="Review each change and confirm"
     ),
     force: bool = typer.Option(
         False, "--force", hidden=True, help="Deprecated alias for --yes"
@@ -583,7 +586,12 @@ def edit(
     """
     from phabfive.editor import confirm_text_change, edit_text
 
-    force = resolve_assume_yes(yes, force)
+    try:
+        force = resolve_assume_yes(yes, force, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
     _setup_output_options(ctx)
     paste = _get_paste_app()
 
@@ -642,20 +650,19 @@ def edit(
     # Handle tags
     tag_list = list(tag) if tag else None
 
-    # Show diff for content changes
-    if final_content is not None and not dry_run:
+    # A single object applies directly; --interactive asks first.
+    if final_content is not None and not dry_run and interactive:
         confirmed, return_code = confirm_text_change(
-            current_paste["content"], final_content, force, filename="content"
+            current_paste["content"], final_content, False, filename="content"
         )
         if not confirmed:
             raise typer.Exit(return_code or 0)
 
-    # Show diff for title changes
-    if final_title is not None and not dry_run:
+    if final_title is not None and not dry_run and interactive:
         current_title = current_paste.get("title", "")
         if final_title != current_title:
             confirmed, return_code = confirm_text_change(
-                current_title, final_title, force, filename="title"
+                current_title, final_title, False, filename="title"
             )
             if not confirmed:
                 raise typer.Exit(return_code or 0)

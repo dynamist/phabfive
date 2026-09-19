@@ -445,15 +445,17 @@ class TestBoardColumnValidation:
         assert error is None
 
 
-class TestBatchConfirmation:
-    """Tests that the non-interactive guard covers N tasks, not just one."""
+class TestBatchReview:
+    """Per-task review: the number of targets decides, not the field type."""
 
     @staticmethod
     def _tasks(n=2):
         return [{"object_id": str(100 + i)} for i in range(n)]
 
     @staticmethod
-    def _maniphest(description="current", name="current title", boards=None):
+    def _maniphest(
+        description="current", name="current title", boards=None, changes=None
+    ):
         m = mock.MagicMock()
         m._get_task_data.return_value = {
             "fields": {
@@ -462,152 +464,393 @@ class TestBatchConfirmation:
             },
             "attachments": {"columns": {"boards": boards or {}}},
         }
-        m.edit_task_by_id.return_value = {"task_id": "100", "changes": []}
+        m.build_task_edit.return_value = (
+            [{"type": "status", "value": "resolved"}],
+            changes
+            if changes is not None
+            else [{"field": "Status", "old": "Open", "new": "Resolved"}],
+        )
         return m
 
-    def test_description_batch_refuses_without_yes(self, capsys):
-        """The single-task guard must not disappear once there are two targets."""
+    @staticmethod
+    @contextlib.contextmanager
+    def _terminal(answers=()):
+        """Pretend stdin is a terminal and feed the review loop given answers."""
+        with (
+            mock.patch("sys.stdin.isatty", return_value=True),
+            mock.patch(
+                "phabfive.edit.batch.prompt_each", side_effect=list(answers)
+            ) as prompt,
+        ):
+            yield prompt
+
+    def test_single_task_applies_without_prompt(self):
+        """One task is not reviewed - that is the whole rule."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal() as prompt:
+            retcode = edit_tasks_batch(self._tasks(1), maniphest, status="resolved")
+
+        assert retcode == 0
+        prompt.assert_not_called()
+        assert maniphest.apply_task_edit.call_count == 1
+
+    def test_batch_reviews_each_task(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal(["y", "y"]) as prompt:
+            retcode = edit_tasks_batch(self._tasks(2), maniphest, status="resolved")
+
+        assert retcode == 0
+        assert prompt.call_count == 2
+        assert maniphest.apply_task_edit.call_count == 2
+
+    def test_n_skips_only_that_task(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal(["n", "y"]):
+            retcode = edit_tasks_batch(self._tasks(2), maniphest, status="resolved")
+
+        assert retcode == 0
+        assert maniphest.apply_task_edit.call_count == 1
+        assert maniphest.apply_task_edit.call_args[0][0] == "101"
+
+    def test_a_applies_the_rest_without_prompting(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal(["a"]) as prompt:
+            retcode = edit_tasks_batch(self._tasks(3), maniphest, status="resolved")
+
+        assert retcode == 0
+        assert prompt.call_count == 1
+        assert maniphest.apply_task_edit.call_count == 3
+
+    def test_q_stops_and_is_not_a_failure(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal(["q"]):
+            retcode = edit_tasks_batch(self._tasks(3), maniphest, status="resolved")
+
+        # Quitting is a choice, not an error.
+        assert retcode == 0
+        maniphest.apply_task_edit.assert_not_called()
+
+    def test_yes_skips_the_review(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal() as prompt:
+            retcode = edit_tasks_batch(
+                self._tasks(3), maniphest, status="resolved", force=True
+            )
+
+        assert retcode == 0
+        prompt.assert_not_called()
+        assert maniphest.apply_task_edit.call_count == 3
+
+    def test_interactive_reviews_a_single_task(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal(["y"]) as prompt:
+            retcode = edit_tasks_batch(
+                self._tasks(1), maniphest, status="resolved", interactive=True
+            )
+
+        assert retcode == 0
+        assert prompt.call_count == 1
+
+    def test_no_terminal_applies_structured_fields(self):
+        """Agents editing status/column keep working, unprompted."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=False),
+            mock.patch("phabfive.edit.batch.prompt_each") as prompt,
+        ):
+            retcode = edit_tasks_batch(self._tasks(2), maniphest, status="resolved")
+
+        assert retcode == 0
+        prompt.assert_not_called()
+        assert maniphest.apply_task_edit.call_count == 2
+
+    def test_no_terminal_refuses_text_changes(self, capsys):
+        """No terminal to show N diffs on, so make the caller say --yes."""
         from phabfive.edit.batch import edit_tasks_batch
 
         maniphest = self._maniphest()
 
         with mock.patch("sys.stdin.isatty", return_value=False):
-            retcode = edit_tasks_batch(
-                self._tasks(), maniphest, description="new", force=False
-            )
+            retcode = edit_tasks_batch(self._tasks(2), maniphest, description="new")
 
         assert retcode == 1
-        maniphest.edit_task_by_id.assert_not_called()
+        maniphest.apply_task_edit.assert_not_called()
         err = capsys.readouterr().err
         assert "--yes required for non-interactive mode" in err
         assert "No tasks were modified." in err
 
-    def test_title_batch_refuses_without_yes(self, capsys):
+    def test_no_terminal_text_changes_with_yes(self):
         from phabfive.edit.batch import edit_tasks_batch
 
         maniphest = self._maniphest()
 
         with mock.patch("sys.stdin.isatty", return_value=False):
             retcode = edit_tasks_batch(
-                self._tasks(), maniphest, title="new title", force=False
+                self._tasks(2), maniphest, description="new", force=True
+            )
+
+        assert retcode == 0
+        assert maniphest.apply_task_edit.call_count == 2
+
+    def test_dry_run_never_prompts_and_never_writes(self):
+        """--dry-run decides whether a write happens; the review only answers a prompt."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal() as prompt:
+            retcode = edit_tasks_batch(
+                self._tasks(2), maniphest, description="new", dry_run=True
+            )
+
+        assert retcode == 0
+        prompt.assert_not_called()
+        maniphest.apply_task_edit.assert_not_called()
+
+    def test_piped_input_is_not_reviewed_without_interactive(self):
+        """Prompting on a pipe would hang an agent that cannot answer."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=False),
+            mock.patch("phabfive.edit.batch.open_tty") as open_tty,
+            mock.patch("phabfive.edit.batch.prompt_each") as prompt,
+        ):
+            retcode = edit_tasks_batch(self._tasks(2), maniphest, status="resolved")
+
+        assert retcode == 0
+        open_tty.assert_not_called()
+        prompt.assert_not_called()
+
+    def test_interactive_reaches_past_a_pipe_to_the_terminal(self):
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+        tty = mock.MagicMock()
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=False),
+            mock.patch("phabfive.edit.batch.open_tty", return_value=tty),
+            mock.patch("phabfive.edit.batch.prompt_each", return_value="y") as prompt,
+        ):
+            retcode = edit_tasks_batch(
+                self._tasks(2), maniphest, status="resolved", interactive=True
+            )
+
+        assert retcode == 0
+        assert prompt.call_count == 2
+        # The prompt must read the terminal, not the pipe.
+        assert prompt.call_args[0][1] is tty
+        tty.close.assert_called_once()
+
+    def test_interactive_without_any_terminal_refuses(self, capsys):
+        """Applying unreviewed is the opposite of what --interactive asked for."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with (
+            mock.patch("sys.stdin.isatty", return_value=False),
+            mock.patch("phabfive.edit.batch.open_tty", return_value=None),
+            mock.patch("phabfive.edit.batch.prompt_each") as prompt,
+        ):
+            retcode = edit_tasks_batch(
+                self._tasks(2), maniphest, status="resolved", interactive=True
             )
 
         assert retcode == 1
-        maniphest.edit_task_by_id.assert_not_called()
-        assert "--yes required" in capsys.readouterr().err
+        prompt.assert_not_called()
+        maniphest.apply_task_edit.assert_not_called()
+        err = capsys.readouterr().err
+        assert "--interactive needs a terminal" in err
+        assert "No tasks were modified." in err
 
-    def test_description_batch_applies_with_yes(self):
+    def test_interactive_with_dry_run_still_previews(self):
+        """--dry-run shows every change anyway, so it needs no terminal."""
         from phabfive.edit.batch import edit_tasks_batch
 
         maniphest = self._maniphest()
 
-        with mock.patch("sys.stdin.isatty", return_value=False):
+        with (
+            mock.patch("sys.stdin.isatty", return_value=False),
+            mock.patch("phabfive.edit.batch.open_tty", return_value=None),
+            mock.patch("phabfive.edit.batch.prompt_each") as prompt,
+        ):
             retcode = edit_tasks_batch(
-                self._tasks(3), maniphest, description="new", force=True
+                self._tasks(2),
+                maniphest,
+                status="resolved",
+                interactive=True,
+                dry_run=True,
             )
 
         assert retcode == 0
-        assert maniphest.edit_task_by_id.call_count == 3
+        prompt.assert_not_called()
+        maniphest.apply_task_edit.assert_not_called()
 
-    def test_column_batch_never_prompts(self):
-        """Column, status and priority edits stay promptless - a stray --yes is a no-op."""
+    def test_task_with_no_changes_is_not_reviewed(self, capsys):
         from phabfive.edit.batch import edit_tasks_batch
 
-        maniphest = self._maniphest(
-            boards={"PHID-PROJ-board1": {"columns": [{"phid": "PHID-PCOL-1"}]}}
+        maniphest = self._maniphest()
+        maniphest.build_task_edit.return_value = ([], [])
+
+        with self._terminal() as prompt:
+            retcode = edit_tasks_batch(self._tasks(2), maniphest, status="resolved")
+
+        assert retcode == 0
+        prompt.assert_not_called()
+        maniphest.apply_task_edit.assert_not_called()
+        assert "No changes (already at target state)" in capsys.readouterr().out
+
+    def test_build_reuses_the_task_data_already_fetched(self):
+        """Phase 1 fetched each task; the build must not fetch it again."""
+        from phabfive.edit.batch import edit_tasks_batch
+
+        maniphest = self._maniphest()
+
+        with self._terminal() as prompt:
+            edit_tasks_batch(self._tasks(2), maniphest, status="resolved", force=True)
+
+        prompt.assert_not_called()
+        assert maniphest._get_task_data.call_count == 2
+        for call in maniphest.build_task_edit.call_args_list:
+            assert call[0][1] is maniphest._get_task_data.return_value
+
+
+@mock.patch("phabfive.maniphest.core.Phabfive.__init__", return_value=None)
+class TestBuildTaskEdit:
+    """Splitting "what would change" from "do it" is what makes review possible."""
+
+    @staticmethod
+    def _task():
+        return {
+            "id": 123,
+            "phid": "PHID-TASK-123",
+            "fields": {
+                "name": "A task",
+                "priority": {"value": 50, "name": "Normal"},
+                "status": {"value": "open", "name": "Open"},
+                "ownerPHID": None,
+                "description": {"raw": "old text"},
+                "spacePHID": "PHID-SPCE-1",
+            },
+            "attachments": {
+                "columns": {"boards": {}},
+                "projects": {"projectPHIDs": []},
+                "subscribers": {"subscriberPHIDs": []},
+            },
+        }
+
+    def _maniphest(self):
+        from phabfive.maniphest.core import Maniphest
+
+        maniphest = Maniphest()
+        maniphest.phab = mock.MagicMock()
+        maniphest.url = "https://phorge.example.com/"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest._get_task_data = mock.MagicMock(return_value=self._task())
+        return maniphest
+
+    def test_building_never_touches_the_api(self, mock_init):
+        maniphest = self._maniphest()
+
+        transactions, changes = maniphest.build_task_edit("123", title="New title")
+
+        assert transactions == [{"type": "title", "value": "New title"}]
+        assert changes == [{"field": "Title", "old": "A task", "new": "New title"}]
+        maniphest.phab.maniphest.edit.assert_not_called()
+
+    def test_supplied_task_data_is_not_refetched(self, mock_init):
+        """Batch fetches in phase 1; the build must not pay for it again."""
+        maniphest = self._maniphest()
+
+        maniphest.build_task_edit("123", self._task(), title="New title")
+
+        maniphest._get_task_data.assert_not_called()
+
+    def test_task_data_is_fetched_when_omitted(self, mock_init):
+        maniphest = self._maniphest()
+
+        maniphest.build_task_edit("123", title="New title")
+
+        maniphest._get_task_data.assert_called_once_with("123")
+
+    def test_no_change_builds_no_transactions(self, mock_init):
+        maniphest = self._maniphest()
+
+        transactions, changes = maniphest.build_task_edit("123", title="A task")
+
+        assert transactions == []
+        assert changes == []
+
+    def test_apply_sends_exactly_what_was_built(self, mock_init):
+        maniphest = self._maniphest()
+        transactions, _ = maniphest.build_task_edit("123", title="New title")
+
+        maniphest.apply_task_edit("123", transactions)
+
+        maniphest.phab.maniphest.edit.assert_called_once_with(
+            objectIdentifier="T123", transactions=transactions
         )
 
-        with (
-            mock.patch("sys.stdin.isatty", return_value=False),
-            mock.patch("typer.confirm") as mock_confirm,
-        ):
-            retcode = edit_tasks_batch(
-                self._tasks(), maniphest, column="Done", status="resolved", force=False
-            )
-
-        assert retcode == 0
-        assert maniphest.edit_task_by_id.call_count == 2
-        mock_confirm.assert_not_called()
-
-    def test_dry_run_beats_yes(self):
-        """--dry-run decides whether a write happens; --yes only answers a prompt."""
-        from phabfive.edit.batch import edit_tasks_batch
-
+    def test_edit_task_by_id_still_composes_the_two(self, mock_init):
+        """The old entry point keeps its behavior, so its callers are untouched."""
         maniphest = self._maniphest()
 
-        with (
-            mock.patch("sys.stdin.isatty", return_value=False),
-            mock.patch("typer.confirm") as mock_confirm,
-        ):
-            retcode = edit_tasks_batch(
-                self._tasks(), maniphest, description="new", force=True, dry_run=True
-            )
+        result = maniphest.edit_task_by_id(task_id="123", title="New title")
 
-        assert retcode == 0
-        mock_confirm.assert_not_called()
-        for call in maniphest.edit_task_by_id.call_args_list:
-            assert call.kwargs["dry_run"] is True
+        assert result == {
+            "task_id": "123",
+            "changes": [{"field": "Title", "old": "A task", "new": "New title"}],
+        }
+        maniphest.phab.maniphest.edit.assert_called_once()
 
-    def test_dry_run_does_not_require_yes(self):
-        """Preview changes nothing, so it must not demand the flag."""
-        from phabfive.edit.batch import edit_tasks_batch
-
+    def test_dry_run_builds_but_does_not_apply(self, mock_init):
         maniphest = self._maniphest()
 
-        with mock.patch("sys.stdin.isatty", return_value=False):
-            retcode = edit_tasks_batch(
-                self._tasks(), maniphest, description="new", force=False, dry_run=True
-            )
+        result = maniphest.edit_task_by_id(
+            task_id="123", title="New title", dry_run=True
+        )
 
-        assert retcode == 0
-        assert maniphest.edit_task_by_id.call_count == 2
+        assert result["dry_run"] is True
+        assert result["changes"]
+        maniphest.phab.maniphest.edit.assert_not_called()
 
-    def test_unchanged_text_does_not_prompt(self):
-        """Nothing to confirm when every task already holds the new value."""
-        from phabfive.edit.batch import edit_tasks_batch
-
-        maniphest = self._maniphest(description="same")
-
-        with (
-            mock.patch("sys.stdin.isatty", return_value=False),
-            mock.patch("typer.confirm") as mock_confirm,
-        ):
-            retcode = edit_tasks_batch(
-                self._tasks(), maniphest, description="same", force=False
-            )
-
-        assert retcode == 0
-        mock_confirm.assert_not_called()
-
-    def test_interactive_decline_modifies_nothing(self, capsys):
-        from phabfive.edit.batch import edit_tasks_batch
-
+    def test_edit_task_by_id_accepts_prefetched_data(self, mock_init):
         maniphest = self._maniphest()
 
-        with (
-            mock.patch("sys.stdin.isatty", return_value=True),
-            mock.patch("typer.confirm", return_value=False),
-        ):
-            retcode = edit_tasks_batch(
-                self._tasks(), maniphest, description="new", force=False
-            )
+        maniphest.edit_task_by_id(
+            task_id="123", title="New title", task_data=self._task()
+        )
 
-        assert retcode == 0
-        maniphest.edit_task_by_id.assert_not_called()
-        assert "No tasks were modified." in capsys.readouterr().err
-
-    def test_prompt_counts_only_changing_tasks(self):
-        from phabfive.edit.batch import edit_tasks_batch
-
-        maniphest = self._maniphest()
-
-        with (
-            mock.patch("sys.stdin.isatty", return_value=True),
-            mock.patch("typer.confirm", return_value=True) as mock_confirm,
-        ):
-            edit_tasks_batch(self._tasks(3), maniphest, description="new", force=False)
-
-        mock_confirm.assert_called_once_with("Apply changes to 3 task(s)?")
+        maniphest._get_task_data.assert_not_called()
+        maniphest.phab.maniphest.edit.assert_called_once()
 
 
 class TestStdinAutoDetection:
