@@ -1314,62 +1314,54 @@ class TestUriEditNamesTheRepository:
         assert seen[0] != seen[1]
 
 
-class TestBranchListFailsCleanly:
-    """branch list was the last diffusion command without error handling.
+class TestBranchListIsRetired:
+    """`diffusion branch list` is now `repo show --show-branches`.
 
-    A repository can be listed and addressable and still fail to answer for
-    its branches - the server reaches the repository record, then cannot
-    reach its data. That surfaced as a raw traceback whose last line was
-    the part worth reading.
+    The sub-app is removed rather than shimmed, the way `--new-uri` and the
+    `-n/-i/-d/-c` short flags were, so a script still spelling it out is
+    answered by the parser instead of quietly doing something else.
     """
 
-    def _invoke(self, argv, side_effect=None, branches=None):
+    def _invoke(self, argv):
         from typer.testing import CliRunner
 
         from phabfive.cli.diffusion import diffusion_app
 
         mock_diffusion = MagicMock()
-        if side_effect is not None:
-            mock_diffusion.get_branches_formatted.side_effect = side_effect
-        else:
-            mock_diffusion.get_branches_formatted.return_value = branches or []
 
         with patch(
             "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
         ):
-            return CliRunner().invoke(diffusion_app, argv)
+            result = CliRunner().invoke(diffusion_app, argv)
 
-    def test_an_unreadable_repository_is_reported_cleanly(self):
-        result = self._invoke(
-            ["branch", "list", "R42"],
-            side_effect=PhabfiveDataException("<branchquery> data is unavailable"),
-        )
+        return result, mock_diffusion
 
-        assert result.exit_code == 1
-        assert "data is unavailable" in result.output
-        assert "Traceback" not in result.output
+    def test_the_command_no_longer_exists(self):
+        result, diffusion = self._invoke(["branch", "list", "R42"])
 
-    def test_an_unknown_repository_is_reported_cleanly(self):
-        result = self._invoke(
-            ["branch", "list", "R9999"],
-            side_effect=PhabfiveDataException("is not a valid repository"),
-        )
+        assert result.exit_code != 0
+        diffusion.get_branches_formatted.assert_not_called()
 
-        assert result.exit_code == 1
-        assert "Traceback" not in result.output
+    def test_the_sub_app_no_longer_exists(self):
+        result, _ = self._invoke(["branch"])
 
-    def test_a_repository_with_no_branches_is_not_an_error(self):
-        """Empty is an empty result, not a failure."""
-        result = self._invoke(["branch", "list", "R42"], branches=[])
+        assert result.exit_code != 0
 
-        assert result.exit_code == 0
-        assert result.output.strip() == ""
+    def test_diffusion_no_longer_offers_a_branch_command(self):
+        result, _ = self._invoke(["--help"])
 
-    def test_branches_are_listed_one_per_line(self):
-        result = self._invoke(["branch", "list", "R42"], branches=["main", "topic"])
+        assert "branch" not in result.output
 
-        assert result.exit_code == 0
-        assert result.output.split() == ["main", "topic"]
+    def test_the_monogram_now_shows_the_repository(self):
+        """R5 was the branch listing; it is the repository now."""
+        from phabfive.cli import preprocess_monograms
+
+        assert preprocess_monograms(["phabfive", "R5"])[1:] == [
+            "diffusion",
+            "repo",
+            "show",
+            "R5",
+        ]
 
 
 class TestUriIoAndDisplayValues:
@@ -2051,35 +2043,6 @@ class TestRepoShowCli:
         assert result.exit_code == 1
         assert "data is unavailable" in result.output
         assert "Traceback" not in result.output
-
-
-class TestRefsAreGeneralised:
-    """format_branches filtered branches out of one endpoint and dropped tags."""
-
-    def test_branches_still_list(self):
-        from phabfive.diffusion.formatters import format_refs
-
-        phab = _phab_with_repos([_repo("myrepo")])
-        phab.diffusion.branchquery.return_value = [
-            {"shortName": "main", "refType": "branch"}
-        ]
-
-        assert format_refs(phab, "myrepo") == ["main"]
-
-    def test_tags_come_from_the_tag_endpoint(self):
-        from phabfive.diffusion.formatters import format_refs
-
-        phab = _phab_with_repos([_repo("myrepo")])
-        phab.diffusion.tagsquery.return_value = [{"name": "v1.0"}]
-
-        assert format_refs(phab, "myrepo", "tag") == ["v1.0"]
-        phab.diffusion.branchquery.assert_not_called()
-
-    def test_an_unknown_repository_is_still_reported(self):
-        from phabfive.diffusion.formatters import format_refs
-
-        with pytest.raises(PhabfiveDataException, match="not a valid repository"):
-            format_refs(_phab_with_repos([]), "nope")
 
 
 class TestEditHeadersLinkToPhabricator:

@@ -43,7 +43,6 @@ GROUPS = [
     ["maniphest"],
     ["diffusion", "repo"],
     ["diffusion", "uri"],
-    ["diffusion", "branch"],
 ]
 
 

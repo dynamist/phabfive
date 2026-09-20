@@ -7,7 +7,7 @@ Phabfive is a command line tool to interact with Phabricator/Phorge, providing a
 Phabfive currently supports the following Phabricator/Phorge applications:
 
 - **Passphrase** - Search, list, and retrieve secrets (passwords, tokens, SSH keys, notes)
-- **Diffusion** - List repositories, get branches, clone URIs, add repositories, manage URIs
+- **Diffusion** - List and show repositories, their branches and tags, clone URIs, add repositories, manage URIs
 - **Paste** - List, get, and add code pastes
 - **User** - Get information about the logged-in user
 - **Maniphest** - Add comments, show task details, create tasks from templates, and search with advanced project filtering and transition filtering

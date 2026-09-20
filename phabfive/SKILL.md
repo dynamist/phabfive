@@ -84,7 +84,7 @@ A bare monogram as the first argument expands to a command:
 | `T123` | `maniphest show T123` |
 | `P123` | `paste show P123` |
 | `K123` | `passphrase show K123` |
-| `R123` | `diffusion branch list R123` |
+| `R123` | `diffusion repo show R123` |
 
 A monogram followed by a word is **not** a read:
 

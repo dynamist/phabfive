@@ -6,13 +6,9 @@ from ruamel.yaml.scalarstring import PreservedScalarString
 
 from phabfive.constants import POLICY_LABELS, REPO_STATUS_CHOICES
 from phabfive.diffusion.fetchers import (
-    fetch_refs,
     fetch_repositories,
     fetch_uris,
-    find_repository,
 )
-from phabfive.diffusion.validators import validate_repo_identifier
-from phabfive.exceptions import PhabfiveDataException
 from phabfive.maniphest.utils import format_timestamp
 
 
@@ -119,44 +115,6 @@ def ref_names(refs, ref_type="branch"):
             names.append(name)
 
     return sorted(names)
-
-
-def format_refs(phab, repo, ref_type="branch"):
-    """
-    Return the sorted names of a repository's branches, or of its tags.
-
-    Parameters
-    ----------
-    phab : Phabricator
-        Phabricator API client
-    repo : str
-        Repository monogram (e.g., "R123"), callsign or short name
-    ref_type : str, optional
-        Either "branch" (the default) or "tag"
-
-    Returns
-    -------
-    list
-        Sorted ref name strings
-
-    Raises
-    ------
-    PhabfiveDataException
-        If no such repository exists, or the API refuses the query
-    """
-    if validate_repo_identifier(repo):
-        repo_id = repo[1:]
-    else:
-        resolved = find_repository(phab, repo)
-
-        if resolved is None:
-            raise PhabfiveDataException(
-                f"Repository '{repo}' is not a valid repository"
-            )
-
-        repo_id = resolved["id"]
-
-    return ref_names(fetch_refs(phab, repo_id, ref_type), ref_type)
 
 
 def repository_is_hosted(repo):

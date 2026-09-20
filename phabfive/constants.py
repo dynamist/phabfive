@@ -43,7 +43,7 @@ MONOGRAM_SHORTCUT = {
     "T": ["maniphest", "show"],  # T123 → maniphest show T123
     "K": ["passphrase", "show"],  # K123 → passphrase show K123
     "P": ["paste", "show"],  # P123 → paste show P123
-    "R": ["diffusion", "branch", "list"],  # R123 → diffusion branch list R123
+    "R": ["diffusion", "repo", "show"],  # R123 → diffusion repo show R123
 }
 
 # Apps that support "X123 'text'" → "app comment X123 'text'" shortcut

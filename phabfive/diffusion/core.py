@@ -20,7 +20,6 @@ from phabfive.diffusion.fetchers import (
 )
 from phabfive.diffusion.formatters import (
     build_repository_display_data,
-    format_refs,
     format_repositories,
     format_uris,
     ref_names,
@@ -145,14 +144,6 @@ class Diffusion(Phabfive):
     def get_repositories_formatted(self, status=None, include_url=False):
         """Return list of repository dicts with 'name' and optionally 'urls' keys."""
         return format_repositories(self.phab, status, include_url)
-
-    def get_branches_formatted(self, repo):
-        """Return sorted list of branch names for a repository."""
-        return format_refs(self.phab, repo, "branch")
-
-    def get_tags_formatted(self, repo):
-        """Return sorted list of tag names for a repository."""
-        return format_refs(self.phab, repo, "tag")
 
     def _resolve_spaces(self, repos):
         """Name the spaces a set of repositories live in.
