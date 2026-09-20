@@ -178,6 +178,30 @@ REPO_POLICY_TRANSACTIONS = {
     "push": "policy.push",
 }
 
+# Where a task record keeps each policy. maniphest.search reports all three on
+# every task, unprefixed.
+TASK_POLICY_FIELDS = {
+    "view": "view",
+    "interact": "interact",
+    "edit": "edit",
+}
+
+# The Conduit transaction types that set a task's policies - and there are two
+# of them, not three, which is the one place tasks and repositories genuinely
+# differ.
+#
+# maniphest.edit answers an unknown type by listing every valid one, and that
+# list holds "view" and "edit" and no interact type at all: "interact" and
+# "policy.interact" are both refused. ManiphestTask::getPolicy is why. A task
+# does not store an interact policy; it derives one, returning the view policy
+# unless the task's status locks comments, in which case it returns "no-one".
+# So "Can Interact With" is readable and is worth reading - it is how a locked
+# task says so - but the way to change it is the task's status, not a policy.
+TASK_POLICY_TRANSACTIONS = {
+    "view": "view",
+    "edit": "edit",
+}
+
 CONFIGURABLES = [
     "PHAB_TOKEN",
     "PHAB_URL",
@@ -309,6 +333,8 @@ __all__ = [
     "REPO_POLICY_TRANSACTIONS",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
+    "TASK_POLICY_FIELDS",
+    "TASK_POLICY_TRANSACTIONS",
     "URI_ROLES",
     "URI_ROLE_DISABLED",
     "VALIDATION_HINTS",

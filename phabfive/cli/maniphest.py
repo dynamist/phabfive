@@ -13,6 +13,7 @@ from phabfive.cli.completers import (
     complete_column_change,
     complete_column_filter,
     complete_order,
+    complete_policy,
     complete_priority,
     complete_priority_change,
     complete_priority_filter,
@@ -27,7 +28,8 @@ from phabfive.cli.completers import (
 from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.constants import MONOGRAMS
 from phabfive.editor import resolve_assume_yes
-from phabfive.exceptions import PhabfiveConfigException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.policy import POLICY_GRAMMAR
 
 maniphest_app = typer.Typer(
     cls=AgentFooterGroup, help="The maniphest app", no_args_is_help=True
@@ -220,6 +222,18 @@ def create(
         help="Create the task in a Space (monogram, name, or unique pattern)",
         autocompletion=complete_space,
     ),
+    visible_to: Optional[str] = typer.Option(
+        None,
+        "--visible-to",
+        help=f"Set who can see it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    editable_by: Optional[str] = typer.Option(
+        None,
+        "--editable-by",
+        help=f"Set who can edit it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview without creating task"
     ),
@@ -251,6 +265,7 @@ def create(
         phabfive maniphest create "Task" --priority=high --tag=Sprint
         phabfive maniphest create "Task" --tag=Board --column=Backlog
         phabfive maniphest create "Task" --space=S3
+        phabfive maniphest create "Task" --visible-to='#infra' --editable-by=admin
         echo "Description" | phabfive maniphest create "Task" --description=-
     """
     try:
@@ -328,10 +343,13 @@ def create(
                 column=column,
                 board_phid=board_phid,
                 space=space,
+                visible_to=visible_to,
+                editable_by=editable_by,
                 dry_run=dry_run,
             )
-        except PhabfiveConfigException as e:
-            # e.g. a --tag that matches no project, or several projects
+        except (PhabfiveConfigException, PhabfiveDataException) as e:
+            # e.g. a --tag that matches no project, or several projects, or a
+            # policy naming a project or user that does not exist
             sys.stderr.write(f"Error: {e}\n")
             raise typer.Exit(1)
         if result:
@@ -361,6 +379,8 @@ def create(
                     print(f"  Subscribers: {', '.join(result['subscribers'])}")
                 if result.get("space"):
                     print(f"  Space: {result['space']}")
+                for label, value in (result.get("policy") or {}).items():
+                    print(f"  {label}: {value}")
             else:
                 typer.echo(result["uri"])
                 if result.get("tag_slugs"):
@@ -752,6 +772,18 @@ def edit(
         help="Move to a Space (monogram, name, or unique pattern)",
         autocompletion=complete_space,
     ),
+    visible_to: Optional[str] = typer.Option(
+        None,
+        "--visible-to",
+        help=f"Set who can see it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    editable_by: Optional[str] = typer.Option(
+        None,
+        "--editable-by",
+        help=f"Set who can edit it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -788,6 +820,7 @@ def edit(
         phabfive maniphest edit T123 T124 "New Title"
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
         phabfive maniphest edit T123 --space=S3
+        phabfive maniphest edit T123 --visible-to=public --editable-by='#infra'
     """
     # Greedy monogram parsing: leading args that are task monograms (or
     # comma-separated lists of them) are task IDs; the first non-matching
@@ -841,6 +874,8 @@ def edit(
         subscribe=subscribe,
         comment=comment_text,
         space=space,
+        visible_to=visible_to,
+        editable_by=editable_by,
         dry_run=dry_run,
         force=force,
         interactive=interactive,

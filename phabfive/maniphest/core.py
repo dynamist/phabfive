@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from jinja2 import Template
+from phabricator import APIError
 from ruamel.yaml import YAML
 
 from phabfive.constants import (
@@ -16,6 +17,8 @@ from phabfive.constants import (
     MANIPHEST_ORDER_DIRECTIONS,
     MANIPHEST_ORDER_FIELDS,
     PRIORITY_DEFAULT,
+    TASK_POLICY_FIELDS,
+    TASK_POLICY_TRANSACTIONS,
 )
 from phabfive.core import Phabfive
 from phabfive.exceptions import (
@@ -63,6 +66,13 @@ from phabfive.maniphest.utils import (
 )
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
+from phabfive.policy import (
+    policy_label,
+    policy_lockout_message,
+    resolve_policy_names,
+    resolve_policy_value,
+    validate_policy_value,
+)
 from phabfive.project_filters import parse_project_patterns
 
 log = logging.getLogger(__name__)
@@ -1783,6 +1793,8 @@ class Maniphest(Phabfive):
         column=None,
         board_phid=None,
         space=None,
+        visible_to=None,
+        editable_by=None,
         dry_run=False,
     ):
         """
@@ -1813,6 +1825,12 @@ class Maniphest(Phabfive):
             matches exactly one Space. The server's default Space is used when
             omitted; PHAB_SPACE filters searches and is deliberately not
             consulted here.
+        visible_to : str, optional
+            Who can see the new task, in the grammar phabfive.policy accepts.
+            The server's default is used when omitted.
+        editable_by : str, optional
+            Who can edit the new task. Both are named after the labels
+            Phorge's own form uses.
         dry_run : bool
             If True, validate and display without creating
 
@@ -1824,10 +1842,19 @@ class Maniphest(Phabfive):
         Raises
         ------
         PhabfiveConfigException
-            If validation fails (invalid priority, status, user not found, etc.)
+            If validation fails (invalid priority, status, user not found, or a
+            policy value outside the grammar)
+        PhabfiveDataException
+            If a policy names a project or user that does not exist
         PhabfiveRemoteException
             If API call fails
         """
+        # Refused here rather than by the API, which reads a value it does not
+        # recognise as a policy nobody satisfies and so answers a typo with a
+        # permissions error.
+        validate_policy_value(visible_to, option="--visible-to")
+        validate_policy_value(editable_by, option="--editable-by")
+
         # Parse plus-separated values (supports both repeat option and plus syntax)
         parsed_tags = self._parse_plus_separated(tags) if tags else []
         parsed_subscribers = (
@@ -1917,6 +1944,32 @@ class Maniphest(Phabfive):
             space_display = describe_space(resolved_space)
             transactions.append({"type": "space", "value": resolved_space["phid"]})
 
+        # Policies. There is no interact one to set: a task derives "Can
+        # Interact With" from its view policy rather than storing it.
+        resolved_policies = [
+            (label, key, resolve_policy_value(self.phab, value, option=option))
+            for key, value, label, option in (
+                ("view", visible_to, "Visible To", "--visible-to"),
+                ("edit", editable_by, "Editable By", "--editable-by"),
+            )
+            if value is not None
+        ]
+
+        for _, key, resolved in resolved_policies:
+            transactions.append(
+                {"type": TASK_POLICY_TRANSACTIONS[key], "value": resolved}
+            )
+
+        # One lookup for both, so naming what the dry run reports costs at most
+        # a single round trip.
+        policy_names = resolve_policy_names(
+            self.phab, [resolved for _, _, resolved in resolved_policies]
+        )
+        policy_display = {
+            label: policy_label(resolved, policy_names)
+            for label, _, resolved in resolved_policies
+        }
+
         # Dry run - return what would be created
         if dry_run:
             log.info("Dry run mode - task would be created with these transactions:")
@@ -1931,6 +1984,7 @@ class Maniphest(Phabfive):
                 "column": column,
                 "subscribers": subscriber_display,
                 "space": space_display,
+                "policy": policy_display,
             }
 
         # Create the task via API
@@ -2010,6 +2064,8 @@ class Maniphest(Phabfive):
         subscribe=None,
         comment=None,
         space=None,
+        visible_to=None,
+        editable_by=None,
     ):
         """Compute the transactions for a task edit, without applying them.
 
@@ -2041,6 +2097,12 @@ class Maniphest(Phabfive):
         space : str, optional
             Space to move the task to, by monogram, name, or a pattern that
             matches exactly one Space
+        visible_to : str, optional
+            New view policy, in the grammar phabfive.policy accepts
+        editable_by : str, optional
+            New edit policy. Both are named after the labels Phorge's own
+            form uses.
+
         Returns
         -------
         tuple
@@ -2051,6 +2113,10 @@ class Maniphest(Phabfive):
         ------
         ValueError
             On validation or API errors
+        PhabfiveConfigException
+            If a policy value is outside the grammar
+        PhabfiveDataException
+            If a policy names a project or user that does not exist
         """
         # Fetch current task state unless the caller already has it
         if task_data is None:
@@ -2308,6 +2374,83 @@ class Maniphest(Phabfive):
                     }
                 )
 
+        policy_transactions, policy_changes = self._build_policy_edit(
+            task_data["fields"].get("policy") or {},
+            visible_to=visible_to,
+            editable_by=editable_by,
+        )
+
+        return transactions + policy_transactions, changes + policy_changes
+
+    def _build_policy_edit(self, policy, visible_to=None, editable_by=None):
+        """The policy half of a task edit.
+
+        Kept apart from the scalar fields because a policy is not a scalar:
+        each value asked for has to be resolved against the instance before
+        it can be compared with the one in place, and both ends of the
+        comparison are then named for the dry run - a PHID either side of an
+        arrow says nothing about what changed.
+
+        There is no interact half. A task's "Can Interact With" is derived
+        rather than stored - see TASK_POLICY_TRANSACTIONS - so maniphest.edit
+        has no transaction that could set it.
+
+        Parameters
+        ----------
+        policy : dict
+            The "policy" field of the task as it stands
+        visible_to, editable_by : str, optional
+            New policies, in the grammar phabfive.policy accepts
+
+        Returns
+        -------
+        tuple
+            (transactions, changes)
+        """
+        asked = [
+            ("view", visible_to, "Visible To", "--visible-to"),
+            ("edit", editable_by, "Editable By", "--editable-by"),
+        ]
+
+        wanted = [
+            (
+                key,
+                label,
+                policy.get(TASK_POLICY_FIELDS[key]),
+                resolve_policy_value(self.phab, value, option=option),
+            )
+            for key, value, label, option in asked
+            if value is not None
+        ]
+
+        if not wanted:
+            return [], []
+
+        # One lookup for both ends of every arrow: the policy in place and
+        # the one asked for are named out of the same phid.query.
+        names = resolve_policy_names(
+            self.phab,
+            [current for _, _, current, _ in wanted] + [new for _, _, _, new in wanted],
+        )
+
+        transactions = []
+        changes = []
+
+        for key, label, current, new in wanted:
+            if current == new:
+                # Already at the target policy.
+                continue
+
+            transactions.append({"type": TASK_POLICY_TRANSACTIONS[key], "value": new})
+
+            changes.append(
+                {
+                    "field": label,
+                    "old": policy_label(current, names),
+                    "new": policy_label(new, names),
+                }
+            )
+
         return transactions, changes
 
     def edit_task_by_id(
@@ -2323,6 +2466,8 @@ class Maniphest(Phabfive):
         subscribe=None,
         comment=None,
         space=None,
+        visible_to=None,
+        editable_by=None,
         dry_run=False,
         task_data=None,
     ):
@@ -2336,6 +2481,10 @@ class Maniphest(Phabfive):
         ----------
         task_id : str
             Numeric task ID (e.g., "123")
+        visible_to : str, optional
+            New view policy
+        editable_by : str, optional
+            New edit policy
         dry_run : bool
             Show changes without applying
         task_data : dict, optional
@@ -2359,6 +2508,8 @@ class Maniphest(Phabfive):
             subscribe=subscribe,
             comment=comment,
             space=space,
+            visible_to=visible_to,
+            editable_by=editable_by,
         )
 
         if not transactions:
@@ -2386,10 +2537,21 @@ class Maniphest(Phabfive):
             Numeric task ID (e.g., "123")
         transactions : list
             Transactions from :meth:`build_task_edit`
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the API rejects the edit. A policy that would take the task
+            away from whoever is applying it is rejected this way, and is
+            reported as the sentence Phorge answered with rather than as the
+            APIError around it.
         """
-        self.phab.maniphest.edit(
-            objectIdentifier=f"T{task_id}", transactions=transactions
-        )
+        try:
+            self.phab.maniphest.edit(
+                objectIdentifier=f"T{task_id}", transactions=transactions
+            )
+        except APIError as e:
+            raise PhabfiveDataException(policy_lockout_message(e) or str(e))
 
     def _format_description_preview(self, text):
         """Format description for change display.

@@ -5,6 +5,7 @@ import logging
 import sys
 from collections import defaultdict
 
+from phabfive.constants import TASK_POLICY_FIELDS
 from phabfive.edit.formatters import display_changes, generate_partition_suggestions
 from phabfive.edit.validators import (
     get_board_names,
@@ -12,6 +13,7 @@ from phabfive.edit.validators import (
     validate_board_column_context,
 )
 from phabfive.editor import confirm_apply, open_tty, prompt_each, render_changes
+from phabfive.policy import resolve_policy_value
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +62,43 @@ def _needs_text_confirmation(validated_tasks, title, description):
     return False
 
 
+def _needs_policy_confirmation(validated_tasks, maniphest, visible_to, editable_by):
+    """Whether any task's view or edit policy would actually change.
+
+    A policy change joins the text guard rather than applying unreviewed. It
+    is the more consequential of the two and the harder to notice: a retitled
+    task is still on the board it was on, while one whose view policy has
+    narrowed has simply gone - for everybody the new policy leaves out, there
+    is nothing left to notice. Both are also silent in the same way, in that
+    the object still exists and still looks fine to whoever made the change.
+
+    So a batch that would move a policy with no terminal to show the change on
+    fails for want of `--yes`, exactly as a retitle does.
+
+    Deciding it needs the instance, unlike the text guard: `#infra` has to
+    become a PHID before it can be compared with the policy in place. That is
+    one resolution for the batch, not one per task.
+    """
+    asked = [
+        (TASK_POLICY_FIELDS[key], value, option)
+        for key, value, option in (
+            ("view", visible_to, "--visible-to"),
+            ("edit", editable_by, "--editable-by"),
+        )
+        if value is not None
+    ]
+
+    for field, value, option in asked:
+        resolved = resolve_policy_value(maniphest.phab, value, option=option)
+
+        for task in validated_tasks:
+            policy = task["task_data"]["fields"].get("policy") or {}
+            if policy.get(field) != resolved:
+                return True
+
+    return False
+
+
 def edit_tasks_batch(
     tasks,
     maniphest,
@@ -73,6 +112,8 @@ def edit_tasks_batch(
     subscribe=None,
     comment=None,
     space=None,
+    visible_to=None,
+    editable_by=None,
     dry_run=False,
     force=False,
     interactive=False,
@@ -92,6 +133,8 @@ def edit_tasks_batch(
         subscribe (list): Usernames to add as subscribers
         comment (str): Comment to add
         space (str): Space to move the tasks to
+        visible_to (str): Who can see it, the --visible-to policy
+        editable_by (str): Who can edit it, the --editable-by policy
         dry_run (bool): Show changes without applying
         force (bool): Skip confirmation prompts
         interactive (bool): Review every change, even for a single task
@@ -171,7 +214,12 @@ def edit_tasks_batch(
     if (
         review_stream is None
         and not dry_run
-        and _needs_text_confirmation(validated_tasks, title, description)
+        and (
+            _needs_text_confirmation(validated_tasks, title, description)
+            or _needs_policy_confirmation(
+                validated_tasks, maniphest, visible_to, editable_by
+            )
+        )
     ):
         # No terminal to show N diffs on, so make the caller say so explicitly.
         confirmed, return_code = confirm_apply(force)
@@ -203,6 +251,8 @@ def edit_tasks_batch(
                 subscribe=subscribe,
                 comment=comment,
                 space=space,
+                visible_to=visible_to,
+                editable_by=editable_by,
             )
         except Exception as e:
             log.debug(f"Failed to prepare edit for {monogram}: {e}")

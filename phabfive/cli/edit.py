@@ -8,6 +8,7 @@ import typer
 
 from phabfive.cli.completers import (
     complete_column_change,
+    complete_policy,
     complete_priority_change,
     complete_space,
     complete_status,
@@ -16,6 +17,7 @@ from phabfive.cli.completers import (
 )
 from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
+from phabfive.policy import POLICY_GRAMMAR
 
 
 def _get_edit_app():
@@ -95,6 +97,18 @@ def edit_command(
         help="Move to a Space (monogram, name, or unique pattern)",
         autocompletion=complete_space,
     ),
+    visible_to: Optional[str] = typer.Option(
+        None,
+        "--visible-to",
+        help=f"Set who can see it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    editable_by: Optional[str] = typer.Option(
+        None,
+        "--editable-by",
+        help=f"Set who can edit it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -133,6 +147,7 @@ def edit_command(
         phabfive maniphest search --tag "Backend" | phabfive edit --column=Done
         phabfive edit T123 --tag="Sprint" --column=forward --comment="Moving forward"
         phabfive edit T123 T124 --space=Archive
+        phabfive edit T123 --visible-to=public --editable-by='#infra'
     """
     try:
         force = resolve_assume_yes(yes, force, interactive)
@@ -153,6 +168,8 @@ def edit_command(
         subscribe=subscribe,
         comment=comment,
         space=space,
+        visible_to=visible_to,
+        editable_by=editable_by,
         dry_run=dry_run,
         force=force,
         interactive=interactive,

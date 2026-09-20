@@ -6,10 +6,83 @@ import logging
 
 from ruamel.yaml.scalarstring import PreservedScalarString
 
+from phabfive.constants import TASK_POLICY_FIELDS
 from phabfive.maniphest.fetchers import get_column_info
 from phabfive.maniphest.utils import format_timestamp
+from phabfive.policy import policy_label, resolve_policy_names
 
 log = logging.getLogger(__name__)
+
+
+def format_task_policy(policy, policy_names=None):
+    """Label a task's policies the way the Phorge web UI labels them.
+
+    Parameters
+    ----------
+    policy : dict
+        The "policy" field of a task record
+    policy_names : dict, optional
+        PHID to name, from phabfive.policy.resolve_policy_names. A policy can
+        carry a PHID rather than a keyword - a project, a user or a custom
+        rule - and this is what names it. Left out, or missing an entry, the
+        PHID is shown as it stands rather than guessed at.
+
+    Returns
+    -------
+    dict
+        {"Visible To": ..., "Editable By": ..., "Can Interact": ...}, each a
+        web-UI label for a keyword constant, the name of a PHID that was
+        resolved, or the raw value.
+
+        The keys are Phorge's own labels rather than the API's field names:
+        AphrontFormPolicyControl calls CAN_VIEW "Visible To" and CAN_EDIT
+        "Editable By", and PhabricatorPolicyCanInteractCapability calls
+        CAN_INTERACT "Can Interact".
+
+        "Can Interact" is the one a repository does not have, and it is
+        read-only: a task derives it from its view policy, answering "No One"
+        while its status locks comments. Seeing it differ from "Visible To"
+        is how a locked task says so, which is why it comes last rather than
+        beside the policy it is derived from.
+    """
+    policy = policy or {}
+
+    return {
+        "Visible To": policy_label(
+            policy.get(TASK_POLICY_FIELDS["view"]), policy_names
+        ),
+        "Editable By": policy_label(
+            policy.get(TASK_POLICY_FIELDS["edit"]), policy_names
+        ),
+        "Can Interact": policy_label(
+            policy.get(TASK_POLICY_FIELDS["interact"]), policy_names
+        ),
+    }
+
+
+def resolve_task_policy_names(phab, result_data):
+    """Name the projects, users and rules a set of task policies point at.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    result_data : list
+        Task records from maniphest.search
+
+    Returns
+    -------
+    dict
+        Policy PHID to its name. Empty when every policy is a keyword, which
+        is the common case and costs no round trip at all.
+    """
+    values = []
+
+    for item in result_data:
+        policy = (item.get("fields") or {}).get("policy") or {}
+        values.extend(policy.get(field) for field in TASK_POLICY_FIELDS.values())
+
+    return resolve_policy_names(phab, values)
 
 
 def build_priority_transitions(priority_transactions, format_direction_func):
@@ -690,6 +763,11 @@ def build_task_display_data(
         except Exception as e:
             log.warning(f"Failed to resolve space PHIDs: {e}")
 
+    # Name the projects, users and custom rules the policies point at. One
+    # lookup for every task on the page, and none at all when every policy is
+    # a keyword, which is the common case.
+    policy_names = resolve_task_policy_names(phab, result_data)
+
     # Build YAML data structure
     tasks_list = []
 
@@ -759,6 +837,10 @@ def build_task_display_data(
             task_data["Description"] = description_raw if description_raw else ""
 
         task_dict["Task"] = task_data
+
+        # Policies, all three of them - a task carries "Can Interact With"
+        # where a repository carries "Can Push".
+        task_dict["Policy"] = format_task_policy(fields.get("policy"), policy_names)
 
         # Display board information (current columns only)
         columns_data = item.get("attachments", {}).get("columns", {})

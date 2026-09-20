@@ -142,6 +142,24 @@ phabfive maniphest parents T123
 phabfive maniphest subtasks T123
 ```
 
+Every task record carries a `Policy` section, and it holds three entries where a
+repository holds three of its own:
+
+```yaml
+  Policy:
+    Visible To: All Users
+    Editable By: '#infrastructure'
+    Can Interact: All Users
+```
+
+The keys are Phorge's own labels, not the API's field names. `Can Interact` is the
+one repositories do not have, and a task does not store it - it derives it from
+`Visible To`, and answers `No One` while the task's status locks comments. So
+`Can Interact` differing from `Visible To` is how a locked task says so, and there is
+no option to set it: the way to move it is the status. A policy naming a project or a
+user is shown as `#projectslug` or `@username`, the same spelling the options below
+take.
+
 The defaults differ per app: `paste show` prints the content by default, and
 `passphrase show` prints the **secret** by default. Pass `--no-secret` unless the user
 asked for the value, and never echo a retrieved secret into a summary, a commit message or
@@ -221,7 +239,32 @@ apply.
 ```bash
 phabfive maniphest create "Fix the flaky import test" --priority=high --tag Backend --dry-run
 phabfive maniphest edit T123 --status=resolved --dry-run
+phabfive maniphest edit T123 --visible-to='#infra' --editable-by=admin --dry-run
 ```
+
+`--visible-to` and `--editable-by` set who can see and who can edit a task, named after
+the labels Phorge's own form uses. Each takes
+
+| Value | Means |
+|---|---|
+| `public`, `users`, `admin`, `no-one` | the Phorge keyword |
+| `#projectslug` | that project; a display name works too, `#'Human Resources'` |
+| `@username` | that user |
+| `PHID-...` | that object, including a custom policy rule |
+
+and anything else is refused before a call is made, because Conduit reads a value it
+does not recognise as a policy nobody satisfies - so `--visible-to=nonsense` would
+otherwise come back as a permissions error rather than a spelling one. `--dry-run`
+names both ends of the change rather than showing a PHID:
+
+```
+  Visible To: All Users -> #infrastructure
+  Editable By: Administrators -> @admin
+```
+
+`maniphest create` takes the same two. Phorge refuses a policy that would stop you
+seeing or editing the task yourself, and that refusal is reported as a sentence.
+There is no `--can-interact`: see the `Policy` section above.
 
 `--dry-run` exists on every write command except the `comment` ones, which stay
 immediate because a comment is cheap to correct. Preview first on anything that
@@ -241,9 +284,9 @@ URL that nothing asked it to touch. Its `--dry-run` names each URI it would demo
 - Editing **one** task applies straight away. Editing **two or more** reviews them one at a
   time when you are at a terminal: each task's changes are printed, then `[y,n,a,q,?]` -
   apply it, skip it, apply all the rest, or quit. Nothing you skip is touched.
-- Without a terminal there is nobody to ask, so a batch applies unreviewed - except a title
-  or description change, which fails with `--yes required for non-interactive mode` rather
-  than rewriting text nobody has read.
+- Without a terminal there is nobody to ask, so a batch applies unreviewed - except a title,
+  description or policy change, which fails with `--yes required for non-interactive mode`
+  rather than rewriting text, or narrowing a policy, that nobody has read.
 - `--dry-run` never asks, so it never needs `--yes`.
 - `--interactive` forces the review for a single task, and reaches past a piped stdin to the
   terminal. With no terminal to show the changes on it fails rather than applying unreviewed.
@@ -282,9 +325,10 @@ which is what `--format=yaml` emits, so a search pipes straight into an edit. Bo
 are accepted: one document holding a list of objects, and one mapping per `---` document.
 
 Batch validation is atomic: if any task fails validation nothing is modified, and the error
-suggests how to partition the tasks by board. Batch mode refuses `$EDITOR` mode, and it
-does **not** ask for diff confirmation — a batch title or description change applies
-unprompted. Dry-run the batch first.
+suggests how to partition the tasks by board. Batch mode refuses `$EDITOR` mode. With no
+terminal to review on, a title, a description or a **policy** change fails for want of
+`--yes` rather than applying unreviewed - the three that are hard to notice afterwards.
+Everything else applies unprompted, so dry-run the batch first.
 
 ## Other apps
 
