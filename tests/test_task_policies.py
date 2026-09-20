@@ -142,14 +142,14 @@ class TestFormatTaskPolicy:
         }
 
 
-def _display_data(maniphest, task):
+def _display_data(maniphest, task, show_policy=True):
     """The task_dict the four display builders are handed."""
     with patch(
         "phabfive.maniphest.fetchers.fetch_project_names_for_boards",
         return_value={},
     ):
         maniphest.phab.user.search.return_value = {"data": []}
-        result = maniphest._build_task_display_data([task])
+        result = maniphest._build_task_display_data([task], show_policy=show_policy)
 
     return result["tasks"][0]
 
@@ -246,6 +246,114 @@ class TestTheFourBuildersAgree:
         assert [str(child.label) for child in branch.children] == [
             f"{key}: {value}" for key, value in self._expected.items()
         ]
+
+
+class TestThePolicySectionIsOptIn:
+    """`--show-policy` joined `-H`, `-M` and `-C`; before it, Policy was the
+    one optional section nobody could decline.
+
+    Naming a policy that carries a PHID costs a ``phid.query`` per page, so
+    the gate is in the record builder and covers the resolution as well as
+    the rendering. The resolution is the half that leaves no trace in the
+    output, so it is counted rather than read.
+    """
+
+    def _task_naming_a_project(self):
+        return _task(view="PHID-PROJ-infra")
+
+    def test_no_phid_query_is_made_without_the_flag(self, maniphest):
+        _display_data(maniphest, self._task_naming_a_project(), show_policy=False)
+
+        maniphest.phab.phid.query.assert_not_called()
+
+    def test_one_is_made_with_the_flag(self, maniphest):
+        maniphest.phab.phid.query.return_value = {}
+
+        _display_data(maniphest, self._task_naming_a_project(), show_policy=True)
+
+        assert maniphest.phab.phid.query.call_count == 1
+        assert maniphest.phab.phid.query.call_args[1]["phids"] == ["PHID-PROJ-infra"]
+
+    def test_the_section_is_absent_until_asked_for(self, maniphest):
+        task = self._task_naming_a_project()
+
+        assert "Policy" not in _display_data(maniphest, task, show_policy=False)
+        assert "Policy" in _display_data(maniphest, task, show_policy=True)
+
+    @pytest.mark.parametrize("builder", ["json", "yaml", "rich", "tree"])
+    def test_every_builder_agrees_that_it_is_absent(self, maniphest, capsys, builder):
+        """The gate is in the record, so no builder can be the one that keeps
+        printing it - the same promise TestTheFourBuildersAgree makes from the
+        other side."""
+        from phabfive.display import (
+            _build_task_json_output,
+            _display_task_rich,
+            _display_task_tree,
+            _display_task_yaml,
+        )
+
+        task_dict = _display_data(maniphest, _task(), show_policy=False)
+
+        if builder == "json":
+            assert "Policy" not in _build_task_json_output(task_dict)
+            return
+
+        if builder == "yaml":
+            _display_task_yaml(task_dict)
+            assert "Policy" not in capsys.readouterr().out
+            return
+
+        console = MagicMock()
+        printed = []
+        console.print.side_effect = lambda line="", **kw: printed.append(str(line))
+        phabfive_instance = MagicMock()
+        phabfive_instance.url = "http://phorge.localhost"
+
+        if builder == "rich":
+            _display_task_rich(console, task_dict, phabfive_instance)
+            assert "Policy" not in "\n".join(printed)
+            return
+
+        _display_task_tree(console, task_dict, phabfive_instance)
+        tree = console.print.call_args[0][0]
+
+        assert not any(node.label == "Policy" for node in tree.children)
+
+    def test_the_cli_threads_the_flag(self):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.maniphest import maniphest_app
+
+        for args, expected in (([], False), (["--show-policy"], True), (["-P"], True)):
+            mock_maniphest = MagicMock()
+            mock_maniphest.task_show.return_value = {"tasks": [], "missing_ids": []}
+
+            with patch(
+                "phabfive.cli.maniphest._get_maniphest_app",
+                return_value=mock_maniphest,
+            ):
+                CliRunner().invoke(maniphest_app, ["show", "T1", *args])
+
+            assert mock_maniphest.task_show.call_args[1]["show_policy"] is expected
+
+    def test_search_offers_it_too(self):
+        """`repo list` got one, so the other listing command does as well -
+        without it a search has no way back to a section it used to print."""
+        from typer.testing import CliRunner
+
+        from phabfive.cli.maniphest import maniphest_app
+
+        for args, expected in (([], False), (["--show-policy"], True)):
+            mock_maniphest = MagicMock()
+            mock_maniphest.task_search.return_value = {"tasks": []}
+
+            with patch(
+                "phabfive.cli.maniphest._get_maniphest_app",
+                return_value=mock_maniphest,
+            ):
+                CliRunner().invoke(maniphest_app, ["search", "--tag=infra", *args])
+
+            assert mock_maniphest.task_search.call_args[1]["show_policy"] is expected
 
 
 class TestBuildPolicyEdit:

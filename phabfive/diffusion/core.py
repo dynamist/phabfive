@@ -247,6 +247,7 @@ class Diffusion(Phabfive):
         show_tags=False,
         show_uris=False,
         show_metadata=False,
+        show_policy=False,
         show_description=True,
     ):
         """
@@ -268,6 +269,9 @@ class Diffusion(Phabfive):
             Include the repository's URIs
         show_metadata : bool, optional
             Include PHIDs and timestamps
+        show_policy : bool, optional
+            Include the policy section. Naming the policies costs a
+            ``phid.query``, so it is not paid for unless it was asked for.
         show_description : bool, optional
             Include the description
 
@@ -315,17 +319,18 @@ class Diffusion(Phabfive):
             branches_map=branches_map,
             tags_map=tags_map,
             space_map=self._resolve_spaces(found),
-            policy_names=self._resolve_policy_names(found),
+            policy_names=self._resolve_policy_names(found) if show_policy else None,
             show_uris=show_uris,
             show_branches=show_branches,
             show_tags=show_tags,
             show_metadata=show_metadata,
+            show_policy=show_policy,
             show_description=show_description,
         )
 
         return {"repositories": repositories, "missing_ids": missing_ids}
 
-    def repo_list(self, status=None, show_uris=False):
+    def repo_list(self, status=None, show_uris=False, show_policy=False):
         """
         List repositories, as the records ``repo_show`` answers with.
 
@@ -343,6 +348,10 @@ class Diffusion(Phabfive):
             Statuses to keep, defaults to every status
         show_uris : bool, optional
             Include each repository's URIs
+        show_policy : bool, optional
+            Include each repository's policies. Naming them costs one
+            ``phid.query`` for the whole listing, which a list that was not
+            asked for a policy does not pay.
 
         Returns
         -------
@@ -364,8 +373,9 @@ class Diffusion(Phabfive):
             self.format_link,
             repos,
             space_map=self._resolve_spaces(repos),
-            policy_names=self._resolve_policy_names(repos),
+            policy_names=self._resolve_policy_names(repos) if show_policy else None,
             show_uris=show_uris,
+            show_policy=show_policy,
         )
 
         return {"repositories": repositories}

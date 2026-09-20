@@ -314,6 +314,7 @@ def build_repository_display_data(
     show_branches=False,
     show_tags=False,
     show_metadata=False,
+    show_policy=False,
     show_description=True,
 ):
     """
@@ -343,7 +344,7 @@ def build_repository_display_data(
     policy_names : dict, optional
         Policy PHID to its name, for the policies that name a project, a
         user or a custom rule rather than a keyword
-    show_uris, show_branches, show_tags, show_metadata : bool, optional
+    show_uris, show_branches, show_tags, show_metadata, show_policy : bool, optional
         Include that section
     show_description : bool, optional
         Include the description in the Repository section
@@ -404,9 +405,15 @@ def build_repository_display_data(
         if space_phid:
             record["Space"] = space_map.get(space_phid, space_phid)
 
-        record["Policy"] = format_policy(
-            fields.get("policy"), policy_names, hosted=hosted
-        )
+        # Gated here rather than per format, and gated over the resolution
+        # too: the caller skips the phid.query that names the policies when
+        # nobody asked for them. A repository that was not asked about says
+        # nothing at all, which is a different answer from the one a
+        # non-hosted repository gives about its push policy.
+        if show_policy:
+            record["Policy"] = format_policy(
+                fields.get("policy"), policy_names, hosted=hosted
+            )
 
         if show_uris:
             record["URIs"] = format_repository_uris(repo)

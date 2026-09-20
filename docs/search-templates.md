@@ -70,6 +70,7 @@ search:
   updated-after: "1w"
   show-history: true
   show-metadata: false
+  show-policy: false
 
 # Optional description for documentation
 description: |
@@ -115,6 +116,8 @@ search:
 - `status`: Status transition patterns
 - `show-history`: Display transition history (true/false)
 - `show-metadata`: Display filter match metadata (true/false)
+- `show-policy`: Display each task's policies (true/false). Off by default: naming a
+  policy that points at a project or a user costs one `phid.query` for the page
 
 **Time Unit Support:**
 All date filters support time units: `h` (hours), `d` (days), `w` (weeks), `m` (months), `y` (years).

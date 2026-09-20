@@ -90,6 +90,9 @@ def repo_list(
     show_uris: bool = typer.Option(
         False, "--show-uris", "-U", help="Display each repository's URIs"
     ),
+    show_policy: bool = typer.Option(
+        False, "--show-policy", "-P", help="Display each repository's policies"
+    ),
     url: bool = typer.Option(
         False,
         "--url",
@@ -112,6 +115,7 @@ def repo_list(
     Examples:
         phabfive diffusion repo list
         phabfive diffusion repo list all --show-uris
+        phabfive diffusion repo list --show-policy
         phabfive --format=json diffusion repo list active
     """
     from phabfive.diffusion.display import display_repositories
@@ -128,7 +132,9 @@ def repo_list(
         status_filter = ["active"]
 
     try:
-        result = diffusion.repo_list(status=status_filter, show_uris=show_uris)
+        result = diffusion.repo_list(
+            status=status_filter, show_uris=show_uris, show_policy=show_policy
+        )
     except PhabfiveDataException as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
@@ -154,6 +160,9 @@ def repo_show(
     show_metadata: bool = typer.Option(
         False, "--show-metadata", "-M", help="Display metadata about the repository"
     ),
+    show_policy: bool = typer.Option(
+        False, "--show-policy", "-P", help="Display the repository's policies"
+    ),
     no_description: bool = typer.Option(
         False, "--no-description", "-n", help="Hide the repository description"
     ),
@@ -165,6 +174,7 @@ def repo_show(
         phabfive diffusion repo show R5
         phabfive diffusion repo show R5 R6 --show-uris
         phabfive diffusion repo show R5,R6
+        phabfive diffusion repo show R5 --show-policy
         phabfive --format=json diffusion repo show phabfive --show-branches
     """
     from phabfive.diffusion.display import display_repositories
@@ -184,6 +194,7 @@ def repo_show(
             show_tags=show_tags,
             show_uris=show_uris,
             show_metadata=show_metadata,
+            show_policy=show_policy,
             show_description=not no_description,
         )
     except PhabfiveDataException as e:

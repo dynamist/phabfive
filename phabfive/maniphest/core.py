@@ -263,6 +263,7 @@ class Maniphest(Phabfive):
         show_history=False,
         show_metadata=False,
         show_comments=False,
+        show_policy=False,
         search_params=None,
     ):
         """Build structured task display data from API results."""
@@ -286,6 +287,7 @@ class Maniphest(Phabfive):
             show_history=show_history,
             show_metadata=show_metadata,
             show_comments=show_comments,
+            show_policy=show_policy,
             search_params=search_params,
         )
 
@@ -322,6 +324,7 @@ class Maniphest(Phabfive):
         show_history=False,
         show_metadata=False,
         show_comments=False,
+        show_policy=False,
         show_description=True,
     ):
         """
@@ -339,6 +342,9 @@ class Maniphest(Phabfive):
             If True, display metadata (mainly useful for debugging, less useful for single task)
         show_comments : bool, optional
             If True, display comments on the task
+        show_policy : bool, optional
+            If True, display the task's policies. Naming them costs a
+            ``phid.query``, so it is not paid for unless it was asked for.
         show_description : bool, optional
             If True, include task description in output. Default is True.
         """
@@ -460,6 +466,7 @@ class Maniphest(Phabfive):
             show_history=show_history,
             show_metadata=show_metadata,
             show_comments=show_comments,
+            show_policy=show_policy,
         )
 
         # Let the caller tell a partial result from a complete one, so asking
@@ -844,6 +851,7 @@ class Maniphest(Phabfive):
         status_patterns=None,
         show_history=False,
         show_metadata=False,
+        show_policy=False,
         include_closed=False,
         limit=100,
         order=None,
@@ -889,6 +897,9 @@ class Maniphest(Phabfive):
         show_history (bool, optional): If True, display column, priority, and status transition history for each task.
                       Must be explicitly requested; not auto-enabled by filters.
         show_metadata (bool, optional): If True, display which boards/priorities/statuses matched the filters.
+        show_policy   (bool, optional): If True, display each task's policies. Naming them costs a
+                      phid.query for the whole page, which a search that was not asked for a policy
+                      does not pay.
                       Shows MatchedBoards list, MatchedPriority, and MatchedStatus boolean for debugging filter logic.
         include_closed (bool, optional): If True, include tasks with closed statuses
                       (resolved, wontfix, invalid, duplicate, spite). Default is False,
@@ -1430,6 +1441,7 @@ class Maniphest(Phabfive):
             matching_status_map=matching_status_map,
             show_history=show_history,
             show_metadata=show_metadata,
+            show_policy=show_policy,
             search_params=search_params,
         )
 
