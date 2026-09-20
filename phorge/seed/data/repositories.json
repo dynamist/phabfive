@@ -1,0 +1,56 @@
+{
+  "author": {
+    "name": "Viola Larsson",
+    "email": "viola.larsson@air.rmi.se"
+  },
+  "repositories": [
+    {
+      "callsign": "GUNNAR",
+      "name": "GUNNAR Firmware",
+      "shortName": "gunnar-firmware",
+      "description": "Sample hosted repository with history, so branch, tag and ref queries have something to answer with.",
+      "defaultBranch": "main",
+      "branches": [
+        {
+          "name": "main",
+          "commits": [
+            {
+              "message": "Add the README",
+              "date": "2026-01-05 09:12:00 +0100",
+              "tag": "v1.0.0",
+              "files": {
+                "README.md": "# GUNNAR Firmware\n\nSample data. This repository is created by phorge/seed/ so that\nDiffusion has a hosted repository with real refs to query.\n"
+              }
+            },
+            {
+              "message": "Describe how the firmware is built",
+              "date": "2026-01-19 14:30:00 +0100",
+              "files": {
+                "docs/building.md": "# Building\n\n    make firmware\n\nSample data, there is nothing to build.\n"
+              }
+            }
+          ]
+        },
+        {
+          "name": "feature/telemetry",
+          "from": "main",
+          "commits": [
+            {
+              "message": "Sketch the telemetry frame format",
+              "date": "2026-02-02 10:05:00 +0100",
+              "files": {
+                "docs/telemetry.md": "# Telemetry\n\nA second branch, so a branch listing has more than one row.\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "callsign": "SPIKE",
+      "name": "GUNNAR Spike",
+      "shortName": "gunnar-spike",
+      "description": "Sample hosted repository nobody has pushed to, for the empty-repository path."
+    }
+  ]
+}
