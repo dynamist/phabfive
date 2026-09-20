@@ -1292,7 +1292,9 @@ class TestUriEditNamesTheRepository:
             repo["id"] = rid
             mock_diffusion = MagicMock()
             mock_diffusion.get_uri_and_repo.return_value = (repo, _uri())
-            mock_diffusion.describe_repository.return_value = f"R{rid} ({name})"
+            mock_diffusion.link_repository.return_value = (
+                f"https://phabricator.example.com/R{rid} ({name})"
+            )
             mock_diffusion.build_uri_edit.return_value = (
                 [{"type": "disable", "value": True}],
                 [{"field": "Disabled", "old": "False", "new": "True"}],
@@ -2078,3 +2080,123 @@ class TestRefsAreGeneralised:
 
         with pytest.raises(PhabfiveDataException, match="not a valid repository"):
             format_refs(_phab_with_repos([]), "nope")
+
+
+class TestEditHeadersLinkToPhabricator:
+    """The header says which Phabricator object, not which git remote.
+
+    The remote is already on the change line, so repeating it in the header
+    spent the most prominent line restating the body, while the object
+    being edited was named only by a monogram nothing could open.
+    """
+
+    def _diffusion(self, diffusion, url="https://phabricator.example.com"):
+        diffusion.url = url
+        return diffusion
+
+    def test_link_names_the_monogram_and_the_short_name(self, diffusion):
+        d = self._diffusion(diffusion)
+
+        assert (
+            d.link_repository(_repo("thing", short_name="thing"))
+            == "https://phabricator.example.com/R1 (thing)"
+        )
+
+    def test_link_falls_back_to_callsign_then_name(self, diffusion):
+        d = self._diffusion(diffusion)
+        repo = _repo("thing")
+        repo["fields"]["shortName"] = None
+        repo["fields"]["callsign"] = "THING"
+
+        assert d.link_repository(repo).endswith("/R1 (THING)")
+
+    def test_link_without_any_name_is_just_the_url(self, diffusion):
+        d = self._diffusion(diffusion)
+        repo = _repo("thing")
+        repo["fields"] = {"shortName": None, "callsign": None, "name": None}
+
+        assert d.link_repository(repo) == "https://phabricator.example.com/R1"
+
+    def test_the_describer_and_the_link_agree_on_the_name(self, diffusion):
+        """Both read it through name_repository, so they cannot drift."""
+        d = self._diffusion(diffusion)
+        repo = _repo("thing", short_name="thing")
+
+        assert d.describe_repository(repo) == "R1 (thing)"
+        assert d.link_repository(repo).endswith("/R1 (thing)")
+
+    def _invoke(self, args, changes):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.get_uri_and_repo.return_value = (_repo("myrepo"), _uri())
+        mock_diffusion.link_repository.return_value = (
+            "https://phabricator.example.com/R1 (myrepo)"
+        )
+        mock_diffusion.build_uri_edit.return_value = (
+            [{"type": "disable", "value": True}],
+            changes,
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            return CliRunner().invoke(diffusion_app, ["uri", "edit", *args])
+
+    REMOTE = "git@example.com:group/project.git"
+
+    def test_the_remote_is_not_repeated_in_the_header(self):
+        result = self._invoke(
+            [
+                "myrepo",
+                self.REMOTE,
+                "--uri",
+                "git@example.com:group/new.git",
+                "--dry-run",
+            ],
+            [
+                {
+                    "field": "URI",
+                    "old": self.REMOTE,
+                    "new": "git@example.com:group/new.git",
+                }
+            ],
+        )
+
+        header = result.output.splitlines()[0]
+        assert header.endswith("/R1 (myrepo):")
+        assert self.REMOTE not in header
+
+    def test_an_edit_that_leaves_the_uri_alone_still_names_it(self):
+        """A --disable would otherwise not say which URI it meant."""
+        result = self._invoke(
+            ["myrepo", self.REMOTE, "--disable", "--dry-run"],
+            [{"field": "Disabled", "old": "False", "new": "True"}],
+        )
+
+        lines = result.output.splitlines()
+        assert lines[0].endswith("/R1 (myrepo):")
+        assert lines[1] == f"  URI: {self.REMOTE}"
+        assert "Disabled: False → True" in result.output
+
+    def test_a_uri_change_is_not_listed_twice(self):
+        result = self._invoke(
+            [
+                "myrepo",
+                self.REMOTE,
+                "--uri",
+                "git@example.com:group/new.git",
+                "--dry-run",
+            ],
+            [
+                {
+                    "field": "URI",
+                    "old": self.REMOTE,
+                    "new": "git@example.com:group/new.git",
+                }
+            ],
+        )
+
+        assert result.output.count("  URI:") == 1
