@@ -61,9 +61,12 @@ class TestFormatRegistration:
     def test_jsonl_is_an_output_format(self):
         assert OutputFormat.jsonl.value == "jsonl"
 
-    def test_ndjson_is_not_an_output_format(self):
-        # It is rewritten in argv instead, so no display code tests for it
-        assert "ndjson" not in [member.value for member in OutputFormat]
+    @pytest.mark.parametrize("alias", sorted(FORMAT_ALIASES))
+    def test_an_alias_is_not_an_output_format(self, alias):
+        # An alias is rewritten in argv instead, so no display code tests for
+        # it. Alias xor enum member, never both - which is what makes a rename
+        # like simple -> value safe to do by moving the spelling between them.
+        assert alias not in [member.value for member in OutputFormat]
 
     def test_format_is_offered_by_the_cli(self):
         result = runner.invoke(app, ["--format=nope", "cache", "info"])
@@ -77,12 +80,16 @@ class TestFormatRegistration:
     def test_table_is_an_output_format(self):
         assert OutputFormat.table.value == "table"
 
+    def test_value_is_an_output_format(self):
+        assert OutputFormat.value.value == "value"
+
     @pytest.mark.parametrize(
-        "value", ["rich", "tree", "simple", "table", "jsonlines", ""]
+        "value", ["rich", "tree", "value", "simple", "table", "jsonlines", ""]
     )
     def test_fallback_rejects_everything_else(self, value):
         """A fallback is for a pipe. table cuts cells and drops columns, so
-        it is a human format and deliberately not one of them."""
+        it is a human format and deliberately not one of them - and neither
+        is value, which prints one field with no way to tell which."""
         assert not re.match(VALIDATORS["PHAB_FALLBACK"], value)
 
 

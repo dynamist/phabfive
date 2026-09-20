@@ -11,7 +11,7 @@ class OutputFormat(str, Enum):
     json = "json"  # Machine-readable JSON
     jsonl = "jsonl"  # Machine-readable newline-delimited JSON
     table = "table"  # Human-readable grid, for list commands
-    simple = "simple"  # Minimal output (e.g., just the secret for passphrase)
+    value = "value"  # Bare values, no keys or decoration
 
 
 # Spellings accepted for --format and PHAB_FALLBACK that are not members of
@@ -20,6 +20,7 @@ class OutputFormat(str, Enum):
 FORMAT_ALIASES = {
     "strict": "yaml",
     "ndjson": "jsonl",
+    "simple": "value",
 }
 
 

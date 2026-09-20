@@ -37,7 +37,7 @@ which is what makes the output greppable. That is lossy on purpose, and why
 ``table`` is a human format: it is deliberately not accepted for
 ``PHAB_FALLBACK``, and anything being parsed should ask for json or yaml.
 
-Narrowing a wide table is ``--columns``, which is #50 and not implemented.
+Narrowing a wide table would be ``--columns``, which is not implemented.
 """
 
 import shutil

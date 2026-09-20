@@ -94,9 +94,10 @@ on a pull request that skips the deployment.
 - `Phabfive` class: central configuration and API client management
 - Loads config from `.arcconfig`, `~/.arcrc`, `~/.config/phabfive.yaml`, and environment variables
 - Uses the `phabricator` library for Conduit API calls
-- Output formatting: `rich` and `tree` (terminal), `yaml`, `json` and `jsonl`
-  (machine-readable), `simple` (bare value). `strict` is an alias for `yaml` and
-  `ndjson` for `jsonl`, both rewritten in argv by `preprocess_format_alias()`
+- Output formatting: `rich`, `tree` and `table` (terminal), `yaml`, `json` and
+  `jsonl` (machine-readable), `value` (bare values, for piping). `strict` is an alias
+  for `yaml`, `ndjson` for `jsonl` and `simple` for `value`, all rewritten in argv by
+  `preprocess_format_alias()`
 - Every JSON emitter goes through `phabfive/json_output.py`, which is what keeps
   `json` and `jsonl` emitting the same records from the same builders
 

@@ -19,6 +19,7 @@ Cross-cutting features:
 - **Shell completion** - Tab completion for commands, options, and values
 - **Machine-readable output** - `--format=json`, `--format=jsonl` or `--format=yaml` for scripting and AI agents
 - **Table output** - `--format=table` renders a grid for the commands that answer with a list
+- **Bare values** - `--format=value` prints the secret, the paste content or the monograms with nothing around them, for piping
 - **Agent skill** - `phabfive --skill` prints a ready-to-use skill file for AI agents
 - **Quiet by default** - `-v` reports which filters a search actually applied
 

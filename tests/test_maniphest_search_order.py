@@ -652,7 +652,7 @@ class TestTemplateSearchHeaders:
         else:
             assert yaml.safe_load(result.output) == [{"Task": {"Name": "Example"}}]
 
-    def test_simple_output_has_no_template_header(self):
+    def test_value_output_has_no_template_header(self):
         result = self._run(
             [
                 {
@@ -661,7 +661,7 @@ class TestTemplateSearchHeaders:
                     "description": "A human-readable description",
                 }
             ],
-            output_format="simple",
+            output_format="value",
         )
 
         assert result.exit_code == 0

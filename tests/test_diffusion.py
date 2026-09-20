@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # phabfive imports
+from phabfive.constants import FORMAT_ALIASES
 from phabfive.diffusion import Diffusion
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 
@@ -2317,12 +2318,19 @@ class TestRepoShowFormats:
         # A tree, not the YAML-shaped rich output.
         assert "- Link:" not in output
 
-    def test_an_unknown_format_falls_back_to_rich(self, capsys):
-        assert self._render(capsys, "simple").startswith("- Link:")
+    def test_a_format_with_no_renderer_falls_back_to_rich(self, capsys):
+        # value is a real format, but only passphrase and paste have a bare
+        # value to print - diffusion registers no renderer and gets rich.
+        assert self._render(capsys, "value").startswith("- Link:")
 
-    def test_the_aliases_reach_the_same_renderers(self, capsys):
-        assert self._render(capsys, "strict") == self._render(capsys, "yaml")
-        assert self._render(capsys, "ndjson") == self._render(capsys, "jsonl")
+    def test_an_unknown_format_falls_back_to_rich(self, capsys):
+        assert self._render(capsys, "nope").startswith("- Link:")
+
+    @pytest.mark.parametrize(("alias", "resolved"), sorted(FORMAT_ALIASES.items()))
+    def test_the_aliases_reach_the_same_renderers(self, capsys, alias, resolved):
+        # render_records() resolves through FORMAT_ALIASES rather than its own
+        # copy, so an alias cannot dispatch here and nowhere else.
+        assert self._render(capsys, alias) == self._render(capsys, resolved)
 
 
 class TestRepoShowCli:

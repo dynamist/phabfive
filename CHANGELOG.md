@@ -20,6 +20,9 @@
   `--force required for non-interactive mode` error, are gone. Two or more are reviewed one
   at a time at a terminal. `--dry-run` still previews anything
 * **`--force` is deprecated in favour of `--yes`.** It still works, hidden, and warns
+* **`--format=simple` is now `--format=value`.** The old spelling still works - it is
+  rewritten in argv the way `strict` and `ndjson` are - so no script has to change. Only
+  `value` is offered by `--help` and by shell completion
 
 ## New Features
 
@@ -62,6 +65,18 @@
   `--dry-run`, `--yes` and `--interactive`, and reports each value it would change and what
   it would change it from. A credential is named by its monogram; its secret is never printed
 
+### Bare Values
+* **`--format=value`** - The format that prints values with no keys, no header and no
+  decoration, for piping. It is what `--format=simple` has always been; `simple` named
+  nothing, while `rich`, `tree` and `table` name a shape and `yaml`, `json` and `jsonl`
+  name a syntax
+* **Which value is the command's choice** - `passphrase show` prints the secret,
+  `passphrase search` one monogram per line, and `paste show` the content. No other app
+  has a bare value to offer, so `value` falls back to `rich` there, which `--help` says.
+  Like `table` it is a human format and is not accepted for `PHAB_FALLBACK`
+* **`--format=simple`** - Kept as a spelling of `value`, alongside `strict` for `yaml` and
+  `ndjson` for `jsonl`
+
 ### Table Output
 * **`--format=table`** - A grid, one row per record and one column per field, for the
   commands whose answer is a list: `diffusion repo list`, `diffusion uri list`,
@@ -72,8 +87,8 @@
   contributes its leaves (`Repository: {Name: ...}` is a `Name` column), a list
   becomes one comma-joined column, a column empty in every row is dropped, and a
   `Link` becomes the row's terminal hyperlink rather than a column of URLs. So an app
-  adopting the format writes no column list. Selecting columns with `--columns`, and
-  `csv`, remain open in #50
+  adopting the format writes no column list. Selecting columns with `--columns` is
+  not implemented
 * **One row is one line** - Cells are cut to 60 characters, and on a terminal the
   table is fitted to its width by shrinking the widest column first. Piped, every
   cell arrives whole. `table` is a human format and is deliberately not accepted for

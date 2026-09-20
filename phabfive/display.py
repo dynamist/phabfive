@@ -10,6 +10,7 @@ from rich.tree import Tree
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
+from phabfive.constants import FORMAT_ALIASES
 from phabfive.json_output import emit_records
 from phabfive.table import display_records_table
 
@@ -19,7 +20,7 @@ def render_records(output_format, renderers):
 
     ``renderers`` maps a format name to the zero-argument callable that
     renders it. An app that has nothing special to say for a format leaves
-    it out and gets ``rich``, which is what ``simple`` has always done
+    it out and gets ``rich``, which is what ``value`` has always done
     everywhere but passphrase and paste. ``table`` rides on the same rule:
     a list command registers a table renderer, a ``show`` command does not
     and so falls back to rich, which is the whole of "table is
@@ -27,19 +28,21 @@ def render_records(output_format, renderers):
 
     This exists so that an app added later - diffusion was the fourth -
     reuses the switch instead of writing another copy of it that drifts.
-    The alias handling is the same defensive pass ``display_tasks`` carried:
+    The alias handling is the same defensive pass ``display_tasks`` carried,
+    and reads :data:`FORMAT_ALIASES` rather than restating it, so the old
+    spelling of a renamed format cannot resolve here and nowhere else.
     ``preprocess_format_alias`` has normally rewritten these in argv long
     before a display function sees them.
 
     Parameters
     ----------
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', 'table', or an alias
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', 'table', 'value', or an alias
     renderers : dict
         Format name to a callable taking no arguments. A 'rich' entry is
         required, being the fallback.
     """
-    canonical = {"strict": "yaml", "ndjson": "jsonl"}.get(output_format, output_format)
+    canonical = FORMAT_ALIASES.get(output_format, output_format)
 
     try:
         renderers.get(canonical, renderers["rich"])()

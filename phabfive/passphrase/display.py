@@ -257,7 +257,7 @@ def display_passphrase_json(passphrase_dict):
     print(json.dumps(output, indent=2))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
 
 
-def display_passphrase_simple(passphrase_dict):
+def display_passphrase_value(passphrase_dict):
     """Display only the secret value (for piping).
 
     Parameters
@@ -277,15 +277,15 @@ def display_passphrase(passphrase_dict, output_format, phabfive_instance):
     passphrase_dict : dict
         Passphrase data from get_passphrase()
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or 'simple'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or 'value'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     """
     console = phabfive_instance.get_console()
 
     try:
-        if output_format == "simple":
-            display_passphrase_simple(passphrase_dict)
+        if output_format == "value":
+            display_passphrase_value(passphrase_dict)
         elif output_format == "tree":
             display_passphrase_tree(console, passphrase_dict, phabfive_instance)
         elif output_format in ("yaml", "strict"):
@@ -314,7 +314,7 @@ def display_passphrases(
     credentials : list
         List of passphrase data dictionaries
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or 'simple'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or 'value'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     show_secrets : bool
@@ -323,7 +323,7 @@ def display_passphrases(
     console = phabfive_instance.get_console()
 
     try:
-        if output_format == "simple":
+        if output_format == "value":
             for cred in credentials:
                 if show_secrets and "secret" in cred:
                     # Intentional: Output secrets for piping
@@ -478,7 +478,7 @@ def display_passphrases_list(
     credentials : list
         List of credential dictionaries
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', 'simple'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', 'value'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     show_secrets : bool
@@ -496,8 +496,8 @@ def display_passphrases_list(
         elif output_format == "tree":
             for cred in credentials:
                 display_passphrase_tree(console, cred, phabfive_instance)
-        elif output_format == "simple":
-            # Just output monograms for simple format
+        elif output_format == "value":
+            # Just output monograms for the value format
             for cred in credentials:
                 print(cred.get("id", ""))
         else:
