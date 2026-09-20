@@ -163,11 +163,13 @@ def repository_is_hosted(repo):
     """
     Whether Phabricator serves this repository itself.
 
-    ``diffusion.repository.search`` does not report hosting as a field, but
-    the URIs say it: Phabricator turns hosting on for a repository that
-    offers a read-write URI, and a repository that follows a remote carries
-    an observed URI and read-only built-ins instead. An instance that does
-    report the field is believed over the derivation.
+    Phorge reports this as ``isHosted`` and that is what is read. The
+    fallback is for an instance that does not: hosting is what a read-write
+    URI means, a repository that follows a remote carrying an observed URI
+    and read-only built-ins instead. It is a fallback rather than the rule
+    because the URIs attachment can come back empty on a repository that
+    is hosted - a freshly seeded one does - and an empty list must not be
+    read as "not hosted" when the instance has already said otherwise.
 
     Parameters
     ----------

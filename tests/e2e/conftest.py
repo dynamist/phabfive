@@ -50,6 +50,33 @@ def phabfive(live_env):
     return run
 
 
+@pytest.fixture(scope="session")
+def phabfive_raw(live_env):
+    """Run the CLI and hand back the whole result, exit code included.
+
+    The `phabfive` fixture asserts success, which is the right default and
+    no use at all for the commands whose contract is the exit code - a
+    repository that does not exist is a failed lookup, and a partial
+    result still fails.
+    """
+
+    def run(*args):
+        return subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from phabfive.cli import cli_entrypoint; cli_entrypoint()",
+                *args,
+            ],
+            env=live_env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+    return run
+
+
 @pytest.fixture
 def create_task(phabfive):
     """Create a task with a unique title, return (monogram, title)."""
