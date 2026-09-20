@@ -72,7 +72,7 @@ def test_task_edit_sets_the_two_policies_it_can(
         "--yes",
     )
 
-    [task] = phabfive("maniphest", "show", task_id, json_output=True)
+    [task] = phabfive("maniphest", "show", task_id, "--show-policy", json_output=True)
 
     # Read back in the same spelling that set them, and "Can Interact"
     # following "Visible To" without having been named
@@ -151,11 +151,14 @@ def test_task_formats_agree_on_the_policy_section(phabfive, create_task):
     some and not others makes yaml and json disagree about the same task."""
     task_id, _title = create_task()
 
-    from_json = phabfive("--format", "json", "maniphest", "show", task_id)
-    from_jsonl = phabfive("--format", "jsonl", "maniphest", "show", task_id)
-    from_yaml = phabfive("--format", "yaml", "maniphest", "show", task_id)
-    from_rich = phabfive("maniphest", "show", task_id)
-    from_tree = phabfive("--format", "tree", "maniphest", "show", task_id)
+    def show(*args):
+        return phabfive(*args, "maniphest", "show", task_id, "--show-policy")
+
+    from_json = show("--format", "json")
+    from_jsonl = show("--format", "jsonl")
+    from_yaml = show("--format", "yaml")
+    from_rich = show()
+    from_tree = show("--format", "tree")
 
     expected = json.loads(from_json)[0]["Policy"]
 
@@ -165,6 +168,16 @@ def test_task_formats_agree_on_the_policy_section(phabfive, create_task):
     for rendered in (from_rich, from_tree):
         for key, value in expected.items():
             assert f"{key}: {value}" in rendered, rendered
+
+    # And every one of them is silent about the section when it was not
+    # asked for - the gate is in the record builder, so no renderer can be
+    # the one that keeps printing it
+    for output_format in ("json", "jsonl", "yaml", "tree"):
+        rendered = phabfive("--format", output_format, "maniphest", "show", task_id)
+
+        assert "Policy" not in rendered, rendered
+
+    assert "Policy" not in phabfive("maniphest", "show", task_id)
 
 
 def test_jsonl_is_one_task_per_line(phabfive, create_task):
@@ -185,7 +198,9 @@ def test_jsonl_is_one_task_per_line(phabfive, create_task):
 
 def test_repo_show_describes_a_seeded_repository(phabfive):
     """GUNNAR is hosted, with history, per phorge/seed/data/repositories.json."""
-    [repo] = phabfive("diffusion", "repo", "show", "GUNNAR", json_output=True)
+    [repo] = phabfive(
+        "diffusion", "repo", "show", "GUNNAR", "--show-policy", json_output=True
+    )
 
     assert repo["Repository"]["Callsign"] == "GUNNAR"
     assert repo["Repository"]["Short Name"] == "gunnar-firmware"
@@ -378,7 +393,9 @@ def test_repo_edit_sets_every_policy(
         "--yes",
     )
 
-    [record] = phabfive("diffusion", "repo", "show", repo, json_output=True)
+    [record] = phabfive(
+        "diffusion", "repo", "show", repo, "--show-policy", json_output=True
+    )
 
     # Read back in the same spelling that set them, so what a policy is
     # shown as can be typed straight back in
