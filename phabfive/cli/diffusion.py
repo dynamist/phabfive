@@ -82,10 +82,49 @@ def repo_list(
 def repo_create(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="Repository name"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be created without creating it"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Create without confirming"),
+    interactive: bool = typer.Option(
+        False, "--interactive", "-i", help="Review the new repository and confirm"
+    ),
 ) -> None:
     """Create a new repository."""
+    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
+
+    try:
+        assume_yes = resolve_assume_yes(yes, False, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
     diffusion = _get_diffusion_app()
-    diffusion.create_repository(name=name)
+
+    try:
+        transactions, changes = diffusion.build_repo_create(name=name)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    if dry_run:
+        render_changes(name, changes, header=f"[DRY RUN] Would create {name}:")
+        return
+
+    if interactive:
+        render_changes(name, changes, header=f"Would create {name}:")
+        confirmed, return_code = confirm_apply(assume_yes)
+        if not confirmed:
+            typer.echo("Nothing was created.", err=True)
+            raise typer.Exit(return_code or 0)
+
+    try:
+        diffusion.apply_repo_create(transactions)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    render_changes(name, changes)
 
 
 @repo_app.command("edit")

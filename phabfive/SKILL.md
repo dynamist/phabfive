@@ -289,6 +289,7 @@ phabfive --format=json passphrase show K12 --no-secret
 phabfive --format=json diffusion repo list active
 phabfive diffusion uri list R5 --clone
 phabfive diffusion repo edit R5 --default-branch main --dry-run
+phabfive diffusion repo create newrepo --dry-run
 ```
 
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
