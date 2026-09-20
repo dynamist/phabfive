@@ -14,6 +14,7 @@ from phabfive.exceptions import (
     PhabfiveDataException,
     PhabfiveRemoteException,
 )
+from phabfive.pagination import iter_pages
 
 log = logging.getLogger(__name__)
 
@@ -305,9 +306,19 @@ class Passphrase(Phabfive):
         return result
 
     def search_passphrases(
-        self, query=None, credential_type=None, need_secrets=False, limit=100
+        self, query=None, credential_type=None, need_secrets=False, limit=None
     ):
         """Search/list all accessible credentials.
+
+        Follows the result cursor, so an instance with more than the 100
+        credentials one page holds is not answered short.
+
+        The type and name filters are applied in Python, which is why `limit`
+        is counted here rather than sent to the API: sent, it would truncate
+        every credential before a single one had been tested, so `--limit 2
+        --type key` could report none of the keys that exist. Pages are read
+        one at a time and reading stops as soon as `limit` credentials match,
+        so a small limit still costs a small number of requests.
 
         Parameters
         ----------
@@ -317,8 +328,9 @@ class Passphrase(Phabfive):
             Filter by type: password, token, key, note
         need_secrets : bool
             Include secret material (default: False for security)
-        limit : int
-            Maximum number of results
+        limit : int, optional
+            Maximum number of matching credentials to return. None means
+            every match.
 
         Returns
         -------
@@ -339,30 +351,38 @@ class Passphrase(Phabfive):
                     f"Valid choices: {', '.join(CREDENTIAL_TYPE_FILTERS)}"
                 )
 
+        credentials = []
+
         try:
-            response = self.phab.passphrase.query(
+            pages = iter_pages(
+                self.phab.passphrase.query,
                 needSecrets=1 if need_secrets else 0,
-                limit=limit,
             )
+
+            for page in pages:
+                for item in page:
+                    # Apply type filter
+                    if api_types and item.get("type") not in api_types:
+                        continue
+
+                    # Apply name filter (case-insensitive partial match)
+                    if query:
+                        name = item.get("name", "")
+                        if query.lower() not in name.lower():
+                            continue
+
+                    credentials.append(
+                        self._format_credential(item, need_secrets=need_secrets)
+                    )
+
+                    if limit is not None and len(credentials) >= limit:
+                        # Closed here rather than left to the collector, so
+                        # the generator cannot be resumed into another page
+                        pages.close()
+
+                        return credentials
         except APIError as e:
             raise PhabfiveRemoteException(e)
-
-        credentials = []
-        # Conduit returns an empty list instead of an object when nothing matches
-        data = response.get("data") or {}
-
-        for item in data.values():
-            # Apply type filter
-            if api_types and item.get("type") not in api_types:
-                continue
-
-            # Apply name filter (case-insensitive partial match)
-            if query:
-                name = item.get("name", "")
-                if query.lower() not in name.lower():
-                    continue
-
-            credentials.append(self._format_credential(item, need_secrets=need_secrets))
 
         return credentials
 

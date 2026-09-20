@@ -122,7 +122,7 @@ def search(
         100,
         "--limit",
         "-l",
-        help="Maximum results to return",
+        help="Maximum results to return, 0 for all",
     ),
 ) -> None:
     """Search credentials by name or type.
@@ -132,6 +132,7 @@ def search(
         phabfive passphrase search "deploy"
         phabfive passphrase search --type=password
         phabfive passphrase search "api" --type=token
+        phabfive passphrase search --type=key --limit=0
         phabfive --format=json passphrase search --type=key
     """
     from phabfive.passphrase.display import display_passphrases_list
@@ -149,7 +150,9 @@ def search(
             query=text_query,
             credential_type=credential_type,
             need_secrets=show_secret,
-            limit=limit,
+            # A limit counts matching credentials, and 0 - as in `paste
+            # search` and `maniphest search` - means every match
+            limit=limit if limit > 0 else None,
         )
 
         output_format = _get_output_format(ctx)
