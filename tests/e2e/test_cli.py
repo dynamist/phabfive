@@ -125,8 +125,13 @@ def test_repo_show_takes_several_repositories(phabfive):
     assert [r["Repository"]["Callsign"] for r in repos] == ["GUNNAR", "SPIKE"]
 
 
-def test_repo_show_formats_agree(phabfive):
-    """The whole point of the command: one record, five ways of writing it."""
+def test_repo_show_formats_agree(phabfive, settled_repositories):
+    """The whole point of the command: one record, five ways of writing it.
+
+    `settled_repositories` because this compares four separate runs of the
+    CLI: a repository that finishes importing between two of them changes
+    `Importing` underneath the comparison.
+    """
     from ruamel.yaml import YAML
 
     load = YAML(typ="safe").load
@@ -179,7 +184,8 @@ def test_a_listed_repository_is_the_record_show_answers_with(phabfive):
     assert shown in listed
 
 
-def test_repo_list_formats_agree(phabfive):
+def test_repo_list_formats_agree(phabfive, settled_repositories):
+    """Four runs of the CLI again, so the same settling applies."""
     from ruamel.yaml import YAML
 
     load = YAML(typ="safe").load

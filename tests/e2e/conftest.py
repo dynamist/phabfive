@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import uuid
 
 # 3rd party imports
@@ -109,6 +110,35 @@ def conduit(live_env):
         return payload["result"]
 
     return call
+
+
+@pytest.fixture(scope="session")
+def settled_repositories(conduit):
+    """Wait until no repository is still importing.
+
+    Phorge marks a hosted repository as importing until the daemons have
+    finished its initial import, and the seeder does not wait for that -
+    it has no reason to, refs exist before the daemons start. A test that
+    runs the same command once per format and compares the results can
+    therefore see `Importing` flip between two of its own invocations,
+    which reads as the formats disagreeing when what actually changed was
+    the repository. Asking for this first makes the four runs comparable.
+    """
+    deadline = time.monotonic() + 180
+
+    while True:
+        repos = conduit("diffusion.repository.search")["data"]
+
+        if not any(repo["fields"].get("isImporting") for repo in repos):
+            return
+
+        assert time.monotonic() < deadline, (
+            "repositories were still importing after 180s: "
+            + ", ".join(
+                f"R{repo['id']}" for repo in repos if repo["fields"].get("isImporting")
+            )
+        )
+        time.sleep(2)
 
 
 @pytest.fixture(scope="session")
