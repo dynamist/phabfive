@@ -7,21 +7,19 @@ import logging
 from phabricator import APIError
 
 from phabfive import passphrase
-from phabfive.constants import IO_NEW_URI_CHOICES
+from phabfive.constants import IO_NEW_URI_CHOICES, REPO_STATUS_CHOICES
 from phabfive.core import Phabfive
 from phabfive.diffusion.fetchers import (
     fetch_branches,
     fetch_refs,
     fetch_repositories,
-    fetch_uris,
     demotion_io,
     find_repository,
     match_repository,
 )
 from phabfive.diffusion.formatters import (
     build_repository_display_data,
-    format_repositories,
-    format_uris,
+    format_uri,
     ref_names,
 )
 from phabfive.diffusion.resolvers import (
@@ -117,33 +115,6 @@ class Diffusion(Phabfive):
             List of branch data
         """
         return fetch_branches(self.phab, repo_id, repo_callsign, repo_shortname)
-
-    def get_uris(self, repo_id=None, clone_uri=None):
-        """
-        Connect to Phabricator and list URIs for a specific repository.
-
-        Parameters
-        ----------
-        repo_id : str
-            Repository ID or short name
-        clone_uri : bool, optional
-            If True, only return clone URIs
-
-        Returns
-        -------
-        list
-            List of URI strings
-        """
-        clone_uri = clone_uri if clone_uri else False
-        return fetch_uris(self.phab, repo_id, clone_uri)
-
-    def get_uris_formatted(self, repo, clone_uri=False):
-        """Return list of URI strings for a repository."""
-        return format_uris(self.phab, repo, clone_uri)
-
-    def get_repositories_formatted(self, status=None, include_url=False):
-        """Return list of repository dicts with 'name' and optionally 'urls' keys."""
-        return format_repositories(self.phab, status, include_url)
 
     def _resolve_spaces(self, repos):
         """Name the spaces a set of repositories live in.
@@ -263,6 +234,118 @@ class Diffusion(Phabfive):
         )
 
         return {"repositories": repositories, "missing_ids": missing_ids}
+
+    def repo_list(self, status=None, show_uris=False):
+        """
+        List repositories, as the records ``repo_show`` answers with.
+
+        The same builder, so a listed repository and a shown one cannot
+        describe themselves differently. Only the per-repository sections
+        differ: branches and tags are deliberately not offered here,
+        because each costs one ``branchquery`` or ``tagsquery`` per
+        repository, which would turn a list into hundreds of round trips
+        on a large instance. URIs ride the search call's own attachment,
+        so they cost nothing extra.
+
+        Parameters
+        ----------
+        status : list, optional
+            Statuses to keep, defaults to every status
+        show_uris : bool, optional
+            Include each repository's URIs
+
+        Returns
+        -------
+        dict
+            {"repositories": [...]}, sorted by name
+        """
+        status = status or REPO_STATUS_CHOICES
+
+        # Asked for whether or not they are shown: repository_is_hosted
+        # falls back to them on an instance that does not report isHosted,
+        # and the attachment rides this same call.
+        repos = fetch_repositories(self.phab, attachments={"uris": True})
+
+        repos = [repo for repo in repos if repo["fields"].get("status") in status]
+        repos = sorted(repos, key=lambda repo: repo["fields"].get("name") or "")
+
+        repositories = build_repository_display_data(
+            self.url,
+            self.format_link,
+            repos,
+            space_map=self._resolve_spaces(repos),
+            show_uris=show_uris,
+        )
+
+        return {"repositories": repositories}
+
+    def uri_list(self, repo, clone_only=False):
+        """
+        List a repository's URIs in full.
+
+        Parameters
+        ----------
+        repo : str
+            Repository monogram (e.g., "R123"), callsign or short name
+        clone_only : bool, optional
+            Keep only the URIs the instance shows as clone URIs
+
+        Returns
+        -------
+        dict
+            {"uris": [...]}. A repository with no URIs to list is an empty
+            result, not a failure.
+
+        Raises
+        ------
+        PhabfiveDataException
+            If no such repository exists
+        """
+        repos = fetch_repositories(self.phab, attachments={"uris": True})
+
+        match = match_repository(repos, repo)
+
+        if match is None:
+            raise PhabfiveDataException(f"Repository '{repo}' not found")
+
+        uris = match["attachments"]["uris"]["uris"]
+
+        if clone_only:
+            uris = [
+                uri for uri in uris if uri["fields"]["display"]["effective"] == "always"
+            ]
+
+        credential_names = self._credential_names(uris)
+
+        return {"uris": [format_uri(uri, credential_names) for uri in uris]}
+
+    def _credential_names(self, uris):
+        """Name the credentials a set of URIs is bound to, by monogram.
+
+        One lookup per distinct credential, through the same
+        ``_describe_credential`` an edit uses: it asks ``phid.query``,
+        which answers with the monogram and nothing else. The secret is
+        never read, here or anywhere on a read path.
+
+        Parameters
+        ----------
+        uris : list
+            URI records
+
+        Returns
+        -------
+        dict
+            Credential PHID to its monogram
+        """
+        names = {}
+
+        for uri in uris:
+            phid = uri.get("fields", {}).get("credentialPHID")
+
+            if phid and phid not in names:
+                names[phid] = self._describe_credential(phid)
+
+        return names
 
     # Core operations that remain in the main class
 

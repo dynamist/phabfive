@@ -7,8 +7,6 @@ import pytest
 
 # phabfive imports
 from phabfive.diffusion import Diffusion
-from phabfive.diffusion.fetchers import fetch_uris
-from phabfive.diffusion.formatters import format_repositories
 from phabfive.exceptions import PhabfiveDataException
 
 
@@ -31,6 +29,22 @@ def _phab_with_repos(repos):
     return phab
 
 
+def _listing(repos):
+    """A Diffusion wired to a mock API, ready for repo_list() and uri_list()."""
+    with (
+        patch("phabfive.diffusion.core.Phabfive.__init__", return_value=None),
+        patch("phabfive.diffusion.core.passphrase.Passphrase"),
+    ):
+        diffusion = Diffusion()
+
+    diffusion.phab = _phab_with_repos(repos)
+    diffusion.url = "http://phorge.localhost"
+    diffusion.format_link = lambda url, text: url
+    diffusion.phab.phid.query.return_value = {}
+
+    return diffusion
+
+
 @pytest.fixture
 def diffusion():
     with (
@@ -49,26 +63,24 @@ class TestEmptyInstance:
     """An instance without repositories is valid, not an error."""
 
     def test_repo_list_is_empty(self):
-        assert format_repositories(_phab_with_repos([])) == []
+        assert _listing([]).repo_list()["repositories"] == []
 
     def test_uri_list_reports_unknown_repository(self):
         """No repositories means the one asked for does not exist.
 
-        None rather than [] so the CLI can tell an unknown repository
-        apart from one that simply has no URIs to list.
+        A raised exception rather than an empty list, so the CLI can tell
+        an unknown repository apart from one that simply has no URIs.
         """
-        assert fetch_uris(_phab_with_repos([]), repo_id="myrepo") is None
+        with pytest.raises(PhabfiveDataException, match="not found"):
+            _listing([]).uri_list("myrepo")
 
     def test_uri_list_is_empty_for_repository_without_uris(self):
         """An existing repository with no URIs is an empty result, not an error."""
-        phab = _phab_with_repos([_repo("myrepo")])
-
-        assert fetch_uris(phab, repo_id="myrepo") == []
+        assert _listing([_repo("myrepo")]).uri_list("myrepo") == {"uris": []}
 
     def test_uri_list_reports_unknown_repository_among_others(self):
-        phab = _phab_with_repos([_repo("myrepo")])
-
-        assert fetch_uris(phab, repo_id="otherrepo") is None
+        with pytest.raises(PhabfiveDataException, match="not found"):
+            _listing([_repo("myrepo")]).uri_list("otherrepo")
 
     def test_repo_create_creates_first_repository(self, diffusion):
         diffusion.phab.diffusion.repository.search.return_value = {"data": []}
@@ -116,15 +128,57 @@ class TestRepoCreateDuplicateCheck:
 
 
 class TestRepoList:
+    """The records `repo list` answers with - the ones `repo show` answers with."""
+
+    def _names(self, result):
+        return [r["Repository"]["Name"] for r in result["repositories"]]
+
     def test_filters_by_status_and_sorts_by_name(self):
-        phab = _phab_with_repos(
+        diffusion = _listing(
             [_repo("zeta"), _repo("alpha"), _repo("old", status="inactive")]
         )
 
-        assert format_repositories(phab, status=["active"]) == [
-            {"name": "alpha"},
-            {"name": "zeta"},
+        assert self._names(diffusion.repo_list(status=["active"])) == ["alpha", "zeta"]
+
+    def test_inactive_repositories_are_listed_when_asked_for(self):
+        diffusion = _listing([_repo("alpha"), _repo("old", status="inactive")])
+
+        assert self._names(diffusion.repo_list(status=["inactive"])) == ["old"]
+
+    def test_a_listed_repository_is_a_shown_one(self):
+        """The same builder, so a list and a show cannot disagree."""
+        repo = _show_repo()
+        listed = _listing([repo]).repo_list()["repositories"][0]
+        shown = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert listed == shown
+
+    def test_the_uris_section_is_absent_until_asked_for(self):
+        record = _listing([_show_repo()]).repo_list()["repositories"][0]
+
+        assert "URIs" not in record
+
+    def test_show_uris_describes_each_uri(self):
+        repo = _show_repo(uris=[_show_uri("git@github.com:dynamist/phabfive.git")])
+        record = _listing([repo]).repo_list(show_uris=True)["repositories"][0]
+
+        assert record["URIs"] == [
+            {
+                "URI": "git@github.com:dynamist/phabfive.git",
+                "I/O": "observe",
+                "Display": "always",
+                "Disabled": False,
+            }
         ]
+
+    def test_branches_and_tags_are_never_queried(self):
+        """One query per repository is what a list command cannot pay."""
+        diffusion = _listing([_show_repo()])
+
+        diffusion.repo_list(show_uris=True)
+
+        diffusion.phab.diffusion.branchquery.assert_not_called()
+        diffusion.phab.diffusion.tagsquery.assert_not_called()
 
 
 def _uri(
@@ -581,21 +635,13 @@ class TestRepositoryIdentifiers:
 
     def test_uri_list_accepts_a_monogram(self):
         """SKILL.md documents `diffusion uri list R5 --clone`."""
-        from phabfive.diffusion.formatters import format_uris
-
         repo = _repo("anything")
         repo["id"] = 5
-        repo["attachments"]["uris"]["uris"] = [
-            {
-                "id": 1,
-                "fields": {
-                    "uri": {"display": "git@example.com:x.git"},
-                    "display": {"effective": "always"},
-                },
-            }
-        ]
+        repo["attachments"]["uris"]["uris"] = [_show_uri("git@example.com:x.git")]
 
-        assert format_uris(_phab_with_repos([repo]), "R5") == ["git@example.com:x.git"]
+        result = _listing([repo]).uri_list("R5", clone_only=True)
+
+        assert [uri["URI"] for uri in result["uris"]] == ["git@example.com:x.git"]
 
 
 class TestMissingRepositoryIsNotATraceback:
@@ -2163,3 +2209,389 @@ class TestEditHeadersLinkToPhabricator:
         )
 
         assert result.output.count("  URI:") == 1
+
+
+def _credential_uri(credential_phid="PHID-CDTL-1", **kwargs):
+    """A URI bound to a credential, as the uris attachment returns it."""
+    uri = _show_uri(kwargs.pop("uri", "git@github.com:dynamist/phabfive.git"), **kwargs)
+    uri["fields"]["credentialPHID"] = credential_phid
+
+    return uri
+
+
+class TestUriListRecord:
+    """`uri list` printed bare strings; this is the record it answers with."""
+
+    def test_every_field_the_web_ui_shows(self):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [_show_uri("git@example.com:x.git")]
+
+        assert _listing([repo]).uri_list("myrepo") == {
+            "uris": [
+                {
+                    "URI": "git@example.com:x.git",
+                    "I/O": "observe",
+                    "Display": "always",
+                    "Credential": "(none)",
+                    "Disabled": False,
+                }
+            ]
+        }
+
+    def test_the_display_uri_is_what_is_reported(self):
+        """The two list commands used to read two different spellings.
+
+        `repo list --url` read uri.effective and `uri list` read
+        uri.display, so the same URI could be printed two ways. Every
+        caller now reads the display URI, which is the one the web UI
+        shows.
+        """
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            {
+                "id": 1,
+                "fields": {
+                    "uri": {
+                        "raw": "git@example.com:x.git",
+                        "display": "git@example.com:x.git",
+                        "effective": "ssh://git@example.com/x.git",
+                    },
+                    "io": {"effective": "observe"},
+                    "display": {"effective": "always"},
+                },
+            }
+        ]
+
+        [uri] = _listing([repo]).uri_list("myrepo")["uris"]
+
+        assert uri["URI"] == "git@example.com:x.git"
+
+    def test_clone_keeps_only_the_uris_shown_as_clone_uris(self):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            _show_uri("git@example.com:shown.git", display="always"),
+            _show_uri("git@example.com:hidden.git", display="never"),
+        ]
+
+        listed = _listing([repo])
+
+        assert [uri["URI"] for uri in listed.uri_list("myrepo")["uris"]] == [
+            "git@example.com:shown.git",
+            "git@example.com:hidden.git",
+        ]
+        assert [
+            uri["URI"] for uri in listed.uri_list("myrepo", clone_only=True)["uris"]
+        ] == ["git@example.com:shown.git"]
+
+    def test_a_credential_is_named_by_its_monogram(self):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [_credential_uri()]
+        diffusion = _listing([repo])
+        diffusion.phab.phid.query.return_value = {"PHID-CDTL-1": {"name": "K3"}}
+
+        [uri] = diffusion.uri_list("myrepo")["uris"]
+
+        assert uri["Credential"] == "K3"
+
+    def test_the_secret_is_never_fetched(self):
+        """Naming a credential is phid.query; passphrase is never asked."""
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [_credential_uri()]
+        diffusion = _listing([repo])
+        diffusion.passphrase = MagicMock()
+        diffusion.phab.phid.query.return_value = {"PHID-CDTL-1": {"name": "K3"}}
+
+        diffusion.uri_list("myrepo")
+
+        diffusion.passphrase.get_secret.assert_not_called()
+        diffusion.passphrase.get_credential_record.assert_not_called()
+
+    def test_an_unnameable_credential_falls_back_to_its_phid(self):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [_credential_uri()]
+        diffusion = _listing([repo])
+        diffusion.phab.phid.query.side_effect = Exception("lookup failed")
+
+        [uri] = diffusion.uri_list("myrepo")["uris"]
+
+        # Naming it is a convenience; it must never fail the read.
+        assert uri["Credential"] == "PHID-CDTL-1"
+
+    def test_one_lookup_per_distinct_credential(self):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            _credential_uri(uri="git@example.com:a.git"),
+            _credential_uri(uri="git@example.com:b.git"),
+            _credential_uri("PHID-CDTL-2", uri="git@example.com:c.git"),
+        ]
+        diffusion = _listing([repo])
+        diffusion.phab.phid.query.return_value = {}
+
+        diffusion.uri_list("myrepo")
+
+        assert diffusion.phab.phid.query.call_count == 2
+
+
+class TestListFormats:
+    """Both list commands honour --format, and the formats agree (#372)."""
+
+    def _repo_records(self):
+        repo = _show_repo(uris=[_show_uri("git@github.com:dynamist/phabfive.git")])
+
+        return _listing([repo]), _listing([repo]).repo_list(show_uris=True)
+
+    def _uri_records(self):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [_show_uri("git@example.com:x.git")]
+
+        return _listing([repo]), _listing([repo]).uri_list("myrepo")
+
+    def _render(self, capsys, which, output_format):
+        from phabfive.diffusion.display import display_repositories, display_uris
+
+        if which == "repositories":
+            diffusion, result = self._repo_records()
+            display_repositories(result, output_format, diffusion)
+        else:
+            diffusion, result = self._uri_records()
+            display_uris(result, output_format, diffusion)
+
+        return capsys.readouterr().out
+
+    @pytest.mark.parametrize("which", ["repositories", "uris"])
+    def test_yaml_json_and_jsonl_carry_the_same_record(self, capsys, which):
+        import json
+
+        from ruamel.yaml import YAML
+
+        as_yaml = YAML(typ="safe").load(self._render(capsys, which, "yaml"))
+        as_json = json.loads(self._render(capsys, which, "json"))
+        as_jsonl = [
+            json.loads(line)
+            for line in self._render(capsys, which, "jsonl").splitlines()
+        ]
+
+        assert as_yaml == as_json == as_jsonl
+
+    @pytest.mark.parametrize("which", ["repositories", "uris"])
+    def test_rich_is_the_same_record_in_yaml_shape(self, capsys, which):
+        import json
+
+        from ruamel.yaml import YAML
+
+        as_rich = YAML(typ="safe").load(self._render(capsys, which, "rich"))
+
+        assert as_rich == json.loads(self._render(capsys, which, "json"))
+
+    @pytest.mark.parametrize("which", ["repositories", "uris"])
+    def test_tree_renders_rather_than_falling_back(self, capsys, which):
+        """--format is global; a format that quietly falls back is the bug."""
+        output = self._render(capsys, which, "tree")
+
+        assert "├──" in output or "└──" in output
+        assert not output.startswith("- ")
+
+    @pytest.mark.parametrize("which", ["repositories", "uris"])
+    def test_no_internal_key_reaches_the_output(self, capsys, which):
+        for output_format in ("rich", "yaml", "json", "jsonl", "tree"):
+            assert "_link" not in self._render(capsys, which, output_format)
+            assert "_url" not in self._render(capsys, which, output_format)
+
+    def test_a_uri_record_has_no_link_to_lead_with(self, capsys):
+        """A URI has no page of its own, so it leads with the URI itself."""
+        import json
+
+        record = json.loads(self._render(capsys, "uris", "json"))[0]
+
+        assert list(record)[0] == "URI"
+        assert "Link" not in record
+
+    def test_a_repository_record_still_leads_with_its_link(self, capsys):
+        import json
+
+        record = json.loads(self._render(capsys, "repositories", "json"))[0]
+
+        assert list(record)[0] == "Link"
+
+
+class TestRepoListCli:
+    """`repo list` ignored --format entirely and printed bare names (#372)."""
+
+    def _invoke(self, args, result=None, side_effect=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        if side_effect is not None:
+            mock_diffusion.repo_list.side_effect = side_effect
+        else:
+            mock_diffusion.repo_list.return_value = (
+                result if result is not None else {"repositories": []}
+            )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            return CliRunner().invoke(diffusion_app, ["repo", "list", *args]), (
+                mock_diffusion
+            )
+
+    RECORD = {
+        "_url": "http://phorge.localhost/R5",
+        "_link": "http://phorge.localhost/R5",
+        "Repository": {"Monogram": "R5", "Name": "phabfive"},
+    }
+
+    @pytest.mark.parametrize(
+        "status, expected",
+        [
+            (None, ["active"]),
+            ("active", ["active"]),
+            ("inactive", ["inactive"]),
+            ("all", ["active", "inactive"]),
+        ],
+    )
+    def test_the_status_argument_reaches_the_lookup(self, status, expected):
+        _, diffusion = self._invoke([status] if status else [])
+
+        assert diffusion.repo_list.call_args[1]["status"] == expected
+
+    def test_show_uris_reaches_the_lookup(self):
+        _, diffusion = self._invoke(["--show-uris"])
+
+        assert diffusion.repo_list.call_args[1]["show_uris"] is True
+
+    def test_nothing_extra_is_shown_by_default(self):
+        _, diffusion = self._invoke([])
+
+        assert diffusion.repo_list.call_args[1]["show_uris"] is False
+
+    def test_the_url_alias_still_works_and_says_it_is_deprecated(self):
+        result, diffusion = self._invoke(["--url"])
+
+        assert result.exit_code == 0
+        assert diffusion.repo_list.call_args[1]["show_uris"] is True
+        assert "--url is deprecated" in result.output
+
+    def test_the_url_alias_is_hidden_from_the_help(self):
+        result, _ = self._invoke(["--help"])
+
+        assert "--show-uris" in result.output
+        assert "--url" not in result.output
+
+    def test_the_records_are_emitted_in_the_format_asked_for(self):
+        import json
+
+        from typer.testing import CliRunner
+
+        from phabfive.cli import app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.repo_list.return_value = {"repositories": [self.RECORD]}
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(
+                app, ["--format=json", "diffusion", "repo", "list"]
+            )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == [
+            {
+                "Link": "http://phorge.localhost/R5",
+                "Repository": {"Monogram": "R5", "Name": "phabfive"},
+            }
+        ]
+
+    def test_an_empty_instance_exits_zero(self):
+        result, _ = self._invoke([])
+
+        assert result.exit_code == 0
+
+    def test_an_api_failure_is_reported_rather_than_tracebacked(self):
+        result, _ = self._invoke(
+            [], side_effect=PhabfiveDataException("data is unavailable")
+        )
+
+        assert result.exit_code == 1
+        assert "data is unavailable" in result.output
+        assert "Traceback" not in result.output
+
+
+class TestUriListCli:
+    """`uri list` printed bare strings whatever --format asked for (#372)."""
+
+    def _invoke(self, args, result=None, side_effect=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        if side_effect is not None:
+            mock_diffusion.uri_list.side_effect = side_effect
+        else:
+            mock_diffusion.uri_list.return_value = (
+                result if result is not None else {"uris": []}
+            )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            return CliRunner().invoke(diffusion_app, ["uri", "list", *args]), (
+                mock_diffusion
+            )
+
+    RECORD = {
+        "URI": "git@example.com:x.git",
+        "I/O": "observe",
+        "Display": "always",
+        "Credential": "K3",
+        "Disabled": False,
+    }
+
+    def test_the_repository_reaches_the_lookup(self):
+        _, diffusion = self._invoke(["R5"])
+
+        assert diffusion.uri_list.call_args[0][0] == "R5"
+        assert diffusion.uri_list.call_args[1] == {"clone_only": False}
+
+    def test_clone_reaches_the_lookup(self):
+        _, diffusion = self._invoke(["R5", "--clone"])
+
+        assert diffusion.uri_list.call_args[1] == {"clone_only": True}
+
+    def test_the_records_are_emitted_in_the_format_asked_for(self):
+        import json
+
+        from typer.testing import CliRunner
+
+        from phabfive.cli import app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.uri_list.return_value = {"uris": [self.RECORD]}
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(
+                app, ["--format=json", "diffusion", "uri", "list", "R5"]
+            )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == [self.RECORD]
+
+    def test_a_repository_without_uris_exits_zero(self):
+        result, _ = self._invoke(["R5"])
+
+        assert result.exit_code == 0
+
+    def test_a_missing_repository_is_reported_cleanly(self):
+        result, _ = self._invoke(
+            ["R9999"], side_effect=PhabfiveDataException("Repository 'R9999' not found")
+        )
+
+        assert result.exit_code == 1
+        assert "not found" in result.output
+        assert "Traceback" not in result.output
