@@ -288,7 +288,12 @@ phabfive --format=json passphrase show K12 --no-secret
 
 phabfive --format=json diffusion repo list active
 phabfive diffusion uri list R5 --clone
+phabfive diffusion repo edit R5 --default-branch main --dry-run
 ```
+
+`diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
+`--status`. A `--short-name` change also rewrites the built-in `/source/<name>.git`
+URIs, which `--dry-run` spells out before anything is applied.
 
 A repository is addressable by monogram (`R5`), callsign or short name. Not every
 repository has a short name, so prefer the monogram when scripting.
