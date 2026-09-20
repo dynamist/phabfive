@@ -13,7 +13,12 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from phabfive.cli.paste import paste_app
-from phabfive.pagination import MAX_PAGE_SIZE, search_all_pages
+from phabfive.pagination import (
+    MAX_PAGE_SIZE,
+    iter_pages,
+    page_records,
+    search_all_pages,
+)
 
 runner = CliRunner()
 
@@ -93,6 +98,40 @@ class TestSearchAllPages:
         search_all_pages(search, queryKey="all")
 
         assert "limit" not in search.calls[0]
+
+
+class TestPageRecords:
+    """A *.search page is a list; a legacy *.query page is a PHID-keyed dict."""
+
+    def test_a_list_page_is_read_in_order(self):
+        assert page_records([_paste(1), _paste(2)]) == [_paste(1), _paste(2)]
+
+    def test_a_dict_page_is_read_as_its_values(self):
+        page = {"PHID-CDTL-1": {"id": 1}, "PHID-CDTL-2": {"id": 2}}
+
+        assert page_records(page) == [{"id": 1}, {"id": 2}]
+
+    def test_an_empty_result_is_empty_either_way(self):
+        assert page_records([]) == []
+        assert page_records({}) == []
+        assert page_records(None) == []
+
+
+class TestIterPages:
+    def test_pages_arrive_one_at_a_time(self):
+        search = _paged_search([[_paste(1)], [_paste(2)]])
+
+        assert [[p["id"] for p in page] for page in iter_pages(search)] == [[1], [2]]
+
+    def test_abandoning_the_walk_leaves_the_next_page_unfetched(self):
+        """What lets a caller that filters in Python stop early."""
+        search = _paged_search([[_paste(1)], [_paste(2)]])
+
+        pages = iter_pages(search)
+        next(pages)
+        pages.close()
+
+        assert len(search.calls) == 1
 
 
 class TestGetPastesPaging:
