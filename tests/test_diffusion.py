@@ -165,8 +165,10 @@ class TestRepoList:
         assert record["URIs"] == [
             {
                 "URI": "git@github.com:dynamist/phabfive.git",
-                "I/O": "observe",
-                "Display": "always",
+                "Origin": "external",
+                "Role": "Phorge pulls from here",
+                "I/O": {"Raw": "observe", "Default": "none", "Effective": "observe"},
+                "Display": {"Raw": "always", "Default": "never", "Effective": "always"},
                 "Disabled": False,
             }
         ]
@@ -1651,14 +1653,22 @@ def _show_repo(
     }
 
 
-def _show_uri(uri, io="observe", display="always", disabled=False):
+def _show_uri(uri, io="observe", display="always", disabled=False, builtin=None):
+    """A URI as the uris attachment returns it.
+
+    Phorge spells io and display as raw/default/effective; `io` and
+    `display` here are what is written on the URI, which for anything but
+    the literal "default" is also what is in force. `builtin` is the
+    protocol Phorge generated the URI for, and None is a URI someone added.
+    """
     return {
         "id": 1,
         "fields": {
             "uri": {"display": uri},
-            "io": {"effective": io},
-            "display": {"effective": display},
+            "io": {"raw": io, "default": "none", "effective": io},
+            "display": {"raw": display, "default": "never", "effective": display},
             "disabled": disabled,
+            "builtin": {"protocol": builtin, "identifier": builtin and "shortname"},
         },
     }
 
@@ -1810,8 +1820,10 @@ class TestRepoShowRecord:
         assert record["URIs"] == [
             {
                 "URI": "git@github.com:dynamist/phabfive.git",
-                "I/O": "observe",
-                "Display": "always",
+                "Origin": "external",
+                "Role": "Phorge pulls from here",
+                "I/O": {"Raw": "observe", "Default": "none", "Effective": "observe"},
+                "Display": {"Raw": "always", "Default": "never", "Effective": "always"},
                 "Disabled": False,
             }
         ]
@@ -2230,8 +2242,18 @@ class TestUriListRecord:
             "uris": [
                 {
                     "URI": "git@example.com:x.git",
-                    "I/O": "observe",
-                    "Display": "always",
+                    "Origin": "external",
+                    "Role": "Phorge pulls from here",
+                    "I/O": {
+                        "Raw": "observe",
+                        "Default": "none",
+                        "Effective": "observe",
+                    },
+                    "Display": {
+                        "Raw": "always",
+                        "Default": "never",
+                        "Effective": "always",
+                    },
                     "Credential": "(none)",
                     "Disabled": False,
                 }
@@ -2330,6 +2352,324 @@ class TestUriListRecord:
         diffusion.uri_list("myrepo")
 
         assert diffusion.phab.phid.query.call_count == 2
+
+
+class TestUriMatrix:
+    """A URI has four independent dimensions, and the record has all four.
+
+    `uri list` reported two of them, flattened to their effective value
+    (#375): there was no way to tell a URI Phorge generated from one
+    somebody added, and no way to tell a value written on the URI from one
+    it inherited.
+    """
+
+    def _record(self, **kwargs):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            _show_uri("git@example.com:x.git", **kwargs)
+        ]
+
+        [record] = _listing([repo]).uri_list("myrepo")["uris"]
+
+        return record
+
+    def test_a_generated_uri_is_built_in(self):
+        assert self._record(builtin="ssh")["Origin"] == "built-in"
+
+    def test_an_added_uri_is_external(self):
+        assert self._record()["Origin"] == "external"
+
+    def test_a_record_without_a_builtin_section_is_external(self):
+        """Only builtin.protocol says which, and a sparse record has none."""
+        from phabfive.diffusion.formatters import uri_origin
+
+        assert uri_origin({"fields": {}}) == "external"
+
+    @pytest.mark.parametrize(
+        "io, role",
+        [
+            ("observe", "Phorge pulls from here"),
+            ("mirror", "Phorge pushes here"),
+            ("readwrite", "clone + push"),
+            ("read", "clone (read-only)"),
+            ("none", "not in use"),
+        ],
+    )
+    def test_the_role_answers_what_the_uri_is_for(self, io, role):
+        assert self._record(io=io)["Role"] == role
+
+    def test_being_disabled_overrides_the_role(self):
+        """A disabled observe URI is not pulled from, whatever io says."""
+        record = self._record(io="observe", disabled=True)
+
+        assert record["Role"] == "disabled"
+        assert record["Disabled"] is True
+
+    def test_an_io_value_phabfive_does_not_know_is_reported_as_it_is(self):
+        """Phorge may grow one; answering with a guess would be worse."""
+        assert self._record(io="teleport")["Role"] == "teleport"
+
+    def test_io_is_published_as_all_three_spellings(self):
+        assert self._record(io="observe")["I/O"] == {
+            "Raw": "observe",
+            "Default": "none",
+            "Effective": "observe",
+        }
+
+    def test_display_is_published_as_all_three_spellings(self):
+        assert self._record(display="always")["Display"] == {
+            "Raw": "always",
+            "Default": "never",
+            "Effective": "always",
+        }
+
+    def test_an_inherited_value_keeps_what_it_inherited_from(self):
+        """effective alone cannot say whether the value was chosen."""
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            {
+                "id": 1,
+                "fields": {
+                    "uri": {"display": "http://phorge/source/x.git"},
+                    "io": {
+                        "raw": "default",
+                        "default": "readwrite",
+                        "effective": "readwrite",
+                    },
+                    "display": {
+                        "raw": "default",
+                        "default": "always",
+                        "effective": "always",
+                    },
+                    "builtin": {"protocol": "http", "identifier": "shortname"},
+                },
+            }
+        ]
+
+        [record] = _listing([repo]).uri_list("myrepo")["uris"]
+
+        assert record["I/O"]["Raw"] == "default"
+        assert record["I/O"]["Effective"] == "readwrite"
+        assert record["Role"] == "clone + push"
+
+    def test_a_sparse_record_is_answered_rather_than_raising(self):
+        """An older instance may not send every key; a read must not fail."""
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            {"id": 1, "fields": {"uri": {"display": "git@example.com:x.git"}}}
+        ]
+
+        [record] = _listing([repo]).uri_list("myrepo")["uris"]
+
+        assert record["I/O"] == {"Raw": None, "Default": None, "Effective": None}
+        assert record["Origin"] == "external"
+        assert record["Role"] is None
+
+    def test_the_uri_stays_the_first_field_and_stays_a_scalar(self):
+        """Every renderer here takes the first field as the identifying one."""
+        record = self._record()
+
+        assert next(iter(record)) == "URI"
+        assert isinstance(record["URI"], str)
+
+
+class TestUriListFilters:
+    """`uri list` is queryable, which is what #33 and #32 asked for."""
+
+    def _uris(self, **filters):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            # The one Phorge generated, inheriting both its values.
+            {
+                "id": 1,
+                "fields": {
+                    "uri": {"display": "http://phorge/source/x.git"},
+                    "io": {
+                        "raw": "default",
+                        "default": "readwrite",
+                        "effective": "readwrite",
+                    },
+                    "display": {
+                        "raw": "default",
+                        "default": "always",
+                        "effective": "always",
+                    },
+                    "disabled": False,
+                    "builtin": {"protocol": "http", "identifier": "shortname"},
+                },
+            },
+            _show_uri("git@example.com:observed.git", io="observe", display="never"),
+            _show_uri("git@example.com:mirrored.git", io="mirror", display="always"),
+            _show_uri(
+                "git@example.com:off.git", io="none", display="never", disabled=True
+            ),
+        ]
+
+        return [
+            uri["URI"] for uri in _listing([repo]).uri_list("myrepo", **filters)["uris"]
+        ]
+
+    def test_no_filter_is_every_uri(self):
+        assert len(self._uris()) == 4
+
+    def test_io_keeps_the_uris_that_do_that(self):
+        assert self._uris(io="observe") == ["git@example.com:observed.git"]
+
+    def test_io_finds_a_uri_by_what_is_in_force_not_only_what_was_set(self):
+        """The built-in URI never had "readwrite" written on it."""
+        assert self._uris(io="readwrite") == ["http://phorge/source/x.git"]
+
+    def test_io_default_finds_the_uris_that_inherit_it(self):
+        """ "default" is never an effective value, so raw is what answers."""
+        assert self._uris(io="default") == ["http://phorge/source/x.git"]
+
+    def test_display_keeps_the_uris_shown_that_way(self):
+        """Whether the URI was told to be shown or inherited being shown."""
+        assert self._uris(display="always") == [
+            "http://phorge/source/x.git",
+            "git@example.com:mirrored.git",
+        ]
+
+    def test_builtin_keeps_what_phorge_generated(self):
+        assert self._uris(builtin=True) == ["http://phorge/source/x.git"]
+
+    def test_external_keeps_what_was_added(self):
+        assert self._uris(builtin=False) == [
+            "git@example.com:observed.git",
+            "git@example.com:mirrored.git",
+            "git@example.com:off.git",
+        ]
+
+    def test_disabled_keeps_only_the_disabled_ones(self):
+        assert self._uris(disabled=True) == ["git@example.com:off.git"]
+
+    def test_enabled_keeps_only_the_rest(self):
+        assert "git@example.com:off.git" not in self._uris(disabled=False)
+
+    def test_filters_combine(self):
+        assert self._uris(builtin=False, display="always") == [
+            "git@example.com:mirrored.git"
+        ]
+
+    def test_a_filter_matching_nothing_is_an_empty_result(self):
+        assert self._uris(io="read") == []
+
+    def test_a_filtered_out_uri_costs_no_credential_lookup(self):
+        """Naming a credential is a round trip per credential."""
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            _credential_uri(uri="git@example.com:observed.git", io="observe"),
+            _credential_uri(
+                "PHID-CDTL-2", uri="git@example.com:mirrored.git", io="mirror"
+            ),
+        ]
+        diffusion = _listing([repo])
+        diffusion.phab.phid.query.return_value = {}
+
+        diffusion.uri_list("myrepo", io="observe")
+
+        assert diffusion.phab.phid.query.call_count == 1
+
+    def test_clone_is_the_display_filter_it_has_always_been(self):
+        assert self._uris(clone_only=True) == self._uris(display="always")
+
+
+class TestUriListFilterCli:
+    """The options are validated before a request is made."""
+
+    def _invoke(self, argv, uris=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.uri_list.return_value = {"uris": uris or []}
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, argv)
+
+        return result, mock_diffusion
+
+    def test_the_filters_reach_the_lookup(self):
+        _, diffusion = self._invoke(
+            ["uri", "list", "R5", "--io=observe", "--display=always", "--external"]
+        )
+
+        assert diffusion.uri_list.call_args[1] == {
+            "clone_only": False,
+            "io": "observe",
+            "display": "always",
+            "builtin": False,
+            "disabled": None,
+        }
+
+    def test_builtin_and_disabled_are_the_other_half_of_each_pair(self):
+        _, diffusion = self._invoke(["uri", "list", "R5", "--builtin", "--disabled"])
+
+        assert diffusion.uri_list.call_args[1]["builtin"] is True
+        assert diffusion.uri_list.call_args[1]["disabled"] is True
+
+    def test_enabled_is_false_not_absent(self):
+        _, diffusion = self._invoke(["uri", "list", "R5", "--enabled"])
+
+        assert diffusion.uri_list.call_args[1]["disabled"] is False
+
+    def test_an_old_spelling_resolves_to_what_phorge_calls_it(self):
+        """--io=never and --display=hidden are what phabfive advertised."""
+        _, diffusion = self._invoke(
+            ["uri", "list", "R5", "--io=never", "--display=hidden"]
+        )
+
+        assert diffusion.uri_list.call_args[1]["io"] == "none"
+        assert diffusion.uri_list.call_args[1]["display"] == "never"
+
+    def test_an_io_value_that_is_not_one_is_refused_unsent(self):
+        result, diffusion = self._invoke(["uri", "list", "R5", "--io=bogus"])
+
+        assert result.exit_code == 1
+        assert "not valid" in result.output
+        diffusion.uri_list.assert_not_called()
+
+    def test_a_display_value_that_is_not_one_is_refused_unsent(self):
+        result, diffusion = self._invoke(["uri", "list", "R5", "--display=sometimes"])
+
+        assert result.exit_code == 1
+        assert "not valid" in result.output
+        diffusion.uri_list.assert_not_called()
+
+    def test_the_error_names_the_values_there_are(self):
+        from phabfive.constants import IO_URI_VALUES
+
+        result, _ = self._invoke(["uri", "list", "R5", "--io=bogus"])
+
+        for value in IO_URI_VALUES:
+            assert f"'{value}'" in result.output
+
+    def test_both_halves_of_a_pair_is_refused(self):
+        result, diffusion = self._invoke(
+            ["uri", "list", "R5", "--builtin", "--external"]
+        )
+
+        assert result.exit_code == 1
+        assert "--builtin and --external" in result.output
+        diffusion.uri_list.assert_not_called()
+
+    def test_both_halves_of_the_other_pair_is_refused(self):
+        result, diffusion = self._invoke(
+            ["uri", "list", "R5", "--disabled", "--enabled"]
+        )
+
+        assert result.exit_code == 1
+        assert "--disabled and --enabled" in result.output
+        diffusion.uri_list.assert_not_called()
+
+    def test_a_filter_matching_nothing_is_still_a_success(self):
+        result, _ = self._invoke(["uri", "list", "R5", "--io=read"])
+
+        assert result.exit_code == 0
+        assert result.output == ""
 
 
 class TestListFormats:
@@ -2555,12 +2895,18 @@ class TestUriListCli:
         _, diffusion = self._invoke(["R5"])
 
         assert diffusion.uri_list.call_args[0][0] == "R5"
-        assert diffusion.uri_list.call_args[1] == {"clone_only": False}
+        assert diffusion.uri_list.call_args[1] == {
+            "clone_only": False,
+            "io": None,
+            "display": None,
+            "builtin": None,
+            "disabled": None,
+        }
 
     def test_clone_reaches_the_lookup(self):
         _, diffusion = self._invoke(["R5", "--clone"])
 
-        assert diffusion.uri_list.call_args[1] == {"clone_only": True}
+        assert diffusion.uri_list.call_args[1]["clone_only"] is True
 
     def test_the_records_are_emitted_in_the_format_asked_for(self):
         import json
@@ -2638,14 +2984,26 @@ class TestTableFormatCli:
         "uris": [
             {
                 "URI": "ssh://phorge@phorge.localhost/source/phabfive.git",
-                "I/O": "readwrite",
-                "Display": "always",
+                "Origin": "built-in",
+                "Role": "clone + push",
+                "I/O": {
+                    "Raw": "default",
+                    "Default": "readwrite",
+                    "Effective": "readwrite",
+                },
+                "Display": {
+                    "Raw": "default",
+                    "Default": "always",
+                    "Effective": "always",
+                },
                 "Disabled": False,
             },
             {
                 "URI": "git@github.com:dynamist/phabfive.git",
-                "I/O": "observe",
-                "Display": "never",
+                "Origin": "external",
+                "Role": "Phorge pulls from here",
+                "I/O": {"Raw": "observe", "Default": "none", "Effective": "observe"},
+                "Display": {"Raw": "never", "Default": "never", "Effective": "never"},
                 "Disabled": False,
             },
         ]
@@ -2709,8 +3067,24 @@ class TestTableFormatCli:
             ["--format=table", "diffusion", "uri", "list", "R5"], uri_list=self.URIS
         )
 
-        assert rows[0].split() == ["URI", "I/O", "Display", "Disabled"]
         assert "ssh://phorge@phorge.localhost/source/phabfive.git" in rows[1]
+
+    def test_uri_list_gives_the_matrix_one_column_each(self):
+        """Six columns of Raw/Default/Effective is what rule 3 is for."""
+        rows = self._invoke(
+            ["--format=table", "diffusion", "uri", "list", "R5"], uri_list=self.URIS
+        )
+
+        assert rows[0].split() == [
+            "URI",
+            "Origin",
+            "Role",
+            "I/O",
+            "Display",
+            "Disabled",
+        ]
+        assert "readwrite (default)" in rows[1]
+        assert "observe (set)" in rows[2]
 
     def test_uri_list_writes_one_row_per_uri(self):
         rows = self._invoke(

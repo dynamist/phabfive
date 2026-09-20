@@ -118,6 +118,21 @@ DISPLAY_CHOICES = ["default", "always", "never"]
 IO_URI_ALIASES = {"never": "none"}
 DISPLAY_ALIASES = {"hidden": "never"}
 
+# What a URI actually does, in one line, keyed by its effective I/O value.
+# The I/O value alone is Phorge's vocabulary; this is the answer to "so what
+# is this URI for", which is the question someone reading `uri list` has.
+URI_ROLES = {
+    "observe": "Phorge pulls from here",
+    "mirror": "Phorge pushes here",
+    "readwrite": "clone + push",
+    "read": "clone (read-only)",
+    "none": "not in use",
+}
+
+# A disabled URI does nothing whatever its I/O says, so this overrides the
+# table above rather than appearing in it.
+URI_ROLE_DISABLED = "disabled"
+
 REPO_STATUS_CHOICES = ["active", "inactive"]
 
 # Phorge's policy keyword constants, labelled the way its web UI labels them.
@@ -258,6 +273,8 @@ __all__ = [
     "PRIORITY_DEFAULT",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
+    "URI_ROLES",
+    "URI_ROLE_DISABLED",
     "VALIDATION_HINTS",
     "VALIDATORS",
 ]
