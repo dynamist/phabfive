@@ -193,7 +193,7 @@ def test_repo_show_describes_a_seeded_repository(phabfive):
     assert repo["Repository"]["VCS"] == "git"
     assert repo["Repository"]["Hosted"] is True
     assert repo["Link"].endswith("/source/gunnar-firmware/")
-    assert repo["Policy"]["View"] == "All Users"
+    assert repo["Policy"]["Visible To"] == "All Users"
 
 
 def test_repo_show_resolves_every_way_in(phabfive):
@@ -372,9 +372,9 @@ def test_repo_edit_sets_every_policy(
         "repo",
         "edit",
         repo,
-        "--view=public",
-        f"--edit-policy=#{slug}",
-        f"--push=@{me}",
+        "--visible-to=public",
+        f"--editable-by=#{slug}",
+        f"--pushable-by=@{me}",
         "--yes",
     )
 
@@ -383,17 +383,21 @@ def test_repo_edit_sets_every_policy(
     # Read back in the same spelling that set them, so what a policy is
     # shown as can be typed straight back in
     assert record["Policy"] == {
-        "View": "Public (No Login Required)",
-        "Edit": f"#{slug}",
-        "Push": f"@{me}",
+        "Visible To": "Public (No Login Required)",
+        "Editable By": f"#{slug}",
+        "Pushable By": f"@{me}",
     }
 
     # Asking for what is already there is not a change
-    assert "No changes" in phabfive("diffusion", "repo", "edit", repo, "--view=public")
+    assert "No changes" in phabfive(
+        "diffusion", "repo", "edit", repo, "--visible-to=public"
+    )
 
     # And Phorge refuses to let the viewer lock themselves out, which is
     # reported as the sentence it answered with
-    result = phabfive_raw("diffusion", "repo", "edit", repo, "--view=no-one", "--yes")
+    result = phabfive_raw(
+        "diffusion", "repo", "edit", repo, "--visible-to=no-one", "--yes"
+    )
 
     assert result.returncode == 1
     assert "would no longer allow you" in result.stderr

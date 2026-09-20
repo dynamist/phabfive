@@ -264,19 +264,19 @@ def repo_edit(
     ),
     view: Optional[str] = typer.Option(
         None,
-        "--view",
+        "--visible-to",
         help=f"Set who can see it ({POLICY_GRAMMAR})",
         autocompletion=complete_policy,
     ),
     edit_policy: Optional[str] = typer.Option(
         None,
-        "--edit-policy",
+        "--editable-by",
         help=f"Set who can edit it ({POLICY_GRAMMAR})",
         autocompletion=complete_policy,
     ),
     push: Optional[str] = typer.Option(
         None,
-        "--push",
+        "--pushable-by",
         help=f"Set who can push to it ({POLICY_GRAMMAR})",
         autocompletion=complete_policy,
     ),
@@ -292,8 +292,8 @@ def repo_edit(
 
     The policy options take a keyword, a #project, an @user or a PHID, and
     `--dry-run` names both ends of the change rather than showing a PHID.
-    They are `--view`, `--edit-policy` and `--push`: the edit one is spelled
-    out because `repo edit --edit` is unreadable.
+    They are `--visible-to`, `--editable-by` and `--pushable-by`, spelled the
+    way the Phorge web UI labels them on a repository's Policies panel.
     """
     from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
 
@@ -313,9 +313,9 @@ def repo_edit(
     # nobody satisfies, and answers a typo with a self-lockout error.
     try:
         for value, option in (
-            (view, "--view"),
-            (edit_policy, "--edit-policy"),
-            (push, "--push"),
+            (view, "--visible-to"),
+            (edit_policy, "--editable-by"),
+            (push, "--pushable-by"),
         ):
             validate_policy_value(value, option=option)
     except PhabfiveConfigException as e:

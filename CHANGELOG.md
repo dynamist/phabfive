@@ -37,17 +37,18 @@
   called `diffusion.tagsquery` at all
 
 ### Repository Policies
-* **`diffusion repo edit --view`, `--edit-policy` and `--push`** - phabfive had no policy
-  handling anywhere, in any app, while every search response carried the policies and
-  discarded them. Each option takes a keyword (`public`, `users`, `admin`, `no-one`), a
-  `#project`, an `@user` or a PHID. It is `--edit-policy` rather than `--edit` because
-  `repo edit --edit` is unreadable. A value outside that grammar is refused before a call
-  is made: Conduit reads one it does not recognise as a policy nobody satisfies, so
-  `--view=nonsense` would otherwise be answered as a permissions error rather than a
-  spelling one
+* **`diffusion repo edit --visible-to`, `--editable-by` and `--pushable-by`** - phabfive
+  had no policy handling anywhere, in any app, while every search response carried the
+  policies and discarded them. Each option takes a keyword (`public`, `users`, `admin`,
+  `no-one`), a `#project`, an `@user` or a PHID, and is named the way the Phorge web UI
+  labels it on a repository's Policies panel. A value outside that grammar is refused
+  before a call is made: Conduit reads one it does not recognise as a policy nobody
+  satisfies, so `--visible-to=nonsense` would otherwise be answered as a permissions
+  error rather than a spelling one
 * **Policy PHIDs are resolved to names** - `repo show` and `repo list` printed a raw
   `PHID-PROJ-...` where a policy named a project. Both now name it, in the same spelling
-  the options take, so what a policy is shown as can be typed straight back in
+  the options take, so what a policy is shown as can be typed straight back in. They are
+  reported under `Visible To`, `Editable By` and `Pushable By`, the web UI's own labels
 * **A self-lockout is a sentence, not a traceback** - Phorge refuses a policy that would
   stop you seeing or editing the repository yourself, and `repo edit` now reports the
   sentence it answered with

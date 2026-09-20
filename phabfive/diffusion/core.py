@@ -1046,8 +1046,7 @@ class Diffusion(Phabfive):
         view : str, optional
             New view policy, in the grammar phabfive.policy accepts
         edit_policy : str, optional
-            New edit policy. Named for the option it comes from: `repo edit
-            --edit` would be unreadable.
+            New edit policy, from `--editable-by`
         push : str, optional
             New push policy
 
@@ -1140,9 +1139,9 @@ class Diffusion(Phabfive):
             (transactions, changes)
         """
         asked = [
-            ("view", view, "View policy", "--view"),
-            ("edit", edit_policy, "Edit policy", "--edit-policy"),
-            ("push", push, "Push policy", "--push"),
+            ("view", view, "Visible To", "--visible-to"),
+            ("edit", edit_policy, "Editable By", "--editable-by"),
+            ("push", push, "Pushable By", "--pushable-by"),
         ]
 
         wanted = [

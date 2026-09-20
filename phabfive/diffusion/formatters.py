@@ -101,16 +101,23 @@ def format_policy(policy, policy_names=None):
     Returns
     -------
     dict
-        {"View": ..., "Edit": ..., "Push": ...}, each a web-UI label for a
+        {"Visible To": ..., "Editable By": ..., "Pushable By": ...}, each a
+        web-UI label for a
         keyword constant, the name of a PHID that was resolved, or the raw
         value.
     """
     policy = policy or {}
 
     return {
-        "View": policy_label(policy.get(REPO_POLICY_FIELDS["view"]), policy_names),
-        "Edit": policy_label(policy.get(REPO_POLICY_FIELDS["edit"]), policy_names),
-        "Push": policy_label(policy.get(REPO_POLICY_FIELDS["push"]), policy_names),
+        "Visible To": policy_label(
+            policy.get(REPO_POLICY_FIELDS["view"]), policy_names
+        ),
+        "Editable By": policy_label(
+            policy.get(REPO_POLICY_FIELDS["edit"]), policy_names
+        ),
+        "Pushable By": policy_label(
+            policy.get(REPO_POLICY_FIELDS["push"]), policy_names
+        ),
     }
 
 

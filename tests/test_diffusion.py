@@ -822,7 +822,11 @@ class TestRichIsYaml:
 
         record = {
             "_url": "http://phorge.localhost/R5",
-            "Policy": {"View": "public", "Edit": "#security", "Push": "@admin"},
+            "Policy": {
+                "Visible To": "public",
+                "Editable By": "#security",
+                "Pushable By": "@admin",
+            },
         }
 
         console = MagicMock()
@@ -834,9 +838,9 @@ class TestRichIsYaml:
         parsed = YAML(typ="safe").load(StringIO("\n".join(printed)))
 
         assert parsed[0]["Policy"] == {
-            "View": "public",
-            "Edit": "#security",
-            "Push": "@admin",
+            "Visible To": "public",
+            "Editable By": "#security",
+            "Pushable By": "@admin",
         }
 
 
@@ -878,7 +882,7 @@ class TestBuildPolicyEdit:
 
         assert changes == [
             {
-                "field": "View policy",
+                "field": "Visible To",
                 "old": "All Users",
                 "new": "Public (No Login Required)",
             }
@@ -904,7 +908,7 @@ class TestBuildPolicyEdit:
         assert transactions == [{"type": "edit", "value": "PHID-PROJ-infra"}]
         assert changes == [
             {
-                "field": "Edit policy",
+                "field": "Editable By",
                 "old": "Administrators",
                 "new": "#infrastructure",
             }
@@ -920,7 +924,7 @@ class TestBuildPolicyEdit:
         with pytest.raises(PhabfiveConfigException) as excinfo:
             diffusion.build_repo_edit(self._record(), view="nonsense")
 
-        assert "--view" in str(excinfo.value)
+        assert "--visible-to" in str(excinfo.value)
         diffusion.phab.diffusion.repository.edit.assert_not_called()
 
     def test_policies_ride_along_with_the_scalar_fields(self, diffusion):
@@ -929,7 +933,7 @@ class TestBuildPolicyEdit:
         )
 
         assert [t["type"] for t in transactions] == ["name", "view"]
-        assert [c["field"] for c in changes] == ["Name", "View policy"]
+        assert [c["field"] for c in changes] == ["Name", "Visible To"]
 
     def test_a_repository_with_no_policy_field_still_edits(self, diffusion):
         """An older instance, or a record fetched without them."""
@@ -1040,13 +1044,14 @@ class TestRepoEditCli:
         diffusion.apply_repo_edit.assert_not_called()
 
     def test_the_policy_options_are_passed_through(self):
-        """--edit-policy, not --edit: `repo edit --edit` is unreadable."""
+        """Named the way the Phorge web UI labels them on the Policies panel,
+        and mapped onto the internal keys the API names hang off."""
         result, diffusion = self._invoke(
             [
                 "R42",
-                "--view=public",
-                "--edit-policy=#infrastructure",
-                "--push=@admin",
+                "--visible-to=public",
+                "--editable-by=#infrastructure",
+                "--pushable-by=@admin",
                 "--dry-run",
             ]
         )
@@ -1063,13 +1068,14 @@ class TestRepoEditCli:
         }
 
     def test_there_is_no_bare_edit_option(self):
+        """`repo edit --edit` is unreadable, and --editable-by sidesteps it."""
         result, diffusion = self._invoke(["R42", "--edit=public"])
 
         assert result.exit_code != 0
         diffusion.apply_repo_edit.assert_not_called()
 
     def test_a_policy_alone_is_enough_to_ask_for(self):
-        result, diffusion = self._invoke(["R42", "--view=public"])
+        result, diffusion = self._invoke(["R42", "--visible-to=public"])
 
         assert result.exit_code == 0
         diffusion.apply_repo_edit.assert_called_once()
@@ -1077,10 +1083,10 @@ class TestRepoEditCli:
     def test_a_value_outside_the_grammar_is_never_sent(self):
         """Refused before the instance is reached, because Conduit reads an
         unknown value as a policy nobody satisfies rather than as a typo."""
-        result, diffusion = self._invoke(["R42", "--view=nonsense"])
+        result, diffusion = self._invoke(["R42", "--visible-to=nonsense"])
 
         assert result.exit_code == 1
-        assert "--view must be one of" in result.output
+        assert "--visible-to must be one of" in result.output
         diffusion.get_repo_record.assert_not_called()
         diffusion.apply_repo_edit.assert_not_called()
 
@@ -1099,7 +1105,7 @@ class TestRepoEditCli:
             "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
         ):
             result = CliRunner().invoke(
-                diffusion_app, ["repo", "edit", "R42", "--edit-policy=#nope"]
+                diffusion_app, ["repo", "edit", "R42", "--editable-by=#nope"]
             )
 
         assert result.exit_code == 1
@@ -1111,7 +1117,7 @@ class TestRepoEditCli:
         """A self-lockout reaches the CLI as a PhabfiveDataException, which
         used to go all the way out as a traceback."""
         result, diffusion = self._invoke(
-            ["R42", "--view=no-one", "--yes"],
+            ["R42", "--visible-to=no-one", "--yes"],
             apply_error=PhabfiveDataException(
                 "The view policy of this object would no longer allow you to "
                 "view the object."
@@ -2047,14 +2053,14 @@ class TestRepoShowRecord:
         record = _showable([repo]).repo_show(["R5"])["repositories"][0]
 
         assert record["Policy"] == {
-            "View": "Public (No Login Required)",
-            "Edit": "Administrators",
-            "Push": "No One",
+            "Visible To": "Public (No Login Required)",
+            "Editable By": "Administrators",
+            "Pushable By": "No One",
         }
 
     def test_a_policy_phid_is_resolved_to_a_name(self):
-        """And named in the spelling --view would take, not "Infrastructure":
-        there is no option that accepts a project's display name."""
+        """And named in the spelling --visible-to would take, not
+        "Infrastructure": no option accepts a project's display name."""
         repo = _show_repo(
             policy={
                 "view": "PHID-PROJ-infra",
@@ -2073,7 +2079,7 @@ class TestRepoShowRecord:
 
         record = diffusion.repo_show(["R5"])["repositories"][0]
 
-        assert record["Policy"]["View"] == "#infrastructure"
+        assert record["Policy"]["Visible To"] == "#infrastructure"
 
     def test_a_policy_phid_the_instance_will_not_name_passes_through(self):
         """Inventing a name for a policy is worse than showing the PHID."""
@@ -2086,7 +2092,7 @@ class TestRepoShowRecord:
         )
         record = _showable([repo]).repo_show(["R5"])["repositories"][0]
 
-        assert record["Policy"]["View"] == "PHID-PROJ-secret"
+        assert record["Policy"]["Visible To"] == "PHID-PROJ-secret"
 
     def test_keyword_policies_cost_no_lookup(self):
         """Which is every instance that never named a project in a policy."""
@@ -3297,7 +3303,7 @@ class TestTableFormatCli:
                     "Status": "active",
                     "Default Branch": "master",
                 },
-                "Policy": {"View": "All Users"},
+                "Policy": {"Visible To": "All Users"},
             },
             {
                 "_url": "http://phorge.localhost/R6",
@@ -3309,7 +3315,7 @@ class TestTableFormatCli:
                     "Status": "active",
                     "Default Branch": "main",
                 },
-                "Policy": {"View": "All Users"},
+                "Policy": {"Visible To": "All Users"},
             },
         ]
     }
@@ -3377,7 +3383,8 @@ class TestTableFormatCli:
             "Status",
             "Default",
             "Branch",
-            "View",
+            "Visible",
+            "To",
         ]
 
     def test_repo_list_writes_one_row_per_repository(self):

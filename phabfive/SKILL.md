@@ -352,7 +352,7 @@ phabfive diffusion uri list R5 --io=observe
 phabfive diffusion uri list R5 --display=always --external
 phabfive diffusion uri list R5 --disabled
 phabfive diffusion repo edit R5 --default-branch main --dry-run
-phabfive diffusion repo edit R5 --view=public --edit-policy='#infra' --push=admin --dry-run
+phabfive diffusion repo edit R5 --visible-to=public --editable-by='#infra' --pushable-by=admin --dry-run
 phabfive diffusion repo create <name> --dry-run
 phabfive diffusion uri create K1 R5 <uri> --observe --dry-run
 ```
@@ -406,8 +406,8 @@ nothing is an empty result - neither is a failure.
 `--status`. A `--short-name` change also rewrites the built-in `/source/<name>.git`
 URIs, which `--dry-run` spells out before anything is applied.
 
-It also sets the three policies: `--view`, `--edit-policy` and `--push`. The edit
-one is spelled out because `repo edit --edit` is unreadable. Each takes
+It also sets the three policies: `--visible-to`, `--editable-by` and
+`--pushable-by`, named the way the Phorge web UI labels them. Each takes
 
 | Value | Means |
 |---|---|
@@ -417,13 +417,13 @@ one is spelled out because `repo edit --edit` is unreadable. Each takes
 | `PHID-...` | that object, including a custom policy rule |
 
 and anything else is refused before a call is made, because Conduit reads a value
-it does not recognise as a policy nobody satisfies - so `--view=nonsense` would
-otherwise come back as a permissions error rather than a spelling one. `--dry-run`
-names both ends of the change rather than showing a PHID:
+it does not recognise as a policy nobody satisfies - so `--visible-to=nonsense`
+would otherwise come back as a permissions error rather than a spelling one.
+`--dry-run` names both ends of the change rather than showing a PHID:
 
 ```
-  View policy: All Users -> Public (No Login Required)
-  Edit policy: Administrators -> #infrastructure
+  Visible To: All Users -> Public (No Login Required)
+  Editable By: Administrators -> #infrastructure
 ```
 
 `repo show` and `repo list` report the same names under `Policy`, in the same

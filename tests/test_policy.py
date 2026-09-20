@@ -106,9 +106,9 @@ class TestGrammar:
 
     def test_the_error_names_the_option_it_came_from(self):
         with pytest.raises(PhabfiveConfigException) as excinfo:
-            validate_policy_value("nonsense", option="--view")
+            validate_policy_value("nonsense", option="--visible-to")
 
-        assert "--view" in str(excinfo.value)
+        assert "--visible-to" in str(excinfo.value)
 
     @pytest.mark.parametrize("value", ["#", "@", "", "   "])
     def test_a_prefix_with_nothing_after_it_is_refused(self, value):
