@@ -8,7 +8,7 @@ import typer
 from phabfive import cache
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_cache_namespace, complete_cached_host
-from phabfive.core import Phabfive
+from phabfive.cli.output import _get_output_format
 from phabfive.json_output import emit_record
 
 cache_app = typer.Typer(
@@ -16,14 +16,6 @@ cache_app = typer.Typer(
     help="Inspect and clear cached completion data",
     no_args_is_help=True,
 )
-
-
-def _get_output_format(ctx: typer.Context) -> str:
-    """Get the output format from context or auto-detect."""
-    format_arg = ctx.obj.get("format") if ctx.obj else None
-    if format_arg:
-        return format_arg
-    return Phabfive._get_auto_format()
 
 
 def _human_size(size: int) -> str:

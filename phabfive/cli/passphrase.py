@@ -7,6 +7,7 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
+from phabfive.cli.output import _get_output_format
 from phabfive.cli.completers import complete_passphrase_type
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -37,14 +38,6 @@ def _get_passphrase_app():
     except requests.exceptions.RequestException as e:
         sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
         raise typer.Exit(1)
-
-
-def _get_output_format(ctx: typer.Context):
-    """Get output format from context."""
-    from phabfive.core import Phabfive
-
-    format_arg = ctx.obj.get("format") if ctx.obj else None
-    return format_arg if format_arg else Phabfive._get_auto_format()
 
 
 @passphrase_app.command()

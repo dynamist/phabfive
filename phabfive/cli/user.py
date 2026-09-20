@@ -6,7 +6,7 @@ import sys
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
-from phabfive.core import Phabfive
+from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.exceptions import PhabfiveConfigException
 
 user_app = typer.Typer(
@@ -14,23 +14,6 @@ user_app = typer.Typer(
     help="Information on users, setup wizard",
     no_args_is_help=True,
 )
-
-
-def _get_output_format(ctx: typer.Context) -> str:
-    """Get the output format from context or auto-detect."""
-    format_arg = ctx.obj.get("format") if ctx.obj else None
-    if format_arg:
-        return format_arg
-    return Phabfive._get_auto_format()
-
-
-def _setup_output_options(ctx: typer.Context) -> None:
-    """Set global output options from context."""
-    if ctx.obj:
-        ascii_when = ctx.obj.get("ascii", "auto")
-        hyperlink_when = ctx.obj.get("hyperlink", "auto")
-        output_format = _get_output_format(ctx)
-        Phabfive.set_output_options(ascii_when, hyperlink_when, output_format)
 
 
 @user_app.command()

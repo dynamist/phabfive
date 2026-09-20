@@ -587,8 +587,12 @@ def display_tasks_json(task_dicts, output_format="json", show_description=True):
     emit_records(outputs, output_format)
 
 
-def display_tasks(result, output_format, phabfive_instance):
+def display_tasks(result, output_format, phabfive_instance, show_description=True):
     """Display task search/show results in the specified format.
+
+    This is the canonical five-way format switch for tasks; a new app should
+    reuse it rather than writing its own. ``phabfive.cli.maniphest._display_tasks``
+    is a thin wrapper kept for the CLI's own call sites and tests.
 
     Parameters
     ----------
@@ -598,6 +602,8 @@ def display_tasks(result, output_format, phabfive_instance):
         One of 'rich', 'tree', 'yaml', 'json', or 'jsonl'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
+    show_description : bool
+        If True, include the task description in the output
     """
     if not result or not result.get("tasks"):
         return
@@ -607,13 +613,17 @@ def display_tasks(result, output_format, phabfive_instance):
     try:
         tasks = result["tasks"]
         if output_format in ("json", "jsonl"):
-            display_tasks_json(tasks, output_format)
+            display_tasks_json(tasks, output_format, show_description=show_description)
         elif output_format == "tree":
-            display_tasks_tree(console, tasks, phabfive_instance)
+            display_tasks_tree(
+                console, tasks, phabfive_instance, show_description=show_description
+            )
         elif output_format in ("yaml", "strict"):
-            display_tasks_yaml(tasks)
+            display_tasks_yaml(tasks, show_description=show_description)
         else:  # "rich" (default)
-            display_tasks_rich(console, tasks, phabfive_instance)
+            display_tasks_rich(
+                console, tasks, phabfive_instance, show_description=show_description
+            )
     except BrokenPipeError:
         # Handle pipe closed by consumer (e.g., head, less)
         # Quietly exit - this is normal behavior
