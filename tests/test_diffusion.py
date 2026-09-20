@@ -1310,3 +1310,61 @@ class TestUriEditNamesTheRepository:
         assert "R86 (live-one)" in seen[0]
         assert "R89 (retired-one)" in seen[1]
         assert seen[0] != seen[1]
+
+
+class TestBranchListFailsCleanly:
+    """branch list was the last diffusion command without error handling.
+
+    A repository can be listed and addressable and still fail to answer for
+    its branches - the server reaches the repository record, then cannot
+    reach its data. That surfaced as a raw traceback whose last line was
+    the part worth reading.
+    """
+
+    def _invoke(self, argv, side_effect=None, branches=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        if side_effect is not None:
+            mock_diffusion.get_branches_formatted.side_effect = side_effect
+        else:
+            mock_diffusion.get_branches_formatted.return_value = branches or []
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            return CliRunner().invoke(diffusion_app, argv)
+
+    def test_an_unreadable_repository_is_reported_cleanly(self):
+        result = self._invoke(
+            ["branch", "list", "R42"],
+            side_effect=PhabfiveDataException("<branchquery> data is unavailable"),
+        )
+
+        assert result.exit_code == 1
+        assert "data is unavailable" in result.output
+        assert "Traceback" not in result.output
+
+    def test_an_unknown_repository_is_reported_cleanly(self):
+        result = self._invoke(
+            ["branch", "list", "R9999"],
+            side_effect=PhabfiveDataException("is not a valid repository"),
+        )
+
+        assert result.exit_code == 1
+        assert "Traceback" not in result.output
+
+    def test_a_repository_with_no_branches_is_not_an_error(self):
+        """Empty is an empty result, not a failure."""
+        result = self._invoke(["branch", "list", "R42"], branches=[])
+
+        assert result.exit_code == 0
+        assert result.output.strip() == ""
+
+    def test_branches_are_listed_one_per_line(self):
+        result = self._invoke(["branch", "list", "R42"], branches=["main", "topic"])
+
+        assert result.exit_code == 0
+        assert result.output.split() == ["main", "topic"]
