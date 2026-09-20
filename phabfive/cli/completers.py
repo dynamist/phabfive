@@ -1041,7 +1041,7 @@ def complete_cached_host(incomplete: str) -> List[str]:
 
 
 def complete_policy(incomplete: str) -> list[str | tuple[str, str]]:
-    """Complete a policy option: --view, --edit-policy and --push.
+    """Complete a policy option: --visible-to, --editable-by and --pushable-by.
 
     The four keywords are a constant rather than a lookup, because Phorge has
     no policy.query endpoint to ask. Past them the grammar branches on the

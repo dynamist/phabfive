@@ -5,6 +5,10 @@
 import json
 from urllib.parse import urlparse
 
+# 3rd party imports
+import requests
+from ruamel.yaml import YAML
+
 
 def test_whoami(phabfive, live_env):
     [host] = phabfive("user", "whoami", json_output=True)
@@ -38,6 +42,129 @@ def test_create_in_a_space(phabfive, create_task, space_name):
     task_id, _title = create_task("--space", "S3")
     [task] = phabfive("maniphest", "show", task_id, json_output=True)
     assert task["Space"] == space_name("S3")
+
+
+def test_task_edit_sets_the_two_policies_it_can(
+    phabfive, phabfive_raw, conduit, create_task
+):
+    """The task policy transaction names, against a real Phorge.
+
+    This is the test that could not be written below the CLI. maniphest.edit
+    takes `view` and `edit` and refuses `policy.view` and `policy.edit`, and a
+    wrong name is an ERR-CONDUIT-CORE from the instance, which a mocked client
+    cannot produce and would happily accept.
+
+    It also pins the one thing tasks do not have: there is no interact
+    transaction of any spelling. A task derives "Can Interact With" from its
+    view policy - which is why it moves here without having been asked for -
+    so a `--interact` option would be offering a write that cannot happen.
+    """
+    task_id, _title = create_task()
+    slug = conduit("project.search", limit=1)["data"][0]["fields"]["slug"]
+    me = conduit("user.whoami")["userName"]
+
+    phabfive(
+        "maniphest",
+        "edit",
+        task_id,
+        f"--visible-to=#{slug}",
+        f"--editable-by=@{me}",
+        "--yes",
+    )
+
+    [task] = phabfive("maniphest", "show", task_id, json_output=True)
+
+    # Read back in the same spelling that set them, and "Can Interact"
+    # following "Visible To" without having been named
+    assert task["Policy"] == {
+        "Visible To": f"#{slug}",
+        "Editable By": f"@{me}",
+        "Can Interact": f"#{slug}",
+    }
+
+    # Asking for what is already there is not a change
+    assert "No changes" in phabfive(
+        "maniphest", "edit", task_id, f"--visible-to=#{slug}", "--yes"
+    )
+
+    # And Phorge refuses to let the viewer lock themselves out, which is
+    # reported as the sentence it answered with
+    result = phabfive_raw("maniphest", "edit", task_id, "--visible-to=no-one", "--yes")
+
+    assert result.returncode == 1
+    assert "would no longer allow you" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_maniphest_edit_has_no_interact_transaction(live_env):
+    """Why there is no `--interact` option, asked of the instance rather than
+    assumed from the read side.
+
+    maniphest.edit answers an unknown transaction type by listing every valid
+    one. That list holds `view` and `edit` and nothing for interact, in any
+    spelling. ManiphestTask::getPolicy is why: a task does not store an
+    interact policy, it returns its view policy unless its status locks
+    comments, and then "no-one".
+
+    Nothing is created - the type is rejected before any object is.
+    """
+    response = requests.post(
+        live_env["PHAB_URL"].rstrip("/") + "/maniphest.edit",
+        data={
+            "api.token": live_env["PHAB_TOKEN"],
+            "transactions[0][type]": "interact",
+            "transactions[0][value]": "public",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+
+    assert payload["error_code"] == "ERR-CONDUIT-CORE"
+    assert 'invalid type "interact"' in payload["error_info"]
+
+    valid = payload["error_info"].split("Valid types are: ")[1].rstrip(".").split(", ")
+
+    assert "view" in valid
+    assert "edit" in valid
+    assert not [name for name in valid if "interact" in name]
+
+
+def test_a_policy_outside_the_grammar_never_reaches_the_instance(
+    phabfive_raw, create_task
+):
+    """Conduit reads a value it does not recognise as a policy nobody
+    satisfies, so a typo would otherwise be answered as a permissions error."""
+    task_id, _title = create_task()
+
+    result = phabfive_raw(
+        "maniphest", "edit", task_id, "--visible-to=nonsense", "--yes"
+    )
+
+    assert result.returncode == 1
+    assert "--visible-to must be one of" in result.stderr
+    assert "would no longer allow you" not in result.stderr
+
+
+def test_task_formats_agree_on_the_policy_section(phabfive, create_task):
+    """Four independent display builders name the section; a Policy added to
+    some and not others makes yaml and json disagree about the same task."""
+    task_id, _title = create_task()
+
+    from_json = phabfive("--format", "json", "maniphest", "show", task_id)
+    from_jsonl = phabfive("--format", "jsonl", "maniphest", "show", task_id)
+    from_yaml = phabfive("--format", "yaml", "maniphest", "show", task_id)
+    from_rich = phabfive("maniphest", "show", task_id)
+    from_tree = phabfive("--format", "tree", "maniphest", "show", task_id)
+
+    expected = json.loads(from_json)[0]["Policy"]
+
+    assert expected == json.loads(from_jsonl)["Policy"]
+    assert expected == YAML(typ="safe").load(from_yaml)[0]["Policy"]
+
+    for rendered in (from_rich, from_tree):
+        for key, value in expected.items():
+            assert f"{key}: {value}" in rendered, rendered
 
 
 def test_jsonl_is_one_task_per_line(phabfive, create_task):

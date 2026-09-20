@@ -52,6 +52,32 @@
   stop you seeing or editing the repository yourself, and `repo edit` now reports the
   sentence it answered with
 
+### Task Policies
+* **`maniphest show` reports a task's policies** - Every search response carried them and
+  every display builder discarded them. The record now holds a `Policy` section with all
+  three: `Visible To`, `Editable By` and `Can Interact`. Those are Phorge's own labels
+  rather than the API's field names, and a policy naming a project or a user is shown in
+  the same spelling the options take, so what a policy is shown as can be typed straight
+  back in
+* **`maniphest edit` and `maniphest create` take `--visible-to` and `--editable-by`** -
+  Named after the labels Phorge's own form uses, and taking the same grammar repository
+  policies take, from the same module: a keyword, a `#project`, an `@user` or a PHID,
+  refused client-side when it is none of those. `phabfive edit` takes them too, so a
+  `maniphest show | phabfive edit` pipeline can set a policy
+* **There is no `--can-interact`, deliberately** - `Can Interact` is readable and worth
+  reading, but a task does not store it. `ManiphestTask::getPolicy` derives it from the
+  view policy, answering `No One` while the task's status locks comments, and
+  `maniphest.edit` has no interact transaction in any spelling. So `Can Interact`
+  differing from `Visible To` is how a locked task says so, and the way to move it is the
+  task's status
+* **A policy change needs `--yes` in a batch without a terminal** - It joins title and
+  description behind that guard rather than applying unreviewed. It is the more
+  consequential of the two and the harder to notice: a retitled task is still where it
+  was, while one whose view policy has narrowed has simply gone, for everybody the new
+  policy leaves out
+* **A self-lockout is a sentence, not a traceback** - As for repositories, and
+  `maniphest edit` was not translating it at all
+
 ### Reviewing Edits
 * **Per-task review for batch edits** - Editing two or more tasks at a terminal shows each
   task's changes and asks `[y,n,a,q,?]`: apply it, skip it, apply all the rest, or quit.
@@ -110,7 +136,9 @@
   YAML-shaped and is read back as YAML, and it printed every scalar bare - so a value
   like `#security` read back as an empty field followed by a comment, and one like
   `@admin` failed to parse at all. Reachable with ordinary data once a policy could
-  name a project or a user
+  name a project or a user. The helper moved to `phabfive/display.py` when
+  Maniphest's `Policy` section became its second caller; the older task fields around
+  that section still print bare, so a task's rich output is not YAML in general
 * All JSON serialization now goes through `phabfive/json_output.py`, so `json` and
   `jsonl` are built from the same record builders and cannot drift apart
 * Paste and passphrase JSON output gained builder/printer splits, matching what

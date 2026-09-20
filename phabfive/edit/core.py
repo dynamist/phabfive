@@ -17,6 +17,7 @@ from phabfive.edit.validators import (
     validate_board_column_context,
 )
 from phabfive.maniphest import Maniphest
+from phabfive.policy import validate_policy_value
 from phabfive.yaml_utils import group_objects_by_type, parse_yaml_from_stdin
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,8 @@ class Edit(Phabfive):
         subscribe=None,
         comment=None,
         space=None,
+        visible_to=None,
+        editable_by=None,
         dry_run=False,
         force=False,
         interactive=False,
@@ -61,6 +64,8 @@ class Edit(Phabfive):
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             space (str): Space to move the object to
+            visible_to (str): Who can see it, the --visible-to policy
+            editable_by (str): Who can edit it, the --editable-by policy
             dry_run (bool): Show changes without applying
             force (bool): Skip confirmation prompts
             interactive (bool): Review every change, even for a single task
@@ -80,11 +85,21 @@ class Edit(Phabfive):
                 subscribe,
                 comment,
                 space,
+                visible_to,
+                editable_by,
             ]
         )
         edit_description_in_editor = not has_any_option
 
         try:
+            # Refused before a task is even fetched, and once for the whole
+            # batch rather than once per task, because the API cannot be relied
+            # on to notice: it reads a policy value it does not recognise as a
+            # policy nobody satisfies, and so answers a typo with a
+            # self-lockout error.
+            validate_policy_value(visible_to, option="--visible-to")
+            validate_policy_value(editable_by, option="--editable-by")
+
             # Auto-detect piped input
             has_piped_input = not sys.stdin.isatty()
 
@@ -109,6 +124,8 @@ class Edit(Phabfive):
                             subscribe=subscribe,
                             comment=comment,
                             space=space,
+                            visible_to=visible_to,
+                            editable_by=editable_by,
                             dry_run=dry_run,
                             force=force,
                             interactive=interactive,
@@ -153,6 +170,8 @@ class Edit(Phabfive):
                             subscribe=subscribe,
                             comment=comment,
                             space=space,
+                            visible_to=visible_to,
+                            editable_by=editable_by,
                             dry_run=dry_run,
                             force=force,
                             interactive=interactive,
@@ -200,6 +219,8 @@ class Edit(Phabfive):
                         subscribe=subscribe,
                         comment=comment,
                         space=space,
+                        visible_to=visible_to,
+                        editable_by=editable_by,
                         dry_run=dry_run,
                         force=force,
                         interactive=interactive,
@@ -245,6 +266,8 @@ class Edit(Phabfive):
         subscribe=None,
         comment=None,
         space=None,
+        visible_to=None,
+        editable_by=None,
         dry_run=False,
         force=False,
         interactive=False,
@@ -264,6 +287,8 @@ class Edit(Phabfive):
             subscribe (list): Usernames to add as subscribers
             comment (str): Comment to add
             space (str): Space to move the task to
+            visible_to (str): Who can see it, the --visible-to policy
+            editable_by (str): Who can edit it, the --editable-by policy
             dry_run (bool): Show changes without applying
             force (bool): Skip confirmation prompts
             interactive (bool): Review every change, even for a single task
@@ -320,6 +345,8 @@ class Edit(Phabfive):
                     subscribe=subscribe,
                     comment=comment,
                     space=space,
+                    visible_to=visible_to,
+                    editable_by=editable_by,
                     dry_run=dry_run,
                     interactive=True,
                 )
@@ -358,6 +385,8 @@ class Edit(Phabfive):
                 subscribe=subscribe,
                 comment=comment,
                 space=space,
+                visible_to=visible_to,
+                editable_by=editable_by,
                 dry_run=dry_run,
             )
 
