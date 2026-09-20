@@ -2236,7 +2236,10 @@ class Maniphest(Phabfive):
                 column_info = get_column_info(self.phab, board_phid)
                 new_column_name = column_info.get(column_phid, {}).get("name", column)
 
-                # Get current column name on this board
+                # Get the current column on this board. The PHID is what the
+                # target is compared against, not the name: two boards can
+                # both have a "Backlog", and a task can be on both.
+                current_col_phid = None
                 current_column_name = None
                 boards_data = (
                     task_data.get("attachments", {})
@@ -2251,19 +2254,25 @@ class Maniphest(Phabfive):
                             "name"
                         )
 
-                # Also need to add task to board if not already on it
+                # Also need to add task to board if not already on it. This
+                # stays outside the comparison below: putting a task on a
+                # board and into a column is one edit.
                 task_projects = task_data["attachments"]["projects"]["projectPHIDs"]
                 if board_phid not in task_projects:
                     transactions.append({"type": "projects.add", "value": [board_phid]})
-                transactions.append({"type": "column", "value": [column_phid]})
 
-                changes.append(
-                    {
-                        "field": "Column",
-                        "old": current_column_name or "(none)",
-                        "new": new_column_name,
-                    }
-                )
+                # A task already in the target column needs no transaction,
+                # and reporting one would claim a move that never happened.
+                if column_phid != current_col_phid:
+                    transactions.append({"type": "column", "value": [column_phid]})
+
+                    changes.append(
+                        {
+                            "field": "Column",
+                            "old": current_column_name or "(none)",
+                            "new": new_column_name,
+                        }
+                    )
 
         # Handle assignee
         if assign:
