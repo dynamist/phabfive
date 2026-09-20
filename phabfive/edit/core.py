@@ -49,6 +49,7 @@ class Edit(Phabfive):
         dry_run=False,
         force=False,
         interactive=False,
+        output_format=None,
     ):
         """Edit one or more Phabricator objects.
 
@@ -69,6 +70,10 @@ class Edit(Phabfive):
             dry_run (bool): Show changes without applying
             force (bool): Skip confirmation prompts
             interactive (bool): Review every change, even for a single task
+            output_format (str): The format the caller asked for. A
+                machine-readable one answers with the record `maniphest
+                show` gives for each task that was edited, and puts every
+                line of prose on stderr. None keeps the human output.
 
         Returns:
             int: Return code (0 for success, 1 for failure)
@@ -130,6 +135,7 @@ class Edit(Phabfive):
                             force=force,
                             interactive=interactive,
                             edit_description_in_editor=edit_description_in_editor,
+                            output_format=output_format,
                         )
                     elif object_type == "passphrase":
                         sys.stderr.write(
@@ -175,6 +181,7 @@ class Edit(Phabfive):
                             dry_run=dry_run,
                             force=force,
                             interactive=interactive,
+                            output_format=output_format,
                         )
                     elif object_type == "passphrase":
                         sys.stderr.write(
@@ -224,6 +231,7 @@ class Edit(Phabfive):
                         dry_run=dry_run,
                         force=force,
                         interactive=interactive,
+                        output_format=output_format,
                     )
                     if retcode != 0:
                         return retcode
@@ -272,6 +280,7 @@ class Edit(Phabfive):
         force=False,
         interactive=False,
         edit_description_in_editor=False,
+        output_format=None,
     ):
         """Edit a single task.
 
@@ -293,10 +302,18 @@ class Edit(Phabfive):
             force (bool): Skip confirmation prompts
             interactive (bool): Review every change, even for a single task
             edit_description_in_editor (bool): Open $EDITOR for description
+            output_format (str): The format the caller asked for; a
+                machine-readable one answers with the task's own record
 
         Returns:
             int: Return code (0 for success, 1 for failure)
         """
+        from phabfive.cli.output import is_machine_format
+        from phabfive.display import display_tasks
+
+        machine = is_machine_format(output_format)
+        preview = sys.stderr if machine else sys.stdout
+
         try:
             # Fetch current task state
             task_data = self.maniphest._get_task_data(task_id)
@@ -312,7 +329,7 @@ class Edit(Phabfive):
 
                 new_desc = edit_text(current_desc, prefix="description-")
                 if new_desc is None:
-                    print("Description edit cancelled")
+                    print("Description edit cancelled", file=preview)
                     return 0
 
                 final_description = new_desc
@@ -349,6 +366,7 @@ class Edit(Phabfive):
                     editable_by=editable_by,
                     dry_run=dry_run,
                     interactive=True,
+                    output_format=output_format,
                 )
 
             # Validate board/column context
@@ -388,10 +406,25 @@ class Edit(Phabfive):
                 visible_to=visible_to,
                 editable_by=editable_by,
                 dry_run=dry_run,
+                preview=preview,
             )
 
             # Display the changes
-            display_changes(f"T{task_id}", result)
+            display_changes(f"T{task_id}", result, file=preview)
+
+            # A dry run wrote nothing, so there is no record to answer with,
+            # and stdout stays empty rather than carrying the preview above.
+            # A task that needed no transaction does have one: "already at
+            # the target state" is an answer about the task, and a caller
+            # parsing the stream should not have to special-case it as
+            # silence.
+            if machine and not result.get("dry_run"):
+                display_tasks(
+                    self.maniphest.task_show([int(task_id)]),
+                    output_format,
+                    self.maniphest,
+                )
+
             return 0
 
         except Exception as e:

@@ -117,6 +117,7 @@ def edit_tasks_batch(
     dry_run=False,
     force=False,
     interactive=False,
+    output_format=None,
 ):
     """Edit multiple tasks in batch (atomic validation).
 
@@ -138,10 +139,21 @@ def edit_tasks_batch(
         dry_run (bool): Show changes without applying
         force (bool): Skip confirmation prompts
         interactive (bool): Review every change, even for a single task
+        output_format (str): The format the caller asked for. A
+            machine-readable one answers with the record `maniphest show`
+            gives for every task that was actually edited, and every line
+            of prose below moves to stderr so the stream stays parseable.
+            None, the default, is the human path and prints as it always has.
 
     Returns:
         int: Return code (0 for success, 1 for failure)
     """
+    from phabfive.cli.output import is_machine_format
+    from phabfive.display import display_tasks
+
+    machine = is_machine_format(output_format)
+    preview = sys.stderr if machine else sys.stdout
+
     # Phase 1: Validate ALL tasks before processing ANY (atomic batch)
     validation_errors = []
     errors_by_boards = defaultdict(list)
@@ -232,6 +244,12 @@ def edit_tasks_batch(
     skipped_count = 0
     error_count = 0
     quit_early = False
+    # The tasks a machine-readable format answers with the records of: the
+    # ones now at the state that was asked for. A task that needed no
+    # transaction is one of them - "already there" is an answer about the
+    # object, not an absence of one - while a dry run, a skip and a failure
+    # are not.
+    settled_ids = []
 
     for task in validated_tasks:
         task_id = task["task_id"]
@@ -261,13 +279,19 @@ def edit_tasks_batch(
             continue
 
         if not transactions:
-            print(f"{monogram}: No changes (already at target state)")
+            print(f"{monogram}: No changes (already at target state)", file=preview)
             success_count += 1
+            settled_ids.append(task_id)
             continue
 
         if review_stream is not None:
             stream = None if review_stream is sys.stdin else review_stream
-            render_changes(monogram, changes, header=f"Would apply to {monogram}:")
+            render_changes(
+                monogram,
+                changes,
+                header=f"Would apply to {monogram}:",
+                file=preview,
+            )
             answer = prompt_each(monogram, stream)
 
             if answer == "n":
@@ -281,7 +305,10 @@ def edit_tasks_batch(
 
         if dry_run:
             render_changes(
-                monogram, changes, header=f"[DRY RUN] Would apply to {monogram}:"
+                monogram,
+                changes,
+                header=f"[DRY RUN] Would apply to {monogram}:",
+                file=preview,
             )
             success_count += 1
             continue
@@ -289,7 +316,10 @@ def edit_tasks_batch(
         try:
             maniphest.apply_task_edit(task_id, transactions)
             success_count += 1
-            display_changes(monogram, {"task_id": task_id, "changes": changes})
+            settled_ids.append(task_id)
+            display_changes(
+                monogram, {"task_id": task_id, "changes": changes}, file=preview
+            )
 
         except Exception as e:
             log.debug(f"Failed to edit task {monogram}: {e}")
@@ -300,13 +330,23 @@ def edit_tasks_batch(
     if review_stream is not None and review_stream is not sys.stdin:
         review_stream.close()
 
-    _print_summary(success_count, skipped_count, len(validated_tasks), quit_early)
+    _print_summary(
+        success_count, skipped_count, len(validated_tasks), quit_early, file=preview
+    )
+
+    # One query for the batch, and the same records `maniphest show` gives.
+    if machine and settled_ids:
+        display_tasks(
+            maniphest.task_show([int(task_id) for task_id in settled_ids]),
+            output_format,
+            maniphest,
+        )
 
     # Skipping and quitting are choices, not failures.
     return 1 if error_count else 0
 
 
-def _print_summary(applied, skipped, total, quit_early):
+def _print_summary(applied, skipped, total, quit_early, file=None):
     """Report what happened, naming anything left untouched."""
     parts = [f"Edited {applied}/{total} tasks"]
     if skipped:
@@ -315,4 +355,4 @@ def _print_summary(applied, skipped, total, quit_early):
         remaining = total - applied - skipped
         parts.append(f"{remaining} left unchanged (quit)")
 
-    print(f"\n{', '.join(parts)}")
+    print(f"\n{', '.join(parts)}", file=file or sys.stdout)

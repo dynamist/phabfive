@@ -82,8 +82,8 @@ def search(
     """
     # Require at least one search criterion
     if not text_query and not author:
-        typer.echo("Usage:")
-        typer.echo("    phabfive paste search [<text_query>] [options]")
+        typer.echo("Usage:", err=True)
+        typer.echo("    phabfive paste search [<text_query>] [options]", err=True)
         return
 
     _setup_output_options(ctx)
@@ -122,7 +122,7 @@ def search(
     )
 
     if not pastes:
-        typer.echo("No pastes found")
+        typer.echo("No pastes found", err=True)
         return
 
     # Format output

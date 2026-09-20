@@ -82,10 +82,23 @@ def test_task_edit_sets_the_two_policies_it_can(
         "Can Interact": f"#{slug}",
     }
 
-    # Asking for what is already there is not a change
-    assert "No changes" in phabfive(
-        "maniphest", "edit", task_id, f"--visible-to=#{slug}", "--yes"
+    # Asking for what is already there is not a change. The sentence saying
+    # so is prose, so under a machine-readable format it is on stderr (#344)
+    # and stdout carries the task's record - "already at the target state"
+    # is an answer about the task, not an absence of one.
+    result = phabfive_raw(
+        "--format",
+        "json",
+        "maniphest",
+        "edit",
+        task_id,
+        f"--visible-to=#{slug}",
+        "--yes",
     )
+
+    assert result.returncode == 0
+    assert "No changes" in result.stderr
+    assert json.loads(result.stdout)[0]["Link"].endswith(f"/{task_id}")
 
     # And Phorge refuses to let the viewer lock themselves out, which is
     # reported as the sentence it answered with

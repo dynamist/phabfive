@@ -15,6 +15,7 @@ from phabfive.cli.completers import (
     complete_tag,
     complete_user,
 )
+from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
 from phabfive.policy import POLICY_GRAMMAR
@@ -41,6 +42,7 @@ def _get_edit_app():
 
 
 def edit_command(
+    ctx: typer.Context,
     object_id: Optional[str] = typer.Argument(
         None,
         help="Object monogram(s) to edit (e.g., T123 or T123,T124,T125). Routes to app-specific edit command. If omitted, reads YAML from stdin.",
@@ -155,10 +157,12 @@ def edit_command(
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
 
+    _setup_output_options(ctx)
     edit_handler = _get_edit_app()
 
     retcode = edit_handler.edit_objects(
         object_id=object_id,
+        output_format=_get_output_format(ctx),
         priority=priority,
         status=status,
         tag=tag,

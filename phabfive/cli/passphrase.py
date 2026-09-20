@@ -139,8 +139,8 @@ def search(
 
     # Require at least one search criterion
     if not text_query and not credential_type:
-        typer.echo("Usage:")
-        typer.echo("    phabfive passphrase search [<text_query>] [options]")
+        typer.echo("Usage:", err=True)
+        typer.echo("    phabfive passphrase search [<text_query>] [options]", err=True)
         return
 
     passphrase = _get_passphrase_app()

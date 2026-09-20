@@ -25,7 +25,11 @@ from phabfive.cli.completers import (
     complete_user,
     complete_user_list_filter,
 )
-from phabfive.cli.output import _get_output_format, _setup_output_options
+from phabfive.cli.output import (
+    _get_output_format,
+    _setup_output_options,
+    is_machine_format,
+)
 from phabfive.constants import MONOGRAMS
 from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
@@ -74,6 +78,27 @@ def _display_tasks(
         show_description=show_description,
         tabular=tabular,
     )
+
+
+def _show_tasks_after_write(ctx, maniphest_instance, task_ids):
+    """Emit the records `show` gives for the tasks a write command touched.
+
+    A create, an edit or a comment answers a machine-readable format with
+    exactly what ``maniphest show`` answers with for the object it just
+    wrote, so the monogram, the link and every field arrive together and no
+    second, parallel "result" shape has to be invented or kept in step.
+
+    Parameters
+    ----------
+    ctx : typer.Context
+        The command context, carrying the format the caller asked for
+    maniphest_instance : Maniphest
+        The instance the write went through
+    task_ids : list
+        Task IDs, numeric or as strings
+    """
+    result = maniphest_instance.task_show([int(task_id) for task_id in task_ids])
+    _display_tasks(result, _get_output_format(ctx), maniphest_instance)
 
 
 @maniphest_app.command()
@@ -154,14 +179,25 @@ def comment(
     ticket_id: str = typer.Argument(..., help="Task ID (e.g., T123)"),
     comment_text: str = typer.Argument(..., help="Comment text to add"),
 ) -> None:
-    """Add a comment to a Maniphest task."""
+    """Add a comment to a Maniphest task.
+
+    A machine-readable format answers with the task's record, the one
+    `maniphest show` gives, rather than with the link on its own.
+    """
+    _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
 
     result = maniphest.add_task_comment(ticket_id, comment_text)
 
     if result[0]:
+        task_id = int(ticket_id[1:])
+
+        if is_machine_format(_get_output_format(ctx)):
+            _show_tasks_after_write(ctx, maniphest, [task_id])
+            return
+
         # Query the ticket to fetch the URI for it
-        _, ticket = maniphest.get_task_info(int(ticket_id[1:]))
+        _, ticket = maniphest.get_task_info(task_id)
         typer.echo(ticket["uri"])
 
 
@@ -279,7 +315,16 @@ def create(
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
 
+    _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
+
+    # A machine-readable format answers with the record `show` would give
+    # for the task that was created. There is no such record for a task
+    # that was only previewed, so a dry run writes its preview to stderr
+    # and leaves stdout empty rather than putting prose in a JSON stream.
+    output_format = _get_output_format(ctx)
+    machine = is_machine_format(output_format)
+    preview = sys.stderr if machine else sys.stdout
 
     # Merge positional and option title (positional takes precedence)
     final_title = title or title_opt
@@ -294,7 +339,7 @@ def create(
         if result and result.get("dry_run"):
             for task in result["tasks"]:
                 indent = "  " * task["depth"]
-                typer.echo(f"{indent}- {task['title']}")
+                print(f"{indent}- {task['title']}", file=preview)
     elif final_title:
         # CLI mode - handle description input modes
         final_description = description
@@ -311,11 +356,14 @@ def create(
 
             final_description = edit_text("", prefix="description-")
             if final_description and not force:
-                print()
-                print(final_description)
-                print()
-                if not typer.confirm("Create task with this description?"):
-                    print("Cancelled")
+                print(file=preview)
+                print(final_description, file=preview)
+                print(file=preview)
+                # The prompt follows the preview onto stderr under a machine
+                # format, so that answering it cannot land in the stream the
+                # caller is parsing.
+                if not typer.confirm("Create task with this description?", err=machine):
+                    print("Cancelled", file=preview)
                     raise typer.Exit(0)
 
         # Validate --column requires --tag
@@ -359,33 +407,38 @@ def create(
             raise typer.Exit(1)
         if result:
             if result.get("dry_run"):
-                print("[DRY RUN] Would create task:")
-                print(f"  Title: {result['title']}")
+                print("[DRY RUN] Would create task:", file=preview)
+                print(f"  Title: {result['title']}", file=preview)
                 if result.get("description"):
                     desc = result["description"]
                     lines = desc.split("\n")
                     if len(lines) == 1 and len(desc) <= 60:
-                        print(f"  Description: {desc}")
+                        print(f"  Description: {desc}", file=preview)
                     else:
-                        print("  Description:")
+                        print("  Description:", file=preview)
                         for line in lines:
-                            print(f"    {line}")
+                            print(f"    {line}", file=preview)
                 if result.get("priority"):
-                    print(f"  Priority: {result['priority']}")
+                    print(f"  Priority: {result['priority']}", file=preview)
                 if result.get("status"):
-                    print(f"  Status: {result['status']}")
+                    print(f"  Status: {result['status']}", file=preview)
                 if result.get("assignee"):
-                    print(f"  Assignee: {result['assignee']}")
+                    print(f"  Assignee: {result['assignee']}", file=preview)
                 if result.get("tags"):
-                    print(f"  Tags: {', '.join(result['tags'])}")
+                    print(f"  Tags: {', '.join(result['tags'])}", file=preview)
                 if result.get("column"):
-                    print(f"  Column: {result['column']}")
+                    print(f"  Column: {result['column']}", file=preview)
                 if result.get("subscribers"):
-                    print(f"  Subscribers: {', '.join(result['subscribers'])}")
+                    print(
+                        f"  Subscribers: {', '.join(result['subscribers'])}",
+                        file=preview,
+                    )
                 if result.get("space"):
-                    print(f"  Space: {result['space']}")
+                    print(f"  Space: {result['space']}", file=preview)
                 for label, value in (result.get("policy") or {}).items():
-                    print(f"  {label}: {value}")
+                    print(f"  {label}: {value}", file=preview)
+            elif machine:
+                _show_tasks_after_write(ctx, maniphest, [result["id"]])
             else:
                 typer.echo(result["uri"])
                 if result.get("tag_slugs"):
@@ -668,8 +721,10 @@ def search(
             ]
         )
         if not has_criteria:
-            typer.echo("Usage:")
-            typer.echo("    phabfive maniphest search [<text_query>] [options]")
+            typer.echo("Usage:", err=True)
+            typer.echo(
+                "    phabfive maniphest search [<text_query>] [options]", err=True
+            )
             return
 
         try:
@@ -877,10 +932,12 @@ def edit(
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
 
+    _setup_output_options(ctx)
     edit_handler = _get_edit_app()
 
     retcode = edit_handler.edit_objects(
         object_id=task_ids,
+        output_format=_get_output_format(ctx),
         title=final_title,
         priority=priority,
         status=status,

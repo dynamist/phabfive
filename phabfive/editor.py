@@ -53,16 +53,20 @@ def edit_text(initial_text="", prefix="", suffix=".remarkup"):
         os.unlink(temp_path)
 
 
-def show_diff(old_text, new_text, filename="description"):
+def show_diff(old_text, new_text, filename="description", file=None):
     """Display unified diff between old and new text.
 
-    Uses colors if stdout is a TTY.
+    Uses colors if the stream written to is a TTY.
 
     Args:
         old_text: Original text
         new_text: New text
         filename: Name to show in diff header
+        file: Stream to write to; defaults to stdout. A caller emitting a
+            machine-readable record passes stderr, so the diff stays out of
+            the stream being parsed.
     """
+    stream = file or sys.stdout
     old_lines = (old_text or "").splitlines(keepends=True)
     new_lines = (new_text or "").splitlines(keepends=True)
 
@@ -84,31 +88,36 @@ def show_diff(old_text, new_text, filename="description"):
     if not diff:
         return  # No changes
 
-    use_color = sys.stdout.isatty()
+    use_color = stream.isatty()
 
     for line in diff:
         if use_color:
             if line.startswith("+") and not line.startswith("+++"):
-                print(f"\033[32m{line}\033[0m", end="")  # Green
+                print(f"\033[32m{line}\033[0m", end="", file=stream)  # Green
             elif line.startswith("-") and not line.startswith("---"):
-                print(f"\033[31m{line}\033[0m", end="")  # Red
+                print(f"\033[31m{line}\033[0m", end="", file=stream)  # Red
             elif line.startswith("@@"):
-                print(f"\033[36m{line}\033[0m", end="")  # Cyan
+                print(f"\033[36m{line}\033[0m", end="", file=stream)  # Cyan
             else:
-                print(line, end="")
+                print(line, end="", file=stream)
         else:
-            print(line, end="")
+            print(line, end="", file=stream)
 
 
-def render_changes(monogram, changes, header=None):
+def render_changes(monogram, changes, header=None, file=None):
     """Print one object's pending changes.
 
     Args:
         monogram (str): Object monogram (e.g., "T123")
         changes (list): Dicts with 'field', 'old' and 'new' keys
         header (str): Line to print first; defaults to "<monogram>:"
+        file: Stream to write to; defaults to stdout. Under a
+            machine-readable format the caller passes stderr, because this
+            is prose and the record is what stdout carries.
     """
-    print(header if header is not None else f"{monogram}:")
+    stream = file or sys.stdout
+
+    print(header if header is not None else f"{monogram}:", file=stream)
 
     for change in changes:
         field = change["field"]
@@ -117,12 +126,12 @@ def render_changes(monogram, changes, header=None):
 
         if field == "Title":
             # A title is free text, so a diff reads better than "old → new"
-            print()
-            show_diff(old, new, filename="title")
+            print(file=stream)
+            show_diff(old, new, filename="title", file=stream)
         elif old is None:
-            print(f"  {field}: {new}")
+            print(f"  {field}: {new}", file=stream)
         else:
-            print(f"  {field}: {old} → {new}")
+            print(f"  {field}: {old} → {new}", file=stream)
 
 
 def resolve_assume_yes(yes, force, interactive=False):
