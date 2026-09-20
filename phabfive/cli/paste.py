@@ -197,6 +197,10 @@ def create(
         autocompletion=complete_user,
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without creating"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Create without confirming"),
+    interactive: bool = typer.Option(
+        False, "--interactive", "-i", help="Review the new paste and confirm"
+    ),
 ) -> None:
     """Create a new paste.
 
@@ -208,6 +212,12 @@ def create(
         phabfive paste create "Code" --language=python  # opens $EDITOR
         phabfive paste create "Notes" --subscribe=@me --tag=project
     """
+    try:
+        assume_yes = resolve_assume_yes(yes, False, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
     paste = _get_paste_app()
 
     # Merge positional and option title (positional takes precedence)
@@ -299,8 +309,8 @@ def create(
     # Handle tags
     tag_list = list(tag) if tag else None
 
-    if dry_run:
-        print("[DRY RUN] Would create paste:")
+    def show_preview(header):
+        print(header)
         print(f"  Name: {final_title}")
         if language:
             print(f"  Language: {language}")
@@ -316,7 +326,19 @@ def create(
                 print(f"    {line}")
         else:
             print(f"  Content: ({len(lines)} lines, {len(final_content)} chars)")
+
+    if dry_run:
+        show_preview("[DRY RUN] Would create paste:")
         raise typer.Exit(0)
+
+    if interactive:
+        from phabfive.editor import confirm_apply
+
+        show_preview("Would create paste:")
+        confirmed, return_code = confirm_apply(assume_yes)
+        if not confirmed:
+            sys.stderr.write("Nothing was created.\n")
+            raise typer.Exit(return_code or 0)
 
     # Create the paste
     result = paste.create_paste_from_content(

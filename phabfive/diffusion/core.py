@@ -14,6 +14,7 @@ from phabfive.diffusion.fetchers import (
     fetch_repositories,
     fetch_uris,
     find_repository,
+    match_repository,
 )
 from phabfive.diffusion.formatters import (
     format_branches,
@@ -283,9 +284,55 @@ class Diffusion(Phabfive):
         PhabfiveDataException
             If repository does not exist or API error
         """
-        repository_phid = ""
-        repository_exist = False
+        plan, _ = self.build_uri_create(
+            repository_name=repository_name,
+            new_uri=new_uri,
+            io=io,
+            display=display,
+            credential=credential,
+        )
 
+        self.apply_uri_create(plan)
+
+        return new_uri
+
+    def build_uri_create(
+        self, repository_name=None, new_uri=None, io=None, display=None, credential=None
+    ):
+        """Compute what creating a URI would do, without doing it.
+
+        Creating a URI is not additive: Phabricator publishes one clone URI per
+        repository, so this demotes every URI already on the repository to
+        io=read, display=never before adding the new one. That is invisible in
+        the arguments, so the description names each URI it would demote.
+
+        Parameters
+        ----------
+        repository_name : str
+            Repository name or ID
+        new_uri : str
+            URI to create
+        io : str, optional
+            I/O mode, defaults to "default"
+        display : str, optional
+            Display mode, defaults to "always"
+        credential : str
+            Credential monogram (e.g. "K123")
+
+        Returns
+        -------
+        tuple
+            (plan, changes) - what apply_uri_create needs, and a
+            human-readable description of each effect. The credential is named
+            by its monogram; its secret never reaches the description.
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If io or display values are invalid
+        PhabfiveDataException
+            If the repository does not exist
+        """
         io = io or "default"
         display = display or "always"
 
@@ -300,62 +347,91 @@ class Diffusion(Phabfive):
             )
 
         repos = self.get_repositories(attachments={"uris": True})
+        repo = match_repository(repos, repository_name)
 
-        # Check if input of repository_name is an id
-        if self._validate_identifier(repository_name):
-            repository_id = repository_name.replace("R", "")
-
-            for repo in repos:
-                existing_repo_id = repo["id"]
-
-                if int(repository_id) == existing_repo_id:
-                    repository_name = repo["fields"]["shortName"]
-
-        get_credential = self.passphrase.get_secret(ids=credential)
-        credential_phid = self._validate_credential_type(credential=get_credential)
-
-        for repo in repos:
-            name = repo["fields"]["shortName"]
-
-            if repository_name == name:
-                display_off = "never"
-                io_read_only = "read"
-                repository_exist = True
-                log.info(f"Repository '{repository_name}' exists, updating URIs")
-                repository_phid = repo["phid"]
-                uris = repo["attachments"]["uris"]["uris"]
-
-                for i in range(len(uris)):
-                    uri = uris[i]["fields"]["uri"]["display"]
-                    object_identifier = uris[i]["id"]
-                    self.edit_uri(
-                        uri=uri,
-                        io=io_read_only,
-                        display=display_off,
-                        object_identifier=object_identifier,
-                    )
-
-        if not repository_exist:
+        if repo is None:
             raise PhabfiveDataException(
                 f"'{repository_name}' does not exist. Please create a new repository"
             )
 
-        transactions = self.to_transactions(
-            {
-                "repository": repository_phid,
-                "uri": new_uri,
-                "io": io,
-                "display": display,
-                "credential": credential_phid,
-            }
-        )
+        get_credential = self.passphrase.get_secret(ids=credential)
+        credential_phid = self._validate_credential_type(credential=get_credential)
+
+        demotions = []
+        for uri in repo["attachments"]["uris"]["uris"]:
+            fields = uri["fields"]
+            current_io = fields["io"]["effective"]
+            current_display = fields["display"]["effective"]
+
+            if current_io == "read" and current_display == "never":
+                # Already where the demotion would put it.
+                continue
+
+            demotions.append(
+                {
+                    "id": uri["id"],
+                    "uri": fields["uri"]["display"],
+                    "io": current_io,
+                    "display": current_display,
+                }
+            )
+
+        plan = {
+            "repository_phid": repo["phid"],
+            "demotions": demotions,
+            "transactions": [
+                {"type": "repository", "value": repo["phid"]},
+                {"type": "uri", "value": new_uri},
+                {"type": "io", "value": io},
+                {"type": "display", "value": display},
+                {"type": "credential", "value": credential_phid},
+            ],
+        }
+
+        changes = [
+            {"field": "New URI", "old": "(none)", "new": str(new_uri)},
+            {"field": "I/O", "old": "(none)", "new": io},
+            {"field": "Display", "old": "(none)", "new": display},
+            # The monogram, never the secret behind it.
+            {"field": "Credential", "old": "(none)", "new": str(credential)},
+        ]
+
+        for demoted in demotions:
+            changes.append(
+                {
+                    "field": f"Demotes {demoted['uri']}",
+                    "old": f"io={demoted['io']}, display={demoted['display']}",
+                    "new": "io=read, display=never",
+                }
+            )
+
+        return plan, changes
+
+    def apply_uri_create(self, plan):
+        """Demote the repository's existing URIs, then add the new one.
+
+        Parameters
+        ----------
+        plan : dict
+            The plan from build_uri_create
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the API rejects the edit
+        """
+        for demoted in plan["demotions"]:
+            self.edit_uri(
+                uri=demoted["uri"],
+                io="read",
+                display="never",
+                object_identifier=demoted["id"],
+            )
 
         try:
-            self.phab.diffusion.uri.edit(transactions=transactions)
+            self.phab.diffusion.uri.edit(transactions=plan["transactions"])
         except APIError as e:
             raise PhabfiveDataException(str(e))
-
-        return new_uri
 
     def get_uri_record(self, repo_name, uri_name):
         """Fetch one repository URI in full.
