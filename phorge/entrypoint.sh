@@ -65,8 +65,11 @@ mkdir -p /app/repo
 # Configure large file storage
 echo "Configuring large file storage..."
 mkdir -p /app/files
-# Volumes are mounted owned by root, Apache and the daemons write as www-data
-chown www-data:www-data /app/repo /app/files
+# Volumes are mounted owned by root, Apache and the daemons write as www-data.
+# Recursive because the daemons used to run as root and left root-owned
+# repositories behind on the volume, and git refuses to read a repository
+# owned by another user ("detected dubious ownership").
+chown -R www-data:www-data /app/repo /app/files
 ./bin/config set storage.local-disk.path /app/files
 
 # Configure PHP settings
@@ -109,9 +112,16 @@ ARCANIST_REF=$(cd /app/arcanist && git rev-parse --abbrev-ref HEAD 2>/dev/null |
 echo "phorge: https://we.phorge.it/source/phorge/history/${PHORGE_REF}/"
 echo "arcanist: https://we.phorge.it/source/arcanist/history/${ARCANIST_REF}/"
 
-# Start daemons in background
+# Start daemons in background, as the user Apache serves Conduit with. As root
+# they create /app/repo/<id> owned by root, and every git-backed ref query then
+# fails with "detected dubious ownership". Phorge's own phd.user is not the way
+# to do this: it switches with sudo, which is not installed, and a non-empty
+# phd.user also makes Phorge advertise built-in SSH clone URIs this instance has
+# no sshd to serve.
 echo "Starting Phorge daemons..."
-./bin/phd start
+mkdir -p /var/tmp/phd
+chown -R www-data:www-data /var/tmp/phd
+runuser -u www-data -- ./bin/phd start
 
 # Start Apache in foreground
 exec apache2-foreground
