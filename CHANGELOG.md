@@ -37,18 +37,33 @@
   called `diffusion.tagsquery` at all
 
 ### Repository Policies
-* **`diffusion repo edit --visible-to`, `--editable-by` and `--pushable-by`** - phabfive
+* **`diffusion repo edit --visible-to`, `--editable-by` and `--can-push`** - phabfive
   had no policy handling anywhere, in any app, while every search response carried the
   policies and discarded them. Each option takes a keyword (`public`, `users`, `admin`,
-  `no-one`), a `#project`, an `@user` or a PHID, and is named the way the Phorge web UI
-  labels it on a repository's Policies panel. A value outside that grammar is refused
-  before a call is made: Conduit reads one it does not recognise as a policy nobody
-  satisfies, so `--visible-to=nonsense` would otherwise be answered as a permissions
-  error rather than a spelling one
+  `no-one`), a `#project`, an `@user` or a PHID, and is named after the capability it
+  sets. A value outside that grammar is refused before a call is made: Conduit reads one
+  it does not recognise as a policy nobody satisfies, so `--visible-to=nonsense` would
+  otherwise be answered as a permissions error rather than a spelling one
 * **Policy PHIDs are resolved to names** - `repo show` and `repo list` printed a raw
   `PHID-PROJ-...` where a policy named a project. Both now name it, in the same spelling
   the options take, so what a policy is shown as can be typed straight back in. They are
-  reported under `Visible To`, `Editable By` and `Pushable By`, the web UI's own labels
+  reported under `Visible To`, `Editable By` and `Can Push` - Phorge's own labels, which
+  come from one rule rather than from wherever a label happened to be read off a page.
+  `AphrontFormPolicyControl` special-cases exactly three capabilities into the `-able By`
+  family, `CAN_VIEW`, `CAN_EDIT` and `CAN_JOIN`, and names every other one after the
+  capability itself. Push is not one of the three, so `DiffusionPushCapability` names it
+  and that is `Can Push`. `Pushable By` is a label `DiffusionRepositoryPoliciesManagementPanel`
+  applies to its own row and nothing else in Phorge uses. It is the same rule that makes a
+  task's third policy `Can Interact`
+* **A push policy on a repository Phorge does not host says so** - a repository that
+  follows a remote stores a push policy that nothing ever consults, and phabfive printed
+  it as though it were in force. `repo show` and `repo list` now report it as
+  `Not a Hosted Repository`, which is the sentence Phorge's own Policies panel prints in
+  place of the value. It is that string in every format rather than a null or a dropped
+  key, so every repository carries the same keys and the value reads the same way in a
+  terminal as in JSON; `Repository.Hosted`, in the same record, is the boolean to test.
+  `--can-push` still sets a policy there - Phorge permits it, and a repository can be
+  made hosted later - but warns on stderr that nothing will consult it yet
 * **A self-lockout is a sentence, not a traceback** - Phorge refuses a policy that would
   stop you seeing or editing the repository yourself, and `repo edit` now reports the
   sentence it answered with

@@ -5,6 +5,7 @@
 from ruamel.yaml.scalarstring import PreservedScalarString
 
 from phabfive.constants import (
+    POLICY_NOT_HOSTED,
     REPO_POLICY_FIELDS,
     URI_ROLE_DISABLED,
     URI_ROLES,
@@ -84,7 +85,7 @@ def repository_is_hosted(repo):
     )
 
 
-def format_policy(policy, policy_names=None):
+def format_policy(policy, policy_names=None, hosted=True):
     """
     Label a repository's policies the way the Phorge web UI labels them.
 
@@ -97,14 +98,29 @@ def format_policy(policy, policy_names=None):
         carry a PHID rather than a keyword - a project, a user or a custom
         rule - and this is what names it. Left out, or missing an entry, the
         PHID is shown as it stands rather than guessed at.
+    hosted : bool, optional
+        Whether Phabricator serves the repository itself, from
+        repository_is_hosted. A push policy on a repository that follows a
+        remote is stored but inert, and is reported as POLICY_NOT_HOSTED
+        rather than as a value that reads as if it were in force.
 
     Returns
     -------
     dict
-        {"Visible To": ..., "Editable By": ..., "Pushable By": ...}, each a
-        web-UI label for a
-        keyword constant, the name of a PHID that was resolved, or the raw
-        value.
+        {"Visible To": ..., "Editable By": ..., "Can Push": ...}, each a
+        web-UI label for a keyword constant, the name of a PHID that was
+        resolved, or the raw value.
+
+        The keys are Phorge's own labels rather than the API's field names.
+        AphrontFormPolicyControl special-cases exactly three capabilities
+        into the "-able By" family - CAN_VIEW "Visible To", CAN_EDIT
+        "Editable By" and CAN_JOIN "Joinable By" - and every other one falls
+        through to its capability name. Push is not one of the three, so it
+        is DiffusionPushCapability::getCapabilityName() that names it, and
+        that returns "Can Push". "Pushable By" is a label
+        DiffusionRepositoryPoliciesManagementPanel applies to its own row
+        and nothing else in Phorge uses. This is the same rule that names a
+        task's "Can Interact".
     """
     policy = policy or {}
 
@@ -115,9 +131,9 @@ def format_policy(policy, policy_names=None):
         "Editable By": policy_label(
             policy.get(REPO_POLICY_FIELDS["edit"]), policy_names
         ),
-        "Pushable By": policy_label(
-            policy.get(REPO_POLICY_FIELDS["push"]), policy_names
-        ),
+        "Can Push": policy_label(policy.get(REPO_POLICY_FIELDS["push"]), policy_names)
+        if hosted
+        else POLICY_NOT_HOSTED,
     }
 
 
@@ -379,14 +395,18 @@ def build_repository_display_data(
                 else description
             )
 
-        record["Repository"]["Hosted"] = repository_is_hosted(repo)
+        hosted = repository_is_hosted(repo)
+
+        record["Repository"]["Hosted"] = hosted
         record["Repository"]["Importing"] = bool(fields.get("isImporting"))
 
         space_phid = fields.get("spacePHID")
         if space_phid:
             record["Space"] = space_map.get(space_phid, space_phid)
 
-        record["Policy"] = format_policy(fields.get("policy"), policy_names)
+        record["Policy"] = format_policy(
+            fields.get("policy"), policy_names, hosted=hosted
+        )
 
         if show_uris:
             record["URIs"] = format_repository_uris(repo)

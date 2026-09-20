@@ -10,6 +10,7 @@ from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_policy, complete_repo_status
 from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.constants import REPO_STATUS_CHOICES
+from phabfive.diffusion.formatters import repository_is_hosted
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
 
@@ -274,9 +275,9 @@ def repo_edit(
         help=f"Set who can edit it ({POLICY_GRAMMAR})",
         autocompletion=complete_policy,
     ),
-    pushable_by: Optional[str] = typer.Option(
+    can_push: Optional[str] = typer.Option(
         None,
-        "--pushable-by",
+        "--can-push",
         help=f"Set who can push to it ({POLICY_GRAMMAR})",
         autocompletion=complete_policy,
     ),
@@ -292,8 +293,14 @@ def repo_edit(
 
     The policy options take a keyword, a #project, an @user or a PHID, and
     `--dry-run` names both ends of the change rather than showing a PHID.
-    They are `--visible-to`, `--editable-by` and `--pushable-by`, spelled the
-    way the Phorge web UI labels them on a repository's Policies panel.
+    They are `--visible-to`, `--editable-by` and `--can-push`, spelled the way
+    Phorge names the capability each one sets.
+
+    A push policy on a repository Phabricator does not host is stored but
+    inert. Phorge allows one to be set there and phabfive does too - a
+    repository can be made hosted later - but `--can-push` says so on stderr,
+    and `repo show` reports the policy as "Not a Hosted Repository" rather
+    than as a value in force.
     """
     from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
 
@@ -304,7 +311,7 @@ def repo_edit(
         status,
         visible_to,
         editable_by,
-        pushable_by,
+        can_push,
     ]
 
     if all(arg is None for arg in options):
@@ -323,7 +330,7 @@ def repo_edit(
         for value, option in (
             (visible_to, "--visible-to"),
             (editable_by, "--editable-by"),
-            (pushable_by, "--pushable-by"),
+            (can_push, "--can-push"),
         ):
             validate_policy_value(value, option=option)
     except PhabfiveConfigException as e:
@@ -347,6 +354,20 @@ def repo_edit(
     object_id = repo_record["id"]
     label = diffusion.link_repository(repo_record)
 
+    # Phorge stores and edits a push policy on any repository, hosted or not,
+    # so this is a warning and not a refusal - a repository that follows a
+    # remote today can be made hosted tomorrow, and the policy it was given
+    # takes effect then. Until it is, nothing consults it, which is why
+    # Phorge's own Policies panel prints "Not a Hosted Repository" in place
+    # of the value and phabfive follows it.
+    if can_push is not None and not repository_is_hosted(repo_record):
+        typer.echo(
+            f"WARNING: {label} is not a hosted repository, so a push policy "
+            "has no effect on it. It is stored, and applies if the "
+            "repository becomes hosted.",
+            err=True,
+        )
+
     try:
         transactions, changes = diffusion.build_repo_edit(
             repo_record,
@@ -356,7 +377,7 @@ def repo_edit(
             status=status,
             visible_to=visible_to,
             editable_by=editable_by,
-            pushable_by=pushable_by,
+            can_push=can_push,
         )
     except (PhabfiveConfigException, PhabfiveDataException) as e:
         typer.echo(f"ERROR: {e}", err=True)

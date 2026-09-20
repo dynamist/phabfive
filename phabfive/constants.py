@@ -161,6 +161,21 @@ REPO_POLICY_FIELDS = {
     "push": "diffusion.push",
 }
 
+# What a repository's push policy is reported as when the repository is not
+# hosted. Phorge stores and edits a push policy on every repository, but
+# DiffusionRepositoryPoliciesManagementPanel declines to show one that cannot
+# take effect, printing this sentence in place of the stored value:
+#
+#     $pushable = $repository->isHosted()
+#       ? $descriptions[DiffusionPushCapability::CAPABILITY]
+#       : phutil_tag('em', array(), pht('Not a Hosted Repository'));
+#
+# It is the string, and not null or a dropped key, so that every repository
+# carries the same keys in every format and the value reads the same way in
+# a terminal as it does in JSON. What a script keys on is Repository.Hosted,
+# which is a boolean and is in the same record.
+POLICY_NOT_HOSTED = "Not a Hosted Repository"
+
 # The Conduit transaction types that set those policies, confirmed against the
 # instance rather than guessed: diffusion.repository.edit answers an unknown
 # type by listing every valid one, and these are the three it names.
@@ -327,6 +342,7 @@ __all__ = [
     "PASTE_LANGUAGES",
     "POLICY_KEYWORDS",
     "POLICY_LABELS",
+    "POLICY_NOT_HOSTED",
     "PRIORITY_VALUES",
     "PRIORITY_DEFAULT",
     "REPO_POLICY_FIELDS",

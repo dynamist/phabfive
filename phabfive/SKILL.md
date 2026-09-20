@@ -352,7 +352,7 @@ phabfive diffusion uri list R5 --io=observe
 phabfive diffusion uri list R5 --display=always --external
 phabfive diffusion uri list R5 --disabled
 phabfive diffusion repo edit R5 --default-branch main --dry-run
-phabfive diffusion repo edit R5 --visible-to=public --editable-by='#infra' --pushable-by=admin --dry-run
+phabfive diffusion repo edit R5 --visible-to=public --editable-by='#infra' --can-push=admin --dry-run
 phabfive diffusion repo create <name> --dry-run
 phabfive diffusion uri create K1 R5 <uri> --observe --dry-run
 ```
@@ -407,7 +407,7 @@ nothing is an empty result - neither is a failure.
 URIs, which `--dry-run` spells out before anything is applied.
 
 It also sets the three policies: `--visible-to`, `--editable-by` and
-`--pushable-by`, named the way the Phorge web UI labels them. Each takes
+`--can-push`, named the way Phorge names the capability each one sets. Each takes
 
 | Value | Means |
 |---|---|
@@ -430,6 +430,26 @@ would otherwise come back as a permissions error rather than a spelling one.
 spelling the options take, so what a policy is shown as can be typed straight back
 in. Phorge refuses a policy that would stop you seeing or editing the repository
 yourself, and that refusal is reported as a sentence.
+
+```yaml
+  Policy:
+    Visible To: All Users
+    Editable By: Administrators
+    Can Push: All Users
+```
+
+The keys are Phorge's own labels rather than the API's field names, and the third
+one is `Can Push` for the same reason a task's third one is `Can Interact`: Phorge
+special-cases exactly three capabilities into the `-able By` family - `Visible To`,
+`Editable By` and `Joinable By` - and names every other one after the capability
+itself. `Pushable By` is a label one management panel applies to its own row.
+
+`Can Push` only means anything on a repository Phabricator hosts. On one that
+follows a remote, the stored push policy is never consulted, so it is reported as
+the string `Not a Hosted Repository` in every format - `Repository.Hosted`, in the
+same record, is the boolean to test. `--can-push` still sets a policy there, because
+Phorge allows it and a repository can be made hosted later, but it warns on stderr
+that nothing will consult it yet.
 
 A repository is addressable by monogram (`R5`), callsign or short name. Not every
 repository has a short name, so prefer the monogram when scripting.

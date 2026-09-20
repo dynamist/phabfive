@@ -1004,14 +1004,19 @@ class Diffusion(Phabfive):
         Returns
         -------
         dict
-            The repository object, with 'id', 'phid' and 'fields' keys
+            The repository object, with 'id', 'phid' and 'fields' keys and
+            its URIs attached
 
         Raises
         ------
         PhabfiveDataException
             If the repository does not exist
         """
-        repo = find_repository(self.phab, repo_name)
+        # The URIs attachment rides this same call because
+        # repository_is_hosted falls back to it on an instance that does not
+        # report isHosted, and repo edit consults it before it lets a push
+        # policy be set on a repository that cannot take one.
+        repo = find_repository(self.phab, repo_name, attachments={"uris": True})
 
         if repo is None:
             raise PhabfiveDataException(f"Repository '{repo_name}' does not exist")
@@ -1027,7 +1032,7 @@ class Diffusion(Phabfive):
         status=None,
         visible_to=None,
         editable_by=None,
-        pushable_by=None,
+        can_push=None,
     ):
         """Compute the transactions for a repository edit, without applying them.
 
@@ -1047,7 +1052,7 @@ class Diffusion(Phabfive):
             New view policy, in the grammar phabfive.policy accepts
         editable_by : str, optional
             New edit policy
-        pushable_by : str, optional
+        can_push : str, optional
             New push policy
 
         Returns
@@ -1112,13 +1117,13 @@ class Diffusion(Phabfive):
             fields.get("policy") or {},
             visible_to=visible_to,
             editable_by=editable_by,
-            pushable_by=pushable_by,
+            can_push=can_push,
         )
 
         return transactions + policy_transactions, changes + policy_changes
 
     def _build_policy_edit(
-        self, policy, visible_to=None, editable_by=None, pushable_by=None
+        self, policy, visible_to=None, editable_by=None, can_push=None
     ):
         """The policy half of a repository edit.
 
@@ -1132,7 +1137,7 @@ class Diffusion(Phabfive):
         ----------
         policy : dict
             The "policy" field of the repository as it stands
-        visible_to, editable_by, pushable_by : str, optional
+        visible_to, editable_by, can_push : str, optional
             New policies, in the grammar phabfive.policy accepts
 
         Returns
@@ -1143,7 +1148,7 @@ class Diffusion(Phabfive):
         asked = [
             ("view", visible_to, "Visible To", "--visible-to"),
             ("edit", editable_by, "Editable By", "--editable-by"),
-            ("push", pushable_by, "Pushable By", "--pushable-by"),
+            ("push", can_push, "Can Push", "--can-push"),
         ]
 
         wanted = [
@@ -1220,7 +1225,7 @@ class Diffusion(Phabfive):
         status=None,
         visible_to=None,
         editable_by=None,
-        pushable_by=None,
+        can_push=None,
         object_identifier=None,
         repo_record=None,
         dry_run=False,
@@ -1245,7 +1250,7 @@ class Diffusion(Phabfive):
             New view policy
         editable_by : str, optional
             New edit policy
-        pushable_by : str, optional
+        can_push : str, optional
             New push policy
         object_identifier : str, optional
             Repository object identifier
@@ -1272,7 +1277,7 @@ class Diffusion(Phabfive):
             status=status,
             visible_to=visible_to,
             editable_by=editable_by,
-            pushable_by=pushable_by,
+            can_push=can_push,
         )
 
         if not transactions:

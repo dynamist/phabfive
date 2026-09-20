@@ -11,7 +11,7 @@ from phabfive.diffusion import Diffusion
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 
 
-def _repo(name, short_name=None, status="active"):
+def _repo(name, short_name=None, status="active", is_hosted=True):
     return {
         "id": 1,
         "phid": f"PHID-REPO-{name}",
@@ -19,6 +19,7 @@ def _repo(name, short_name=None, status="active"):
             "name": name,
             "shortName": short_name or name,
             "status": status,
+            "isHosted": is_hosted,
         },
         "attachments": {"uris": {"uris": []}},
     }
@@ -825,7 +826,7 @@ class TestRichIsYaml:
             "Policy": {
                 "Visible To": "public",
                 "Editable By": "#security",
-                "Pushable By": "@admin",
+                "Can Push": "@admin",
             },
         }
 
@@ -840,7 +841,7 @@ class TestRichIsYaml:
         assert parsed[0]["Policy"] == {
             "Visible To": "public",
             "Editable By": "#security",
-            "Pushable By": "@admin",
+            "Can Push": "@admin",
         }
 
 
@@ -871,7 +872,7 @@ class TestBuildPolicyEdit:
             self._record(),
             visible_to="public",
             editable_by="public",
-            pushable_by="public",
+            can_push="public",
         )
 
         assert transactions == [
@@ -982,13 +983,13 @@ class TestBuildPolicyEdit:
 class TestRepoEditCli:
     """repo edit matches the vocabulary uri edit settled on."""
 
-    def _invoke(self, args, built=None, apply_error=None):
+    def _invoke(self, args, built=None, apply_error=None, record=None):
         from typer.testing import CliRunner
 
         from phabfive.cli.diffusion import diffusion_app
 
         mock_diffusion = MagicMock()
-        mock_diffusion.get_repo_record.return_value = _repo("oldname")
+        mock_diffusion.get_repo_record.return_value = record or _repo("oldname")
         mock_diffusion.build_repo_edit.return_value = built or (
             [{"type": "defaultBranch", "value": "main"}],
             [{"field": "Default branch", "old": "master", "new": "main"}],
@@ -1056,7 +1057,7 @@ class TestRepoEditCli:
                 "R42",
                 "--visible-to=public",
                 "--editable-by=#infrastructure",
-                "--pushable-by=@admin",
+                "--can-push=@admin",
                 "--dry-run",
             ]
         )
@@ -1069,8 +1070,54 @@ class TestRepoEditCli:
             "status": None,
             "visible_to": "public",
             "editable_by": "#infrastructure",
-            "pushable_by": "@admin",
+            "can_push": "@admin",
         }
+
+    def test_setting_a_push_policy_on_a_non_hosted_repository_warns(self):
+        """A warning and not a refusal, because Phorge allows it.
+
+        `PhabricatorRepository::getPolicy` returns `getPushPolicy()`, a plain
+        getter, and `PhabricatorRepositoryPushPolicyTransaction` is a real
+        transaction type - so unlike a task's derived `Can Interact`, this is
+        a policy that is genuinely stored and genuinely editable on any
+        repository. It just goes unread until the repository is hosted, which
+        a repository can become later.
+        """
+        result, diffusion = self._invoke(
+            ["R42", "--can-push=admin", "--dry-run"],
+            record=_repo("oldname", is_hosted=False),
+        )
+
+        assert result.exit_code == 0
+        assert "not a hosted repository" in result.stderr
+        assert "[DRY RUN]" in result.stdout
+        diffusion.build_repo_edit.assert_called_once()
+
+    def test_the_push_warning_does_not_stop_the_edit(self):
+        result, diffusion = self._invoke(
+            ["R42", "--can-push=admin", "--yes"],
+            record=_repo("oldname", is_hosted=False),
+        )
+
+        assert result.exit_code == 0
+        diffusion.apply_repo_edit.assert_called_once()
+
+    def test_a_hosted_repository_is_not_warned_about(self):
+        result, _ = self._invoke(
+            ["R42", "--can-push=admin", "--dry-run"],
+            record=_repo("oldname", is_hosted=True),
+        )
+
+        assert "not a hosted repository" not in result.stderr
+
+    def test_only_a_push_policy_is_warned_about(self):
+        """View and edit apply whether or not the repository is hosted."""
+        result, _ = self._invoke(
+            ["R42", "--visible-to=public", "--dry-run"],
+            record=_repo("oldname", is_hosted=False),
+        )
+
+        assert "not a hosted repository" not in result.stderr
 
     def test_there_is_no_bare_edit_option(self):
         """`repo edit --edit` is unreadable, and --editable-by sidesteps it."""
@@ -1930,8 +1977,14 @@ def _show_repo(
     uris=None,
     browse_uri=None,
     is_importing=False,
+    is_hosted=None,
 ):
-    """A repository as diffusion.repository.search answers with it."""
+    """A repository as diffusion.repository.search answers with it.
+
+    ``is_hosted`` is left out of the record unless it is given, because an
+    instance old enough not to report isHosted is a case the hosting
+    fallback exists for and several tests exercise.
+    """
     fields = {
         "name": name,
         "shortName": short_name,
@@ -1951,6 +2004,9 @@ def _show_repo(
 
     if browse_uri:
         fields["browseUri"] = browse_uri
+
+    if is_hosted is not None:
+        fields["isHosted"] = is_hosted
 
     return {
         "id": repo_id,
@@ -2052,16 +2108,70 @@ class TestRepoShowRecord:
         assert len(result["repositories"]) == 1
 
     def test_policy_keywords_are_labelled_the_way_the_web_ui_labels_them(self):
+        """And the push one is "Can Push", not "Pushable By".
+
+        AphrontFormPolicyControl special-cases three capabilities into the
+        "-able By" family - CAN_VIEW, CAN_EDIT and CAN_JOIN - and every
+        other one falls through to its capability name. Push is not one of
+        the three, so DiffusionPushCapability::getCapabilityName() names it
+        and that returns "Can Push". "Pushable By" is a label the Policies
+        management panel applies to its own row and nothing else uses.
+        """
         repo = _show_repo(
-            policy={"view": "public", "edit": "admin", "diffusion.push": "no-one"}
+            policy={"view": "public", "edit": "admin", "diffusion.push": "no-one"},
+            is_hosted=True,
         )
         record = _showable([repo]).repo_show(["R5"])["repositories"][0]
 
         assert record["Policy"] == {
             "Visible To": "Public (No Login Required)",
             "Editable By": "Administrators",
-            "Pushable By": "No One",
+            "Can Push": "No One",
         }
+
+    def test_a_non_hosted_repository_has_no_push_policy_to_report(self):
+        """Phorge declines to show one, and so does phabfive.
+
+        DiffusionRepositoryPoliciesManagementPanel prints
+        `Not a Hosted Repository` in place of the value on a repository it
+        does not host, because nothing consults the stored policy there.
+        Printing the stored value instead would read as a rule in force.
+        """
+        repo = _show_repo(
+            policy={"view": "public", "edit": "admin", "diffusion.push": "users"},
+            is_hosted=False,
+        )
+        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert record["Repository"]["Hosted"] is False
+        assert record["Policy"]["Can Push"] == "Not a Hosted Repository"
+
+    def test_the_policy_keys_are_the_same_whether_hosted_or_not(self):
+        """A string and not a null or a dropped key.
+
+        A reader consuming one record per line has to find the same keys on
+        every line, and `Repository.Hosted` in the same record is what a
+        script tests - so the push slot stays a string in every format.
+        """
+        hosted = _showable([_show_repo(is_hosted=True)]).repo_show(["R5"])
+        observed = _showable([_show_repo(is_hosted=False)]).repo_show(["R5"])
+
+        assert (
+            hosted["repositories"][0]["Policy"].keys()
+            == observed["repositories"][0]["Policy"].keys()
+        )
+        assert isinstance(observed["repositories"][0]["Policy"]["Can Push"], str)
+
+    def test_the_other_two_policies_are_unaffected_by_hosting(self):
+        """Only push is gated: view and edit apply to any repository."""
+        repo = _show_repo(
+            policy={"view": "public", "edit": "admin", "diffusion.push": "users"},
+            is_hosted=False,
+        )
+        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert record["Policy"]["Visible To"] == "Public (No Login Required)"
+        assert record["Policy"]["Editable By"] == "Administrators"
 
     def test_a_policy_phid_is_resolved_to_a_name(self):
         """And named in the spelling --visible-to would take, not
