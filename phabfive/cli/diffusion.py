@@ -319,12 +319,14 @@ def edit(
         None, "--uri", help="Set the URI to this value"
     ),
     io: Optional[str] = typer.Option(
-        None, "--io", help="Adjust I/O behavior (default, read, write, never)"
+        None,
+        "--io",
+        help="Adjust I/O behavior (default, observe, mirror, read, readwrite, none)",
     ),
     display: Optional[str] = typer.Option(
         None,
         "--display",
-        help="Change display behavior (default, always, hidden)",
+        help="Change display behavior (default, always, never)",
     ),
     cred: Optional[str] = typer.Option(
         None, "--cred", help="Change credential (e.g., K2)"
@@ -375,14 +377,18 @@ def edit(
     # remote - so name the repository as well as the URI being changed.
     label = f"{diffusion.describe_repository(repo_record)} {uri}"
 
-    transactions, changes = diffusion.build_uri_edit(
-        uri_record,
-        uri=new_uri,
-        io=io,
-        display=display,
-        credential=cred,
-        disable=disable_flag,
-    )
+    try:
+        transactions, changes = diffusion.build_uri_edit(
+            uri_record,
+            uri=new_uri,
+            io=io,
+            display=display,
+            credential=cred,
+            disable=disable_flag,
+        )
+    except (PhabfiveConfigException, PhabfiveDataException) as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
 
     if not transactions:
         typer.echo(f"{label}: No changes (already at target state)")

@@ -4,8 +4,14 @@
 
 import re
 
-from phabfive.constants import MONOGRAMS
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.constants import (
+    DISPLAY_ALIASES,
+    DISPLAY_CHOICES,
+    IO_URI_ALIASES,
+    IO_URI_VALUES,
+    MONOGRAMS,
+)
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 
 
 def validate_repo_identifier(repo_id):
@@ -59,3 +65,74 @@ def validate_credential_type(credential):
         )
 
     return credential.get("phid")
+
+
+def _quoted(choices):
+    """Name the valid values the way an error message reads them out."""
+    quoted = [f"'{choice}'" for choice in choices]
+
+    return f"{', '.join(quoted[:-1])} or {quoted[-1]}"
+
+
+def resolve_io_value(io, choices=None):
+    """Resolve a URI I/O value to what Phorge calls it.
+
+    An accepted-but-old spelling is rewritten here, before anything compares
+    the value to what the URI already carries, so nothing downstream has to
+    know two names for the same thing.
+
+    Parameters
+    ----------
+    io : str
+        The I/O value as the caller wrote it
+    choices : list, optional
+        The values to accept, defaulting to every I/O value Phorge has.
+        `uri create` passes a narrower list.
+
+    Returns
+    -------
+    str
+        The value Phorge knows it by
+
+    Raises
+    ------
+    PhabfiveConfigException
+        If the value is not an I/O value
+    """
+    choices = IO_URI_VALUES if choices is None else choices
+    resolved = IO_URI_ALIASES.get(io, io)
+
+    if resolved not in choices:
+        raise PhabfiveConfigException(
+            f"'{io}' is not valid. Valid IO values are {_quoted(choices)}"
+        )
+
+    return resolved
+
+
+def resolve_display_value(display):
+    """Resolve a URI display value to what Phorge calls it.
+
+    Parameters
+    ----------
+    display : str
+        The display value as the caller wrote it
+
+    Returns
+    -------
+    str
+        The value Phorge knows it by
+
+    Raises
+    ------
+    PhabfiveConfigException
+        If the value is not a display value
+    """
+    resolved = DISPLAY_ALIASES.get(display, display)
+
+    if resolved not in DISPLAY_CHOICES:
+        raise PhabfiveConfigException(
+            f"'{display}' is not valid. Valid Display values are {_quoted(DISPLAY_CHOICES)}"
+        )
+
+    return resolved

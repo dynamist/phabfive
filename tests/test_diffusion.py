@@ -1368,3 +1368,202 @@ class TestBranchListFailsCleanly:
 
         assert result.exit_code == 0
         assert result.output.split() == ["main", "topic"]
+
+
+class TestUriIoAndDisplayValues:
+    """The constants describe Phorge's values, and nothing else reaches it.
+
+    They used to describe neither: `hidden` is not a display value, `never`
+    is not an I/O one, and `uri edit --io` was checked nowhere at all - so
+    `demotion_io` returned values its own constant forbade while the CLI
+    advertised a `write` that does not exist.
+    """
+
+    def test_display_values_are_the_ones_phorge_returns(self):
+        from phabfive.constants import DISPLAY_CHOICES
+
+        assert DISPLAY_CHOICES == ["default", "always", "never"]
+
+    def test_io_values_cover_every_setting_phorge_has(self):
+        from phabfive.constants import IO_URI_VALUES
+
+        assert IO_URI_VALUES == [
+            "default",
+            "observe",
+            "mirror",
+            "read",
+            "readwrite",
+            "none",
+        ]
+
+    def test_create_offers_a_narrower_set_on_purpose(self):
+        from phabfive.constants import IO_NEW_URI_CHOICES, IO_URI_VALUES
+
+        assert IO_NEW_URI_CHOICES == ["default", "observe", "mirror", "none"]
+        assert set(IO_NEW_URI_CHOICES) < set(IO_URI_VALUES)
+
+    def test_every_demotion_target_is_a_valid_io_value(self):
+        """demotion_io used to return two values its own constant refused."""
+        from phabfive.constants import IO_URI_VALUES
+        from phabfive.diffusion.fetchers import demotion_io
+
+        targets = {
+            demotion_io({"builtin": {"protocol": "ssh"}}),
+            demotion_io({"builtin": {"protocol": None}}),
+        }
+
+        assert targets == {"read", "none"}
+        assert targets <= set(IO_URI_VALUES)
+
+    def test_an_invalid_io_is_refused(self, diffusion):
+        from phabfive.exceptions import PhabfiveConfigException
+
+        with pytest.raises(PhabfiveConfigException, match="'write' is not valid"):
+            diffusion.build_uri_edit(_uri(), io="write")
+
+    def test_an_invalid_display_is_refused(self, diffusion):
+        from phabfive.exceptions import PhabfiveConfigException
+
+        with pytest.raises(PhabfiveConfigException, match="'nope' is not valid"):
+            diffusion.build_uri_edit(_uri(), display="nope")
+
+    def test_refusing_sends_nothing(self, diffusion):
+        from phabfive.exceptions import PhabfiveConfigException
+
+        with pytest.raises(PhabfiveConfigException):
+            diffusion.build_uri_edit(_uri(), io="write")
+
+        diffusion.phab.diffusion.uri.edit.assert_not_called()
+
+    def test_the_error_names_the_values_that_would_work(self, diffusion):
+        from phabfive.exceptions import PhabfiveConfigException
+
+        with pytest.raises(PhabfiveConfigException) as excinfo:
+            diffusion.build_uri_edit(_uri(), io="write")
+
+        assert "'readwrite'" in str(excinfo.value)
+
+    def test_readwrite_is_accepted(self, diffusion):
+        transactions, _ = diffusion.build_uri_edit(_uri(), io="readwrite")
+
+        assert transactions == [{"type": "io", "value": "readwrite"}]
+
+
+class TestDeprecatedUriValueSpellings:
+    """The spellings the CLI advertised keep working, silently.
+
+    `--display hidden` and `--io never` are what phabfive told people to
+    write, so scripts write them. They resolve to what Phorge calls the
+    same thing before anything compares or sends the value.
+    """
+
+    def test_hidden_still_means_never(self, diffusion):
+        transactions, changes = diffusion.build_uri_edit(
+            _uri(display="always"), display="hidden"
+        )
+
+        assert transactions == [{"type": "display", "value": "never"}]
+        assert changes == [{"field": "Display", "old": "always", "new": "never"}]
+
+    def test_never_still_means_none_for_io(self, diffusion):
+        transactions, changes = diffusion.build_uri_edit(_uri(io="observe"), io="never")
+
+        assert transactions == [{"type": "io", "value": "none"}]
+        assert changes == [{"field": "I/O", "old": "observe", "new": "none"}]
+
+    def test_a_deprecated_spelling_of_the_current_value_is_no_change(self, diffusion):
+        """Resolved before the comparison, so it is not an edit to nothing."""
+        assert diffusion.build_uri_edit(_uri(display="never"), display="hidden") == (
+            [],
+            [],
+        )
+        assert diffusion.build_uri_edit(_uri(io="none"), io="never") == ([], [])
+
+    def test_create_still_takes_never(self, diffusion):
+        repo = _repo("myrepo")
+        diffusion.phab.diffusion.repository.search.return_value = {"data": [repo]}
+        diffusion.passphrase.get_credential_record.return_value = {
+            "phid": "PHID-CDTL-1",
+            "type": "token",
+            "monogram": "K1",
+        }
+
+        plan, _ = diffusion.build_uri_create(
+            repository_name="myrepo",
+            new_uri="git@example.com:group/project.git",
+            io="never",
+            display="hidden",
+            credential="K1",
+        )
+
+        assert {"type": "io", "value": "none"} in plan["transactions"]
+        assert {"type": "display", "value": "never"} in plan["transactions"]
+
+
+class TestUriEditIoCli:
+    """An unusable --io is answered, not sent and not a traceback."""
+
+    URI = "https://github.com/dynamist/phabfive.git"
+
+    def _invoke(self, args):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+        from phabfive.diffusion import Diffusion
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.get_uri_and_repo.return_value = (_repo("myrepo"), _uri())
+        mock_diffusion.describe_repository.return_value = "R1 (myrepo)"
+        # The real builder, so the CLI is tested against the real validation.
+        mock_diffusion.build_uri_edit = MagicMock(
+            side_effect=lambda *a, **kw: Diffusion.build_uri_edit(
+                mock_diffusion, *a, **kw
+            )
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, ["uri", "edit", *args])
+        return result, mock_diffusion
+
+    def test_an_invalid_io_is_reported_not_sent(self):
+        result, diffusion = self._invoke(["myrepo", self.URI, "--io=write"])
+
+        assert result.exit_code == 1
+        assert "ERROR:" in result.output
+        assert "Traceback" not in result.output
+        diffusion.apply_uri_edit.assert_not_called()
+
+    def test_a_deprecated_io_spelling_still_applies(self):
+        result, diffusion = self._invoke(["myrepo", self.URI, "--io=never"])
+
+        assert result.exit_code == 0
+        diffusion.apply_uri_edit.assert_called_once_with(
+            10, [{"type": "io", "value": "none"}]
+        )
+
+    def test_a_deprecated_display_spelling_still_applies(self):
+        result, diffusion = self._invoke(["myrepo", self.URI, "--display=hidden"])
+
+        # _uri() is already display=never, which is what hidden means.
+        assert result.exit_code == 0
+        assert "No changes" in result.output
+        diffusion.apply_uri_edit.assert_not_called()
+
+    def test_the_help_lists_the_values_phorge_takes(self):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        # Wide enough that rich prints the help rather than eliding it.
+        result = CliRunner().invoke(
+            diffusion_app, ["uri", "edit", "--help"], env={"COLUMNS": "200"}
+        )
+        output = " ".join(result.output.split())
+
+        assert "default, observe, mirror, read, readwrite, none" in output
+        assert "default, always, never" in output
+        # The list it used to advertise, of which two thirds were not values.
+        assert "default, read, write, never" not in output
+        assert "hidden" not in output

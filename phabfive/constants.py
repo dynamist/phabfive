@@ -99,9 +99,24 @@ PASTE_LANGUAGES = [
     "yaml",
 ]
 
-# IO_EDIT_URI_VALUES = ["default", "read", "write", "never"]
-IO_NEW_URI_CHOICES = ["default", "observe", "mirror", "never"]
-DISPLAY_CHOICES = ["default", "always", "hidden"]
+# Phorge's I/O values for a repository URI. Which of them a given URI accepts
+# depends on what kind it is - an observed URI takes neither "read" nor
+# "readwrite", see demotion_io() - and only Phorge knows that, so phabfive
+# refuses what is not an I/O value at all and leaves the rest to the server.
+IO_URI_VALUES = ["default", "observe", "mirror", "read", "readwrite", "none"]
+
+# `uri create` stays narrower on purpose: it adds a URI that carries a remote,
+# which is what "observe" and "mirror" describe.
+IO_NEW_URI_CHOICES = ["default", "observe", "mirror", "none"]
+
+DISPLAY_CHOICES = ["default", "always", "never"]
+
+# Spellings phabfive advertised before these constants matched Phorge, so
+# scripts use them. Resolved before anything else sees the value, the way
+# FORMAT_ALIASES is, which keeps them out of every comparison downstream.
+IO_URI_ALIASES = {"never": "none"}
+DISPLAY_ALIASES = {"hidden": "never"}
+
 REPO_STATUS_CHOICES = ["active", "inactive"]
 
 CONFIGURABLES = [
@@ -212,9 +227,12 @@ __all__ = [
     "CACHE_TTLS",
     "CONFIGURABLES",
     "DEFAULTS",
+    "DISPLAY_ALIASES",
     "DISPLAY_CHOICES",
     "FORMAT_ALIASES",
     "IO_NEW_URI_CHOICES",
+    "IO_URI_ALIASES",
+    "IO_URI_VALUES",
     "COMMENTS_SUPPORTED",
     "MANIPHEST_ORDER_CHOICES",
     "MANIPHEST_ORDER_DEFAULT",
