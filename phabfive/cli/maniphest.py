@@ -473,7 +473,9 @@ def search(
     show_metadata: bool = typer.Option(
         False, "--show-metadata", help="Display filter match metadata"
     ),
-    limit: int = typer.Option(100, "--limit", "-l", help="Maximum results to return"),
+    limit: int = typer.Option(
+        100, "--limit", "-l", help="Maximum results to return, 0 for all"
+    ),
     order: Optional[str] = typer.Option(
         None,
         "--order",

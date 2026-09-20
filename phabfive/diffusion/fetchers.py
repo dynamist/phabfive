@@ -6,6 +6,7 @@ from phabricator import APIError
 
 from phabfive.diffusion.validators import validate_repo_identifier
 from phabfive.exceptions import PhabfiveDataException
+from phabfive.pagination import search_all_pages
 
 
 def fetch_repositories(phab, query_key=None, attachments=None, constraints=None):
@@ -33,30 +34,12 @@ def fetch_repositories(phab, query_key=None, attachments=None, constraints=None)
     list
         List of repository data dicts
     """
-    query_key = query_key or "all"
-    attachments = attachments or {}
-    constraints = constraints or {}
-
-    repos = []
-    after = None
-
-    while True:
-        kwargs = {
-            "queryKey": query_key,
-            "attachments": attachments,
-            "constraints": constraints,
-        }
-
-        if after is not None:
-            kwargs["after"] = after
-
-        response = phab.diffusion.repository.search(**kwargs)
-        repos.extend(response.get("data") or [])
-
-        after = (response.get("cursor") or {}).get("after")
-
-        if not after:
-            return repos
+    return search_all_pages(
+        phab.diffusion.repository.search,
+        queryKey=query_key or "all",
+        attachments=attachments or {},
+        constraints=constraints or {},
+    )
 
 
 def match_repository(repos, repo_id):
