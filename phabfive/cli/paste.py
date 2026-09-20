@@ -65,7 +65,9 @@ def search(
         help="Filter by author (username or @me)",
         autocompletion=complete_user_filter,
     ),
-    limit: int = typer.Option(100, "--limit", "-l", help="Maximum results to return"),
+    limit: int = typer.Option(
+        100, "--limit", "-l", help="Maximum results to return, 0 for all"
+    ),
 ) -> None:
     """Search and list pastes with optional filters.
 
@@ -74,6 +76,8 @@ def search(
         phabfive paste search "script"
         phabfive paste search --author=@me
         phabfive paste search "config" --author=@me
+        phabfive paste search "config" --limit=250
+        phabfive paste search --author=@me --limit=0
         phabfive --format=yaml paste search "notes"
     """
     # Require at least one search criterion
@@ -110,8 +114,11 @@ def search(
         constraints["authors"] = [author_phid]
 
     # Get pastes with constraints
+    # A limit is how many pastes to return, not the page size to ask for, and
+    # 0 - like maniphest search - means every match
     pastes = paste.get_pastes(
-        constraints=constraints if constraints else None, limit=limit
+        constraints=constraints if constraints else None,
+        limit=limit if limit > 0 else None,
     )
 
     if not pastes:

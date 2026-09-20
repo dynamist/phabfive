@@ -9,6 +9,7 @@ import re
 from phabfive.constants import MONOGRAMS
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveDataException
+from phabfive.pagination import search_all_pages
 
 # 3rd party imports
 from phabricator import APIError
@@ -109,32 +110,32 @@ class Paste(Phabfive):
     ):
         """Wrapper that connects to Phabricator and retrieves information about pastes.
 
+        Follows the result cursor to the end, so callers see every paste
+        rather than the first page. Conduit returns 100 rows per page, and an
+        instance past that limit would otherwise hide pastes from every lookup
+        that goes through here.
+
         `query_key` defaults to "all".
+
+        `limit` is how many pastes to return in total, not the page size a
+        page is asked for - forwarding it as the page size is what made
+        `--limit 101` fail with ERR-INVALID-PAGE-SIZE. `None` means every
+        paste.
 
         :type query_key: str
         :type attachments: dict
         :type constraints: dict
         :type limit: int
 
-        :rtype: dict
+        :rtype: list
         """
-        query_key = query_key or "all"
-        attachments = attachments or {}
-        constraints = constraints or {}
-
-        kwargs = {
-            "queryKey": query_key,
-            "attachments": attachments,
-            "constraints": constraints,
-        }
-        if limit is not None:
-            kwargs["limit"] = limit
-
-        response = self.phab.paste.search(**kwargs)
-
-        pastes = response.get("data", {})
-
-        return pastes
+        return search_all_pages(
+            self.phab.paste.search,
+            limit=limit,
+            queryKey=query_key or "all",
+            attachments=attachments or {},
+            constraints=constraints or {},
+        )
 
     def get_pastes_formatted(self, ids=None):
         """Return list of dicts with 'id' and 'title' keys, sorted by title."""
