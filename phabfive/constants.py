@@ -145,6 +145,38 @@ POLICY_LABELS = {
     "no-one": "No One",
 }
 
+# The keywords a policy option accepts, in the order the web UI offers them.
+# There is no policy.query endpoint on Phorge, so this cannot be discovered at
+# runtime - and it has to be checked before anything is sent, because the API
+# reads an unknown keyword as "nobody", not as a typo: --view=nonsense is
+# refused with the same self-lockout error as --view=no-one.
+POLICY_KEYWORDS = list(POLICY_LABELS)
+
+# Where a repository record keeps each policy. The push one is spelled with
+# the application prefix here, and without it in a transaction.
+REPO_POLICY_FIELDS = {
+    "view": "view",
+    "edit": "edit",
+    "push": "diffusion.push",
+}
+
+# The Conduit transaction types that set those policies, confirmed against the
+# instance rather than guessed: diffusion.repository.edit answers an unknown
+# type by listing every valid one, and these are the three it names.
+#
+# They are not spelled consistently, and the aliases are not interchangeable.
+# PhabricatorPolicyEditEngineExtension declares the view and edit fields as
+# "policy.view" and "policy.edit" but gives each an edit type key of its own
+# ("view", "edit"), and it is the edit type key that Conduit takes - so
+# "policy.view" is refused. DiffusionRepositoryEditEngine declares the push
+# field as "policy.push" with no edit type key, so its field key stands in and
+# the "push" alias is the one that is refused.
+REPO_POLICY_TRANSACTIONS = {
+    "view": "view",
+    "edit": "edit",
+    "push": "policy.push",
+}
+
 CONFIGURABLES = [
     "PHAB_TOKEN",
     "PHAB_URL",
@@ -268,9 +300,12 @@ __all__ = [
     "MONOGRAMS",
     "OutputFormat",
     "PASTE_LANGUAGES",
+    "POLICY_KEYWORDS",
     "POLICY_LABELS",
     "PRIORITY_VALUES",
     "PRIORITY_DEFAULT",
+    "REPO_POLICY_FIELDS",
+    "REPO_POLICY_TRANSACTIONS",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
     "URI_ROLES",

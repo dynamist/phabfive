@@ -7,10 +7,11 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
-from phabfive.cli.completers import complete_repo_status
+from phabfive.cli.completers import complete_policy, complete_repo_status
 from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.constants import REPO_STATUS_CHOICES
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
 
 diffusion_app = typer.Typer(
     cls=AgentFooterGroup, help="The diffusion app", no_args_is_help=True
@@ -261,6 +262,24 @@ def repo_edit(
     status: Optional[str] = typer.Option(
         None, "--status", help="Set status (active, inactive)"
     ),
+    view: Optional[str] = typer.Option(
+        None,
+        "--view",
+        help=f"Set who can see it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    edit_policy: Optional[str] = typer.Option(
+        None,
+        "--edit-policy",
+        help=f"Set who can edit it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    push: Optional[str] = typer.Option(
+        None,
+        "--push",
+        help=f"Set who can push to it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show the change without making it"
     ),
@@ -269,16 +288,38 @@ def repo_edit(
         False, "--interactive", "-i", help="Review the change and confirm"
     ),
 ) -> None:
-    """Edit a repository."""
+    """Edit a repository.
+
+    The policy options take a keyword, a #project, an @user or a PHID, and
+    `--dry-run` names both ends of the change rather than showing a PHID.
+    They are `--view`, `--edit-policy` and `--push`: the edit one is spelled
+    out because `repo edit --edit` is unreadable.
+    """
     from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
 
-    if all(arg is None for arg in [name, short_name, default_branch, status]):
+    options = [name, short_name, default_branch, status, view, edit_policy, push]
+
+    if all(arg is None for arg in options):
         typer.echo("Please input minimum one option", err=True)
         raise typer.Exit(1)
 
     if status is not None and status not in REPO_STATUS_CHOICES:
         choices = ", ".join(REPO_STATUS_CHOICES)
         typer.echo(f"ERROR: --status must be one of: {choices}", err=True)
+        raise typer.Exit(1)
+
+    # Checked before the instance is even reached, because Conduit cannot be
+    # relied on to notice: it reads an unknown policy value as a policy
+    # nobody satisfies, and answers a typo with a self-lockout error.
+    try:
+        for value, option in (
+            (view, "--view"),
+            (edit_policy, "--edit-policy"),
+            (push, "--push"),
+        ):
+            validate_policy_value(value, option=option)
+    except PhabfiveConfigException as e:
+        typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
     try:
@@ -298,13 +339,20 @@ def repo_edit(
     object_id = repo_record["id"]
     label = diffusion.link_repository(repo_record)
 
-    transactions, changes = diffusion.build_repo_edit(
-        repo_record,
-        name=name,
-        short_name=short_name,
-        default_branch=default_branch,
-        status=status,
-    )
+    try:
+        transactions, changes = diffusion.build_repo_edit(
+            repo_record,
+            name=name,
+            short_name=short_name,
+            default_branch=default_branch,
+            status=status,
+            view=view,
+            edit_policy=edit_policy,
+            push=push,
+        )
+    except (PhabfiveConfigException, PhabfiveDataException) as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
 
     if not transactions:
         typer.echo(f"{label}: No changes (already at target state)")
@@ -321,7 +369,11 @@ def repo_edit(
             typer.echo("Nothing was changed.", err=True)
             raise typer.Exit(return_code or 0)
 
-    diffusion.apply_repo_edit(object_id, transactions)
+    try:
+        diffusion.apply_repo_edit(object_id, transactions)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
 
     render_changes(label, changes)
 

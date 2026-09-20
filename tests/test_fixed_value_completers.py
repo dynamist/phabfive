@@ -30,6 +30,65 @@ class TestRepoStatusCompletion:
         assert _complete(["diffusion", "repo", "list"], "in") == ["inactive"]
 
 
+class TestPolicyCompletion:
+    """--view, --edit-policy and --push share one grammar and one completer."""
+
+    @pytest.mark.parametrize("flag", ["--view", "--edit-policy", "--push"])
+    def test_offers_the_keywords_and_both_prefixes(self, flag):
+        """The keywords are a constant because Phorge has no policy.query to
+        ask; "#" and "@" are offered as the start of a value rather than a
+        whole one, so the rest of the grammar is discoverable."""
+        assert _complete(["diffusion", "repo", "edit", "R5", flag], "") == [
+            "public",
+            "users",
+            "admin",
+            "no-one",
+            "#",
+            "@",
+        ]
+
+    def test_matches_prefix(self):
+        assert _complete(["diffusion", "repo", "edit", "R5", "--view"], "no") == [
+            "no-one"
+        ]
+
+    def test_a_hash_completes_projects(self):
+        """A project's display name is offered rather than its hashtag, and
+        works: project.search normalises the "slugs" constraint it is given,
+        so "#Human Resources" resolves what "#human_resources" does."""
+        with patch.object(
+            completers,
+            "_project_completions",
+            return_value=[("infrastructure", "in Ops")],
+        ) as projects:
+            offered = _complete(["diffusion", "repo", "edit", "R5", "--view"], "#infra")
+
+        assert offered == ["#infrastructure"]
+        projects.assert_called_once_with("infra")
+
+    def test_an_at_completes_usernames(self):
+        with patch.object(
+            completers, "_user_completions", return_value=[("admin", "Administrator")]
+        ) as users:
+            offered = _complete(["diffusion", "repo", "edit", "R5", "--push"], "@adm")
+
+        assert offered == ["@admin"]
+        users.assert_called_once_with("adm", include_disabled=False)
+
+    def test_me_is_not_offered(self):
+        """A policy names an account. The shortcut would have to be resolved
+        against whoever is running the command, which is a different thing
+        from the placeholder the search filters accept."""
+        with patch.object(
+            completers,
+            "_user_completions",
+            return_value=[("@me", "yourself"), ("admin", None)],
+        ):
+            offered = _complete(["diffusion", "repo", "edit", "R5", "--view"], "@")
+
+        assert offered == ["@admin"]
+
+
 class TestPassphraseTypeCompletion:
     @pytest.mark.parametrize("flag", ["--type", "-t"])
     def test_offers_all_types(self, flag):

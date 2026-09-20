@@ -33,6 +33,22 @@
   `diffusion.branchquery` and then dropped every ref that was not a branch, and nothing
   called `diffusion.tagsquery` at all
 
+### Repository Policies
+* **`diffusion repo edit --view`, `--edit-policy` and `--push`** - phabfive had no policy
+  handling anywhere, in any app, while every search response carried the policies and
+  discarded them. Each option takes a keyword (`public`, `users`, `admin`, `no-one`), a
+  `#project`, an `@user` or a PHID. It is `--edit-policy` rather than `--edit` because
+  `repo edit --edit` is unreadable. A value outside that grammar is refused before a call
+  is made: Conduit reads one it does not recognise as a policy nobody satisfies, so
+  `--view=nonsense` would otherwise be answered as a permissions error rather than a
+  spelling one
+* **Policy PHIDs are resolved to names** - `repo show` and `repo list` printed a raw
+  `PHID-PROJ-...` where a policy named a project. Both now name it, in the same spelling
+  the options take, so what a policy is shown as can be typed straight back in
+* **A self-lockout is a sentence, not a traceback** - Phorge refuses a policy that would
+  stop you seeing or editing the repository yourself, and `repo edit` now reports the
+  sentence it answered with
+
 ### Reviewing Edits
 * **Per-task review for batch edits** - Editing two or more tasks at a terminal shows each
   task's changes and asks `[y,n,a,q,?]`: apply it, skip it, apply all the rest, or quit.
@@ -75,6 +91,11 @@
 
 ## Other Notes
 
+* `--format=rich` now quotes the values YAML would quote. Diffusion's rich output is
+  YAML-shaped and is read back as YAML, and it printed every scalar bare - so a value
+  like `#security` read back as an empty field followed by a comment, and one like
+  `@admin` failed to parse at all. Reachable with ordinary data once a policy could
+  name a project or a user
 * All JSON serialization now goes through `phabfive/json_output.py`, so `json` and
   `jsonl` are built from the same record builders and cannot drift apart
 * Paste and passphrase JSON output gained builder/printer splits, matching what

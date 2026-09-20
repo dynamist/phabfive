@@ -7,7 +7,7 @@ import pytest
 
 # phabfive imports
 from phabfive.diffusion import Diffusion
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 
 
 def _repo(name, short_name=None, status="active"):
@@ -758,10 +758,221 @@ class TestBuildRepoEdit:
         diffusion.phab.diffusion.repository.edit.assert_not_called()
 
 
+class TestRichIsYaml:
+    """--format=rich is YAML-shaped, and is read back as YAML.
+
+    Which means a value YAML would quote has to be quoted here too. Policy
+    values are what made this reachable with ordinary data.
+    """
+
+    def _rendered(self, value):
+        from phabfive.diffusion.display import _yaml_scalar
+
+        return _yaml_scalar(value)
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("#security", "'#security'"),
+            ("@admin", "'@admin'"),
+            ("true", "'true'"),
+            ("123", "'123'"),
+            ("null", "'null'"),
+            ("a: b", "'a: b'"),
+            ("", "''"),
+        ],
+    )
+    def test_a_value_yaml_would_read_back_differently_is_quoted(self, value, expected):
+        """`Edit: #security` is the dangerous one: YAML reads it as an empty
+        value plus a comment, so it round-trips clean and wrong."""
+        assert self._rendered(value) == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "Public (No Login Required)",
+            "S1 Default",
+            "feature/telemetry",
+            "gunnar-firmware",
+            "A CLI for Phorge",
+        ],
+    )
+    def test_an_ordinary_value_is_left_alone(self, value):
+        assert self._rendered(value) == value
+
+    def test_booleans_are_yaml_booleans(self):
+        assert (self._rendered(True), self._rendered(False)) == ("true", "false")
+
+    def test_a_long_value_stays_on_one_line(self):
+        """ruamel folds a long scalar at its default width, and the renderer
+        prints what comes back as a single line - so a folded answer arrived
+        as a continuation with no indent and took the document with it."""
+        value = "Sample hosted repository with history, " * 5
+
+        assert "\n" not in self._rendered(value)
+
+    def test_the_whole_record_parses_back_as_yaml(self):
+        """The property the e2e format-agreement test asserts, in miniature."""
+        from io import StringIO
+
+        from ruamel.yaml import YAML
+
+        from phabfive.diffusion.display import display_records_rich
+
+        record = {
+            "_url": "http://phorge.localhost/R5",
+            "Policy": {"View": "public", "Edit": "#security", "Push": "@admin"},
+        }
+
+        console = MagicMock()
+        printed = []
+        console.print.side_effect = lambda line="", **kw: printed.append(str(line))
+
+        display_records_rich(console, [record], MagicMock())
+
+        parsed = YAML(typ="safe").load(StringIO("\n".join(printed)))
+
+        assert parsed[0]["Policy"] == {
+            "View": "public",
+            "Edit": "#security",
+            "Push": "@admin",
+        }
+
+
+class TestBuildPolicyEdit:
+    """Policies are the one repository field that is not a scalar.
+
+    Both ends of the change have to be resolved before either can be shown,
+    and the transaction names are not the ones the edit form uses.
+    """
+
+    def _record(self, **policy):
+        record = _repo("oldname", short_name="oldname")
+        record["fields"]["policy"] = {
+            "view": "users",
+            "edit": "admin",
+            "diffusion.push": "users",
+            **policy,
+        }
+        return record
+
+    def test_the_transaction_names_are_the_ones_conduit_accepts(self, diffusion):
+        """Confirmed against the instance: diffusion.repository.edit lists
+        `view`, `edit` and `policy.push` among its valid types and refuses
+        `policy.view`, `policy.edit` and `push`. The two halves are declared
+        in different places in Phorge, which is why they are spelled
+        differently."""
+        transactions, _ = diffusion.build_repo_edit(
+            self._record(), view="public", edit_policy="public", push="public"
+        )
+
+        assert transactions == [
+            {"type": "view", "value": "public"},
+            {"type": "edit", "value": "public"},
+            {"type": "policy.push", "value": "public"},
+        ]
+
+    def test_the_change_names_both_ends(self, diffusion):
+        _, changes = diffusion.build_repo_edit(self._record(), view="public")
+
+        assert changes == [
+            {
+                "field": "View policy",
+                "old": "All Users",
+                "new": "Public (No Login Required)",
+            }
+        ]
+
+    def test_a_project_is_resolved_and_then_named(self, diffusion):
+        """A PHID either side of an arrow says nothing about what changed."""
+        diffusion.phab.project.search.return_value = {
+            "data": [{"phid": "PHID-PROJ-infra"}]
+        }
+        diffusion.phab.phid.query.return_value = {
+            "PHID-PROJ-infra": {
+                "type": "PROJ",
+                "name": "Infrastructure",
+                "uri": "http://phorge.localhost/tag/infrastructure/",
+            }
+        }
+
+        transactions, changes = diffusion.build_repo_edit(
+            self._record(), edit_policy="#infrastructure"
+        )
+
+        assert transactions == [{"type": "edit", "value": "PHID-PROJ-infra"}]
+        assert changes == [
+            {
+                "field": "Edit policy",
+                "old": "Administrators",
+                "new": "#infrastructure",
+            }
+        ]
+
+    def test_a_policy_already_in_place_is_not_a_transaction(self, diffusion):
+        transactions, changes = diffusion.build_repo_edit(self._record(), view="users")
+
+        assert transactions == []
+        assert changes == []
+
+    def test_a_policy_outside_the_grammar_is_refused(self, diffusion):
+        with pytest.raises(PhabfiveConfigException) as excinfo:
+            diffusion.build_repo_edit(self._record(), view="nonsense")
+
+        assert "--view" in str(excinfo.value)
+        diffusion.phab.diffusion.repository.edit.assert_not_called()
+
+    def test_policies_ride_along_with_the_scalar_fields(self, diffusion):
+        transactions, changes = diffusion.build_repo_edit(
+            self._record(), name="newname", view="public"
+        )
+
+        assert [t["type"] for t in transactions] == ["name", "view"]
+        assert [c["field"] for c in changes] == ["Name", "View policy"]
+
+    def test_a_repository_with_no_policy_field_still_edits(self, diffusion):
+        """An older instance, or a record fetched without them."""
+        record = _repo("oldname")
+
+        transactions, changes = diffusion.build_repo_edit(record, view="public")
+
+        assert transactions == [{"type": "view", "value": "public"}]
+        assert changes[0]["old"] == "(none)"
+
+    def test_both_ends_of_every_arrow_come_out_of_one_lookup(self, diffusion):
+        record = self._record(view="PHID-PROJ-old")
+        diffusion.phab.project.search.return_value = {
+            "data": [{"phid": "PHID-PROJ-new"}]
+        }
+
+        diffusion.build_repo_edit(record, view="#new", edit_policy="public")
+
+        diffusion.phab.phid.query.assert_called_once()
+
+    def test_a_self_lockout_is_reported_as_a_sentence(self, diffusion):
+        """Phorge refuses the edit; the stack trace around it says nothing
+        the sentence does not."""
+        from phabricator import APIError
+
+        diffusion.phab.diffusion.repository.edit.side_effect = APIError(
+            "ERR-CONDUIT-CORE",
+            "Validation errors:\n  - The view policy of this object would no "
+            "longer allow you to view the object.",
+        )
+
+        with pytest.raises(PhabfiveDataException) as excinfo:
+            diffusion.apply_repo_edit(1, [{"type": "view", "value": "no-one"}])
+
+        message = str(excinfo.value)
+
+        assert message.startswith("The view policy of this object")
+        assert "Nothing was changed" in message
+
+
 class TestRepoEditCli:
     """repo edit matches the vocabulary uri edit settled on."""
 
-    def _invoke(self, args, built=None):
+    def _invoke(self, args, built=None, apply_error=None):
         from typer.testing import CliRunner
 
         from phabfive.cli.diffusion import diffusion_app
@@ -772,6 +983,7 @@ class TestRepoEditCli:
             [{"type": "defaultBranch", "value": "main"}],
             [{"field": "Default branch", "old": "master", "new": "main"}],
         )
+        mock_diffusion.apply_repo_edit.side_effect = apply_error
 
         with patch(
             "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
@@ -825,6 +1037,89 @@ class TestRepoEditCli:
 
         assert result.exit_code != 0
         diffusion.apply_repo_edit.assert_not_called()
+
+    def test_the_policy_options_are_passed_through(self):
+        """--edit-policy, not --edit: `repo edit --edit` is unreadable."""
+        result, diffusion = self._invoke(
+            [
+                "R42",
+                "--view=public",
+                "--edit-policy=#infrastructure",
+                "--push=@admin",
+                "--dry-run",
+            ]
+        )
+
+        assert result.exit_code == 0
+        assert diffusion.build_repo_edit.call_args.kwargs == {
+            "name": None,
+            "short_name": None,
+            "default_branch": None,
+            "status": None,
+            "view": "public",
+            "edit_policy": "#infrastructure",
+            "push": "@admin",
+        }
+
+    def test_there_is_no_bare_edit_option(self):
+        result, diffusion = self._invoke(["R42", "--edit=public"])
+
+        assert result.exit_code != 0
+        diffusion.apply_repo_edit.assert_not_called()
+
+    def test_a_policy_alone_is_enough_to_ask_for(self):
+        result, diffusion = self._invoke(["R42", "--view=public"])
+
+        assert result.exit_code == 0
+        diffusion.apply_repo_edit.assert_called_once()
+
+    def test_a_value_outside_the_grammar_is_never_sent(self):
+        """Refused before the instance is reached, because Conduit reads an
+        unknown value as a policy nobody satisfies rather than as a typo."""
+        result, diffusion = self._invoke(["R42", "--view=nonsense"])
+
+        assert result.exit_code == 1
+        assert "--view must be one of" in result.output
+        diffusion.get_repo_record.assert_not_called()
+        diffusion.apply_repo_edit.assert_not_called()
+
+    def test_a_project_that_does_not_exist_is_reported_cleanly(self):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.get_repo_record.return_value = _repo("oldname")
+        mock_diffusion.build_repo_edit.side_effect = PhabfiveDataException(
+            "Project '#nope' does not exist"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(
+                diffusion_app, ["repo", "edit", "R42", "--edit-policy=#nope"]
+            )
+
+        assert result.exit_code == 1
+        assert "does not exist" in result.output
+        assert "Traceback" not in result.output
+        mock_diffusion.apply_repo_edit.assert_not_called()
+
+    def test_a_refused_edit_is_reported_cleanly(self):
+        """A self-lockout reaches the CLI as a PhabfiveDataException, which
+        used to go all the way out as a traceback."""
+        result, diffusion = self._invoke(
+            ["R42", "--view=no-one", "--yes"],
+            apply_error=PhabfiveDataException(
+                "The view policy of this object would no longer allow you to "
+                "view the object."
+            ),
+        )
+
+        assert result.exit_code == 1
+        assert "would no longer allow you" in result.output
+        assert "Traceback" not in result.output
 
     def test_a_missing_repository_is_reported_cleanly(self):
         from typer.testing import CliRunner
@@ -1756,8 +2051,31 @@ class TestRepoShowRecord:
             "Push": "No One",
         }
 
-    def test_a_policy_phid_passes_through_unresolved(self):
-        """Resolving it is its own piece of work, and inventing a name is worse."""
+    def test_a_policy_phid_is_resolved_to_a_name(self):
+        """And named in the spelling --view would take, not "Infrastructure":
+        there is no option that accepts a project's display name."""
+        repo = _show_repo(
+            policy={
+                "view": "PHID-PROJ-infra",
+                "edit": "admin",
+                "diffusion.push": "users",
+            }
+        )
+        diffusion = _showable([repo])
+        diffusion.phab.phid.query.return_value = {
+            "PHID-PROJ-infra": {
+                "type": "PROJ",
+                "name": "Infrastructure",
+                "uri": "http://phorge.localhost/tag/infrastructure/",
+            }
+        }
+
+        record = diffusion.repo_show(["R5"])["repositories"][0]
+
+        assert record["Policy"]["View"] == "#infrastructure"
+
+    def test_a_policy_phid_the_instance_will_not_name_passes_through(self):
+        """Inventing a name for a policy is worse than showing the PHID."""
         repo = _show_repo(
             policy={
                 "view": "PHID-PROJ-secret",
@@ -1768,6 +2086,14 @@ class TestRepoShowRecord:
         record = _showable([repo]).repo_show(["R5"])["repositories"][0]
 
         assert record["Policy"]["View"] == "PHID-PROJ-secret"
+
+    def test_keyword_policies_cost_no_lookup(self):
+        """Which is every instance that never named a project in a policy."""
+        diffusion = _showable([_show_repo()])
+
+        diffusion.repo_show(["R5"])
+
+        diffusion.phab.phid.query.assert_not_called()
 
     def test_hosting_is_what_the_instance_says_it_is(self):
         """Phorge reports isHosted, and that is the answer."""

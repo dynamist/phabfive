@@ -7,7 +7,12 @@ import logging
 from phabricator import APIError
 
 from phabfive import passphrase
-from phabfive.constants import IO_NEW_URI_CHOICES, REPO_STATUS_CHOICES
+from phabfive.constants import (
+    IO_NEW_URI_CHOICES,
+    REPO_POLICY_FIELDS,
+    REPO_POLICY_TRANSACTIONS,
+    REPO_STATUS_CHOICES,
+)
 from phabfive.core import Phabfive
 from phabfive.diffusion.fetchers import (
     fetch_branches,
@@ -36,6 +41,12 @@ from phabfive.diffusion.validators import (
     validate_repo_identifier,
 )
 from phabfive.exceptions import PhabfiveDataException
+from phabfive.policy import (
+    policy_label,
+    policy_lockout_message,
+    resolve_policy_names,
+    resolve_policy_value,
+)
 
 log = logging.getLogger(__name__)
 
@@ -152,6 +163,28 @@ class Diffusion(Phabfive):
             for phid, data in found.items()
         }
 
+    def _resolve_policy_names(self, repos):
+        """Name the projects, users and rules a set of policies point at.
+
+        Parameters
+        ----------
+        repos : list
+            Repository records
+
+        Returns
+        -------
+        dict
+            Policy PHID to its name. Empty when every policy is a keyword,
+            which is the common case and costs no round trip at all.
+        """
+        values = [
+            (repo.get("fields", {}).get("policy") or {}).get(field)
+            for repo in repos
+            for field in REPO_POLICY_FIELDS.values()
+        ]
+
+        return resolve_policy_names(self.phab, values)
+
     def repo_show(
         self,
         repo_ids,
@@ -227,6 +260,7 @@ class Diffusion(Phabfive):
             branches_map=branches_map,
             tags_map=tags_map,
             space_map=self._resolve_spaces(found),
+            policy_names=self._resolve_policy_names(found),
             show_uris=show_uris,
             show_branches=show_branches,
             show_tags=show_tags,
@@ -275,6 +309,7 @@ class Diffusion(Phabfive):
             self.format_link,
             repos,
             space_map=self._resolve_spaces(repos),
+            policy_names=self._resolve_policy_names(repos),
             show_uris=show_uris,
         )
 
@@ -990,6 +1025,9 @@ class Diffusion(Phabfive):
         short_name=None,
         default_branch=None,
         status=None,
+        view=None,
+        edit_policy=None,
+        push=None,
     ):
         """Compute the transactions for a repository edit, without applying them.
 
@@ -1005,6 +1043,13 @@ class Diffusion(Phabfive):
             New default branch
         status : str, optional
             New status ("active" or "inactive")
+        view : str, optional
+            New view policy, in the grammar phabfive.policy accepts
+        edit_policy : str, optional
+            New edit policy. Named for the option it comes from: `repo edit
+            --edit` would be unreadable.
+        push : str, optional
+            New push policy
 
         Returns
         -------
@@ -1013,6 +1058,13 @@ class Diffusion(Phabfive):
             human-readable description of each one. A short name change also
             describes the built-in URIs it rewrites, which are derived from it
             and would otherwise change with nothing having said so.
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If a policy value is outside the grammar
+        PhabfiveDataException
+            If a policy names a project or user that does not exist
         """
         fields = repo_record.get("fields", {})
 
@@ -1057,6 +1109,81 @@ class Diffusion(Phabfive):
                     }
                 )
 
+        policy_transactions, policy_changes = self._build_policy_edit(
+            fields.get("policy") or {},
+            view=view,
+            edit_policy=edit_policy,
+            push=push,
+        )
+
+        return transactions + policy_transactions, changes + policy_changes
+
+    def _build_policy_edit(self, policy, view=None, edit_policy=None, push=None):
+        """The policy half of a repository edit.
+
+        Kept apart from the scalar fields because a policy is not a scalar:
+        each value asked for has to be resolved against the instance before
+        it can be compared with the one in place, and both ends of the
+        comparison are then named for the dry run - a PHID either side of an
+        arrow says nothing about what changed.
+
+        Parameters
+        ----------
+        policy : dict
+            The "policy" field of the repository as it stands
+        view, edit_policy, push : str, optional
+            New policies, in the grammar phabfive.policy accepts
+
+        Returns
+        -------
+        tuple
+            (transactions, changes)
+        """
+        asked = [
+            ("view", view, "View policy", "--view"),
+            ("edit", edit_policy, "Edit policy", "--edit-policy"),
+            ("push", push, "Push policy", "--push"),
+        ]
+
+        wanted = [
+            (
+                key,
+                label,
+                policy.get(REPO_POLICY_FIELDS[key]),
+                resolve_policy_value(self.phab, value, option=option),
+            )
+            for key, value, label, option in asked
+            if value is not None
+        ]
+
+        if not wanted:
+            return [], []
+
+        # One lookup for both ends of every arrow: the policy in place and
+        # the one asked for are named out of the same phid.query.
+        names = resolve_policy_names(
+            self.phab,
+            [current for _, _, current, _ in wanted] + [new for _, _, _, new in wanted],
+        )
+
+        transactions = []
+        changes = []
+
+        for key, label, current, new in wanted:
+            if current == new:
+                # Already at the target policy.
+                continue
+
+            transactions.append({"type": REPO_POLICY_TRANSACTIONS[key], "value": new})
+
+            changes.append(
+                {
+                    "field": label,
+                    "old": policy_label(current, names),
+                    "new": policy_label(new, names),
+                }
+            )
+
         return transactions, changes
 
     def apply_repo_edit(self, object_identifier, transactions):
@@ -1072,14 +1199,17 @@ class Diffusion(Phabfive):
         Raises
         ------
         PhabfiveDataException
-            If the API rejects the edit
+            If the API rejects the edit. A policy that would take the
+            repository away from whoever is applying it is rejected this way,
+            and is reported as the sentence Phorge answered with rather than
+            as the APIError around it.
         """
         try:
             self.phab.diffusion.repository.edit(
                 transactions=transactions, objectIdentifier=object_identifier
             )
         except APIError as e:
-            raise PhabfiveDataException(str(e))
+            raise PhabfiveDataException(policy_lockout_message(e) or str(e))
 
     def edit_repository(
         self,
@@ -1087,6 +1217,9 @@ class Diffusion(Phabfive):
         short_name=None,
         default_branch=None,
         status=None,
+        view=None,
+        edit_policy=None,
+        push=None,
         object_identifier=None,
         repo_record=None,
         dry_run=False,
@@ -1107,6 +1240,12 @@ class Diffusion(Phabfive):
             New default branch
         status : str, optional
             New status
+        view : str, optional
+            New view policy
+        edit_policy : str, optional
+            New edit policy
+        push : str, optional
+            New push policy
         object_identifier : str, optional
             Repository object identifier
         repo_record : dict, optional
@@ -1130,6 +1269,9 @@ class Diffusion(Phabfive):
             short_name=short_name,
             default_branch=default_branch,
             status=status,
+            view=view,
+            edit_policy=edit_policy,
+            push=push,
         )
 
         if not transactions:
