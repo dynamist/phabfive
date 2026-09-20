@@ -20,7 +20,11 @@ from phabfive.cli.completers import (
     complete_user,
     complete_user_filter,
 )
-from phabfive.cli.output import _get_output_format, _setup_output_options
+from phabfive.cli.output import (
+    _get_output_format,
+    _setup_output_options,
+    is_machine_format,
+)
 from phabfive.constants import MONOGRAMS
 from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
@@ -51,6 +55,27 @@ def _get_paste_app():
     except requests.exceptions.RequestException as e:
         sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
         raise typer.Exit(1)
+
+
+def _show_pastes_after_write(ctx, paste_instance, paste_ids):
+    """Emit the records `show` gives for the pastes a write command touched.
+
+    A create, an edit or a comment answers a machine-readable format with
+    exactly what ``paste show`` answers with for the object it just wrote,
+    so no second, parallel "result" shape has to be invented or kept in
+    step. The maniphest commands do the same (#344).
+
+    Parameters
+    ----------
+    ctx : typer.Context
+        The command context, carrying the format the caller asked for
+    paste_instance : Paste
+        The instance the write went through
+    paste_ids : list
+        Paste IDs, numeric and without the P prefix
+    """
+    result = paste_instance.paste_show([int(paste_id) for paste_id in paste_ids])
+    _display_pastes(result, _get_output_format(ctx), paste_instance)
 
 
 @paste_app.command()
@@ -212,7 +237,15 @@ def create(
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
 
+    _setup_output_options(ctx)
     paste = _get_paste_app()
+
+    # A machine-readable format answers with the record `show` would give
+    # for the paste that was created. A dry run wrote nothing, so it has no
+    # record to give: its preview goes to stderr and stdout stays empty.
+    output_format = _get_output_format(ctx)
+    machine = is_machine_format(output_format)
+    preview = sys.stderr if machine else sys.stdout
 
     # Merge positional and option title (positional takes precedence)
     final_title = title or title_opt
@@ -281,7 +314,7 @@ def create(
         suffix = f".{language}" if language else ".txt"
         final_content = edit_text("", prefix="paste-", suffix=suffix)
         if final_content is None:
-            print("Paste creation cancelled")
+            print("Paste creation cancelled", file=preview)
             raise typer.Exit(0)
 
     else:
@@ -304,22 +337,25 @@ def create(
     tag_list = list(tag) if tag else None
 
     def show_preview(header):
-        print(header)
-        print(f"  Name: {final_title}")
+        print(header, file=preview)
+        print(f"  Name: {final_title}", file=preview)
         if language:
-            print(f"  Language: {language}")
+            print(f"  Language: {language}", file=preview)
         if tag_list:
-            print(f"  Tags: {', '.join(tag_list)}")
+            print(f"  Tags: {', '.join(tag_list)}", file=preview)
         if subscriber_names:
-            print(f"  Subscribers: {', '.join(subscriber_names)}")
+            print(f"  Subscribers: {', '.join(subscriber_names)}", file=preview)
         # Show content preview
         lines = final_content.split("\n")
         if len(lines) <= 5:
-            print("  Content:")
+            print("  Content:", file=preview)
             for line in lines:
-                print(f"    {line}")
+                print(f"    {line}", file=preview)
         else:
-            print(f"  Content: ({len(lines)} lines, {len(final_content)} chars)")
+            print(
+                f"  Content: ({len(lines)} lines, {len(final_content)} chars)",
+                file=preview,
+            )
 
     if dry_run:
         show_preview("[DRY RUN] Would create paste:")
@@ -342,6 +378,10 @@ def create(
         tags=tag_list,
         subscribers=subscriber_names,
     )
+
+    if machine:
+        _show_pastes_after_write(ctx, paste, [result["id"]])
+        return
 
     # Output the result (full URL, consistent with maniphest create)
     print(paste.get_paste_url(result["id"]))
@@ -611,6 +651,10 @@ def edit(
     _setup_output_options(ctx)
     paste = _get_paste_app()
 
+    output_format = _get_output_format(ctx)
+    machine = is_machine_format(output_format)
+    preview = sys.stderr if machine else sys.stdout
+
     # Merge positional and option title (positional takes precedence)
     final_title = title or title_opt
 
@@ -647,7 +691,7 @@ def edit(
             suffix=f".{current_paste['language']}",
         )
         if new_content is None:
-            print("Edit cancelled (no changes)")
+            print("Edit cancelled (no changes)", file=preview)
             raise typer.Exit(0)
         final_content = new_content
     elif content is not None:
@@ -698,23 +742,36 @@ def edit(
     if dry_run:
         from phabfive.editor import show_diff
 
-        print(f"[DRY RUN] Would edit {paste_id}:")
+        print(f"[DRY RUN] Would edit {paste_id}:", file=preview)
         for change in result.get("changes", []):
             if change["field"] == "Title":
                 # Show unified diff for title
-                print()
-                show_diff(current_paste.get("title", ""), final_title, filename="title")
+                print(file=preview)
+                show_diff(
+                    current_paste.get("title", ""),
+                    final_title,
+                    filename="title",
+                    file=preview,
+                )
             else:
-                print(f"  {change['field']}: {change['new']}")
+                print(f"  {change['field']}: {change['new']}", file=preview)
         if not result.get("changes"):
-            print("  No changes specified")
+            print("  No changes specified", file=preview)
+        return
+
+    if result.get("changes"):
+        print(f"Updated {paste_id}", file=preview)
+        for change in result["changes"]:
+            print(f"  {change['field']}: {change['new']}", file=preview)
     else:
-        if result.get("changes"):
-            print(f"Updated {paste_id}")
-            for change in result["changes"]:
-                print(f"  {change['field']}: {change['new']}")
-        else:
-            print(result.get("message", "No changes made"))
+        print(result.get("message", "No changes made"), file=preview)
+
+    # An edit that needed no transaction still has a record to answer with:
+    # "nothing to change" is an answer about the paste, not an absence of
+    # one, and a caller parsing the stream should not have to read an empty
+    # stdout as it. The maniphest commands settled this the same way (#344).
+    if machine:
+        _show_pastes_after_write(ctx, paste, [numeric_id])
 
 
 @paste_app.command()
@@ -736,7 +793,12 @@ def comment(
     """
     from phabfive.editor import edit_text
 
+    _setup_output_options(ctx)
     paste = _get_paste_app()
+
+    output_format = _get_output_format(ctx)
+    machine = is_machine_format(output_format)
+    preview = sys.stderr if machine else sys.stdout
 
     # Validate paste ID format
     paste_pattern = f"^{MONOGRAMS['paste']}$"
@@ -765,7 +827,7 @@ def comment(
             raise typer.Exit(1)
         final_text = edit_text("", prefix="paste-comment-", suffix=".remarkup")
         if final_text is None:
-            print("Comment cancelled")
+            print("Comment cancelled", file=preview)
             raise typer.Exit(0)
 
     if not final_text:
@@ -775,7 +837,11 @@ def comment(
     # Add the comment
     try:
         paste.add_paste_comment(numeric_id, final_text)
-        print(paste.get_paste_url(numeric_id))
+
+        if machine:
+            _show_pastes_after_write(ctx, paste, [numeric_id])
+        else:
+            print(paste.get_paste_url(numeric_id))
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)

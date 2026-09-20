@@ -82,6 +82,45 @@ def a_maniphest(task_id=123, **record):
     return instance
 
 
+def a_paste_record(paste_id=42, title="notes", language="text", content="hello"):
+    """One entry of what paste_show() hands the renderers."""
+    return {
+        "id": f"P{paste_id}",
+        "url": f"https://phorge.example.com/P{paste_id}",
+        "_link": f"https://phorge.example.com/P{paste_id}",
+        "title": title,
+        "author": "admin",
+        "language": language,
+        "status": "active",
+        "content": content,
+    }
+
+
+def a_paste(paste_id=42, **record):
+    """A Paste whose create, edit, comment and show are all answered."""
+    instance = MagicMock()
+    instance.create_paste_from_content.return_value = {
+        "id": paste_id,
+        "phid": "PHID-PSTE-x",
+    }
+    instance.get_paste_url.return_value = f"https://phorge.example.com/P{paste_id}"
+    instance.get_paste_data.return_value = {
+        "title": "notes",
+        "content": "hello",
+        "language": "text",
+    }
+    instance.edit_paste.return_value = {
+        "paste_id": paste_id,
+        "changes": [{"field": "Language", "new": "python"}],
+    }
+    instance.add_paste_comment.return_value = {"success": True, "paste_id": paste_id}
+    instance.paste_show.return_value = {
+        "pastes": [a_paste_record(paste_id, **record)],
+        "missing_ids": [],
+    }
+    return instance
+
+
 class TestIsMachineFormat:
     """The one predicate every write command branches on."""
 
@@ -353,6 +392,193 @@ class TestEditBatch:
         assert captured.out == ""
         assert "[DRY RUN] Would apply to T101:" in captured.err
         maniphest.task_show.assert_not_called()
+
+
+class TestPasteCreate:
+    """`paste create` answers with the new paste's record."""
+
+    @pytest.mark.parametrize("output_format", MACHINE)
+    def test_emits_the_show_record(self, output_format):
+        paste = a_paste(paste_id=7, title="notes 344")
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                [
+                    f"--format={output_format}",
+                    "paste",
+                    "create",
+                    "notes",
+                    "--content=hello",
+                    "--yes",
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert "https://phorge.example.com/P7" in result.stdout
+        assert "notes 344" in result.stdout
+        paste.paste_show.assert_called_once_with([7])
+
+    def test_json_stdout_parses_on_its_own(self):
+        paste = a_paste(paste_id=7, title="notes 344", content="hello")
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "paste",
+                    "create",
+                    "notes",
+                    "--content=hello",
+                    "--yes",
+                ],
+            )
+
+        [record] = json.loads(result.stdout)
+        assert record["Link"] == "https://phorge.example.com/P7"
+        assert record["Name"] == "notes 344"
+        assert record["Content"] == "hello"
+
+    @pytest.mark.parametrize("output_format", HUMAN)
+    def test_a_human_format_still_prints_the_url_alone(self, output_format):
+        paste = a_paste(paste_id=7)
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                [
+                    f"--format={output_format}",
+                    "paste",
+                    "create",
+                    "notes",
+                    "--content=hello",
+                    "--yes",
+                ],
+            )
+
+        assert result.stdout.strip() == "https://phorge.example.com/P7"
+        paste.paste_show.assert_not_called()
+
+    def test_dry_run_leaves_stdout_empty(self):
+        paste = a_paste()
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "paste",
+                    "create",
+                    "notes",
+                    "--content=hello",
+                    "--dry-run",
+                    "--yes",
+                ],
+            )
+
+        assert result.stdout.strip() == ""
+        assert "[DRY RUN] Would create paste:" in result.stderr
+        paste.create_paste_from_content.assert_not_called()
+
+
+class TestPasteEdit:
+    """`paste edit` answers with the edited paste's record."""
+
+    def test_emits_the_show_record_and_moves_prose(self):
+        paste = a_paste(paste_id=7, language="python")
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                ["--format=json", "paste", "edit", "P7", "--language=python", "--yes"],
+            )
+
+        [record] = json.loads(result.stdout)
+        assert record["Language"] == "python"
+        assert "Updated P7" in result.stderr
+        paste.paste_show.assert_called_once_with([7])
+
+    def test_a_human_format_still_prints_the_change_list(self):
+        paste = a_paste(paste_id=7)
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                ["--format=rich", "paste", "edit", "P7", "--language=python", "--yes"],
+            )
+
+        assert "Updated P7" in result.stdout
+        assert "Language: python" in result.stdout
+        paste.paste_show.assert_not_called()
+
+    def test_an_edit_needing_nothing_still_has_a_record(self):
+        """Same rule the maniphest commands settled: silence is not an answer."""
+        paste = a_paste(paste_id=7)
+        paste.edit_paste.return_value = {
+            "paste_id": 7,
+            "changes": [],
+            "message": "No changes specified",
+        }
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app, ["--format=json", "paste", "edit", "P7", "--yes"]
+            )
+
+        assert len(json.loads(result.stdout)) == 1
+        assert "No changes specified" in result.stderr
+
+    def test_dry_run_leaves_stdout_empty(self):
+        paste = a_paste(paste_id=7)
+        paste.edit_paste.return_value = {
+            "paste_id": 7,
+            "changes": [{"field": "Language", "new": "python"}],
+            "dry_run": True,
+        }
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "paste",
+                    "edit",
+                    "P7",
+                    "--language=python",
+                    "--dry-run",
+                ],
+            )
+
+        assert result.stdout.strip() == ""
+        assert "[DRY RUN] Would edit P7:" in result.stderr
+        paste.paste_show.assert_not_called()
+
+
+class TestPasteComment:
+    """`paste comment` answers with the commented paste's record."""
+
+    def test_emits_the_show_record(self):
+        paste = a_paste(paste_id=7, title="notes 344")
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app, ["--format=json", "paste", "comment", "P7", "hello"]
+            )
+
+        [record] = json.loads(result.stdout)
+        assert record["Name"] == "notes 344"
+        paste.add_paste_comment.assert_called_once_with(7, "hello")
+
+    def test_a_human_format_still_prints_the_url(self):
+        paste = a_paste(paste_id=7)
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app, ["--format=rich", "paste", "comment", "P7", "hello"]
+            )
+
+        assert result.stdout.strip() == "https://phorge.example.com/P7"
 
 
 class TestStatusTextOnStderr:
