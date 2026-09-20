@@ -7,6 +7,8 @@ edit_uri: edit/main/docs/
 nav:
     - Introduction: 'index.md'
     - Maniphest CLI: 'maniphest-cli.md'
+    - Edit CLI: 'edit-cli.md'
+    - Diffusion URIs: 'diffusion-uri.md'
     - Search Templates: 'search-templates.md'
     - Creation Templates: 'create-templates.md'
     - Caching: 'caching.md'
