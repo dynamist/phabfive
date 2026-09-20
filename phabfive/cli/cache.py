@@ -8,7 +8,7 @@ import typer
 from phabfive import cache
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_cache_namespace, complete_cached_host
-from phabfive.cli.output import _get_output_format
+from phabfive.cli.output import _get_output_format, is_machine_format
 from phabfive.json_output import emit_record
 
 cache_app = typer.Typer(
@@ -37,8 +37,48 @@ def _human_age(seconds: int) -> str:
     return f"{seconds // 86400}d"
 
 
+def _emit_cleared(output_format, removed, wanted, host, all_instances) -> None:
+    """Report what was cleared, as an object rather than as a sentence.
+
+    The one write command with no Phorge object behind it, so there is no
+    `show` record to answer with the way the maniphest, paste and diffusion
+    writes do (#344). What it does have is an answer of its own - how much
+    went, and from where - and this publishes exactly that, in the
+    vocabulary `cache info` already uses: capitalised keys, and lookups as
+    the unit, one per cached file.
+
+    `Host` and `AllInstances` say which of the three scopes was asked for
+    without anyone having to parse the sentence that says so, and
+    `Namespaces` is null when every namespace was cleared rather than a
+    list naming them all.
+
+    Parameters
+    ----------
+    output_format : str
+        The format the caller asked for
+    removed : int
+        How many cached lookups were removed
+    wanted : list or None
+        The namespaces asked for, or None for all of them
+    host : str or None
+        The --url host, when that is the scope
+    all_instances : bool
+        Whether --all was given
+    """
+    emit_record(
+        {
+            "Removed": removed,
+            "Namespaces": wanted,
+            "Host": host,
+            "AllInstances": all_instances,
+        },
+        output_format,
+    )
+
+
 @cache_app.command()
 def clear(
+    ctx: typer.Context,
     namespaces: Optional[List[str]] = typer.Argument(
         None,
         help="Namespaces to clear (e.g. users projects). Default: all of them.",
@@ -74,6 +114,9 @@ def clear(
         typer.echo("Error: --url and --all cannot be combined", err=True)
         raise typer.Exit(1)
 
+    output_format = _get_output_format(ctx)
+    machine = is_machine_format(output_format)
+
     wanted = _checked_namespaces(namespaces)
     # Trailing, so the sentence reads the same with and without it
     scope = "" if wanted is None else " (" + ", ".join(wanted) + ")"
@@ -85,6 +128,10 @@ def clear(
         if removed is None:
             typer.echo(f"Error: '{url}' does not name a host to clear", err=True)
             raise typer.Exit(1)
+        if machine:
+            _emit_cleared(output_format, removed, wanted, url, False)
+            return
+
         typer.echo(f"Removed {removed} cached {_lookups(removed)} for {url}{scope}")
         return
 
@@ -98,12 +145,16 @@ def clear(
         )
         raise typer.Exit(1)
 
-    where = "every instance" if all_instances else "the configured instance"
-    typer.echo(f"Removed {removed} cached {_lookups(removed)} from {where}{scope}")
+    if machine:
+        _emit_cleared(output_format, removed, wanted, None, all_instances)
+    else:
+        where = "every instance" if all_instances else "the configured instance"
+        typer.echo(f"Removed {removed} cached {_lookups(removed)} from {where}{scope}")
 
     # Removing nothing while the same host has entries under another token
     # means the configured token does not match what was cached. Saying so
-    # keeps that from reading as "there was nothing to clear".
+    # keeps that from reading as "there was nothing to clear". It is already
+    # on stderr, so it stays put under a machine-readable format.
     if not all_instances and removed == 0:
         _warn_about_other_tokens()
 

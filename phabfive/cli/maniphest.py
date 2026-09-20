@@ -340,6 +340,10 @@ def create(
             for task in result["tasks"]:
                 indent = "  " * task["depth"]
                 print(f"{indent}- {task['title']}", file=preview)
+        elif machine and result and result.get("task_ids"):
+            # One query for the whole template, and the same records
+            # `maniphest show` gives - a tree of tasks is still just tasks.
+            _show_tasks_after_write(ctx, maniphest, result["task_ids"])
     elif final_title:
         # CLI mode - handle description input modes
         final_description = description

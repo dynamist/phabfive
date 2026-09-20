@@ -909,6 +909,119 @@ class TestDiffusionUriWrites:
         diffusion.apply_uri_edit.assert_not_called()
 
 
+class TestManiphestCreateFromTemplate:
+    """`maniphest create --with` answers with every task it created.
+
+    It used to answer with nothing at all on a real run:
+    `create_tasks_from_yaml` returned None and its recursion kept no list of
+    what it had made, so there was nothing for the CLI to report (#344).
+    """
+
+    def test_emits_a_record_per_created_task(self, tmp_path):
+        maniphest = a_maniphest()
+        maniphest.create_tasks_from_yaml.return_value = {"task_ids": [7, 8]}
+        maniphest.task_show.return_value = {
+            "tasks": [a_task_record(7, "parent"), a_task_record(8, "child")],
+            "missing_ids": [],
+        }
+        template = tmp_path / "tasks.yaml"
+        template.write_text("tasks:\n")
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app, ["--format=json", "maniphest", "create", "--with", str(template)]
+            )
+
+        records = json.loads(result.stdout)
+        assert [r["Task"]["Name"] for r in records] == ["parent", "child"]
+        maniphest.task_show.assert_called_once_with([7, 8])
+
+    def test_a_human_format_still_prints_nothing(self, tmp_path):
+        """Unchanged: a real template run has never printed anything."""
+        maniphest = a_maniphest()
+        maniphest.create_tasks_from_yaml.return_value = {"task_ids": [7]}
+        template = tmp_path / "tasks.yaml"
+        template.write_text("tasks:\n")
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app, ["--format=rich", "maniphest", "create", "--with", str(template)]
+            )
+
+        assert result.stdout.strip() == ""
+        maniphest.task_show.assert_not_called()
+
+    def test_dry_run_preview_moves_to_stderr(self, tmp_path):
+        maniphest = a_maniphest()
+        maniphest.create_tasks_from_yaml.return_value = {
+            "dry_run": True,
+            "tasks": [{"depth": 0, "title": "parent"}],
+        }
+        template = tmp_path / "tasks.yaml"
+        template.write_text("tasks:\n")
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "maniphest",
+                    "create",
+                    "--with",
+                    str(template),
+                    "--dry-run",
+                ],
+            )
+
+        assert result.stdout.strip() == ""
+        assert "- parent" in result.stderr
+
+
+class TestCacheClear:
+    """`cache clear` reports what it removed, as an object.
+
+    The one write with no Phorge object behind it, so there is no `show`
+    record to answer with. What it publishes instead is its own answer -
+    how much went, and from where - in `cache info`'s vocabulary.
+    """
+
+    def test_reports_the_count_as_an_object(self, enabled_cache):
+        from phabfive import cache as cache_module
+
+        cache_module.set("users", "one", 1)
+        cache_module.set("users", "two", 2)
+
+        result = runner.invoke(app, ["--format=json", "cache", "clear"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.stdout) == {
+            "Removed": 2,
+            "Namespaces": None,
+            "Host": None,
+            "AllInstances": False,
+        }
+
+    def test_a_namespace_is_named_without_parsing_prose(self, enabled_cache):
+        from phabfive import cache as cache_module
+
+        cache_module.set("users", "one", 1)
+
+        result = runner.invoke(app, ["--format=json", "cache", "clear", "users"])
+
+        assert json.loads(result.stdout)["Namespaces"] == ["users"]
+
+    def test_jsonl_is_one_line(self, enabled_cache):
+        result = runner.invoke(app, ["--format=jsonl", "cache", "clear"])
+
+        assert len(result.stdout.strip().splitlines()) == 1
+        assert json.loads(result.stdout)["Removed"] == 0
+
+    def test_a_human_format_still_prints_the_sentence(self, enabled_cache):
+        result = runner.invoke(app, ["--format=rich", "cache", "clear"])
+
+        assert "Removed 0 cached lookups" in result.stdout
+
+
 class TestStatusTextOnStderr:
     """Section 2: status and usage text is not part of the stream."""
 

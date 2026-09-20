@@ -1706,6 +1706,12 @@ class Maniphest(Phabfive):
         # List to collect dry-run tasks (nonlocal to be accessible in nested function)
         dry_run_tasks = []
 
+        # The IDs of the tasks actually created, in the order the recursion
+        # created them. Without this the method returned None on a real run
+        # and a caller had no way to name what it had just made, which is
+        # why `--with` could not answer `--format` (#344).
+        created_ids = []
+
         def recurse_commit_transactions(task_config, parent_task_config, depth=0):
             """
             This recurse functions purpose is to iterate over all tickets, commit them to phabricator
@@ -1752,6 +1758,7 @@ class Maniphest(Phabfive):
 
                     # Store the newly created ticket ID in the data structure so child tickets can look it up
                     task_config["phid"] = str(result["object"]["phid"])
+                    created_ids.append(result["object"]["id"])
             child_tasks = task_config.get("tasks", None)
 
             if not transactions_to_commit and not child_tasks:
@@ -1787,6 +1794,8 @@ class Maniphest(Phabfive):
         # Return dry-run data if in dry-run mode
         if dry_run:
             return {"dry_run": True, "tasks": dry_run_tasks}
+
+        return {"task_ids": created_ids}
 
         return {
             "dry_run": False,
