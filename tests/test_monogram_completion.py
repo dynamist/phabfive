@@ -41,7 +41,7 @@ class TestRootCompletion:
         assert helps["T"] == "maniphest show T123"
         assert helps["K"] == "passphrase show K123"
         assert helps["P"] == "paste show P123"
-        assert helps["R"] == "diffusion branch list R123"
+        assert helps["R"] == "diffusion repo show R123"
 
     def test_after_global_options(self):
         assert "T" in _values(["--format", "json"], "")
@@ -56,7 +56,7 @@ class TestRootCompletion:
 
     @pytest.mark.parametrize(
         "monogram, expansion",
-        [("T123", "maniphest show T123"), ("R7", "diffusion branch list R7")],
+        [("T123", "maniphest show T123"), ("R7", "diffusion repo show R7")],
     )
     def test_complete_monogram_is_accepted(self, monogram, expansion):
         assert _complete([], monogram) == [(monogram, expansion)]
@@ -81,7 +81,7 @@ class TestCompletionAfterMonogram:
             (["T123"], ["maniphest", "show", "T123"]),
             (["K1"], ["passphrase", "show", "K1"]),
             (["P1"], ["paste", "show", "P1"]),
-            (["R1"], ["diffusion", "branch", "list", "R1"]),
+            (["R1"], ["diffusion", "repo", "show", "R1"]),
             # T123 "text" is the comment shortcut
             (["T123", "hello"], ["maniphest", "comment", "T123", "hello"]),
             # Global options may come before the monogram

@@ -124,7 +124,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
         edit T123 → maniphest edit T123
         K123 → passphrase show K123
         P123 → paste show P123
-        R123 → diffusion branch list R123
+        R123 → diffusion repo show R123
     """
     if len(argv) < 2:
         return argv

@@ -2,6 +2,14 @@
 
 ## Upgrade Notes
 
+* **Breaking change: `diffusion branch list` is gone.** `diffusion repo show <repo>
+  --show-branches` lists a repository's branches, and `--show-tags` its tags, which nothing
+  could reach before. The command is removed rather than deprecated, so the old spelling is
+  a parse error and not a warning
+* **Breaking change: the `R` monogram shows the repository.** `phabfive R5` expanded to
+  `diffusion branch list R5`; it now expands to `diffusion repo show R5`. `R` was the only
+  monogram that did not stand for a `show` command. The branches it used to print are
+  `phabfive R5 --show-branches`
 * **Breaking change: `diffusion uri edit` lost its short flags.** `-n`, `-i`, `-d` and `-c`
   are gone; spell out `--uri`, `--io`, `--display` and `--cred`. `-i` now means
   `--interactive`, as it does on every other edit command
@@ -14,6 +22,16 @@
 * **`--force` is deprecated in favour of `--yes`.** It still works, hidden, and warns
 
 ## New Features
+
+### Showing Repositories
+* **`diffusion repo show`** - Diffusion had no show command. `diffusion repo show R5 R6`
+  answers with the repository, the policies it is under and a link to it, and - only when
+  asked for - `--show-uris`, `--show-branches`, `--show-tags` and `--show-metadata`. It
+  takes several repositories, space- or comma-separated, and a repository that does not
+  exist is a failed lookup rather than an empty result, the rule `maniphest show` follows
+* **`--show-tags`** - A repository's tags were unreachable: the branch listing asked
+  `diffusion.branchquery` and then dropped every ref that was not a branch, and nothing
+  called `diffusion.tagsquery` at all
 
 ### Reviewing Edits
 * **Per-task review for batch edits** - Editing two or more tasks at a terminal shows each

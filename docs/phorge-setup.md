@@ -156,9 +156,7 @@ writes the history in, so the refs are there as soon as the instance answers at
 all and nothing has to wait for an import:
 
 ```bash
-phabfive diffusion branch list GUNNAR
-curl "http://phorge.localhost/api/diffusion.tagsquery" \
-  -d "api.token=api-supersecr3tapikeyfordevelop1" -d "repository=GUNNAR"
+phabfive diffusion repo show GUNNAR --show-branches --show-tags
 ```
 
 Every commit has a fixed author and date in the data file, so two instances

@@ -19,13 +19,9 @@ repo_app = typer.Typer(
     cls=AgentFooterGroup, help="Repository commands", no_args_is_help=True
 )
 uri_app = typer.Typer(cls=AgentFooterGroup, help="URI commands", no_args_is_help=True)
-branch_app = typer.Typer(
-    cls=AgentFooterGroup, help="Branch commands", no_args_is_help=True
-)
 
 diffusion_app.add_typer(repo_app, name="repo")
 diffusion_app.add_typer(uri_app, name="uri")
-diffusion_app.add_typer(branch_app, name="branch")
 
 
 def _get_diffusion_app():
@@ -479,26 +475,3 @@ def edit(
     diffusion.apply_uri_edit(object_id, transactions)
 
     render_changes(label, changes)
-
-
-# Branch commands
-
-
-@branch_app.command("list")
-def branch_list(
-    ctx: typer.Context,
-    repo: str = typer.Argument(
-        ..., help="Repository monogram (R123), callsign or shortname"
-    ),
-) -> None:
-    """List branches for a repository."""
-    diffusion = _get_diffusion_app()
-
-    try:
-        branches = diffusion.get_branches_formatted(repo=repo)
-    except PhabfiveDataException as e:
-        typer.echo(f"ERROR: {e}", err=True)
-        raise typer.Exit(1)
-
-    for branch_name in branches:
-        typer.echo(branch_name)
