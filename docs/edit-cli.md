@@ -252,6 +252,26 @@ phabfive edit T123 --assign=alice
 phabfive edit T123 --assign=@me
 ```
 
+### Policy Management
+
+`--visible-to` and `--editable-by` set who can see and who can change a task.
+Each takes `public`, `users`, `admin`, `no-one`, a `#project`, an `@user` or a
+PHID, and `--dry-run` names both ends of the change rather than showing a PHID:
+
+```bash
+phabfive edit T239 --visible-to='#human_resources' --editable-by=@tommy.svensson --dry-run
+```
+
+```
+[DRY RUN] Would apply to T239:
+  Visible To: #infrastructure → #human_resources
+  Editable By: Administrators → @tommy.svensson
+```
+
+A policy change is one of the three — with a title and a description — that a
+batch refuses to apply unreviewed without `--yes`. See [Policies](policies.md)
+for the full grammar, the read-only `Can Interact`, and self-lockout.
+
 ### Adding Comments
 
 Add a comment along with your changes:
@@ -609,6 +629,7 @@ phabfive edit T123 --priority=high --dry-run
 ## See Also
 
 - [Maniphest CLI](maniphest-cli.md) - Complete task management guide
+- [Policies](policies.md) - Who can see, edit and interact with an object
 - [Search Templates](search-templates.md) - Reusable search queries
 - [Create Templates](create-templates.md) - Bulk task creation
 

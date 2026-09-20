@@ -16,6 +16,7 @@ Cross-cutting features:
 
 - **Monogram shortcuts** - `phabfive T123` expands to `phabfive maniphest show T123`
 - **Batch editing** - Edit multiple objects at once: `phabfive edit T1,T2,T3 --status=resolved`
+- **Policies** - Read and set who can see, edit and push to repositories and tasks: `--show-policy`, `--visible-to`, `--editable-by`, `--can-push`
 - **Shell completion** - Tab completion for commands, options, and values
 - **Machine-readable output** - `--format=json`, `--format=jsonl` or `--format=yaml` for scripting and AI agents
 - **Table output** - `--format=table` renders a grid for the commands that answer with a list
@@ -144,6 +145,11 @@ phabfive maniphest edit T123 "New Title" --status=resolved
 # Spaces - place a new task in one, or move a task between them
 phabfive maniphest create "Quarterly cleanup" --space=Archive
 phabfive maniphest edit T123 --space=S3
+
+# Policies - read who can see and change an object, and set it
+phabfive maniphest show T123 --show-policy
+phabfive maniphest edit T123 --visible-to='#infra' --editable-by=admin --dry-run
+phabfive diffusion repo edit R5 --visible-to=public --can-push='#infra' --dry-run
 
 # Smart navigation - raise/lower priority, move columns forward/backward
 phabfive edit T123 --priority=raise

@@ -5,6 +5,9 @@ URIs, and each one says something different about how the repository is served,
 followed or pushed. `phabfive diffusion uri` is the command set for reading and
 changing that list.
 
+A URI says nothing about who may use it. That is the repository's policies,
+and they are documented separately in [Policies](policies.md).
+
 ## Overview
 
 Every URI on a repository answers four questions, and they are independent of
@@ -703,5 +706,6 @@ direction the traffic goes. It takes only those two; `read`, `readwrite` and
 ## See Also
 
 - [Maniphest CLI](maniphest-cli.md) — the task commands
+- [Policies](policies.md) — who can see, edit and push to a repository
 - [Phorge Setup](phorge-setup.md) — run a local Phorge instance to try this against
 - [Development Guide](development.md) — set up a development environment

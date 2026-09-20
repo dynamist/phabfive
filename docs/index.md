@@ -7,7 +7,7 @@ Phabfive is a command line tool to interact with Phabricator/Phorge, providing a
 Phabfive currently supports the following Phabricator/Phorge applications:
 
 - **Passphrase** - Search, list, and retrieve secrets (passwords, tokens, SSH keys, notes)
-- **Diffusion** - List and show repositories, their branches and tags, clone URIs, add repositories, manage URIs
+- **Diffusion** - List and show repositories, their branches and tags, clone URIs, add repositories, manage URIs and policies
 - **Paste** - List, get, and add code pastes
 - **User** - Get information about the logged-in user
 - **Maniphest** - Add comments, show task details, create tasks from templates, and search with advanced project filtering and transition filtering
@@ -67,6 +67,7 @@ For detailed setup instructions, see the [README](https://github.com/dynamist/ph
 - **[Edit CLI](edit-cli.md)** - Unified editing with auto-detection, batch operations, and smart navigation
 - **[Maniphest CLI](maniphest-cli.md)** - Complete guide to task management, including advanced transition filtering
 - **[Diffusion URIs](diffusion-uri.md)** - How a repository's URIs work: origin, I/O, display and disabled
+- **[Policies](policies.md)** - Who can see, edit, push to or comment on repositories and tasks
 
 ### Development
 

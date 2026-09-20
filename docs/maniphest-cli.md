@@ -58,6 +58,26 @@ Boards:
       - "2024-10-12T16:45:00 [→] In Progress → Done"
 ```
 
+### Task Policies
+
+`--show-policy` adds who can see, edit and interact with a task, and
+`maniphest edit` and `maniphest create` set the first two:
+
+```bash
+phabfive maniphest show T237 --show-policy
+```
+
+```
+  Policy:
+    Visible To: All Users
+    Editable By: '#infrastructure'
+    Can Interact: All Users
+```
+
+The value grammar, why `Can Interact` cannot be set, and what happens to a
+policy change with no terminal to review it on are all in
+[Policies](policies.md).
+
 ### Add Comments
 
 Add a comment to a task:
@@ -1244,6 +1264,7 @@ The search returned no results. Try:
 
 ## See Also
 
+- [Policies](policies.md) - Who can see, edit and interact with a task
 - [Search Templates](search-templates.md) - Complete guide to YAML search templates
 - [Creation Templates](create-templates.md) - Complete guide to YAML task creation templates
 - [Development Guide](development.md) - Set up a local development environment
