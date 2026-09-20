@@ -910,13 +910,14 @@ class TestRepoCreateCli:
         diffusion.apply_repo_create.assert_not_called()
 
 
-def _uri_record(uri, io="observe", display="always", uri_id=1):
+def _uri_record(uri, io="observe", display="always", uri_id=1, builtin=False):
     return {
         "id": uri_id,
         "fields": {
             "uri": {"display": uri},
             "io": {"effective": io},
             "display": {"effective": display},
+            "builtin": {"protocol": "ssh" if builtin else None},
         },
     }
 
@@ -954,7 +955,9 @@ class TestBuildUriCreate:
         self._diffusion_with(
             [
                 _uri_record("git@example.com:group/old.git", uri_id=1),
-                _uri_record("ssh://host/source/myrepo.git", io="read", uri_id=2),
+                _uri_record(
+                    "ssh://host/source/myrepo.git", io="read", uri_id=2, builtin=True
+                ),
             ],
             diffusion,
         )
@@ -971,12 +974,18 @@ class TestBuildUriCreate:
         assert demotions[0] == {
             "field": "Demotes git@example.com:group/old.git",
             "old": "io=observe, display=always",
+            # An observed URI cannot take io=read; Phorge rejects it.
+            "new": "io=none, display=never",
+        }
+        assert demotions[1] == {
+            "field": "Demotes ssh://host/source/myrepo.git",
+            "old": "io=read, display=always",
             "new": "io=read, display=never",
         }
 
     def test_a_uri_already_demoted_is_not_listed(self, diffusion):
         self._diffusion_with(
-            [_uri_record("git@example.com:group/old.git", io="read", display="never")],
+            [_uri_record("git@example.com:group/old.git", io="none", display="never")],
             diffusion,
         )
 
@@ -1112,3 +1121,82 @@ class TestUriCreateCli:
 
         assert result.exit_code == 1
         diffusion.apply_uri_create.assert_not_called()
+
+
+class TestDemotionIo:
+    """Phabricator validates io per URI kind, so one value does not fit both.
+
+    `uri create` sent io=read for every URI. Phorge rejects that on an
+    observed URI - "Available types for this URI are: default, none,
+    observe, mirror" - so the command failed on any repository that
+    observes a remote, which is the common case.
+    """
+
+    def test_a_built_in_uri_demotes_to_read(self):
+        from phabfive.diffusion.fetchers import demotion_io
+
+        assert demotion_io({"builtin": {"protocol": "ssh"}}) == "read"
+
+    def test_an_observed_uri_demotes_to_none(self):
+        from phabfive.diffusion.fetchers import demotion_io
+
+        assert demotion_io({"builtin": {"protocol": None}}) == "none"
+
+    def test_a_missing_builtin_key_is_treated_as_observed(self):
+        from phabfive.diffusion.fetchers import demotion_io
+
+        assert demotion_io({}) == "none"
+
+    def test_apply_uses_the_per_uri_target(self, diffusion):
+        plan = {
+            "repository_phid": "PHID-REPO-1",
+            "transactions": [],
+            "demotions": [
+                {
+                    "id": 1,
+                    "uri": "a",
+                    "io": "observe",
+                    "display": "always",
+                    "target_io": "none",
+                },
+                {
+                    "id": 2,
+                    "uri": "b",
+                    "io": "read",
+                    "display": "always",
+                    "target_io": "read",
+                },
+            ],
+        }
+        diffusion.edit_uri = MagicMock()
+
+        diffusion.apply_uri_create(plan)
+
+        assert [c.kwargs["io"] for c in diffusion.edit_uri.call_args_list] == [
+            "none",
+            "read",
+        ]
+
+
+class TestApiErrorsAreNotSwallowed:
+    """The generic message hid a validation error that named the fix."""
+
+    def test_uri_edit_surfaces_what_the_api_said(self, diffusion):
+        from phabricator import APIError
+
+        diffusion.phab.diffusion.uri.edit.side_effect = APIError(
+            "ERR-CONDUIT-CORE", 'Value "read" is not a valid IO setting'
+        )
+
+        with pytest.raises(PhabfiveDataException, match="not a valid IO setting"):
+            diffusion.apply_uri_edit(1, [{"type": "io", "value": "read"}])
+
+    def test_repo_edit_surfaces_what_the_api_said(self, diffusion):
+        from phabricator import APIError
+
+        diffusion.phab.diffusion.repository.edit.side_effect = APIError(
+            "ERR-CONDUIT-CORE", "Some specific validation detail"
+        )
+
+        with pytest.raises(PhabfiveDataException, match="specific validation detail"):
+            diffusion.apply_repo_edit(1, [{"type": "name", "value": "x"}])
