@@ -17,6 +17,7 @@ from phabfive.diffusion.fetchers import (
     find_repository,
     match_repository,
 )
+from phabfive.diffusion.filters import select_uris
 from phabfive.diffusion.formatters import (
     build_repository_display_data,
     format_uri,
@@ -279,9 +280,20 @@ class Diffusion(Phabfive):
 
         return {"repositories": repositories}
 
-    def uri_list(self, repo, clone_only=False):
+    def uri_list(
+        self,
+        repo,
+        clone_only=False,
+        io=None,
+        display=None,
+        builtin=None,
+        disabled=None,
+    ):
         """
         List a repository's URIs in full.
+
+        Filtering happens before the credentials are named, so a URI the
+        caller filtered away costs no ``phid.query``.
 
         Parameters
         ----------
@@ -289,12 +301,21 @@ class Diffusion(Phabfive):
             Repository monogram (e.g., "R123"), callsign or short name
         clone_only : bool, optional
             Keep only the URIs the instance shows as clone URIs
+        io : str, optional
+            Keep the URIs whose I/O is this, set or in force
+        display : str, optional
+            Keep the URIs whose display is this, set or in force
+        builtin : bool, optional
+            True keeps the built-in URIs, False the external ones
+        disabled : bool, optional
+            True keeps the disabled URIs, False the enabled ones
 
         Returns
         -------
         dict
-            {"uris": [...]}. A repository with no URIs to list is an empty
-            result, not a failure.
+            {"uris": [...]}. A repository with no URIs to list, and one
+            whose URIs the filters all rejected, are both an empty result
+            rather than a failure.
 
         Raises
         ------
@@ -308,12 +329,14 @@ class Diffusion(Phabfive):
         if match is None:
             raise PhabfiveDataException(f"Repository '{repo}' not found")
 
-        uris = match["attachments"]["uris"]["uris"]
-
-        if clone_only:
-            uris = [
-                uri for uri in uris if uri["fields"]["display"]["effective"] == "always"
-            ]
+        uris = select_uris(
+            match["attachments"]["uris"]["uris"],
+            clone_only=clone_only,
+            io=io,
+            display=display,
+            builtin=builtin,
+            disabled=disabled,
+        )
 
         credential_names = self._credential_names(uris)
 

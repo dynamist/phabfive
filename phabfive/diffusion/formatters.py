@@ -4,7 +4,7 @@
 
 from ruamel.yaml.scalarstring import PreservedScalarString
 
-from phabfive.constants import POLICY_LABELS
+from phabfive.constants import POLICY_LABELS, URI_ROLE_DISABLED, URI_ROLES
 from phabfive.maniphest.utils import format_timestamp
 
 
@@ -110,6 +110,92 @@ def format_policy(policy):
     }
 
 
+def uri_origin(uri):
+    """Whether Phorge generated this URI or someone added it.
+
+    Phorge gives a repository a built-in URI per protocol it serves, and
+    says so by filling in ``builtin.protocol``. A URI someone added has a
+    null protocol. Nothing else in the record distinguishes the two, and
+    the distinction matters: it is half of what decides an inherited I/O
+    value, and a built-in URI cannot be removed.
+
+    Parameters
+    ----------
+    uri : dict
+        A URI record, as the "uris" attachment returns it
+
+    Returns
+    -------
+    str
+        "built-in" or "external"
+    """
+    builtin = uri.get("fields", {}).get("builtin") or {}
+
+    return "built-in" if builtin.get("protocol") else "external"
+
+
+def uri_role(uri):
+    """What this URI actually does, in one line.
+
+    Derived once here and carried in every format, so that rich, yaml,
+    json and table answer the question the same way rather than each
+    reader of the output deriving it again from the I/O value.
+
+    Being disabled overrides everything: a disabled URI neither serves
+    clones nor is pulled from, whatever its I/O says.
+
+    Parameters
+    ----------
+    uri : dict
+        A URI record, as the "uris" attachment returns it
+
+    Returns
+    -------
+    str
+        One of :data:`phabfive.constants.URI_ROLES`' answers, or
+        "disabled". An I/O value Phorge has and phabfive does not is
+        answered with the value itself rather than a guess.
+    """
+    fields = uri.get("fields", {})
+
+    if fields.get("disabled"):
+        return URI_ROLE_DISABLED
+
+    effective = (fields.get("io") or {}).get("effective")
+
+    return URI_ROLES.get(effective, effective)
+
+
+def _resolution(section):
+    """Publish a value that is set, inherited or resolved, as all three.
+
+    Phorge answers with ``raw`` (what is written on the URI, possibly the
+    literal "default"), ``default`` (what it would inherit, which depends
+    on whether the repository is hosted and whether the URI is built-in)
+    and ``effective`` (what is actually in force). ``effective`` alone
+    cannot say whether a value was chosen or inherited, and ``raw`` alone
+    is "default" often enough to be useless, so all three are published
+    and the reader decides.
+
+    Parameters
+    ----------
+    section : dict
+        An ``io`` or ``display`` section of a URI record
+
+    Returns
+    -------
+    dict
+        {"Raw": ..., "Default": ..., "Effective": ...}
+    """
+    section = section or {}
+
+    return {
+        "Raw": section.get("raw"),
+        "Default": section.get("default"),
+        "Effective": section.get("effective"),
+    }
+
+
 def format_uri(uri, credential_names=None):
     """
     Describe one repository URI the way the web UI's URI table does.
@@ -120,6 +206,16 @@ def format_uri(uri, credential_names=None):
     resolves it to), and the two list commands used to read two different
     ones, so `repo list --url` and `uri list` could disagree about the same
     URI. Every caller now reads ``display``.
+
+    A URI has four independent dimensions - where it came from, what I/O it
+    does, whether it is shown, and whether it is disabled - and the record
+    carries all four. ``I/O`` and ``Display`` are published in full rather
+    than flattened to their effective value, because an inherited value and
+    a chosen one are different facts about the URI (#375).
+
+    This is the one description of a URI in phabfive: `uri list`,
+    `repo list --show-uris` and `repo show --show-uris` all render this
+    record, which is what keeps them from disagreeing again.
 
     Parameters
     ----------
@@ -134,14 +230,19 @@ def format_uri(uri, credential_names=None):
     Returns
     -------
     dict
-        "URI", "I/O", "Display", optionally "Credential", and "Disabled"
+        "URI", "Origin", "Role", "I/O", "Display", optionally
+        "Credential", and "Disabled". "URI" stays first and stays a
+        scalar: every renderer here takes a record's first field as the
+        identifying one.
     """
     fields = uri.get("fields", {})
 
     record = {
         "URI": fields["uri"]["display"],
-        "I/O": fields["io"]["effective"],
-        "Display": fields["display"]["effective"],
+        "Origin": uri_origin(uri),
+        "Role": uri_role(uri),
+        "I/O": _resolution(fields.get("io")),
+        "Display": _resolution(fields.get("display")),
     }
 
     if credential_names is not None:

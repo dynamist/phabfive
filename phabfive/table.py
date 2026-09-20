@@ -9,7 +9,7 @@ column list per command. ``repo list``, ``uri list``, ``maniphest search``
 and ``paste search`` all reach it with nothing app-specific in between, and
 an app added later needs no code here.
 
-The rule, in four parts:
+The rule, in five parts:
 
 1. **Flatten.** A nested mapping contributes one column per scalar leaf, not
    a column of its own. ``Repository: {Name: ...}`` is a ``Name`` column.
@@ -17,10 +17,17 @@ The rule, in four parts:
    mappings contributes each item's *first* field, which is the identifying
    one every record builder here puts first - so ``URIs`` reads as the URIs
    and not as a wall of braces.
-3. **Name by the leaf.** A column is named by the last key on its path, and
+3. **Resolve.** A mapping that is one value spelled three ways - ``Raw``,
+   ``Default`` and ``Effective``, which is how Phorge answers anything a
+   record can inherit - is one column rather than three, spelling the value
+   in force and saying where it came from: ``observe (set)`` against
+   ``readwrite (default)``. Rule 1 would answer with six columns for a
+   URI's I/O and display, which is the whole record's width spent on two
+   fields.
+4. **Name by the leaf.** A column is named by the last key on its path, and
    only grows leftwards - ``Infrastructure Column``, ``Security Column`` -
    when that would name two columns the same.
-4. **Drop what says nothing.** Internal ``_`` keys never appear, a ``Link``
+5. **Drop what says nothing.** Internal ``_`` keys never appear, a ``Link``
    becomes the row's hyperlink rather than a column of URLs, and a column
    that is empty in every row is left out entirely.
 
@@ -53,6 +60,11 @@ PADDING = 2
 #: How far a column may be shrunk to make the row fit. Below this there is
 #: no value left to read, only ellipsis.
 MIN_COLUMN = 6
+
+#: The keys of a value that is set, inherited or in force - rule 3. Named
+#: here rather than per command, so any record publishing this shape gets
+#: one column for it without the table learning what the field means.
+RESOLVED_KEYS = frozenset({"Raw", "Default", "Effective"})
 
 
 def _is_empty(value):
@@ -134,6 +146,38 @@ def _item(item):
     return str(item)
 
 
+def _resolved(section):
+    """One cell for a set-or-inherited value, or None if that is not one.
+
+    ``Raw`` is what is written down, which may be the literal "default";
+    ``Effective`` is what that resolves to. The cell answers with the
+    value in force and says in one word which of the two it came from, so
+    that a grid does not have to choose between being wrong and being six
+    columns wide.
+
+    Parameters
+    ----------
+    section : dict
+        A nested mapping, which may or may not be a resolved value
+
+    Returns
+    -------
+    str or None
+        The cell, or None when the mapping is something else and rule 1
+        should flatten it as usual
+    """
+    if set(section) != RESOLVED_KEYS:
+        return None
+
+    value = section["Effective"]
+    inherited = section["Raw"] in (None, "default")
+
+    if value is None:
+        return ""
+
+    return f"{value} ({'default' if inherited else 'set'})"
+
+
 def _walk(mapping, path, fields):
     """Collect the scalar leaves of a mapping, keyed by their path.
 
@@ -155,7 +199,12 @@ def _walk(mapping, path, fields):
             continue
 
         if isinstance(value, dict) and value:
-            _walk(value, path + (key,), fields)
+            resolved = _resolved(value)
+
+            if resolved is None:
+                _walk(value, path + (key,), fields)
+            else:
+                fields[path + (key,)] = resolved
         else:
             fields[path + (key,)] = value
 

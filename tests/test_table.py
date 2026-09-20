@@ -86,6 +86,75 @@ class TestFlattening:
         assert _columns([{"Name": "phabfive", "Boards": {}}]) == ["Name"]
 
 
+class TestResolvedValues:
+    """Raw/Default/Effective is one value, not three columns (#375).
+
+    A URI publishes its I/O and its display as what is written on it, what
+    it would inherit and what is in force. Flattening that as three leaves
+    apiece spends six columns of a seven-field record on two fields, and
+    none of the six says which of the other two it answers to - so the
+    grid says it in the cell instead.
+    """
+
+    def _uri(self, io_raw, io_effective):
+        return {
+            "URI": "git@example.com:a.git",
+            "I/O": {"Raw": io_raw, "Default": "none", "Effective": io_effective},
+        }
+
+    def test_a_resolved_section_is_one_column_named_for_itself(self):
+        assert _columns([self._uri("observe", "observe")]) == ["URI", "I/O"]
+
+    def test_a_value_written_on_the_record_says_it_was_set(self):
+        rows = _render([self._uri("observe", "observe")])
+
+        assert "observe (set)" in rows[1]
+
+    def test_an_inherited_value_says_which_one_is_in_force(self):
+        rows = _render([self._uri("default", "readwrite")])
+
+        assert "readwrite (default)" in rows[1]
+
+    def test_a_section_with_no_raw_at_all_is_read_as_inherited(self):
+        rows = _render([self._uri(None, "readwrite")])
+
+        assert "readwrite (default)" in rows[1]
+
+    def test_a_section_resolving_to_nothing_is_an_empty_cell(self):
+        """And so drops its column, the same as any other empty value."""
+        assert _columns([self._uri("default", None)]) == ["URI"]
+
+    def test_two_resolved_sections_stay_two_columns(self):
+        rows = _render(
+            [
+                {
+                    "URI": "git@example.com:a.git",
+                    "I/O": {
+                        "Raw": "observe",
+                        "Default": "none",
+                        "Effective": "observe",
+                    },
+                    "Display": {
+                        "Raw": "default",
+                        "Default": "never",
+                        "Effective": "never",
+                    },
+                }
+            ]
+        )
+
+        assert rows[0].split() == ["URI", "I/O", "Display"]
+        assert "observe (set)" in rows[1]
+        assert "never (default)" in rows[1]
+
+    def test_a_section_that_is_not_one_flattens_as_usual(self):
+        """The rule reads the three keys, not the name of the section."""
+        assert _columns([{"I/O": {"Raw": "observe", "Effective": "observe"}}]) == [
+            "Raw",
+            "Effective",
+        ]
+
+
 class TestColumnNames:
     """Named by the leaf, grown leftwards only to stay unique."""
 

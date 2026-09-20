@@ -239,6 +239,15 @@ def test_uri_list_on_a_repository_without_uris(phabfive_raw):
     assert result.stdout == ""
 
 
+def test_uri_list_refuses_an_io_value_that_is_not_one(phabfive_raw):
+    """The filters validate against the constants, before any request (#375)."""
+    result = phabfive_raw("diffusion", "uri", "list", "GUNNAR", "--io=bogus")
+
+    assert result.returncode == 1
+    assert "not valid" in result.stderr
+    assert "'observe'" in result.stderr
+
+
 def test_uri_list_on_a_repository_that_does_not_exist(phabfive_raw):
     """A traceback before #372; a message and exit 1 now."""
     result = phabfive_raw("--format", "json", "diffusion", "uri", "list", "R9999")

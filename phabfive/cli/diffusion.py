@@ -329,18 +329,98 @@ def repo_edit(
 # URI commands
 
 
+def _resolve_uri_filters(io, display, builtin, external, disabled, enabled):
+    """Turn the `uri list` filter options into what uri_list() takes.
+
+    A value is validated here, before a request is made, and against the
+    same constants `uri edit` validates against - there is one list of I/O
+    values in phabfive, not one per command.
+
+    Parameters
+    ----------
+    io, display : str or None
+        The values asked for, as the caller wrote them
+    builtin, external, disabled, enabled : bool
+        The paired flags, at most one of each pair
+
+    Returns
+    -------
+    dict
+        Keyword arguments for :meth:`Diffusion.uri_list`
+
+    Raises
+    ------
+    typer.Exit
+        If a pair is asked for both ways, or a value is not one
+    """
+    from phabfive.diffusion.validators import (
+        resolve_display_value,
+        resolve_io_value,
+    )
+
+    if builtin and external:
+        typer.echo("ERROR: Cannot specify both --builtin and --external", err=True)
+        raise typer.Exit(1)
+
+    if disabled and enabled:
+        typer.echo("ERROR: Cannot specify both --disabled and --enabled", err=True)
+        raise typer.Exit(1)
+
+    try:
+        return {
+            "io": resolve_io_value(io) if io is not None else None,
+            "display": resolve_display_value(display) if display is not None else None,
+            "builtin": True if builtin else (False if external else None),
+            "disabled": True if disabled else (False if enabled else None),
+        }
+    except PhabfiveConfigException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+
 @uri_app.command("list")
 def uri_list(
     ctx: typer.Context,
     repo: str = typer.Argument(..., help="Repository monogram (R123) or shortname"),
     clone: bool = typer.Option(False, "--clone", "-c", help="Show clone URL(s)"),
+    io: Optional[str] = typer.Option(
+        None,
+        "--io",
+        help="Keep the URIs with this I/O (default, observe, mirror, read, readwrite, none)",
+    ),
+    display: Optional[str] = typer.Option(
+        None,
+        "--display",
+        help="Keep the URIs with this display (default, always, never)",
+    ),
+    builtin: bool = typer.Option(
+        False, "--builtin", help="Keep only the URIs Phorge generated"
+    ),
+    external: bool = typer.Option(
+        False, "--external", help="Keep only the URIs that were added"
+    ),
+    disabled: bool = typer.Option(
+        False, "--disabled", help="Keep only the disabled URIs"
+    ),
+    enabled: bool = typer.Option(False, "--enabled", help="Keep only the enabled URIs"),
 ) -> None:
     """List URIs for a repository.
 
-    One record per URI - the URI itself, its I/O and Display behaviour, the
-    credential it is bound to and whether it is disabled. The URI reported
-    is the display URI, the one the web UI shows, which is what `repo show
-    --show-uris` and `repo list --show-uris` report too.
+    One record per URI, describing all four of the dimensions a URI has:
+    where it came from (`Origin`), what it does (`Role`, derived from its
+    I/O), its `I/O` and `Display` behaviour, and whether it is `Disabled`.
+    The URI reported is the display URI, the one the web UI shows, which
+    is what `repo show --show-uris` and `repo list --show-uris` report too.
+
+    `I/O` and `Display` are each published as `Raw`, `Default` and
+    `Effective`: what is written on the URI, what it would inherit, and
+    what is in force. `table` has one cell where the others have three
+    levels and spells it `observe (set)` or `readwrite (default)`.
+
+    The filters combine, and `--io` and `--display` match a value that is
+    either set on the URI or in force on it - so `--io=default` finds the
+    URIs that inherit their I/O, and `--io=readwrite` finds the ones that
+    do read-write, however they came by it.
 
     A credential is named by its monogram. Its secret is never read.
 
@@ -348,9 +428,14 @@ def uri_list(
     Examples:
         phabfive diffusion uri list R5
         phabfive diffusion uri list R5 --clone
+        phabfive diffusion uri list R5 --io=observe
+        phabfive diffusion uri list R5 --display=always --external
+        phabfive diffusion uri list R5 --disabled
         phabfive --format=json diffusion uri list R5
     """
     from phabfive.diffusion.display import display_uris
+
+    filters = _resolve_uri_filters(io, display, builtin, external, disabled, enabled)
 
     _setup_output_options(ctx)
     diffusion = _get_diffusion_app()
@@ -358,7 +443,7 @@ def uri_list(
     # An unknown repository is a failed lookup; a repository with no URIs
     # to show is an empty result and stays successful
     try:
-        result = diffusion.uri_list(repo, clone_only=clone)
+        result = diffusion.uri_list(repo, clone_only=clone, **filters)
     except PhabfiveDataException as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)

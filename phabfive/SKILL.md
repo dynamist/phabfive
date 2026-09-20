@@ -299,7 +299,11 @@ phabfive --format=json diffusion repo list all --show-uris
 phabfive --format=json diffusion repo show R5
 phabfive diffusion repo show R5 R6 --show-uris --show-branches
 phabfive --format=json diffusion uri list R5
+phabfive --format=table diffusion uri list R5        # the matrix, one row per URI
 phabfive diffusion uri list R5 --clone
+phabfive diffusion uri list R5 --io=observe
+phabfive diffusion uri list R5 --display=always --external
+phabfive diffusion uri list R5 --disabled
 phabfive diffusion repo edit R5 --default-branch main --dry-run
 phabfive diffusion repo create <name> --dry-run
 phabfive diffusion uri create K1 R5 <uri> --observe --dry-run
@@ -319,11 +323,36 @@ argument. `--show-uris` adds the URIs section; branches and tags are deliberatel
 not offered here, because each costs one query per repository. `--url` is a
 deprecated alias for `--show-uris` and warns on stderr.
 
-`diffusion uri list` answers with one record per URI - `URI`, `I/O`, `Display`,
-the `Credential` it is bound to, named by monogram, and `Disabled`. `--clone`
-keeps only the URIs the instance shows as clone URIs. A URI is reported as its
-display URI, the one the web UI shows, by `uri list`, `repo list --show-uris` and
-`repo show --show-uris` alike.
+`diffusion uri list` answers with one record per URI, covering all four of the
+dimensions a URI has: `URI`, `Origin` (`built-in` when Phorge generated it,
+`external` when it was added), `Role`, `I/O`, `Display`, the `Credential` it is
+bound to, named by monogram, and `Disabled`. A URI is reported as its display
+URI, the one the web UI shows, by `uri list`, `repo list --show-uris` and
+`repo show --show-uris` alike, which all render this same record.
+
+`I/O` and `Display` are each published as `Raw`, `Default` and `Effective` -
+what is written on the URI, what it would inherit, and what is in force. A URI
+with `Raw: default` behaves according to `Default`, which itself depends on
+whether the repository is hosted and whether the URI is built-in, so neither
+`Raw` nor `Effective` alone is the whole answer. `table` has one cell where the
+other formats have three levels and spells it `observe (set)` or
+`readwrite (default)`.
+
+`Role` is the one-line answer to what the URI does, derived from the effective
+I/O and carried in every format: `Phorge pulls from here` (observe),
+`Phorge pushes here` (mirror), `clone + push` (readwrite), `clone (read-only)`
+(read), `not in use` (none), and `disabled`, which overrides the rest.
+
+The filters combine, and are validated before a request is made:
+`--io`, `--display`, `--builtin` / `--external`, `--disabled` / `--enabled`.
+`--io` and `--display` match a value that is either set on the URI or in force
+on it, so `--io=default` finds the URIs that inherit their I/O and
+`--io=readwrite` finds the ones that do read-write however they came by it.
+`--clone` keeps only the URIs the instance shows as clone URIs, which is
+`--display=always` on the effective value.
+
+A hosted repository can report no URIs at all, and a filter that matches
+nothing is an empty result - neither is a failure.
 
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
 `--status`. A `--short-name` change also rewrites the built-in `/source/<name>.git`
