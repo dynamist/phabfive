@@ -6,9 +6,11 @@ by root while Apache serves Conduit as www-data, and git then refuses every
 ref query in that repository with "detected dubious ownership", which made
 diffusion.branchquery, diffusion.tagsquery and diffusion.refsquery unusable.
 
-This asserts the invariant rather than querying a repository on purpose: the
-seed data creates no repositories, so a fresh instance has none to query and
-a test that needed one would pass by vacuously skipping the git path.
+This asserts the invariant rather than querying a repository on purpose: it
+holds on an instance with no repositories at all, where a test that queried
+one would pass by vacuously skipping the git path. The `repositories` seed
+module now creates two, and tests/k8s/test_seed.py queries their refs, which
+is the same bug seen from the other end.
 """
 
 # 3rd party imports
