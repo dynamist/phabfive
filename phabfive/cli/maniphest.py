@@ -24,6 +24,7 @@ from phabfive.cli.completers import (
     complete_user,
     complete_user_list_filter,
 )
+from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.constants import MONOGRAMS
 from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
@@ -53,63 +54,18 @@ def _get_maniphest_app():
         raise typer.Exit(1)
 
 
-def _get_output_format(ctx: typer.Context):
-    """Get output format from context or auto-detect."""
-    from phabfive.core import Phabfive
-
-    format_arg = ctx.obj.get("format") if ctx.obj else None
-    if format_arg is None:
-        return Phabfive._get_auto_format()
-    return format_arg
-
-
-def _setup_output_options(ctx: typer.Context):
-    """Set up output options from context."""
-    from phabfive.core import Phabfive
-
-    if ctx.obj:
-        ascii_when = ctx.obj.get("ascii", "auto")
-        hyperlink_when = ctx.obj.get("hyperlink", "auto")
-        output_format = _get_output_format(ctx)
-
-        Phabfive.set_output_options(
-            ascii_when=ascii_when,
-            hyperlink_when=hyperlink_when,
-            output_format=output_format,
-        )
-
-
 def _display_tasks(result, output_format, maniphest_instance, show_description=True):
-    """Display task search/show results in the specified format."""
-    from phabfive.display import (
-        display_tasks_json,
-        display_tasks_rich,
-        display_tasks_tree,
-        display_tasks_yaml,
+    """Display task search/show results in the specified format.
+
+    The switch itself lives in ``phabfive.display.display_tasks``, which is the
+    canonical one; this only exists as the name the CLI call sites and their
+    tests already use.
+    """
+    from phabfive.display import display_tasks
+
+    display_tasks(
+        result, output_format, maniphest_instance, show_description=show_description
     )
-
-    if not result or not result.get("tasks"):
-        return
-
-    console = maniphest_instance.get_console()
-
-    try:
-        tasks = result["tasks"]
-        if output_format in ("json", "jsonl"):
-            display_tasks_json(tasks, output_format, show_description=show_description)
-        elif output_format == "tree":
-            display_tasks_tree(
-                console, tasks, maniphest_instance, show_description=show_description
-            )
-        elif output_format in ("yaml", "strict"):
-            display_tasks_yaml(tasks, show_description=show_description)
-        else:  # "rich" (default)
-            display_tasks_rich(
-                console, tasks, maniphest_instance, show_description=show_description
-            )
-    except BrokenPipeError:
-        sys.stderr.close()
-        sys.exit(0)
 
 
 @maniphest_app.command()

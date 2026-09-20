@@ -20,6 +20,7 @@ from phabfive.cli.completers import (
     complete_user,
     complete_user_filter,
 )
+from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.constants import MONOGRAMS
 from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
@@ -28,32 +29,6 @@ from phabfive.json_output import emit_records
 paste_app = typer.Typer(
     cls=AgentFooterGroup, help="The paste app", no_args_is_help=True
 )
-
-
-def _get_output_format(ctx: typer.Context):
-    """Get output format from context or auto-detect."""
-    from phabfive.core import Phabfive
-
-    format_arg = ctx.obj.get("format") if ctx.obj else None
-    if format_arg is None:
-        return Phabfive._get_auto_format()
-    return format_arg
-
-
-def _setup_output_options(ctx: typer.Context):
-    """Set up output options from context."""
-    from phabfive.core import Phabfive
-
-    if ctx.obj:
-        ascii_when = ctx.obj.get("ascii", "auto")
-        hyperlink_when = ctx.obj.get("hyperlink", "auto")
-        output_format = _get_output_format(ctx)
-
-        Phabfive.set_output_options(
-            ascii_when=ascii_when,
-            hyperlink_when=hyperlink_when,
-            output_format=output_format,
-        )
 
 
 def _get_paste_app():
