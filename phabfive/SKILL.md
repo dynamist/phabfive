@@ -216,9 +216,10 @@ phabfive maniphest edit T123 --status=resolved --dry-run
 ```
 
 `--dry-run` exists on `maniphest create`, `maniphest edit`, top-level `edit`,
-`paste create`, `paste edit` and `diffusion uri edit`. It does **not** exist on any
-`comment` command, nor on `diffusion repo create` or `diffusion uri create` — those write
-the moment you run them, and a repository cannot be removed afterwards.
+`paste create`, `paste edit`, `diffusion uri edit`, `diffusion repo edit` and
+`diffusion repo create`. It does **not** exist on any `comment` command, nor on
+`diffusion uri create` — that writes the moment you run it. A repository cannot be
+removed once created, so preview it first.
 
 ### Things that will hang you
 
@@ -289,7 +290,7 @@ phabfive --format=json passphrase show K12 --no-secret
 phabfive --format=json diffusion repo list active
 phabfive diffusion uri list R5 --clone
 phabfive diffusion repo edit R5 --default-branch main --dry-run
-phabfive diffusion repo create newrepo --dry-run
+phabfive diffusion repo create <name> --dry-run
 ```
 
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
