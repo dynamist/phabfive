@@ -130,14 +130,16 @@ class TestWhatIsLeftOut:
         assert "http://" not in "\n".join(rows)
 
     def test_a_link_becomes_the_hyperlink_on_the_row(self):
-        console = Console(
-            file=StringIO(), width=400, force_terminal=True, no_color=True
+        """Asked of the cell rather than of the escape codes: whether a
+        terminal is given OSC-8 is Rich's business, and the legacy Windows
+        console is not given any."""
+        table = build_table(
+            [{"Link": "http://phorge.localhost/R5", "Name": "phabfive"}]
         )
-        console.print(
-            build_table([{"Link": "http://phorge.localhost/R5", "Name": "phabfive"}])
-        )
+        [cell] = list(table.columns[0].cells)
 
-        assert "http://phorge.localhost/R5" in console.file.getvalue()
+        assert cell.style == "link http://phorge.localhost/R5"
+        assert cell.plain == "phabfive"
 
     def test_a_column_empty_in_every_row_is_dropped(self):
         records = [
