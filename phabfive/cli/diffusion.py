@@ -2,12 +2,13 @@
 """Diffusion commands for phabfive CLI."""
 
 import sys
-from typing import Optional
+from typing import List, Optional
 
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_repo_status
+from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.constants import REPO_STATUS_CHOICES
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 
@@ -76,6 +77,70 @@ def repo_list(
             typer.echo(", ".join(repo["urls"]))
         else:
             typer.echo(repo["name"])
+
+
+@repo_app.command("show")
+def repo_show(
+    ctx: typer.Context,
+    repos: List[str] = typer.Argument(
+        ..., help="Repository monogram, callsign or short name (e.g., R5 R6 or R5,R6)"
+    ),
+    show_branches: bool = typer.Option(
+        False, "--show-branches", "-B", help="Display the repository's branches"
+    ),
+    show_tags: bool = typer.Option(
+        False, "--show-tags", "-T", help="Display the repository's tags"
+    ),
+    show_uris: bool = typer.Option(
+        False, "--show-uris", "-U", help="Display the repository's URIs"
+    ),
+    show_metadata: bool = typer.Option(
+        False, "--show-metadata", "-M", help="Display metadata about the repository"
+    ),
+    no_description: bool = typer.Option(
+        False, "--no-description", "-n", help="Hide the repository description"
+    ),
+) -> None:
+    """Show details for one or more repositories.
+
+    \b
+    Examples:
+        phabfive diffusion repo show R5
+        phabfive diffusion repo show R5 R6 --show-uris
+        phabfive diffusion repo show R5,R6
+        phabfive --format=json diffusion repo show phabfive --show-branches
+    """
+    from phabfive.diffusion.display import display_repositories
+
+    _setup_output_options(ctx)
+    diffusion = _get_diffusion_app()
+
+    # Support both space-separated (R5 R6) and comma-separated (R5,R6)
+    repo_ids = []
+    for repo_arg in repos:
+        repo_ids.extend(part.strip() for part in repo_arg.split(",") if part.strip())
+
+    try:
+        result = diffusion.repo_show(
+            repo_ids,
+            show_branches=show_branches,
+            show_tags=show_tags,
+            show_uris=show_uris,
+            show_metadata=show_metadata,
+            show_description=not no_description,
+        )
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    output_format = _get_output_format(ctx)
+    display_repositories(result, output_format, diffusion)
+
+    # A repository that does not exist is a failed lookup, not an empty
+    # result. Exit non-zero even when some of the requested repositories
+    # were shown, so scripts can tell a partial result from a complete one.
+    if result is None or result.get("missing_ids"):
+        raise typer.Exit(1)
 
 
 @repo_app.command("create")

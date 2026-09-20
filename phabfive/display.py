@@ -13,6 +13,39 @@ from ruamel.yaml.scalarstring import PreservedScalarString
 from phabfive.json_output import emit_records
 
 
+def render_records(output_format, renderers):
+    """Dispatch to the renderer for a format. The one ``--format`` switch.
+
+    ``renderers`` maps a format name to the zero-argument callable that
+    renders it. An app that has nothing special to say for a format leaves
+    it out and gets ``rich``, which is what ``simple`` has always done
+    everywhere but passphrase and paste.
+
+    This exists so that an app added later - diffusion was the fourth -
+    reuses the switch instead of writing another copy of it that drifts.
+    The alias handling is the same defensive pass ``display_tasks`` carried:
+    ``preprocess_format_alias`` has normally rewritten these in argv long
+    before a display function sees them.
+
+    Parameters
+    ----------
+    output_format : str
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or an alias
+    renderers : dict
+        Format name to a callable taking no arguments. A 'rich' entry is
+        required, being the fallback.
+    """
+    canonical = {"strict": "yaml", "ndjson": "jsonl"}.get(output_format, output_format)
+
+    try:
+        renderers.get(canonical, renderers["rich"])()
+    except BrokenPipeError:
+        # Handle pipe closed by consumer (e.g., head, less)
+        # Quietly exit - this is normal behavior
+        sys.stderr.close()
+        sys.exit(0)
+
+
 def _escape_for_rich(content):
     """Escape user content for safe Rich printing.
 
@@ -590,9 +623,10 @@ def display_tasks_json(task_dicts, output_format="json", show_description=True):
 def display_tasks(result, output_format, phabfive_instance, show_description=True):
     """Display task search/show results in the specified format.
 
-    This is the canonical five-way format switch for tasks; a new app should
-    reuse it rather than writing its own. ``phabfive.cli.maniphest._display_tasks``
-    is a thin wrapper kept for the CLI's own call sites and tests.
+    The switch itself is :func:`render_records`, shared with every other
+    app; this names the renderers for tasks.
+    ``phabfive.cli.maniphest._display_tasks`` is a thin wrapper kept for the
+    CLI's own call sites and tests.
 
     Parameters
     ----------
@@ -609,26 +643,28 @@ def display_tasks(result, output_format, phabfive_instance, show_description=Tru
         return
 
     console = phabfive_instance.get_console()
+    tasks = result["tasks"]
 
-    try:
-        tasks = result["tasks"]
-        if output_format in ("json", "jsonl"):
-            display_tasks_json(tasks, output_format, show_description=show_description)
-        elif output_format == "tree":
-            display_tasks_tree(
+    render_records(
+        output_format,
+        {
+            "json": lambda: display_tasks_json(
+                tasks, "json", show_description=show_description
+            ),
+            "jsonl": lambda: display_tasks_json(
+                tasks, "jsonl", show_description=show_description
+            ),
+            "tree": lambda: display_tasks_tree(
                 console, tasks, phabfive_instance, show_description=show_description
-            )
-        elif output_format in ("yaml", "strict"):
-            display_tasks_yaml(tasks, show_description=show_description)
-        else:  # "rich" (default)
-            display_tasks_rich(
+            ),
+            "yaml": lambda: display_tasks_yaml(
+                tasks, show_description=show_description
+            ),
+            "rich": lambda: display_tasks_rich(
                 console, tasks, phabfive_instance, show_description=show_description
-            )
-    except BrokenPipeError:
-        # Handle pipe closed by consumer (e.g., head, less)
-        # Quietly exit - this is normal behavior
-        sys.stderr.close()
-        sys.exit(0)
+            ),
+        },
+    )
 
 
 # User display functions

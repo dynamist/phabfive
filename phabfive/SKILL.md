@@ -289,11 +289,21 @@ phabfive --format=json passphrase search "deploy" --type=password
 phabfive --format=json passphrase show K12 --no-secret
 
 phabfive --format=json diffusion repo list active
+phabfive --format=json diffusion repo show R5
+phabfive diffusion repo show R5 R6 --show-uris --show-branches
 phabfive diffusion uri list R5 --clone
 phabfive diffusion repo edit R5 --default-branch main --dry-run
 phabfive diffusion repo create <name> --dry-run
 phabfive diffusion uri create K1 R5 <uri> --observe --dry-run
 ```
+
+`diffusion repo show` takes several repositories, space- or comma-separated, and
+answers with a `Link`, a `Repository` section, the `Policy` the repository is under
+and - only when asked - `URIs`, `Branches`, `Tags` and `Metadata`:
+`--show-uris`, `--show-branches`, `--show-tags`, `--show-metadata`, and
+`--no-description` to leave the description out. A repository that does not exist is
+a failed lookup, not an empty result: it is reported on stderr and the exit code is 1
+even when the other repositories asked for were shown.
 
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
 `--status`. A `--short-name` change also rewrites the built-in `/source/<name>.git`
