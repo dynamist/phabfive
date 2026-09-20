@@ -259,7 +259,11 @@ def main(
     output_format: Optional[OutputFormat] = typer.Option(
         None,
         "--format",
-        help="Output format. Auto-detects based on TTY.",
+        help=(
+            "Output format. Auto-detects based on TTY. "
+            "table is list-shaped: list and search commands render a grid, "
+            "show commands fall back to rich."
+        ),
     ),
     ascii_when: AutoOption = typer.Option(
         AutoOption.auto,

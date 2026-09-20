@@ -127,7 +127,7 @@ def repo_list(
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
-    display_repositories(result, _get_output_format(ctx), diffusion)
+    display_repositories(result, _get_output_format(ctx), diffusion, tabular=True)
 
 
 @repo_app.command("show")
@@ -363,7 +363,7 @@ def uri_list(
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
-    display_uris(result, _get_output_format(ctx), diffusion)
+    display_uris(result, _get_output_format(ctx), diffusion, tabular=True)
 
 
 @uri_app.command("create")

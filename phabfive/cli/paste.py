@@ -24,7 +24,9 @@ from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.constants import MONOGRAMS
 from phabfive.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException
+from phabfive.display import render_records
 from phabfive.json_output import emit_records
+from phabfive.table import display_records_table
 
 paste_app = typer.Typer(
     cls=AgentFooterGroup, help="The paste app", no_args_is_help=True
@@ -118,21 +120,31 @@ def search(
 
     # Format output
     output_format = _get_output_format(ctx)
+    records = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
 
-    if output_format in ("json", "jsonl"):
-        result = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
-        emit_records(result, output_format)
-    elif output_format in ("yaml", "strict"):
-        result = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
+    def _yaml():
         yaml = YAML()
         yaml.default_flow_style = False
         stream = StringIO()
-        yaml.dump(result, stream)
+        yaml.dump(records, stream)
         print(stream.getvalue(), end="")
-    else:
-        # Rich/default format
-        for p in pastes:
-            typer.echo(f"P{p['id']} {p['fields']['title']}")
+
+    def _lines():
+        for record in records:
+            typer.echo(f"{record['id']} {record['title']}")
+
+    # The switch every other app already shares, rather than a sixth copy
+    # of it - which is also what gives search a table and the ndjson alias.
+    render_records(
+        output_format,
+        {
+            "json": lambda: emit_records(records, "json"),
+            "jsonl": lambda: emit_records(records, "jsonl"),
+            "yaml": _yaml,
+            "table": lambda: display_records_table(paste.get_console(), records),
+            "rich": _lines,
+        },
+    )
 
 
 @paste_app.command()

@@ -14,6 +14,11 @@ Repositories and URIs both come through here. Nothing below knows which it
 is holding - a record is a dict, a record with a ``_url`` leads with a Link
 and one without leads with its first field - so ``repo show``, ``repo list``
 and ``uri list`` share one set of renderers and one ``--format`` switch.
+
+``table`` is the one format they do not all share, and not because it knows
+anything about repositories: a grid needs a list, so only the list commands
+register it and ``repo show`` falls back to rich. The renderer itself is
+``phabfive.table``, app-agnostic, reading the published record.
 """
 
 from io import StringIO
@@ -24,6 +29,7 @@ from ruamel.yaml import YAML
 
 from phabfive.display import _escape_for_rich, render_records
 from phabfive.json_output import emit_records
+from phabfive.table import display_records_table
 
 # How far a tree node's value is allowed to run before it is cut short.
 _TREE_VALUE_WIDTH = 60
@@ -267,7 +273,7 @@ def display_records_json(records, output_format="json"):
     emit_records([_public(record) for record in records], output_format)
 
 
-def display_records(records, output_format, phabfive_instance):
+def display_records(records, output_format, phabfive_instance, tabular=False):
     """Display records in the specified format. The one --format switch.
 
     Every diffusion command that prints records comes through here, so a
@@ -278,28 +284,39 @@ def display_records(records, output_format, phabfive_instance):
     records : list
         Display records, as the formatters build them
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json' or 'jsonl'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl' or 'table'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
+    tabular : bool, optional
+        Whether this call is list-shaped, and so has a table to offer.
+        ``repo show`` sets it False and `--format=table` falls back to
+        rich there, which is :func:`render_records` doing nothing special.
     """
     if not records:
         return
 
     console = phabfive_instance.get_console()
 
-    render_records(
-        output_format,
-        {
-            "json": lambda: display_records_json(records, "json"),
-            "jsonl": lambda: display_records_json(records, "jsonl"),
-            "tree": lambda: display_records_tree(console, records, phabfive_instance),
-            "yaml": lambda: display_records_yaml(records),
-            "rich": lambda: display_records_rich(console, records, phabfive_instance),
-        },
-    )
+    renderers = {
+        "json": lambda: display_records_json(records, "json"),
+        "jsonl": lambda: display_records_json(records, "jsonl"),
+        "tree": lambda: display_records_tree(console, records, phabfive_instance),
+        "yaml": lambda: display_records_yaml(records),
+        "rich": lambda: display_records_rich(console, records, phabfive_instance),
+    }
+
+    if tabular:
+        # The table reads the published record, the same one yaml and json
+        # publish, so it has no idea whether it is holding repositories or
+        # URIs - and neither app needs a column list of its own.
+        renderers["table"] = lambda: display_records_table(
+            console, [_public(record) for record in records]
+        )
+
+    render_records(output_format, renderers)
 
 
-def display_repositories(result, output_format, phabfive_instance):
+def display_repositories(result, output_format, phabfive_instance, tabular=False):
     """Display `repo show` and `repo list` results in the specified format.
 
     Parameters
@@ -308,17 +325,22 @@ def display_repositories(result, output_format, phabfive_instance):
         Result from Diffusion.repo_show() or Diffusion.repo_list(),
         containing 'repositories'
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json' or 'jsonl'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl' or 'table'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
+    tabular : bool, optional
+        True from `repo list`, which is list-shaped. `repo show` leaves it
+        False and gets rich for `--format=table`.
     """
     if not result:
         return
 
-    display_records(result.get("repositories"), output_format, phabfive_instance)
+    display_records(
+        result.get("repositories"), output_format, phabfive_instance, tabular=tabular
+    )
 
 
-def display_uris(result, output_format, phabfive_instance):
+def display_uris(result, output_format, phabfive_instance, tabular=False):
     """Display `uri list` results in the specified format.
 
     Parameters
@@ -326,11 +348,15 @@ def display_uris(result, output_format, phabfive_instance):
     result : dict
         Result from Diffusion.uri_list(), containing 'uris'
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json' or 'jsonl'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl' or 'table'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
+    tabular : bool, optional
+        True from `uri list`, which is list-shaped
     """
     if not result:
         return
 
-    display_records(result.get("uris"), output_format, phabfive_instance)
+    display_records(
+        result.get("uris"), output_format, phabfive_instance, tabular=tabular
+    )
