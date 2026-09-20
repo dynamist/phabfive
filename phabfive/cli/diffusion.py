@@ -8,7 +8,11 @@ import typer
 
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_policy, complete_repo_status
-from phabfive.cli.output import _get_output_format, _setup_output_options
+from phabfive.cli.output import (
+    _get_output_format,
+    _setup_output_options,
+    is_machine_format,
+)
 from phabfive.constants import REPO_STATUS_CHOICES
 from phabfive.diffusion.formatters import repository_is_hosted
 from phabfive.exceptions import (
@@ -48,6 +52,57 @@ def _get_diffusion_app():
     except requests.exceptions.RequestException as e:
         sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
         raise typer.Exit(1)
+
+
+def _show_repos_after_write(ctx, diffusion, repo_ids):
+    """Emit the records `repo show` gives for the repositories just written.
+
+    A create or an edit answers a machine-readable format with exactly what
+    ``repo show`` answers with, so nothing has to invent or maintain a
+    second description of the same object. The maniphest and paste commands
+    do the same (#344).
+
+    Parameters
+    ----------
+    ctx : typer.Context
+        The command context, carrying the format the caller asked for
+    diffusion : Diffusion
+        The instance the write went through
+    repo_ids : list[str]
+        Monograms, callsigns or short names
+    """
+    from phabfive.diffusion.display import display_repositories
+
+    result = diffusion.repo_show(repo_ids)
+    display_repositories(result, _get_output_format(ctx), diffusion)
+
+
+def _show_uris_after_write(ctx, diffusion, repo):
+    """Emit the repository's URI records after a `uri create` or `uri edit`.
+
+    A URI has no page of its own - `display_uris` leads such a record with
+    its first field rather than a Link - and there is no `uri show`, so the
+    read command a URI write answers with is `uri list`.
+
+    The whole set, not just the URI named, and that is not laziness: `uri
+    create` demotes every URI already on the repository to `io=read,
+    display=never` before adding the new one, so the set is what the command
+    actually changed. Answering `uri edit` the same way means a caller does
+    not have to know which of the two has the wider blast radius.
+
+    Parameters
+    ----------
+    ctx : typer.Context
+        The command context, carrying the format the caller asked for
+    diffusion : Diffusion
+        The instance the write went through
+    repo : str
+        The repository the URI belongs to
+    """
+    from phabfive.diffusion.display import display_uris
+
+    result = diffusion.uri_list(repo)
+    display_uris(result, _get_output_format(ctx), diffusion, tabular=True)
 
 
 # Repo commands
@@ -271,7 +326,14 @@ def repo_create(
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
 
+    _setup_output_options(ctx)
     diffusion = _get_diffusion_app()
+
+    # A machine-readable format answers with the record `repo show` would
+    # give. A dry run wrote nothing, so it has no record to give: the
+    # preview goes to stderr and stdout stays empty.
+    machine = is_machine_format(_get_output_format(ctx))
+    preview = sys.stderr if machine else sys.stdout
 
     try:
         transactions, changes = diffusion.build_repo_create(
@@ -282,11 +344,13 @@ def repo_create(
         raise typer.Exit(1)
 
     if dry_run:
-        render_changes(name, changes, header=f"[DRY RUN] Would create {name}:")
+        render_changes(
+            name, changes, header=f"[DRY RUN] Would create {name}:", file=preview
+        )
         return
 
     if interactive:
-        render_changes(name, changes, header=f"Would create {name}:")
+        render_changes(name, changes, header=f"Would create {name}:", file=preview)
         confirmed, return_code = confirm_apply(assume_yes)
         if not confirmed:
             typer.echo("Nothing was created.", err=True)
@@ -298,7 +362,10 @@ def repo_create(
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
-    render_changes(name, changes)
+    render_changes(name, changes, file=preview)
+
+    if machine:
+        _show_repos_after_write(ctx, diffusion, [name])
 
 
 @repo_app.command("edit")
@@ -408,7 +475,11 @@ def repo_edit(
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
 
+    _setup_output_options(ctx)
     diffusion = _get_diffusion_app()
+
+    machine = is_machine_format(_get_output_format(ctx))
+    preview = sys.stderr if machine else sys.stdout
 
     try:
         repo_record = diffusion.get_repo_record(repo)
@@ -449,16 +520,29 @@ def repo_edit(
         _report_collision(e, command="edit")
         raise typer.Exit(1)
 
+    # The monogram, not the name the caller used: --short-name rewrites the
+    # short name, so the identifier that found the repository may not find
+    # it again once the edit has been applied.
+    monogram = f"R{object_id}"
+
     if not transactions:
-        typer.echo(f"{label}: No changes (already at target state)")
+        print(f"{label}: No changes (already at target state)", file=preview)
+
+        # "Already at the target state" is an answer about the repository,
+        # not an absence of one - the same rule the maniphest and paste
+        # commands settled on (#344).
+        if machine:
+            _show_repos_after_write(ctx, diffusion, [monogram])
         return
 
     if dry_run:
-        render_changes(label, changes, header=f"[DRY RUN] Would apply to {label}:")
+        render_changes(
+            label, changes, header=f"[DRY RUN] Would apply to {label}:", file=preview
+        )
         return
 
     if interactive:
-        render_changes(label, changes, header=f"Would apply to {label}:")
+        render_changes(label, changes, header=f"Would apply to {label}:", file=preview)
         confirmed, return_code = confirm_apply(assume_yes)
         if not confirmed:
             typer.echo("Nothing was changed.", err=True)
@@ -470,7 +554,10 @@ def repo_edit(
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
-    render_changes(label, changes)
+    render_changes(label, changes, file=preview)
+
+    if machine:
+        _show_repos_after_write(ctx, diffusion, [monogram])
 
 
 # URI commands
@@ -640,7 +727,11 @@ def uri_create(
     else:
         io = "observe"
 
+    _setup_output_options(ctx)
     diffusion = _get_diffusion_app()
+
+    machine = is_machine_format(_get_output_format(ctx))
+    preview = sys.stderr if machine else sys.stdout
 
     try:
         plan, changes = diffusion.build_uri_create(
@@ -655,11 +746,13 @@ def uri_create(
         raise typer.Exit(1)
 
     if dry_run:
-        render_changes(uri, changes, header=f"[DRY RUN] Would create {uri}:")
+        render_changes(
+            uri, changes, header=f"[DRY RUN] Would create {uri}:", file=preview
+        )
         return
 
     if interactive:
-        render_changes(uri, changes, header=f"Would create {uri}:")
+        render_changes(uri, changes, header=f"Would create {uri}:", file=preview)
         confirmed, return_code = confirm_apply(assume_yes)
         if not confirmed:
             typer.echo("Nothing was created.", err=True)
@@ -670,6 +763,10 @@ def uri_create(
     except PhabfiveDataException as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
+
+    if machine:
+        _show_uris_after_write(ctx, diffusion, repo)
+        return
 
     typer.echo(uri)
 
@@ -728,7 +825,11 @@ def edit(
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
 
+    _setup_output_options(ctx)
     diffusion = _get_diffusion_app()
+
+    machine = is_machine_format(_get_output_format(ctx))
+    preview = sys.stderr if machine else sys.stdout
 
     try:
         repo_record, uri_record = diffusion.get_uri_and_repo(
@@ -757,7 +858,10 @@ def edit(
         raise typer.Exit(1)
 
     if not transactions:
-        typer.echo(f"{label}: No changes (already at target state)")
+        print(f"{label}: No changes (already at target state)", file=preview)
+
+        if machine:
+            _show_uris_after_write(ctx, diffusion, repo)
         return
 
     # An edit that does not touch the URI - a --disable, say - would
@@ -766,11 +870,13 @@ def edit(
         changes = [{"field": "URI", "old": None, "new": uri}] + changes
 
     if dry_run:
-        render_changes(label, changes, header=f"[DRY RUN] Would apply to {label}:")
+        render_changes(
+            label, changes, header=f"[DRY RUN] Would apply to {label}:", file=preview
+        )
         return
 
     if interactive:
-        render_changes(label, changes, header=f"Would apply to {label}:")
+        render_changes(label, changes, header=f"Would apply to {label}:", file=preview)
         confirmed, return_code = confirm_apply(assume_yes)
         if not confirmed:
             typer.echo("Nothing was changed.", err=True)
@@ -778,4 +884,7 @@ def edit(
 
     diffusion.apply_uri_edit(object_id, transactions)
 
-    render_changes(label, changes)
+    render_changes(label, changes, file=preview)
+
+    if machine:
+        _show_uris_after_write(ctx, diffusion, repo)

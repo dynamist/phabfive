@@ -418,10 +418,23 @@ def test_repo_edit_sets_every_policy(
         "Can Push": f"@{me}",
     }
 
-    # Asking for what is already there is not a change
-    assert "No changes" in phabfive(
-        "diffusion", "repo", "edit", repo, "--visible-to=public"
+    # Asking for what is already there is not a change. The sentence saying
+    # so is prose, so under a machine-readable format it is on stderr (#344)
+    # and stdout carries the repository's record - "already at the target
+    # state" is an answer about the repository, not an absence of one.
+    result = phabfive_raw(
+        "--format",
+        "json",
+        "diffusion",
+        "repo",
+        "edit",
+        repo,
+        "--visible-to=public",
     )
+
+    assert result.returncode == 0
+    assert "No changes" in result.stderr
+    assert json.loads(result.stdout)[0]["Repository"]["Short Name"] == repo
 
     # And Phorge refuses to let the viewer lock themselves out, which is
     # reported as the sentence it answered with
