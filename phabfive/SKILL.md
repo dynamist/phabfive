@@ -84,17 +84,19 @@ Data goes to stdout; logging, diagnostics, status lines, usage blocks and group 
 to stderr. Capturing stdout alone is safe - `phabfive --format=json ... 2>/dev/null | jq .`
 parses for every command, including the ones that write.
 
-A command that **writes** - `maniphest create`, `maniphest edit`, `maniphest comment` and
-the bare `edit` - answers a machine-readable format with the same record `maniphest show`
-gives for the task it touched, so the link and every field arrive together:
+A command that **writes** answers a machine-readable format with the same record `show`
+gives for the object it touched, so the link and every field arrive together. That is
+`maniphest create`, `maniphest edit`, `maniphest comment`, the bare `edit`, and
+`paste create`, `paste edit`, `paste comment`:
 
 ```bash
 phabfive --format=json maniphest create "probe" --yes | jq -r '.[0].Link'
 phabfive --format=json maniphest edit T123 --priority=high --yes | jq -r '.[0].Task.Priority'
+phabfive --format=json paste create "notes" --content=- --yes | jq -r '.[0].Link'
 ```
 
-An edit that needed no transaction still answers with the task's record: "already at the
-target state" is an answer about the task, not an absence of one. Under `rich`, `tree`,
+An edit that needed no transaction still answers with the object's record: "already at
+the target state" is an answer about it, not an absence of one. Under `rich`, `tree`,
 `table` and `value` these commands print what they always have - a URL for `create`, a
 change list for `edit`.
 
@@ -102,9 +104,9 @@ change list for `edit`.
 and leaves stdout empty under a machine-readable format. Check the exit code, not the
 output, to tell a dry run from a refusal.
 
-Not yet wired up (#344): `paste create/edit/comment`, `diffusion repo create/edit`,
-`diffusion uri create/edit`, `cache clear`, and `maniphest create --with=TEMPLATE`. These
-still print human text whatever is asked for - do not parse their output.
+Not yet wired up (#344): `diffusion repo create/edit`, `diffusion uri create/edit`,
+`cache clear`, and `maniphest create --with=TEMPLATE`. These still print human text
+whatever is asked for - do not parse their output.
 
 ## Monograms, and the one that writes
 
