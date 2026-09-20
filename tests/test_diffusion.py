@@ -1719,27 +1719,43 @@ class TestRepoShowRecord:
 
         assert record["Policy"]["View"] == "PHID-PROJ-secret"
 
-    def test_hosting_is_read_off_the_uris(self):
-        """search does not report it; a read-write URI is what it means."""
-        hosted = _show_repo(
-            uris=[_show_uri("http://phorge/source/x.git", io="readwrite")]
-        )
-        observed = _show_repo(uris=[_show_uri("git@github.com:o/x.git", io="observe")])
-
-        assert _showable([hosted]).repo_show(["R5"])["repositories"][0]["Repository"][
-            "Hosted"
-        ]
-        assert not _showable([observed]).repo_show(["R5"])["repositories"][0][
-            "Repository"
-        ]["Hosted"]
-
-    def test_an_instance_that_reports_hosting_is_believed_over_the_derivation(self):
+    def test_hosting_is_what_the_instance_says_it_is(self):
+        """Phorge reports isHosted, and that is the answer."""
         repo = _show_repo(uris=[_show_uri("git@github.com:o/x.git", io="observe")])
         repo["fields"]["isHosted"] = True
 
         record = _showable([repo]).repo_show(["R5"])["repositories"][0]
 
         assert record["Repository"]["Hosted"] is True
+
+    def test_a_hosted_repository_with_no_uris_is_still_hosted(self):
+        """A freshly seeded repository answers with an empty URIs attachment.
+
+        Which is why the field is read before the URIs are: deriving
+        hosting from an empty list would call a hosted repository
+        unhosted, and the seeded instance is exactly that case.
+        """
+        repo = _show_repo(uris=[])
+        repo["fields"]["isHosted"] = True
+
+        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert record["Repository"]["Hosted"] is True
+
+    def test_hosting_falls_back_to_the_uris_when_unreported(self):
+        """For an instance old enough not to report the field at all."""
+        hosted = _show_repo(
+            uris=[_show_uri("http://phorge/source/x.git", io="readwrite")]
+        )
+        observed = _show_repo(uris=[_show_uri("git@github.com:o/x.git", io="observe")])
+
+        assert "isHosted" not in hosted["fields"]
+        assert _showable([hosted]).repo_show(["R5"])["repositories"][0]["Repository"][
+            "Hosted"
+        ]
+        assert not _showable([observed]).repo_show(["R5"])["repositories"][0][
+            "Repository"
+        ]["Hosted"]
 
     def test_the_optional_sections_are_absent_until_asked_for(self):
         record = _showable([_show_repo()]).repo_show(["R5"])["repositories"][0]

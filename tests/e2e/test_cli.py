@@ -54,3 +54,120 @@ def test_jsonl_is_one_task_per_line(phabfive, create_task):
         first_title,
         second_title,
     ]
+
+
+def test_repo_show_describes_a_seeded_repository(phabfive):
+    """GUNNAR is hosted, with history, per phorge/seed/data/repositories.json."""
+    [repo] = phabfive("diffusion", "repo", "show", "GUNNAR", json_output=True)
+
+    assert repo["Repository"]["Callsign"] == "GUNNAR"
+    assert repo["Repository"]["Short Name"] == "gunnar-firmware"
+    assert repo["Repository"]["Default Branch"] == "main"
+    assert repo["Repository"]["VCS"] == "git"
+    assert repo["Repository"]["Hosted"] is True
+    assert repo["Link"].endswith("/source/gunnar-firmware/")
+    assert repo["Policy"]["View"] == "All Users"
+
+
+def test_repo_show_resolves_every_way_in(phabfive):
+    """Monogram, callsign and short name all name the same repository.
+
+    The monogram is asked for rather than assumed: the seeder keys on the
+    callsign and creates only what is missing, so which R number GUNNAR
+    got depends on what was already in the database.
+    """
+    [seeded] = phabfive("diffusion", "repo", "show", "GUNNAR", json_output=True)
+    monogram = seeded["Repository"]["Monogram"]
+
+    monograms = set()
+    for identifier in (monogram, "GUNNAR", "gunnar-firmware"):
+        [repo] = phabfive("diffusion", "repo", "show", identifier, json_output=True)
+        monograms.add(repo["Repository"]["Monogram"])
+
+    assert monograms == {monogram}
+
+
+def test_repo_show_reads_the_refs_off_a_hosted_repository(phabfive):
+    """The reason the seeder builds real history: refs to answer with."""
+    [repo] = phabfive(
+        "diffusion",
+        "repo",
+        "show",
+        "GUNNAR",
+        "--show-branches",
+        "--show-tags",
+        json_output=True,
+    )
+
+    assert repo["Branches"] == ["feature/telemetry", "main"]
+    assert repo["Tags"] == ["v1.0.0"]
+
+
+def test_repo_show_on_a_repository_nobody_pushed_to(phabfive):
+    """Empty is an empty result, not a failure."""
+    [repo] = phabfive(
+        "diffusion",
+        "repo",
+        "show",
+        "SPIKE",
+        "--show-branches",
+        "--show-tags",
+        json_output=True,
+    )
+
+    assert repo["Branches"] == []
+    assert repo["Tags"] == []
+
+
+def test_repo_show_takes_several_repositories(phabfive):
+    repos = phabfive("diffusion", "repo", "show", "GUNNAR,SPIKE", json_output=True)
+
+    assert [r["Repository"]["Callsign"] for r in repos] == ["GUNNAR", "SPIKE"]
+
+
+def test_repo_show_formats_agree(phabfive):
+    """The whole point of the command: one record, five ways of writing it."""
+    from ruamel.yaml import YAML
+
+    load = YAML(typ="safe").load
+    args = (
+        "diffusion",
+        "repo",
+        "show",
+        "GUNNAR",
+        "SPIKE",
+        "--show-branches",
+        "--show-tags",
+    )
+
+    as_json = phabfive(*args, json_output=True)
+    as_yaml = load(phabfive("--format", "yaml", *args))
+    as_jsonl = [
+        json.loads(line) for line in phabfive("--format", "jsonl", *args).splitlines()
+    ]
+    # Rich is the same record in YAML shape - hyperlinks and colour, not a
+    # different layout - and NO_COLOR plus a pipe leave it parseable.
+    as_rich = load(phabfive("--format", "rich", *args))
+
+    assert as_yaml == as_json
+    assert as_jsonl == as_json
+    assert as_rich == as_json
+
+
+def test_repo_show_on_a_repository_that_does_not_exist(phabfive_raw):
+    """A failed lookup, not an empty result."""
+    result = phabfive_raw("diffusion", "repo", "show", "R9999")
+
+    assert result.returncode == 1
+    assert "not found" in result.stderr
+
+
+def test_repo_show_fails_on_a_partial_result(phabfive_raw):
+    """GUNNAR is shown, and the exit code still says something was missed."""
+    result = phabfive_raw(
+        "--format", "jsonl", "diffusion", "repo", "show", "GUNNAR,R9999"
+    )
+
+    assert result.returncode == 1
+    assert len(result.stdout.splitlines()) == 1
+    assert json.loads(result.stdout)["Repository"]["Callsign"] == "GUNNAR"
