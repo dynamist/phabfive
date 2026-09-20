@@ -7,7 +7,7 @@ import logging
 from phabricator import APIError
 
 from phabfive import passphrase
-from phabfive.constants import IO_NEW_URI_CHOICES, DISPLAY_CHOICES
+from phabfive.constants import IO_NEW_URI_CHOICES
 from phabfive.core import Phabfive
 from phabfive.diffusion.fetchers import (
     fetch_branches,
@@ -29,10 +29,12 @@ from phabfive.diffusion.resolvers import (
     resolve_uri_record,
 )
 from phabfive.diffusion.validators import (
+    resolve_display_value,
+    resolve_io_value,
     validate_credential_type,
     validate_repo_identifier,
 )
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.exceptions import PhabfiveDataException
 
 log = logging.getLogger(__name__)
 
@@ -335,18 +337,8 @@ class Diffusion(Phabfive):
         PhabfiveDataException
             If the repository does not exist
         """
-        io = io or "default"
-        display = display or "always"
-
-        if io not in IO_NEW_URI_CHOICES:
-            raise PhabfiveConfigException(
-                f"'{io}' is not valid. Valid IO values are 'default', 'observe', 'mirror' or 'never'"
-            )
-
-        if display not in DISPLAY_CHOICES:
-            raise PhabfiveConfigException(
-                f"'{display}' is not valid. Valid Display values are 'default', 'always' or 'hidden'"
-            )
+        io = resolve_io_value(io or "default", choices=IO_NEW_URI_CHOICES)
+        display = resolve_display_value(display or "always")
 
         repos = self.get_repositories(attachments={"uris": True})
         repo = match_repository(repos, repository_name)
@@ -555,9 +547,19 @@ class Diffusion(Phabfive):
 
         Raises
         ------
+        PhabfiveConfigException
+            If io or display is not a value Phorge has
         PhabfiveDataException
             If the credential is missing or of an unusable type
         """
+        # Before anything compares them to what the URI already carries, so a
+        # deprecated spelling of a value the URI is already at is no change.
+        if io is not None:
+            io = resolve_io_value(io)
+
+        if display is not None:
+            display = resolve_display_value(display)
+
         fields = uri_record.get("fields", {})
 
         credential_phid = None
