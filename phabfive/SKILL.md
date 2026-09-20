@@ -86,14 +86,21 @@ parses for every command, including the ones that write.
 
 A command that **writes** answers a machine-readable format with the same record `show`
 gives for the object it touched, so the link and every field arrive together. That is
-`maniphest create`, `maniphest edit`, `maniphest comment`, the bare `edit`, and
-`paste create`, `paste edit`, `paste comment`:
+`maniphest create/edit/comment`, the bare `edit`, `paste create/edit/comment`, and
+`diffusion repo create/edit` and `diffusion uri create/edit`:
 
 ```bash
 phabfive --format=json maniphest create "probe" --yes | jq -r '.[0].Link'
 phabfive --format=json maniphest edit T123 --priority=high --yes | jq -r '.[0].Task.Priority'
 phabfive --format=json paste create "notes" --content=- --yes | jq -r '.[0].Link'
+phabfive --format=json diffusion repo create probe --yes | jq -r '.[0].Repository.Monogram'
 ```
+
+`repo edit` reports by monogram, because `--short-name` can move the short name out from
+under the identifier you looked it up by. A URI write answers with the repository's URI
+records - what `diffusion uri list` gives - because a URI has no page of its own and
+there is no `uri show`. It is the whole set and not the one URI named: `uri create`
+demotes every URI already on the repository, so the set is what changed.
 
 An edit that needed no transaction still answers with the object's record: "already at
 the target state" is an answer about it, not an absence of one. Under `rich`, `tree`,
@@ -104,9 +111,8 @@ change list for `edit`.
 and leaves stdout empty under a machine-readable format. Check the exit code, not the
 output, to tell a dry run from a refusal.
 
-Not yet wired up (#344): `diffusion repo create/edit`, `diffusion uri create/edit`,
-`cache clear`, and `maniphest create --with=TEMPLATE`. These still print human text
-whatever is asked for - do not parse their output.
+Not yet wired up (#344): `cache clear`, and `maniphest create --with=TEMPLATE`. These
+still print human text whatever is asked for - do not parse their output.
 
 ## Monograms, and the one that writes
 

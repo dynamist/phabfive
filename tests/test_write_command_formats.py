@@ -121,6 +121,76 @@ def a_paste(paste_id=42, **record):
     return instance
 
 
+def a_repo_record(monogram="R7", name="probe", default_branch="master"):
+    """One entry of what repo_show() hands the renderers."""
+    return {
+        "_url": f"https://phorge.example.com/source/{name}/",
+        "Repository": {
+            "Name": name,
+            "Short Name": name,
+            "Monogram": monogram,
+            "Status": "active",
+            "VCS": "git",
+            "Default Branch": default_branch,
+        },
+    }
+
+
+def a_uri_record(uri="git@example.com:org/repo.git", origin="external"):
+    """One entry of what uri_list() hands the renderers.
+
+    A URI carries no _url: it has no page of its own, which is why the
+    renderers lead such a record with its first field instead of a Link.
+    """
+    return {"URI": uri, "Origin": origin, "Role": "Phorge pulls from here"}
+
+
+def a_diffusion(monogram="R7", name="probe", uris=None):
+    """A Diffusion whose create, edit and both reads are answered."""
+    instance = MagicMock()
+    instance.build_repo_create.return_value = (
+        [{"type": "shortName", "value": name}],
+        [{"field": "Short name", "old": None, "new": name}],
+    )
+    instance.apply_repo_create.return_value = f"PHID-REPO-{name}"
+    instance.get_repo_record.return_value = {
+        "id": int(monogram[1:]),
+        "phid": f"PHID-REPO-{name}",
+        "fields": {
+            "name": name,
+            "shortName": name,
+            "status": "active",
+            "isHosted": True,
+        },
+        "attachments": {"uris": {"uris": []}},
+    }
+    instance.link_repository.return_value = f"https://phorge.example.com/{monogram}"
+    instance.build_repo_edit.return_value = (
+        [{"type": "defaultBranch", "value": "main"}],
+        [{"field": "Default branch", "old": "master", "new": "main"}],
+    )
+    instance.build_uri_create.return_value = (
+        {"repository": name},
+        [{"field": "URI", "old": None, "new": "git@example.com:org/repo.git"}],
+    )
+    instance.build_uri_edit.return_value = (
+        [{"type": "display", "value": "never"}],
+        [{"field": "Display", "old": "always", "new": "never"}],
+    )
+    instance.get_uri_and_repo.return_value = (
+        instance.get_repo_record.return_value,
+        {"id": 11, "phid": "PHID-RURI-x"},
+    )
+    instance.repo_show.return_value = {
+        "repositories": [a_repo_record(monogram, name)],
+        "missing_ids": [],
+    }
+    instance.uri_list.return_value = {
+        "uris": uris if uris is not None else [a_uri_record()]
+    }
+    return instance
+
+
 class TestIsMachineFormat:
     """The one predicate every write command branches on."""
 
@@ -579,6 +649,264 @@ class TestPasteComment:
             )
 
         assert result.stdout.strip() == "https://phorge.example.com/P7"
+
+
+class TestDiffusionRepoCreate:
+    """`diffusion repo create` answers with the new repository's record."""
+
+    @pytest.mark.parametrize("output_format", MACHINE)
+    def test_emits_the_show_record(self, output_format):
+        diffusion = a_diffusion(name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    f"--format={output_format}",
+                    "diffusion",
+                    "repo",
+                    "create",
+                    "probe",
+                    "--yes",
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert "R7" in result.stdout
+        diffusion.repo_show.assert_called_once_with(["probe"])
+
+    def test_json_stdout_parses_and_prose_moves(self):
+        diffusion = a_diffusion(name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                ["--format=json", "diffusion", "repo", "create", "probe", "--yes"],
+            )
+
+        [record] = json.loads(result.stdout)
+        assert record["Repository"]["Monogram"] == "R7"
+        assert "Short name: probe" in result.stderr
+
+    @pytest.mark.parametrize("output_format", HUMAN)
+    def test_a_human_format_still_prints_the_change_list(self, output_format):
+        diffusion = a_diffusion(name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    f"--format={output_format}",
+                    "diffusion",
+                    "repo",
+                    "create",
+                    "probe",
+                    "--yes",
+                ],
+            )
+
+        assert "Short name: probe" in result.stdout
+        diffusion.repo_show.assert_not_called()
+
+    def test_dry_run_leaves_stdout_empty(self):
+        diffusion = a_diffusion(name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "diffusion",
+                    "repo",
+                    "create",
+                    "probe",
+                    "--dry-run",
+                ],
+            )
+
+        assert result.stdout.strip() == ""
+        assert "[DRY RUN] Would create probe:" in result.stderr
+        diffusion.apply_repo_create.assert_not_called()
+
+
+class TestDiffusionRepoEdit:
+    """`diffusion repo edit` answers with the edited repository's record."""
+
+    def test_emits_the_show_record_by_monogram(self):
+        """The monogram, because --short-name can move the name underneath.
+
+        Looking the repository up again by the identifier the caller used
+        would miss it after a rename, so the edit reports by R<id>.
+        """
+        diffusion = a_diffusion(monogram="R7", name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "diffusion",
+                    "repo",
+                    "edit",
+                    "probe",
+                    "--default-branch=main",
+                    "--yes",
+                ],
+            )
+
+        [record] = json.loads(result.stdout)
+        assert record["Repository"]["Monogram"] == "R7"
+        diffusion.repo_show.assert_called_once_with(["R7"])
+        assert "Default branch: master → main" in result.stderr
+
+    def test_an_edit_needing_nothing_still_has_a_record(self):
+        diffusion = a_diffusion(monogram="R7", name="probe")
+        diffusion.build_repo_edit.return_value = ([], [])
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "diffusion",
+                    "repo",
+                    "edit",
+                    "probe",
+                    "--default-branch=main",
+                    "--yes",
+                ],
+            )
+
+        assert len(json.loads(result.stdout)) == 1
+        assert "No changes (already at target state)" in result.stderr
+        diffusion.apply_repo_edit.assert_not_called()
+
+    def test_dry_run_leaves_stdout_empty(self):
+        diffusion = a_diffusion(monogram="R7", name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "diffusion",
+                    "repo",
+                    "edit",
+                    "probe",
+                    "--default-branch=main",
+                    "--dry-run",
+                ],
+            )
+
+        assert result.stdout.strip() == ""
+        assert "[DRY RUN] Would apply to" in result.stderr
+        diffusion.apply_repo_edit.assert_not_called()
+
+
+class TestDiffusionUriWrites:
+    """A URI write answers with the repository's URI records.
+
+    There is no `uri show`, and a URI has no page of its own, so the read
+    command a URI write answers with is `uri list`. It answers with the
+    whole set rather than the one URI named, because `uri create` demotes
+    every URI already on the repository before adding the new one - the set
+    is what the command actually changed, and answering `uri edit` the same
+    way means a caller need not know which has the wider blast radius.
+    """
+
+    def test_create_emits_the_uri_records(self):
+        diffusion = a_diffusion(name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "diffusion",
+                    "uri",
+                    "create",
+                    "K3",
+                    "probe",
+                    "git@example.com:org/repo.git",
+                    "--observe",
+                    "--yes",
+                ],
+            )
+
+        [record] = json.loads(result.stdout)
+        assert record["URI"] == "git@example.com:org/repo.git"
+        diffusion.uri_list.assert_called_once_with("probe")
+
+    def test_create_under_a_human_format_still_prints_the_uri(self):
+        diffusion = a_diffusion(name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=rich",
+                    "diffusion",
+                    "uri",
+                    "create",
+                    "K3",
+                    "probe",
+                    "git@example.com:org/repo.git",
+                    "--observe",
+                    "--yes",
+                ],
+            )
+
+        assert result.stdout.strip() == "git@example.com:org/repo.git"
+        diffusion.uri_list.assert_not_called()
+
+    def test_edit_emits_the_whole_set_so_context_survives(self):
+        diffusion = a_diffusion(
+            name="probe",
+            uris=[
+                a_uri_record("git@example.com:org/repo.git"),
+                a_uri_record("https://phorge.example.com/source/probe.git", "built-in"),
+            ],
+        )
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "diffusion",
+                    "uri",
+                    "edit",
+                    "probe",
+                    "git@example.com:org/repo.git",
+                    "--display=never",
+                    "--yes",
+                ],
+            )
+
+        assert len(json.loads(result.stdout)) == 2
+        assert "Display: always → never" in result.stderr
+
+    def test_edit_dry_run_leaves_stdout_empty(self):
+        diffusion = a_diffusion(name="probe")
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = runner.invoke(
+                app,
+                [
+                    "--format=json",
+                    "diffusion",
+                    "uri",
+                    "edit",
+                    "probe",
+                    "git@example.com:org/repo.git",
+                    "--display=never",
+                    "--dry-run",
+                ],
+            )
+
+        assert result.stdout.strip() == ""
+        assert "[DRY RUN] Would apply to" in result.stderr
+        diffusion.apply_uri_edit.assert_not_called()
 
 
 class TestStatusTextOnStderr:

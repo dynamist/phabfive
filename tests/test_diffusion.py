@@ -1553,7 +1553,11 @@ class TestRepoEditCli:
 
         assert result.exit_code == 0
         assert "not a hosted repository" in result.stderr
-        assert "[DRY RUN]" in result.stdout
+        # result.output, not result.stdout, the way the sibling dry-run test
+        # above reads it: these invoke diffusion_app directly, so there is no
+        # root --format to set and the format auto-detects to yaml on a
+        # non-TTY - which since #344 puts a dry run's preview on stderr.
+        assert "[DRY RUN]" in result.output
         diffusion.build_repo_edit.assert_called_once()
 
     def test_the_push_warning_does_not_stop_the_edit(self):
