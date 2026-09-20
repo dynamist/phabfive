@@ -161,6 +161,81 @@ def uri_origin(uri):
     return "built-in" if builtin.get("protocol") else "external"
 
 
+def builtin_clone_name(fields):
+    """The name Phorge builds a repository's built-in URIs out of.
+
+    Phorge asks the repository for a clone name and gets its short name if
+    it has one, and its name if it does not. That is why renaming a
+    repository that never got a short name moves its clone URIs while
+    renaming one that has a short name does not.
+
+    Parameters
+    ----------
+    fields : dict
+        The "fields" of a repository record
+
+    Returns
+    -------
+    str or None
+        The clone name, or None for a record carrying neither
+    """
+    return fields.get("shortName") or fields.get("name")
+
+
+def builtin_uri_moves(repo, old_name, new_name):
+    """Every built-in URI a change of clone name moves, before and after.
+
+    Read off the URIs the repository actually carries rather than built
+    out of the field being edited, because a repository has as many
+    built-in URIs as it has shapes to be addressed by - ``/source/<name>``,
+    ``/diffusion/<id>/<name>`` and, with a callsign,
+    ``/diffusion/<callsign>/<name>`` - and a rename moves all of them at
+    once. Guessing one shape names the wrong number of them, and names
+    none at all correctly on a repository with no short name, which has no
+    ``/source/`` URI to guess.
+
+    A built-in URI ends in the clone name, so only the last path segment
+    moves. One that does not end in the old clone name is not derived from
+    it and is left out.
+
+    Parameters
+    ----------
+    repo : dict
+        A repository record, fetched with attachments={"uris": True}
+    old_name : str
+        The clone name in force
+    new_name : str
+        The clone name it is moving to
+
+    Returns
+    -------
+    list
+        (old, new) display URIs, in the order the attachment returned them
+    """
+    uris = repo.get("attachments", {}).get("uris", {}).get("uris", [])
+    moves = []
+
+    for uri in uris:
+        if uri_origin(uri) != "built-in":
+            continue
+
+        display = (uri.get("fields", {}).get("uri") or {}).get("display")
+
+        if not display:
+            continue
+
+        head, slash, tail = display.rpartition("/")
+
+        if not slash or not (tail == old_name or tail.startswith(f"{old_name}.")):
+            continue
+
+        # Whatever follows the clone name is the VCS suffix Phorge appended
+        # (".git"), and it stays put.
+        moves.append((display, f"{head}/{new_name}{tail[len(old_name) :]}"))
+
+    return moves
+
+
 def uri_role(uri):
     """What this URI actually does, in one line.
 
