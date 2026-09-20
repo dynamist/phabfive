@@ -374,7 +374,7 @@ def test_repo_edit_sets_every_policy(
         repo,
         "--visible-to=public",
         f"--editable-by=#{slug}",
-        f"--pushable-by=@{me}",
+        f"--can-push=@{me}",
         "--yes",
     )
 
@@ -385,7 +385,7 @@ def test_repo_edit_sets_every_policy(
     assert record["Policy"] == {
         "Visible To": "Public (No Login Required)",
         "Editable By": f"#{slug}",
-        "Pushable By": f"@{me}",
+        "Can Push": f"@{me}",
     }
 
     # Asking for what is already there is not a change

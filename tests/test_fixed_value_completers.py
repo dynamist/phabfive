@@ -33,7 +33,7 @@ class TestRepoStatusCompletion:
 class TestPolicyCompletion:
     """The three policy options share one grammar and one completer."""
 
-    @pytest.mark.parametrize("flag", ["--visible-to", "--editable-by", "--pushable-by"])
+    @pytest.mark.parametrize("flag", ["--visible-to", "--editable-by", "--can-push"])
     def test_offers_the_keywords_and_both_prefixes(self, flag):
         """The keywords are a constant because Phorge has no policy.query to
         ask; "#" and "@" are offered as the start of a value rather than a
@@ -73,7 +73,7 @@ class TestPolicyCompletion:
             completers, "_user_completions", return_value=[("admin", "Administrator")]
         ) as users:
             offered = _complete(
-                ["diffusion", "repo", "edit", "R5", "--pushable-by"], "@adm"
+                ["diffusion", "repo", "edit", "R5", "--can-push"], "@adm"
             )
 
         assert offered == ["@admin"]
