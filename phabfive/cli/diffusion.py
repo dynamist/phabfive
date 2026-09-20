@@ -238,13 +238,22 @@ def uri_create(
     credential: str = typer.Argument(
         ..., help="SSH Private Key stored in Passphrase (e.g., K123)"
     ),
-    repo: str = typer.Argument(..., help="Repository monogram (R123) or shortname"),
+    repo: str = typer.Argument(
+        ..., help="Repository monogram (R123), callsign or shortname"
+    ),
     uri: str = typer.Argument(..., help="URI (e.g., git@bitbucket.org:org/repo.git)"),
     observe: bool = typer.Option(False, "--observe", help="Set I/O to observe"),
     mirror: bool = typer.Option(False, "--mirror", help="Set I/O to mirror"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be created without creating it"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Create without confirming"),
+    interactive: bool = typer.Option(
+        False, "--interactive", "-i", help="Review the change and confirm"
+    ),
 ) -> None:
     """Create a new URI for a repository."""
-    diffusion = _get_diffusion_app()
+    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
 
     if not observe and not mirror:
         typer.echo("ERROR: Must specify either --observe or --mirror", err=True)
@@ -254,19 +263,45 @@ def uri_create(
         typer.echo("ERROR: Cannot specify both --observe and --mirror", err=True)
         raise typer.Exit(1)
 
+    try:
+        assume_yes = resolve_assume_yes(yes, False, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
     if mirror:
         io = "mirror"
     else:
         io = "observe"
 
-    created_uri = diffusion.create_uri(
-        repository_name=repo,
-        new_uri=uri,
-        io=io,
-        display="always",
-        credential=credential,
-    )
-    typer.echo(created_uri)
+    diffusion = _get_diffusion_app()
+
+    try:
+        plan, changes = diffusion.build_uri_create(
+            repository_name=repo,
+            new_uri=uri,
+            io=io,
+            display="always",
+            credential=credential,
+        )
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    if dry_run:
+        render_changes(uri, changes, header=f"[DRY RUN] Would create {uri}:")
+        return
+
+    if interactive:
+        render_changes(uri, changes, header=f"Would create {uri}:")
+        confirmed, return_code = confirm_apply(assume_yes)
+        if not confirmed:
+            typer.echo("Nothing was created.", err=True)
+            raise typer.Exit(return_code or 0)
+
+    diffusion.apply_uri_create(plan)
+
+    typer.echo(uri)
 
 
 @uri_app.command()

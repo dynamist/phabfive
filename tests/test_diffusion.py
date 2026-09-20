@@ -908,3 +908,207 @@ class TestRepoCreateCli:
 
         assert result.exit_code == 1
         diffusion.apply_repo_create.assert_not_called()
+
+
+def _uri_record(uri, io="observe", display="always", uri_id=1):
+    return {
+        "id": uri_id,
+        "fields": {
+            "uri": {"display": uri},
+            "io": {"effective": io},
+            "display": {"effective": display},
+        },
+    }
+
+
+class TestBuildUriCreate:
+    """Creating a URI demotes the others; the preview has to say so."""
+
+    def _diffusion_with(self, uris, diffusion):
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = uris
+        diffusion.phab.diffusion.repository.search.return_value = {"data": [repo]}
+        diffusion.passphrase.get_secret.return_value = {
+            "PHID-CRED-1": {"type": "token"}
+        }
+        return diffusion
+
+    def test_the_new_uri_is_described(self, diffusion):
+        self._diffusion_with([], diffusion)
+
+        _, changes = diffusion.build_uri_create(
+            repository_name="myrepo",
+            new_uri="git@example.com:group/project.git",
+            io="observe",
+            credential="K1",
+        )
+
+        assert {
+            "field": "New URI",
+            "old": "(none)",
+            "new": "git@example.com:group/project.git",
+        } in changes
+
+    def test_every_existing_uri_is_named_as_a_demotion(self, diffusion):
+        """This is the effect that is invisible in the arguments."""
+        self._diffusion_with(
+            [
+                _uri_record("git@example.com:group/old.git", uri_id=1),
+                _uri_record("ssh://host/source/myrepo.git", io="read", uri_id=2),
+            ],
+            diffusion,
+        )
+
+        _, changes = diffusion.build_uri_create(
+            repository_name="myrepo",
+            new_uri="git@example.com:group/new.git",
+            io="observe",
+            credential="K1",
+        )
+
+        demotions = [c for c in changes if c["field"].startswith("Demotes")]
+        assert len(demotions) == 2
+        assert demotions[0] == {
+            "field": "Demotes git@example.com:group/old.git",
+            "old": "io=observe, display=always",
+            "new": "io=read, display=never",
+        }
+
+    def test_a_uri_already_demoted_is_not_listed(self, diffusion):
+        self._diffusion_with(
+            [_uri_record("git@example.com:group/old.git", io="read", display="never")],
+            diffusion,
+        )
+
+        _, changes = diffusion.build_uri_create(
+            repository_name="myrepo",
+            new_uri="git@example.com:group/new.git",
+            io="observe",
+            credential="K1",
+        )
+
+        assert not [c for c in changes if c["field"].startswith("Demotes")]
+
+    def test_the_credential_secret_never_reaches_the_description(self, diffusion):
+        self._diffusion_with([], diffusion)
+        diffusion.passphrase.get_secret.return_value = {
+            "PHID-CRED-1": {"type": "token", "material": {"token": "s3cr3t"}}
+        }
+
+        _, changes = diffusion.build_uri_create(
+            repository_name="myrepo",
+            new_uri="git@example.com:group/project.git",
+            io="observe",
+            credential="K1",
+        )
+
+        assert {"field": "Credential", "old": "(none)", "new": "K1"} in changes
+        assert "s3cr3t" not in str(changes)
+
+    def test_building_creates_nothing(self, diffusion):
+        self._diffusion_with([_uri_record("git@example.com:group/old.git")], diffusion)
+
+        diffusion.build_uri_create(
+            repository_name="myrepo",
+            new_uri="git@example.com:group/new.git",
+            io="observe",
+            credential="K1",
+        )
+
+        diffusion.phab.diffusion.uri.edit.assert_not_called()
+
+    def test_a_nameless_repository_can_receive_a_uri(self, diffusion):
+        """It resolves through match_repository like every other lookup."""
+        repo = _repo("nameless")
+        repo["id"] = 42
+        repo["fields"]["shortName"] = None
+        repo["attachments"]["uris"]["uris"] = []
+        diffusion.phab.diffusion.repository.search.return_value = {"data": [repo]}
+        diffusion.passphrase.get_secret.return_value = {
+            "PHID-CRED-1": {"type": "token"}
+        }
+
+        plan, _ = diffusion.build_uri_create(
+            repository_name="R42",
+            new_uri="git@example.com:group/project.git",
+            io="observe",
+            credential="K1",
+        )
+
+        assert plan["repository_phid"] == repo["phid"]
+
+    def test_an_unknown_repository_raises(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {"data": []}
+
+        with pytest.raises(PhabfiveDataException, match="does not exist"):
+            diffusion.build_uri_create(
+                repository_name="nope", new_uri="x", io="observe", credential="K1"
+            )
+
+
+class TestUriCreateCli:
+    """uri create matches the vocabulary the edit commands settled on."""
+
+    def _invoke(self, args):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.build_uri_create.return_value = (
+            {"repository_phid": "PHID-REPO-1", "demotions": [], "transactions": []},
+            [
+                {"field": "New URI", "old": "(none)", "new": "git@example.com:g/p.git"},
+                {
+                    "field": "Demotes git@example.com:g/old.git",
+                    "old": "io=observe, display=always",
+                    "new": "io=read, display=never",
+                },
+            ],
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, ["uri", "create", *args])
+        return result, mock_diffusion
+
+    def test_dry_run_creates_nothing(self):
+        result, diffusion = self._invoke(
+            ["K1", "myrepo", "git@example.com:g/p.git", "--observe", "--dry-run"]
+        )
+
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+        diffusion.apply_uri_create.assert_not_called()
+
+    def test_dry_run_shows_the_demotion(self):
+        """The whole reason this command needed a preview."""
+        result, _ = self._invoke(
+            ["K1", "myrepo", "git@example.com:g/p.git", "--observe", "--dry-run"]
+        )
+
+        assert "Demotes git@example.com:g/old.git" in result.output
+        assert "io=read, display=never" in result.output
+
+    def test_creates_by_default(self):
+        result, diffusion = self._invoke(
+            ["K1", "myrepo", "git@example.com:g/p.git", "--observe"]
+        )
+
+        assert result.exit_code == 0
+        diffusion.apply_uri_create.assert_called_once()
+
+    def test_still_requires_observe_or_mirror(self):
+        result, diffusion = self._invoke(["K1", "myrepo", "git@example.com:g/p.git"])
+
+        assert result.exit_code == 1
+        diffusion.apply_uri_create.assert_not_called()
+
+    def test_yes_and_interactive_are_mutually_exclusive(self):
+        result, diffusion = self._invoke(
+            ["K1", "myrepo", "git@example.com:g/p.git", "--observe", "-y", "-i"]
+        )
+
+        assert result.exit_code == 1
+        diffusion.apply_uri_create.assert_not_called()

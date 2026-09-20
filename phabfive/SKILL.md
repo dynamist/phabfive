@@ -215,11 +215,12 @@ phabfive maniphest create "Fix the flaky import test" --priority=high --tag Back
 phabfive maniphest edit T123 --status=resolved --dry-run
 ```
 
-`--dry-run` exists on `maniphest create`, `maniphest edit`, top-level `edit`,
-`paste create`, `paste edit`, `diffusion uri edit`, `diffusion repo edit` and
-`diffusion repo create`. It does **not** exist on any `comment` command, nor on
-`diffusion uri create` — that writes the moment you run it. A repository cannot be
-removed once created, so preview it first.
+`--dry-run` exists on every write command except the `comment` ones, which stay
+immediate because a comment is cheap to correct. Preview first on anything that
+cannot be undone: a repository cannot be removed once created, and
+`diffusion uri create` **demotes every URI already on the repository** to
+`io=read, display=never` before adding the new one, so it can un-publish a clone
+URL that nothing asked it to touch. Its `--dry-run` names each URI it would demote.
 
 ### Things that will hang you
 
@@ -291,6 +292,7 @@ phabfive --format=json diffusion repo list active
 phabfive diffusion uri list R5 --clone
 phabfive diffusion repo edit R5 --default-branch main --dry-run
 phabfive diffusion repo create <name> --dry-run
+phabfive diffusion uri create K1 R5 <uri> --observe --dry-run
 ```
 
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
