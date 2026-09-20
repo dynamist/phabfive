@@ -226,23 +226,36 @@ class TestBuildUriEdit:
 
 
 class TestUriEditCredentialSecrecy:
-    """A credential is named by monogram; its secret never reaches the output."""
+    """A credential is named by monogram, and its secret is never read.
+
+    These mocks previously returned a dict from get_secret and stubbed out
+    _validate_credential_type, neither of which matched what those functions
+    do. That is why the credential never resolving to a PHID went unnoticed.
+    The record below is the shape passphrase.query actually returns.
+    """
 
     SECRET = "-----BEGIN OPENSSH PRIVATE KEY-----\nhunter2\n"
 
     def _diffusion(self, diffusion):
-        diffusion.passphrase.get_secret = MagicMock(
+        diffusion.passphrase.get_credential_record = MagicMock(
             return_value={
                 "id": 2,
+                "phid": "PHID-CDTL-newcred",
                 "monogram": "K2",
                 "type": "ssh-key-text",
-                "material": {"privateKey": self.SECRET},
             }
         )
-        diffusion._validate_credential_type = MagicMock(
-            return_value="PHID-CDTL-newcred"
-        )
         return diffusion
+
+    def test_the_secret_is_never_fetched(self, diffusion):
+        diffusion = self._diffusion(diffusion)
+        diffusion.passphrase.get_secret = MagicMock(
+            return_value={"material": {"privateKey": self.SECRET}}
+        )
+
+        diffusion.build_uri_edit(_uri(), credential="K2")
+
+        diffusion.passphrase.get_secret.assert_not_called()
 
     def test_the_change_names_the_monogram_not_the_secret(self, diffusion):
         diffusion = self._diffusion(diffusion)
@@ -929,8 +942,10 @@ class TestBuildUriCreate:
         repo = _repo("myrepo")
         repo["attachments"]["uris"]["uris"] = uris
         diffusion.phab.diffusion.repository.search.return_value = {"data": [repo]}
-        diffusion.passphrase.get_secret.return_value = {
-            "PHID-CRED-1": {"type": "token"}
+        diffusion.passphrase.get_credential_record.return_value = {
+            "phid": "PHID-CDTL-1",
+            "type": "token",
+            "monogram": "K1",
         }
         return diffusion
 
@@ -998,11 +1013,8 @@ class TestBuildUriCreate:
 
         assert not [c for c in changes if c["field"].startswith("Demotes")]
 
-    def test_the_credential_secret_never_reaches_the_description(self, diffusion):
+    def test_the_credential_is_named_by_monogram(self, diffusion):
         self._diffusion_with([], diffusion)
-        diffusion.passphrase.get_secret.return_value = {
-            "PHID-CRED-1": {"type": "token", "material": {"token": "s3cr3t"}}
-        }
 
         _, changes = diffusion.build_uri_create(
             repository_name="myrepo",
@@ -1012,7 +1024,19 @@ class TestBuildUriCreate:
         )
 
         assert {"field": "Credential", "old": "(none)", "new": "K1"} in changes
-        assert "s3cr3t" not in str(changes)
+
+    def test_the_secret_is_never_fetched(self, diffusion):
+        """Attaching a credential needs its PHID, not its material."""
+        self._diffusion_with([], diffusion)
+
+        diffusion.build_uri_create(
+            repository_name="myrepo",
+            new_uri="git@example.com:group/project.git",
+            io="observe",
+            credential="K1",
+        )
+
+        diffusion.passphrase.get_secret.assert_not_called()
 
     def test_building_creates_nothing(self, diffusion):
         self._diffusion_with([_uri_record("git@example.com:group/old.git")], diffusion)
@@ -1033,8 +1057,10 @@ class TestBuildUriCreate:
         repo["fields"]["shortName"] = None
         repo["attachments"]["uris"]["uris"] = []
         diffusion.phab.diffusion.repository.search.return_value = {"data": [repo]}
-        diffusion.passphrase.get_secret.return_value = {
-            "PHID-CRED-1": {"type": "token"}
+        diffusion.passphrase.get_credential_record.return_value = {
+            "phid": "PHID-CDTL-1",
+            "type": "token",
+            "monogram": "K1",
         }
 
         plan, _ = diffusion.build_uri_create(

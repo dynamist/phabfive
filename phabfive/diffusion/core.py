@@ -355,8 +355,8 @@ class Diffusion(Phabfive):
                 f"'{repository_name}' does not exist. Please create a new repository"
             )
 
-        get_credential = self.passphrase.get_secret(ids=credential)
-        credential_phid = self._validate_credential_type(credential=get_credential)
+        record = self.passphrase.get_credential_record(credential)
+        credential_phid = self._validate_credential_type(credential=record)
 
         demotions = []
         for uri in repo["attachments"]["uris"]["uris"]:
@@ -524,8 +524,8 @@ class Diffusion(Phabfive):
 
         credential_phid = None
         if credential:
-            secret = self.passphrase.get_secret(credential)
-            credential_phid = self._validate_credential_type(credential=secret)
+            record = self.passphrase.get_credential_record(credential)
+            credential_phid = self._validate_credential_type(credential=record)
 
         candidates = [
             ("uri", uri, "URI", fields.get("uri", {}).get("display"), None),
