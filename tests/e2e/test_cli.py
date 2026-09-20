@@ -201,6 +201,26 @@ def test_repo_list_formats_agree(phabfive, settled_repositories):
     assert load(phabfive("--format", "rich", *args)) == as_json
 
 
+def test_repo_list_table_writes_one_row_per_repository(phabfive):
+    """`--format=table` is the list-shaped format (#376)."""
+    repos = phabfive("diffusion", "repo", "list", json_output=True)
+    rows = phabfive("--format", "table", "diffusion", "repo", "list").splitlines()
+
+    assert len(rows) == len(repos) + 1
+    assert rows[0].startswith("Name")
+    assert "Monogram" in rows[0]
+
+    for repo in repos:
+        assert repo["Repository"]["Monogram"] in "\n".join(rows[1:])
+
+
+def test_repo_show_falls_back_to_rich_for_table(phabfive):
+    """A show has one record and no grid to make of it."""
+    output = phabfive("--format", "table", "diffusion", "repo", "show", "GUNNAR")
+
+    assert output.startswith("- Link: ")
+
+
 def test_repo_list_url_is_a_deprecated_alias(phabfive_raw):
     result = phabfive_raw("--format", "json", "diffusion", "repo", "list", "--url")
 

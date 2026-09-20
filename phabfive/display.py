@@ -11,6 +11,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import PreservedScalarString
 
 from phabfive.json_output import emit_records
+from phabfive.table import display_records_table
 
 
 def render_records(output_format, renderers):
@@ -19,7 +20,10 @@ def render_records(output_format, renderers):
     ``renderers`` maps a format name to the zero-argument callable that
     renders it. An app that has nothing special to say for a format leaves
     it out and gets ``rich``, which is what ``simple`` has always done
-    everywhere but passphrase and paste.
+    everywhere but passphrase and paste. ``table`` rides on the same rule:
+    a list command registers a table renderer, a ``show`` command does not
+    and so falls back to rich, which is the whole of "table is
+    list-shaped".
 
     This exists so that an app added later - diffusion was the fourth -
     reuses the switch instead of writing another copy of it that drifts.
@@ -30,7 +34,7 @@ def render_records(output_format, renderers):
     Parameters
     ----------
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or an alias
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', 'table', or an alias
     renderers : dict
         Format name to a callable taking no arguments. A 'rich' entry is
         required, being the fallback.
@@ -620,7 +624,9 @@ def display_tasks_json(task_dicts, output_format="json", show_description=True):
     emit_records(outputs, output_format)
 
 
-def display_tasks(result, output_format, phabfive_instance, show_description=True):
+def display_tasks(
+    result, output_format, phabfive_instance, show_description=True, tabular=False
+):
     """Display task search/show results in the specified format.
 
     The switch itself is :func:`render_records`, shared with every other
@@ -633,11 +639,15 @@ def display_tasks(result, output_format, phabfive_instance, show_description=Tru
     result : dict
         Result from task_search() or task_show() containing 'tasks' list
     output_format : str
-        One of 'rich', 'tree', 'yaml', 'json', or 'jsonl'
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl' or 'table'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     show_description : bool
         If True, include the task description in the output
+    tabular : bool, optional
+        Whether this call is list-shaped - `search`, `parents`, `subtasks`
+        - and so has a table to offer. `show` leaves it False and
+        `--format=table` falls back to rich there.
     """
     if not result or not result.get("tasks"):
         return
@@ -645,26 +655,34 @@ def display_tasks(result, output_format, phabfive_instance, show_description=Tru
     console = phabfive_instance.get_console()
     tasks = result["tasks"]
 
-    render_records(
-        output_format,
-        {
-            "json": lambda: display_tasks_json(
-                tasks, "json", show_description=show_description
-            ),
-            "jsonl": lambda: display_tasks_json(
-                tasks, "jsonl", show_description=show_description
-            ),
-            "tree": lambda: display_tasks_tree(
-                console, tasks, phabfive_instance, show_description=show_description
-            ),
-            "yaml": lambda: display_tasks_yaml(
-                tasks, show_description=show_description
-            ),
-            "rich": lambda: display_tasks_rich(
-                console, tasks, phabfive_instance, show_description=show_description
-            ),
-        },
-    )
+    renderers = {
+        "json": lambda: display_tasks_json(
+            tasks, "json", show_description=show_description
+        ),
+        "jsonl": lambda: display_tasks_json(
+            tasks, "jsonl", show_description=show_description
+        ),
+        "tree": lambda: display_tasks_tree(
+            console, tasks, phabfive_instance, show_description=show_description
+        ),
+        "yaml": lambda: display_tasks_yaml(tasks, show_description=show_description),
+        "rich": lambda: display_tasks_rich(
+            console, tasks, phabfive_instance, show_description=show_description
+        ),
+    }
+
+    if tabular:
+        # The same published record json emits, so the table needs to know
+        # nothing about tasks - the columns come out of the record.
+        renderers["table"] = lambda: display_records_table(
+            console,
+            [
+                _build_task_json_output(task, show_description=show_description)
+                for task in tasks
+            ],
+        )
+
+    render_records(output_format, renderers)
 
 
 # User display functions

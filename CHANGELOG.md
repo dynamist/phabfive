@@ -46,6 +46,23 @@
   `--dry-run`, `--yes` and `--interactive`, and reports each value it would change and what
   it would change it from. A credential is named by its monogram; its secret is never printed
 
+### Table Output
+* **`--format=table`** - A grid, one row per record and one column per field, for the
+  commands whose answer is a list: `diffusion repo list`, `diffusion uri list`,
+  `maniphest search`, `maniphest parents`, `maniphest subtasks` and `paste search`. A
+  `show` command has one record and no grid to make of it, so `--format=table` falls
+  back to `rich` there, which `--help` says
+* **Columns come from the records, not from the command** - A nested section
+  contributes its leaves (`Repository: {Name: ...}` is a `Name` column), a list
+  becomes one comma-joined column, a column empty in every row is dropped, and a
+  `Link` becomes the row's terminal hyperlink rather than a column of URLs. So an app
+  adopting the format writes no column list. Selecting columns with `--columns`, and
+  `csv`, remain open in #50
+* **One row is one line** - Cells are cut to 60 characters, and on a terminal the
+  table is fitted to its width by shrinking the widest column first. Piped, every
+  cell arrives whole. `table` is a human format and is deliberately not accepted for
+  `PHAB_FALLBACK`
+
 ### Newline-Delimited JSON Output
 * **`--format=jsonl`** - Emits one JSON object per line with no wrapping array
   ([JSON Lines](https://jsonlines.org/)), written and flushed per record. Works

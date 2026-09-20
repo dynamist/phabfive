@@ -18,6 +18,7 @@ Cross-cutting features:
 - **Batch editing** - Edit multiple objects at once: `phabfive edit T1,T2,T3 --status=resolved`
 - **Shell completion** - Tab completion for commands, options, and values
 - **Machine-readable output** - `--format=json`, `--format=jsonl` or `--format=yaml` for scripting and AI agents
+- **Table output** - `--format=table` renders a grid for the commands that answer with a list
 - **Agent skill** - `phabfive --skill` prints a ready-to-use skill file for AI agents
 - **Quiet by default** - `-v` reports which filters a search actually applied
 

@@ -54,7 +54,9 @@ def _get_maniphest_app():
         raise typer.Exit(1)
 
 
-def _display_tasks(result, output_format, maniphest_instance, show_description=True):
+def _display_tasks(
+    result, output_format, maniphest_instance, show_description=True, tabular=False
+):
     """Display task search/show results in the specified format.
 
     The switch itself lives in ``phabfive.display.display_tasks``, which is the
@@ -64,7 +66,11 @@ def _display_tasks(result, output_format, maniphest_instance, show_description=T
     from phabfive.display import display_tasks
 
     display_tasks(
-        result, output_format, maniphest_instance, show_description=show_description
+        result,
+        output_format,
+        maniphest_instance,
+        show_description=show_description,
+        tabular=tabular,
     )
 
 
@@ -656,7 +662,7 @@ def search(
             typer.echo(f"ERROR: {e}", err=True)
             raise typer.Exit(1)
 
-        _display_tasks(result, output_format, maniphest)
+        _display_tasks(result, output_format, maniphest, tabular=True)
 
 
 def _get_edit_app():
@@ -870,7 +876,7 @@ def parents(
         return
 
     output_format = _get_output_format(ctx)
-    _display_tasks(result, output_format, maniphest)
+    _display_tasks(result, output_format, maniphest, tabular=True)
 
 
 @maniphest_app.command()
@@ -900,4 +906,4 @@ def subtasks(
         return
 
     output_format = _get_output_format(ctx)
-    _display_tasks(result, output_format, maniphest)
+    _display_tasks(result, output_format, maniphest, tabular=True)

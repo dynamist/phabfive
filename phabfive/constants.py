@@ -10,6 +10,7 @@ class OutputFormat(str, Enum):
     yaml = "yaml"  # Machine-readable YAML
     json = "json"  # Machine-readable JSON
     jsonl = "jsonl"  # Machine-readable newline-delimited JSON
+    table = "table"  # Human-readable grid, for list commands
     simple = "simple"  # Minimal output (e.g., just the secret for passphrase)
 
 

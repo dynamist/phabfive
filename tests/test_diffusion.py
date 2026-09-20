@@ -2595,3 +2595,146 @@ class TestUriListCli:
         assert result.exit_code == 1
         assert "not found" in result.output
         assert "Traceback" not in result.output
+
+
+class TestTableFormatCli:
+    """`--format=table` is list-shaped, and global (#376).
+
+    `repo list` and `uri list` render a grid from the same records every
+    other format renders; `repo show` registers no table renderer and so
+    falls back to rich, which is what "list-shaped" means in practice.
+    """
+
+    REPOS = {
+        "repositories": [
+            {
+                "_url": "http://phorge.localhost/R5",
+                "_link": "http://phorge.localhost/R5",
+                "Repository": {
+                    "Name": "phabfive",
+                    "Callsign": None,
+                    "Monogram": "R5",
+                    "Status": "active",
+                    "Default Branch": "master",
+                },
+                "Policy": {"View": "All Users"},
+            },
+            {
+                "_url": "http://phorge.localhost/R6",
+                "_link": "http://phorge.localhost/R6",
+                "Repository": {
+                    "Name": "unifik",
+                    "Callsign": None,
+                    "Monogram": "R6",
+                    "Status": "active",
+                    "Default Branch": "main",
+                },
+                "Policy": {"View": "All Users"},
+            },
+        ]
+    }
+
+    URIS = {
+        "uris": [
+            {
+                "URI": "ssh://phorge@phorge.localhost/source/phabfive.git",
+                "I/O": "readwrite",
+                "Display": "always",
+                "Disabled": False,
+            },
+            {
+                "URI": "git@github.com:dynamist/phabfive.git",
+                "I/O": "observe",
+                "Display": "never",
+                "Disabled": False,
+            },
+        ]
+    }
+
+    def _invoke(self, argv, **returns):
+        from rich.console import Console
+        from typer.testing import CliRunner
+
+        from phabfive.cli import app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.get_console.return_value = Console(
+            force_terminal=False, no_color=True, width=400
+        )
+
+        for name, value in returns.items():
+            getattr(mock_diffusion, name).return_value = value
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(app, argv)
+
+        assert result.exit_code == 0, result.output
+
+        return [line.rstrip() for line in result.output.splitlines() if line.strip()]
+
+    def test_repo_list_heads_its_columns_with_the_record_keys(self):
+        rows = self._invoke(
+            ["--format=table", "diffusion", "repo", "list"], repo_list=self.REPOS
+        )
+
+        assert rows[0].split() == [
+            "Name",
+            "Monogram",
+            "Status",
+            "Default",
+            "Branch",
+            "View",
+        ]
+
+    def test_repo_list_writes_one_row_per_repository(self):
+        rows = self._invoke(
+            ["--format=table", "diffusion", "repo", "list"], repo_list=self.REPOS
+        )
+
+        assert len(rows) == 1 + len(self.REPOS["repositories"])
+        assert rows[1].startswith("phabfive")
+        assert rows[2].startswith("unifik")
+
+    def test_repo_list_leaves_out_the_column_no_repository_filled_in(self):
+        rows = self._invoke(
+            ["--format=table", "diffusion", "repo", "list"], repo_list=self.REPOS
+        )
+
+        assert "Callsign" not in rows[0]
+
+    def test_uri_list_keeps_a_long_uri_whole(self):
+        rows = self._invoke(
+            ["--format=table", "diffusion", "uri", "list", "R5"], uri_list=self.URIS
+        )
+
+        assert rows[0].split() == ["URI", "I/O", "Display", "Disabled"]
+        assert "ssh://phorge@phorge.localhost/source/phabfive.git" in rows[1]
+
+    def test_uri_list_writes_one_row_per_uri(self):
+        rows = self._invoke(
+            ["--format=table", "diffusion", "uri", "list", "R5"], uri_list=self.URIS
+        )
+
+        assert len(rows) == 1 + len(self.URIS["uris"])
+
+    def test_repo_show_falls_back_to_rich(self):
+        rows = self._invoke(
+            ["--format=table", "diffusion", "repo", "show", "R5"],
+            repo_show={"repositories": self.REPOS["repositories"][:1]},
+        )
+
+        assert rows[0] == "- Link: http://phorge.localhost/R5"
+
+    def test_the_table_has_as_many_rows_as_json_has_records(self):
+        import json
+
+        table = self._invoke(
+            ["--format=table", "diffusion", "repo", "list"], repo_list=self.REPOS
+        )
+        as_json = self._invoke(
+            ["--format=json", "diffusion", "repo", "list"], repo_list=self.REPOS
+        )
+
+        assert len(table) - 1 == len(json.loads("\n".join(as_json)))

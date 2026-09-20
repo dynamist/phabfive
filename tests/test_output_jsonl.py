@@ -74,8 +74,15 @@ class TestFormatRegistration:
     def test_fallback_accepts_machine_readable_formats(self, value):
         assert re.match(VALIDATORS["PHAB_FALLBACK"], value)
 
-    @pytest.mark.parametrize("value", ["rich", "tree", "simple", "jsonlines", ""])
+    def test_table_is_an_output_format(self):
+        assert OutputFormat.table.value == "table"
+
+    @pytest.mark.parametrize(
+        "value", ["rich", "tree", "simple", "table", "jsonlines", ""]
+    )
     def test_fallback_rejects_everything_else(self, value):
+        """A fallback is for a pipe. table cuts cells and drops columns, so
+        it is a human format and deliberately not one of them."""
         assert not re.match(VALIDATORS["PHAB_FALLBACK"], value)
 
 

@@ -62,15 +62,20 @@ Global options must come **before** the subcommand. `phabfive maniphest show T12
 - `json` and `yaml` wrap them in a list. `jsonl` does not: it writes one object per line
   with no wrapper, which is what `jq -c`, `while read` loops and appended log files want.
   Nothing in a `jsonl` line is ever split across lines, so counting lines counts records.
-- `rich` and `tree` are for humans. `rich` refuses to render a line longer than 4096
-  characters and raises instead, which real task descriptions do hit.
+- `rich`, `tree` and `table` are for humans. `rich` refuses to render a line longer than
+  4096 characters and raises instead, which real task descriptions do hit.
+- `table` is a grid, and list-shaped: `diffusion repo list`, `diffusion uri list`,
+  `maniphest search`, `maniphest parents`, `maniphest subtasks` and `paste search` render
+  one row per record. A `show` command registers no table and falls back to `rich`. The
+  columns are derived from the record, a cell is cut to 60 characters, and a column empty
+  in every row is dropped - so never parse it, ask for `json` instead.
 - `simple` only means something for `passphrase` (prints the bare secret) and `paste`
   (prints bare content). For maniphest it silently falls back to `rich`.
 - `strict` is accepted as an alias for `yaml`, and `ndjson` as an alias for `jsonl`.
 
 When stdout is not a terminal phabfive already defaults to YAML, but pass `--format`
 explicitly so the output does not change under you. `PHAB_FALLBACK` changes that default
-to `json` or `jsonl`.
+to `json` or `jsonl`, and does not accept `table`.
 
 Data goes to stdout; logging, diagnostics and group help go to stderr. Capturing stdout
 alone is safe.
@@ -289,6 +294,7 @@ phabfive --format=json passphrase search "deploy" --type=password
 phabfive --format=json passphrase show K12 --no-secret
 
 phabfive --format=json diffusion repo list active
+phabfive --format=table diffusion repo list active   # a grid, for a human
 phabfive --format=json diffusion repo list all --show-uris
 phabfive --format=json diffusion repo show R5
 phabfive diffusion repo show R5 R6 --show-uris --show-branches
