@@ -262,19 +262,19 @@ def repo_edit(
     status: Optional[str] = typer.Option(
         None, "--status", help="Set status (active, inactive)"
     ),
-    view: Optional[str] = typer.Option(
+    visible_to: Optional[str] = typer.Option(
         None,
         "--visible-to",
         help=f"Set who can see it ({POLICY_GRAMMAR})",
         autocompletion=complete_policy,
     ),
-    edit_policy: Optional[str] = typer.Option(
+    editable_by: Optional[str] = typer.Option(
         None,
         "--editable-by",
         help=f"Set who can edit it ({POLICY_GRAMMAR})",
         autocompletion=complete_policy,
     ),
-    push: Optional[str] = typer.Option(
+    pushable_by: Optional[str] = typer.Option(
         None,
         "--pushable-by",
         help=f"Set who can push to it ({POLICY_GRAMMAR})",
@@ -297,7 +297,15 @@ def repo_edit(
     """
     from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
 
-    options = [name, short_name, default_branch, status, view, edit_policy, push]
+    options = [
+        name,
+        short_name,
+        default_branch,
+        status,
+        visible_to,
+        editable_by,
+        pushable_by,
+    ]
 
     if all(arg is None for arg in options):
         typer.echo("Please input minimum one option", err=True)
@@ -313,9 +321,9 @@ def repo_edit(
     # nobody satisfies, and answers a typo with a self-lockout error.
     try:
         for value, option in (
-            (view, "--visible-to"),
-            (edit_policy, "--editable-by"),
-            (push, "--pushable-by"),
+            (visible_to, "--visible-to"),
+            (editable_by, "--editable-by"),
+            (pushable_by, "--pushable-by"),
         ):
             validate_policy_value(value, option=option)
     except PhabfiveConfigException as e:
@@ -346,9 +354,9 @@ def repo_edit(
             short_name=short_name,
             default_branch=default_branch,
             status=status,
-            view=view,
-            edit_policy=edit_policy,
-            push=push,
+            visible_to=visible_to,
+            editable_by=editable_by,
+            pushable_by=pushable_by,
         )
     except (PhabfiveConfigException, PhabfiveDataException) as e:
         typer.echo(f"ERROR: {e}", err=True)
