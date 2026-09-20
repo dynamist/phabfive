@@ -242,9 +242,11 @@ http://phorge.localhost/source/uridoc377.git        built-in  clone (read-only) 
 
 The address is what it always was. phabfive does not currently warn about this.
 
-**Renaming the repository rewrites them.** Because the address is derived from
-the short name, changing the short name changes every built-in URI that uses it.
-`repo edit` says so:
+**Renaming the repository rewrites them.** The address is derived from the
+repository's *clone name*, which is its short name if it has one and its name if
+it does not. Changing that name changes every built-in URI at once, and
+`repo edit` names each one, with the address it has now and the address it would
+get:
 
 ```bash
 phabfive diffusion repo edit uridoc377 --short-name uridoc377-renamed --dry-run
@@ -253,10 +255,40 @@ phabfive diffusion repo edit uridoc377 --short-name uridoc377-renamed --dry-run
 ```
 [DRY RUN] Would apply to http://phorge.localhost/R16 (uridoc377):
   Short name: uridoc377 → uridoc377-renamed
-  Built-in URIs: /source/uridoc377.git → /source/uridoc377-renamed.git
+  Built-in URI: http://phorge.localhost/diffusion/16/uridoc377.git → http://phorge.localhost/diffusion/16/uridoc377-renamed.git
+  Built-in URI: http://phorge.localhost/source/uridoc377.git → http://phorge.localhost/source/uridoc377-renamed.git
 ```
 
-Anyone who has cloned from the old address has a remote that no longer resolves.
+A repository with a callsign carries a third one, `/diffusion/<callsign>/<name>.git`,
+and it is listed too — being the stable human-readable address, it is the one most
+likely to be in somebody's git remote.
+
+Because the clone name falls back to the name, `--name` moves the URIs of a
+repository that never got a short name, and `repo edit` says so there as well:
+
+```bash
+phabfive diffusion repo edit uridoc405 --name uridoc405-renamed --dry-run
+```
+
+```
+[DRY RUN] Would apply to http://phorge.localhost/R24 (uridoc405):
+  Name: uridoc405 → uridoc405-renamed
+  Built-in URI: http://phorge.localhost/diffusion/24/uridoc405.git → http://phorge.localhost/diffusion/24/uridoc405-renamed.git
+```
+
+It carries only the one: a `/source/` address is built from the short name, so a
+repository without one does not have that shape at all — another reason to read
+the list off the repository rather than assume it.
+
+The list is read off the URIs the repository actually carries, so a repository
+whose view policy hides them (see the note below) gets a warning that says so
+rather than a list that is quietly short:
+
+```
+  Built-in URIs: not visible on this repository, and any it has move too
+```
+
+Anyone who has cloned from an old address has a remote that no longer resolves.
 
 **They take a different set of I/O values.** Phorge validates I/O per URI:
 a built-in URI serves the repository, so it accepts `default`, `none`, `read`

@@ -25,6 +25,8 @@ from phabfive.diffusion.fetchers import (
 from phabfive.diffusion.filters import select_uris
 from phabfive.diffusion.formatters import (
     build_repository_display_data,
+    builtin_clone_name,
+    builtin_uri_moves,
     format_uri,
     ref_names,
 )
@@ -1223,9 +1225,9 @@ class Diffusion(Phabfive):
         -------
         tuple
             (transactions, changes) - the Conduit transactions to apply and a
-            human-readable description of each one. A short name change also
-            describes the built-in URIs it rewrites, which are derived from it
-            and would otherwise change with nothing having said so.
+            human-readable description of each one. A change of clone name
+            also names every built-in URI it rewrites, which are derived from
+            it and would otherwise move with nothing having said so.
 
         Raises
         ------
@@ -1281,16 +1283,7 @@ class Diffusion(Phabfive):
                 }
             )
 
-            if kind == "shortName":
-                # Phabricator derives the built-in clone URIs from the short
-                # name, so this one edit silently moves every /source/ path.
-                changes.append(
-                    {
-                        "field": "Built-in URIs",
-                        "old": f"/source/{current}.git",
-                        "new": f"/source/{value}.git",
-                    }
-                )
+        changes.extend(self._describe_uri_moves(repo_record, name, short_name))
 
         policy_transactions, policy_changes = self._build_policy_edit(
             fields.get("policy") or {},
@@ -1300,6 +1293,64 @@ class Diffusion(Phabfive):
         )
 
         return transactions + policy_transactions, changes + policy_changes
+
+    @staticmethod
+    def _describe_uri_moves(repo_record, name, short_name):
+        """Name the built-in URIs a rename moves, or say none can be seen.
+
+        Phorge builds a repository's clone URIs out of its short name if it
+        has one and its name if it does not, so the URIs move when that
+        effective clone name moves - which `--name` does on a repository
+        that never got a short name. Comparing the two effective names
+        rather than watching one field is what covers both halves.
+
+        The URIs themselves come off the record, so every shape the
+        repository is addressable by is named, with a before and an after
+        that are real strings rather than one guessed shape.
+
+        Parameters
+        ----------
+        repo_record : dict
+            The repository as it stands, from get_repo_record
+        name, short_name : str or None
+            The values asked for, as the caller wrote them
+
+        Returns
+        -------
+        list
+            Change records, empty when the clone name is not moving
+        """
+        fields = repo_record.get("fields", {})
+
+        old_clone = builtin_clone_name(fields)
+        new_clone = builtin_clone_name(
+            {
+                "name": fields.get("name") if name is None else name,
+                "shortName": fields.get("shortName")
+                if short_name is None
+                else short_name,
+            }
+        )
+
+        if not old_clone or old_clone == new_clone:
+            return []
+
+        moves = builtin_uri_moves(repo_record, old_clone, new_clone)
+
+        if not moves:
+            # Every repository has built-in URIs, so seeing none means the
+            # record does not carry them: a view policy short of public
+            # hides them from the API. Saying nothing here would be the
+            # understatement this warning exists to avoid.
+            return [
+                {
+                    "field": "Built-in URIs",
+                    "old": None,
+                    "new": "not visible on this repository, and any it has move too",
+                }
+            ]
+
+        return [{"field": "Built-in URI", "old": old, "new": new} for old, new in moves]
 
     def _build_policy_edit(
         self, policy, visible_to=None, editable_by=None, can_push=None

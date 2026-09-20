@@ -29,6 +29,62 @@ def _repo(name, short_name=None, status="active", is_hosted=True):
     }
 
 
+def _builtin_uri(display, identifier, uri_id):
+    """A built-in URI shaped the way the "uris" attachment returns one."""
+    return {
+        "id": uri_id,
+        "phid": f"PHID-RURI-{identifier}",
+        "fields": {
+            "uri": {
+                "raw": f"http://{identifier}",
+                "display": display,
+                "effective": display,
+            },
+            "io": {"raw": "default", "default": "read", "effective": "read"},
+            "display": {"raw": "default", "default": "always", "effective": "always"},
+            "credentialPHID": None,
+            "builtin": {"protocol": "http", "identifier": identifier},
+            "disabled": False,
+        },
+    }
+
+
+def _with_builtin_uris(record, clone_name, callsign=None):
+    """Attach the built-in URIs Phorge mints for a repository.
+
+    One per shape the repository can be addressed by, in the order Phorge
+    lists them: by id always, by short name when it has one, and by
+    callsign when it has one. Every one of them ends in the clone name,
+    which is why a rename moves the lot.
+    """
+    repo_id = record["id"]
+    uris = [
+        _builtin_uri(
+            f"http://phorge.localhost/diffusion/{repo_id}/{clone_name}.git", "id", 1
+        )
+    ]
+
+    if record["fields"].get("shortName"):
+        uris.append(
+            _builtin_uri(
+                f"http://phorge.localhost/source/{clone_name}.git", "shortname", 2
+            )
+        )
+
+    if callsign:
+        uris.append(
+            _builtin_uri(
+                f"http://phorge.localhost/diffusion/{callsign}/{clone_name}.git",
+                "callsign",
+                3,
+            )
+        )
+
+    record["attachments"]["uris"]["uris"] = uris
+
+    return record
+
+
 def _phab_with_repos(repos):
     phab = MagicMock()
     phab.diffusion.repository.search.return_value = {"data": repos}
@@ -900,20 +956,23 @@ class TestBuildRepoEdit:
         assert changes == []
 
     def test_short_name_change_reports_the_built_in_uris_it_rewrites(self, diffusion):
-        """Phabricator derives /source/<shortName>.git, so a rename moves it."""
-        transactions, changes = diffusion.build_repo_edit(
-            self._record(), short_name="newname"
-        )
+        """Phorge derives the clone URIs from the short name, so a rename moves them."""
+        record = _with_builtin_uris(self._record(), "oldname")
+
+        transactions, changes = diffusion.build_repo_edit(record, short_name="newname")
 
         assert transactions == [{"type": "shortName", "value": "newname"}]
         assert {
-            "field": "Built-in URIs",
-            "old": "/source/oldname.git",
-            "new": "/source/newname.git",
+            "field": "Built-in URI",
+            "old": "http://phorge.localhost/source/oldname.git",
+            "new": "http://phorge.localhost/source/newname.git",
         } in changes
 
-    def test_name_change_alone_leaves_built_in_uris_unmentioned(self, diffusion):
-        _, changes = diffusion.build_repo_edit(self._record(), name="newname")
+    def test_a_name_change_leaves_a_short_named_repositorys_uris_alone(self, diffusion):
+        """A short name in place is the clone name, so --name moves nothing."""
+        record = _with_builtin_uris(self._record(), "oldname")
+
+        _, changes = diffusion.build_repo_edit(record, name="newname")
 
         assert [c["field"] for c in changes] == ["Name"]
 
@@ -949,6 +1008,218 @@ class TestBuildRepoEdit:
 
         assert result["dry_run"] is True
         diffusion.phab.diffusion.repository.edit.assert_not_called()
+
+
+class TestBuiltInUriWarning:
+    """What a rename tells you it breaks, which is the only warning there is.
+
+    Three repository shapes, because each one gets the warning wrong in its
+    own way if the /source/ path is guessed rather than read off the record.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _an_instance_of_one(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {"data": []}
+
+    def _uri_changes(self, changes):
+        return [c for c in changes if c["field"].startswith("Built-in URI")]
+
+    def _with_callsign(self):
+        """A short name and a callsign: all three URI shapes at once."""
+        record = _repo("oldname", short_name="oldname")
+        record["id"] = 26
+        record["fields"]["callsign"] = "PROBEA"
+        return _with_builtin_uris(record, "oldname", callsign="PROBEA")
+
+    def _without_short_name(self):
+        """No short name, so the clone name is the name, and there is no /source/."""
+        record = _repo("oldname")
+        record["id"] = 24
+        record["fields"]["shortName"] = None
+        return _with_builtin_uris(record, "oldname")
+
+    def _plain(self):
+        """A short name and no callsign - the ordinary repository."""
+        record = _repo("oldname", short_name="oldname")
+        record["id"] = 25
+        return _with_builtin_uris(record, "oldname")
+
+    def test_every_shape_a_callsign_repository_is_addressed_by_is_named(
+        self, diffusion
+    ):
+        _, changes = diffusion.build_repo_edit(
+            self._with_callsign(), short_name="newname"
+        )
+
+        assert self._uri_changes(changes) == [
+            {
+                "field": "Built-in URI",
+                "old": "http://phorge.localhost/diffusion/26/oldname.git",
+                "new": "http://phorge.localhost/diffusion/26/newname.git",
+            },
+            {
+                "field": "Built-in URI",
+                "old": "http://phorge.localhost/source/oldname.git",
+                "new": "http://phorge.localhost/source/newname.git",
+            },
+            {
+                "field": "Built-in URI",
+                "old": "http://phorge.localhost/diffusion/PROBEA/oldname.git",
+                "new": "http://phorge.localhost/diffusion/PROBEA/newname.git",
+            },
+        ]
+
+    def test_a_name_change_moves_the_uris_of_a_repository_with_no_short_name(
+        self, diffusion
+    ):
+        """The case the old `if kind == "shortName"` guard let through silently."""
+        _, changes = diffusion.build_repo_edit(
+            self._without_short_name(), name="newname"
+        )
+
+        assert self._uri_changes(changes) == [
+            {
+                "field": "Built-in URI",
+                "old": "http://phorge.localhost/diffusion/24/oldname.git",
+                "new": "http://phorge.localhost/diffusion/24/newname.git",
+            }
+        ]
+
+    def test_giving_a_short_named_repository_a_short_name_never_prints_none(
+        self, diffusion
+    ):
+        """The old code interpolated a null short name as the literal "None"."""
+        _, changes = diffusion.build_repo_edit(
+            self._without_short_name(), short_name="newname"
+        )
+
+        assert self._uri_changes(changes) == [
+            {
+                "field": "Built-in URI",
+                "old": "http://phorge.localhost/diffusion/24/oldname.git",
+                "new": "http://phorge.localhost/diffusion/24/newname.git",
+            }
+        ]
+        assert "None" not in str(changes)
+
+    def test_the_ordinary_repository_still_reads_correctly(self, diffusion):
+        _, changes = diffusion.build_repo_edit(self._plain(), short_name="newname")
+
+        assert self._uri_changes(changes) == [
+            {
+                "field": "Built-in URI",
+                "old": "http://phorge.localhost/diffusion/25/oldname.git",
+                "new": "http://phorge.localhost/diffusion/25/newname.git",
+            },
+            {
+                "field": "Built-in URI",
+                "old": "http://phorge.localhost/source/oldname.git",
+                "new": "http://phorge.localhost/source/newname.git",
+            },
+        ]
+
+    def test_an_external_uri_is_not_claimed_to_move(self, diffusion):
+        """A URI someone added is not derived from the clone name."""
+        record = self._plain()
+        record["attachments"]["uris"]["uris"].append(
+            _uri("git@github.com:dynamist/oldname.git")
+        )
+
+        _, changes = diffusion.build_repo_edit(record, short_name="newname")
+
+        assert all("github" not in c["old"] for c in self._uri_changes(changes))
+
+    def test_a_name_change_on_a_short_named_repository_moves_nothing(self, diffusion):
+        _, changes = diffusion.build_repo_edit(self._plain(), name="A New Name")
+
+        assert self._uri_changes(changes) == []
+
+    def test_setting_a_field_to_what_it_already_is_moves_nothing(self, diffusion):
+        _, changes = diffusion.build_repo_edit(self._plain(), short_name="oldname")
+
+        assert self._uri_changes(changes) == []
+
+    def test_an_edit_that_is_not_a_rename_moves_nothing(self, diffusion):
+        _, changes = diffusion.build_repo_edit(self._plain(), status="inactive")
+
+        assert self._uri_changes(changes) == []
+
+    def test_uris_hidden_by_a_view_policy_are_said_to_move_anyway(self, diffusion):
+        """An empty attachment is a restricted view policy, not a repository
+        without clone URIs - staying quiet would understate the rename."""
+        record = _repo("oldname", short_name="oldname")
+
+        _, changes = diffusion.build_repo_edit(record, short_name="newname")
+
+        assert self._uri_changes(changes) == [
+            {
+                "field": "Built-in URIs",
+                "old": None,
+                "new": "not visible on this repository, and any it has move too",
+            }
+        ]
+
+
+class TestBuiltinUriMoves:
+    """The record-shape half, on its own."""
+
+    def _record(self, uris):
+        return {"attachments": {"uris": {"uris": uris}}}
+
+    def test_a_repository_with_no_uris_moves_nothing(self):
+        from phabfive.diffusion.formatters import builtin_uri_moves
+
+        assert builtin_uri_moves(self._record([]), "old", "new") == []
+
+    def test_a_uri_not_ending_in_the_clone_name_is_left_alone(self):
+        """Only the last path segment is derived from the clone name."""
+        from phabfive.diffusion.formatters import builtin_uri_moves
+
+        record = self._record(
+            [_builtin_uri("http://phorge.localhost/source/old/thing.git", "id", 1)]
+        )
+
+        assert builtin_uri_moves(record, "old", "new") == []
+
+    def test_a_suffixless_uri_moves(self):
+        """Not every VCS gets a ".git" appended."""
+        from phabfive.diffusion.formatters import builtin_uri_moves
+
+        record = self._record(
+            [_builtin_uri("ssh://phorge.localhost/source/old", "shortname", 1)]
+        )
+
+        assert builtin_uri_moves(record, "old", "new") == [
+            ("ssh://phorge.localhost/source/old", "ssh://phorge.localhost/source/new")
+        ]
+
+    def test_only_the_last_occurrence_of_the_clone_name_moves(self):
+        from phabfive.diffusion.formatters import builtin_uri_moves
+
+        record = self._record(
+            [_builtin_uri("http://old.example.com/source/old.git", "shortname", 1)]
+        )
+
+        assert builtin_uri_moves(record, "old", "new") == [
+            (
+                "http://old.example.com/source/old.git",
+                "http://old.example.com/source/new.git",
+            )
+        ]
+
+
+class TestBuiltinCloneName:
+    """Which field Phorge builds the clone URIs out of."""
+
+    def test_the_short_name_wins_when_it_is_set(self):
+        from phabfive.diffusion.formatters import builtin_clone_name
+
+        assert builtin_clone_name({"name": "A Name", "shortName": "sn"}) == "sn"
+
+    def test_the_name_is_used_when_there_is_no_short_name(self):
+        from phabfive.diffusion.formatters import builtin_clone_name
+
+        assert builtin_clone_name({"name": "a-name", "shortName": None}) == "a-name"
 
 
 class TestRichIsYaml:

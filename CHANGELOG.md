@@ -160,6 +160,20 @@
 * **`PHAB_FALLBACK=jsonl`** - The non-TTY default format now accepts `jsonl` alongside
   `yaml` and `json`
 
+## Bug Fixes
+
+* **`diffusion repo edit` understated which built-in URIs a rename rewrites.** The
+  warning is the only signal that a rename breaks existing clones, and it was wrong
+  three ways: it fired only on `--short-name`, although Phorge builds the clone URIs
+  from the *name* of a repository that has no short name, so `--name` moved them
+  silently; it rendered an absent short name as the literal `None`, printing
+  `/source/None.git`; and it named one URI where a repository carries up to three -
+  `/source/<name>.git`, `/diffusion/<id>/<name>.git` and, with a callsign,
+  `/diffusion/<callsign>/<name>.git`, the form most likely to be in somebody's git
+  remote. It is now read off the built-in URIs the repository actually carries and
+  names each one's current and new address. A repository whose view policy hides its
+  URIs is told that rather than given a list that is quietly short
+
 ## Other Notes
 
 * `--format=rich` now quotes the values YAML would quote. Diffusion's rich output is

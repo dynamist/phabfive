@@ -414,8 +414,10 @@ A hosted repository can report no URIs at all, and a filter that matches
 nothing is an empty result - neither is a failure.
 
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
-`--status`. A `--short-name` change also rewrites the built-in `/source/<name>.git`
-URIs, which `--dry-run` spells out before anything is applied.
+`--status`. Phorge derives the built-in clone URIs from the repository's short
+name if it has one and its name if it does not, so a change to either can move
+them - `--dry-run` names every built-in URI that would move, with its current
+and new address, before anything is applied.
 
 `diffusion repo create` and a `repo edit --short-name` both refuse a name that
 differs from an existing repository only in **case** or in `.` `-` `_`
