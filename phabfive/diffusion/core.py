@@ -25,6 +25,7 @@ from phabfive.diffusion.formatters import (
 from phabfive.diffusion.resolvers import (
     resolve_object_identifier,
     resolve_shortname_to_id,
+    resolve_uri_and_repo,
     resolve_uri_record,
 )
 from phabfive.diffusion.validators import (
@@ -458,6 +459,43 @@ class Diffusion(Phabfive):
             The URI object
         """
         return resolve_uri_record(self.phab, repo_name, uri_name)
+
+    def get_uri_and_repo(self, repo_name, uri_name):
+        """Fetch a URI and the repository that owns it, in one lookup.
+
+        Parameters
+        ----------
+        repo_name : str
+            Repository monogram, callsign or short name
+        uri_name : str
+            URI as displayed
+
+        Returns
+        -------
+        tuple
+            (repository, uri), both full records
+        """
+        return resolve_uri_and_repo(self.phab, repo_name, uri_name)
+
+    @staticmethod
+    def describe_repository(repo):
+        """Name a repository the way a person would refer to it.
+
+        Parameters
+        ----------
+        repo : dict
+            A repository record
+
+        Returns
+        -------
+        str
+            e.g. "R86 (aws-redis)", or just "R86" when it has no name
+        """
+        fields = repo.get("fields", {})
+        name = fields.get("shortName") or fields.get("callsign") or fields.get("name")
+        monogram = f"R{repo['id']}"
+
+        return f"{monogram} ({name})" if name else monogram
 
     def _describe_credential(self, credential_phid):
         """Name a credential for display, never revealing its secret.

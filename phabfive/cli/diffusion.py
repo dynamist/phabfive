@@ -363,12 +363,17 @@ def edit(
     diffusion = _get_diffusion_app()
 
     try:
-        uri_record = diffusion.get_uri_record(repo_name=repo, uri_name=uri)
+        repo_record, uri_record = diffusion.get_uri_and_repo(
+            repo_name=repo, uri_name=uri
+        )
     except PhabfiveDataException as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
     object_id = uri_record["id"]
+    # A URI string does not identify a repository - two can carry the same
+    # remote - so name the repository as well as the URI being changed.
+    label = f"{diffusion.describe_repository(repo_record)} {uri}"
 
     transactions, changes = diffusion.build_uri_edit(
         uri_record,
@@ -380,15 +385,15 @@ def edit(
     )
 
     if not transactions:
-        typer.echo(f"{uri}: No changes (already at target state)")
+        typer.echo(f"{label}: No changes (already at target state)")
         return
 
     if dry_run:
-        render_changes(uri, changes, header=f"[DRY RUN] Would apply to {uri}:")
+        render_changes(label, changes, header=f"[DRY RUN] Would apply to {label}:")
         return
 
     if interactive:
-        render_changes(uri, changes, header=f"Would apply to {uri}:")
+        render_changes(label, changes, header=f"Would apply to {label}:")
         confirmed, return_code = confirm_apply(assume_yes)
         if not confirmed:
             typer.echo("Nothing was changed.", err=True)
@@ -396,7 +401,7 @@ def edit(
 
     diffusion.apply_uri_edit(object_id, transactions)
 
-    render_changes(uri, changes)
+    render_changes(label, changes)
 
 
 # Branch commands

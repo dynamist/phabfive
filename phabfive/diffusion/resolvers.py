@@ -53,6 +53,35 @@ def resolve_uri_record(phab, repo_name, uri_name):
     PhabfiveDataException
         If the repository or URI does not exist
     """
+    return resolve_uri_and_repo(phab, repo_name, uri_name)[1]
+
+
+def resolve_uri_and_repo(phab, repo_name, uri_name):
+    """Fetch a URI together with the repository that owns it.
+
+    A URI string does not identify a repository: two repositories can carry
+    the same remote, so an edit described by its URI alone does not say what
+    it is about to change. The caller needs both to name the object.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    repo_name : str
+        Repository monogram, callsign or short name
+    uri_name : str
+        URI as displayed
+
+    Returns
+    -------
+    tuple
+        (repository, uri), both full records
+
+    Raises
+    ------
+    PhabfiveDataException
+        If the repository or URI does not exist
+    """
     repos = fetch_repositories(phab, attachments={"uris": True})
     repo = match_repository(repos, repo_name)
 
@@ -61,7 +90,7 @@ def resolve_uri_record(phab, repo_name, uri_name):
 
     for uri in repo["attachments"]["uris"]["uris"]:
         if uri["fields"]["uri"]["display"] == uri_name:
-            return uri
+            return repo, uri
 
     raise PhabfiveDataException("Uri does not exist or other error")
 

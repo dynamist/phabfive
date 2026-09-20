@@ -341,7 +341,8 @@ class TestUriEditCli:
         from phabfive.cli.diffusion import diffusion_app
 
         mock_diffusion = MagicMock()
-        mock_diffusion.get_uri_record.return_value = _uri()
+        mock_diffusion.get_uri_and_repo.return_value = (_repo("myrepo"), _uri())
+        mock_diffusion.describe_repository.return_value = "R1 (myrepo)"
         mock_diffusion.build_uri_edit.return_value = built or (
             [{"type": "display", "value": "always"}],
             [{"field": "Display", "old": "never", "new": "always"}],
@@ -455,7 +456,7 @@ class TestUriEditCli:
         result, diffusion = self._invoke(["myrepo", self.URI])
 
         assert result.exit_code == 1
-        diffusion.get_uri_record.assert_not_called()
+        diffusion.get_uri_and_repo.assert_not_called()
 
 
 def _paged_phab(pages):
@@ -617,7 +618,7 @@ class TestMissingRepositoryIsNotATraceback:
 
     def test_uri_edit_reports_a_missing_repository_cleanly(self):
         result = self._invoke(
-            ["uri", "edit", "R42", "someuri", "--io=read"], "get_uri_record"
+            ["uri", "edit", "R42", "someuri", "--io=read"], "get_uri_and_repo"
         )
 
         assert result.exit_code == 1
@@ -626,7 +627,7 @@ class TestMissingRepositoryIsNotATraceback:
 
     def test_uri_edit_reports_a_missing_uri_cleanly(self):
         result = self._invoke(
-            ["uri", "edit", "myrepo", "nosuchuri", "--io=read"], "get_uri_record"
+            ["uri", "edit", "myrepo", "nosuchuri", "--io=read"], "get_uri_and_repo"
         )
 
         assert result.exit_code == 1
@@ -1226,3 +1227,86 @@ class TestApiErrorsAreNotSwallowed:
 
         with pytest.raises(PhabfiveDataException, match="specific validation detail"):
             diffusion.apply_repo_edit(1, [{"type": "name", "value": "x"}])
+
+
+class TestUriEditNamesTheRepository:
+    """A URI string does not identify a repository; two can carry the same one.
+
+    Scanning a bulk dry run, "Would apply to git@host:group/project.git"
+    does not say which repository is about to change. On a real instance two
+    repositories claimed one remote, one live and one retired, and the
+    output for disabling either was identical.
+    """
+
+    def test_describe_repository_prefers_the_short_name(self, diffusion):
+        assert (
+            diffusion.describe_repository(_repo("thing", short_name="thing"))
+            == "R1 (thing)"
+        )
+
+    def test_describe_repository_falls_back_to_the_callsign(self, diffusion):
+        repo = _repo("thing")
+        repo["fields"]["shortName"] = None
+        repo["fields"]["callsign"] = "THING"
+
+        assert diffusion.describe_repository(repo) == "R1 (THING)"
+
+    def test_describe_repository_falls_back_to_the_name(self, diffusion):
+        repo = _repo("thing")
+        repo["fields"]["shortName"] = None
+
+        assert diffusion.describe_repository(repo) == "R1 (thing)"
+
+    def test_describe_repository_copes_with_no_name_at_all(self, diffusion):
+        repo = _repo("thing")
+        repo["fields"] = {"shortName": None, "callsign": None, "name": None}
+
+        assert diffusion.describe_repository(repo) == "R1"
+
+    def test_resolve_returns_the_repository_alongside_the_uri(self):
+        from phabfive.diffusion.resolvers import resolve_uri_and_repo
+
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [
+            {"id": 3, "fields": {"uri": {"display": "git@example.com:g/p.git"}}}
+        ]
+
+        found_repo, found_uri = resolve_uri_and_repo(
+            _phab_with_repos([repo]), "myrepo", "git@example.com:g/p.git"
+        )
+
+        assert found_repo["id"] == 1
+        assert found_uri["id"] == 3
+
+    def test_two_repositories_sharing_a_remote_are_told_apart(self):
+        """The case that prompted this: same URI, different repository."""
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        URI = "git@example.com:group/shared.git"
+        seen = []
+
+        for rid, name in ((86, "live-one"), (89, "retired-one")):
+            repo = _repo(name, short_name=name)
+            repo["id"] = rid
+            mock_diffusion = MagicMock()
+            mock_diffusion.get_uri_and_repo.return_value = (repo, _uri())
+            mock_diffusion.describe_repository.return_value = f"R{rid} ({name})"
+            mock_diffusion.build_uri_edit.return_value = (
+                [{"type": "disable", "value": True}],
+                [{"field": "Disabled", "old": "False", "new": "True"}],
+            )
+
+            with patch(
+                "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+            ):
+                result = CliRunner().invoke(
+                    diffusion_app,
+                    ["uri", "edit", str(rid), URI, "--disable", "--dry-run"],
+                )
+            seen.append(result.output)
+
+        assert "R86 (live-one)" in seen[0]
+        assert "R89 (retired-one)" in seen[1]
+        assert seen[0] != seen[1]
