@@ -92,6 +92,53 @@ def create_task(phabfive):
     return create
 
 
+@pytest.fixture
+def create_repository(phabfive, conduit):
+    """Create a repository with a unique short name, and answer with it.
+
+    Anything that mutates a repository needs one of its own. The seeded
+    repositories are read by a dozen tests around this one, and a policy is
+    exactly the kind of change that would make one of them answer
+    differently - or, set wrong, hide the repository from them entirely.
+
+    The short name is the handle because `repo create` prints the change it
+    made rather than a monogram, and `repo show` and `repo edit` both take a
+    short name.
+
+    Deactivated afterwards, so repeated runs do not pile up repositories in
+    `repo list` - Conduit has no way to delete one. The wait before that is
+    not optional: the pull daemon does not import an inactive repository, so
+    deactivating one that has not finished leaves `isImporting` true for
+    good, and `settled_repositories` then fails for every later run on the
+    instance rather than for the run that caused it.
+    """
+    created = []
+
+    def create():
+        name = f"e2e-{uuid.uuid4().hex[:8]}"
+        phabfive("diffusion", "repo", "create", name, "--yes")
+        created.append(name)
+        return name
+
+    yield create
+
+    for name in created:
+        deadline = time.monotonic() + 60
+
+        while time.monotonic() < deadline:
+            repos = conduit(
+                "diffusion.repository.search",
+                **{"constraints[shortNames][0]": name},
+            )["data"]
+
+            if not any(repo["fields"].get("isImporting") for repo in repos):
+                break
+
+            time.sleep(2)
+
+        phabfive("diffusion", "repo", "edit", name, "--status=inactive", "--yes")
+
+
 @pytest.fixture(scope="session")
 def conduit(live_env):
     """Call a Conduit method directly, for facts the CLI cannot report."""

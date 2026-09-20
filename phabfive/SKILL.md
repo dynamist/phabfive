@@ -305,6 +305,7 @@ phabfive diffusion uri list R5 --io=observe
 phabfive diffusion uri list R5 --display=always --external
 phabfive diffusion uri list R5 --disabled
 phabfive diffusion repo edit R5 --default-branch main --dry-run
+phabfive diffusion repo edit R5 --view=public --edit-policy='#infra' --push=admin --dry-run
 phabfive diffusion repo create <name> --dry-run
 phabfive diffusion uri create K1 R5 <uri> --observe --dry-run
 ```
@@ -357,6 +358,31 @@ nothing is an empty result - neither is a failure.
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
 `--status`. A `--short-name` change also rewrites the built-in `/source/<name>.git`
 URIs, which `--dry-run` spells out before anything is applied.
+
+It also sets the three policies: `--view`, `--edit-policy` and `--push`. The edit
+one is spelled out because `repo edit --edit` is unreadable. Each takes
+
+| Value | Means |
+|---|---|
+| `public`, `users`, `admin`, `no-one` | the Phorge keyword |
+| `#projectslug` | that project; a display name works too, `#'Human Resources'` |
+| `@username` | that user |
+| `PHID-...` | that object, including a custom policy rule |
+
+and anything else is refused before a call is made, because Conduit reads a value
+it does not recognise as a policy nobody satisfies - so `--view=nonsense` would
+otherwise come back as a permissions error rather than a spelling one. `--dry-run`
+names both ends of the change rather than showing a PHID:
+
+```
+  View policy: All Users → Public (No Login Required)
+  Edit policy: Administrators → #infrastructure
+```
+
+`repo show` and `repo list` report the same names under `Policy`, in the same
+spelling the options take, so what a policy is shown as can be typed straight back
+in. Phorge refuses a policy that would stop you seeing or editing the repository
+yourself, and that refusal is reported as a sentence.
 
 A repository is addressable by monogram (`R5`), callsign or short name. Not every
 repository has a short name, so prefer the monogram when scripting.

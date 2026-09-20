@@ -221,6 +221,58 @@ def test_repo_show_falls_back_to_rich_for_table(phabfive):
     assert output.startswith("- Link: ")
 
 
+def test_repo_edit_sets_every_policy(
+    phabfive, phabfive_raw, conduit, create_repository
+):
+    """The three policy transaction names, against a real Phorge.
+
+    This is the test that could not be written below the CLI. Phorge's edit
+    form calls the view and edit fields `policy.view` and `policy.edit`, and
+    Conduit refuses both of those spellings in favour of the shorter aliases,
+    while the push one goes the other way - `policy.push` is the type and
+    `push` is refused. A wrong name is an ERR-CONDUIT-CORE from the instance,
+    which a mocked client cannot produce and would happily accept.
+
+    The project and the username are asked for rather than hard-coded: what
+    S3 means is positional in the seed file, and a slug is no different.
+    """
+    repo = create_repository()
+    slug = conduit("project.search", limit=1)["data"][0]["fields"]["slug"]
+    me = conduit("user.whoami")["userName"]
+
+    phabfive(
+        "diffusion",
+        "repo",
+        "edit",
+        repo,
+        "--view=public",
+        f"--edit-policy=#{slug}",
+        f"--push=@{me}",
+        "--yes",
+    )
+
+    [record] = phabfive("diffusion", "repo", "show", repo, json_output=True)
+
+    # Read back in the same spelling that set them, so what a policy is
+    # shown as can be typed straight back in
+    assert record["Policy"] == {
+        "View": "Public (No Login Required)",
+        "Edit": f"#{slug}",
+        "Push": f"@{me}",
+    }
+
+    # Asking for what is already there is not a change
+    assert "No changes" in phabfive("diffusion", "repo", "edit", repo, "--view=public")
+
+    # And Phorge refuses to let the viewer lock themselves out, which is
+    # reported as the sentence it answered with
+    result = phabfive_raw("diffusion", "repo", "edit", repo, "--view=no-one", "--yes")
+
+    assert result.returncode == 1
+    assert "would no longer allow you" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_repo_list_url_is_a_deprecated_alias(phabfive_raw):
     result = phabfive_raw("--format", "json", "diffusion", "repo", "list", "--url")
 

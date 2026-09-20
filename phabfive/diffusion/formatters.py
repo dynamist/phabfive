@@ -4,8 +4,13 @@
 
 from ruamel.yaml.scalarstring import PreservedScalarString
 
-from phabfive.constants import POLICY_LABELS, URI_ROLE_DISABLED, URI_ROLES
+from phabfive.constants import (
+    REPO_POLICY_FIELDS,
+    URI_ROLE_DISABLED,
+    URI_ROLES,
+)
 from phabfive.maniphest.utils import format_timestamp
+from phabfive.policy import policy_label
 
 
 def ref_names(refs, ref_type="branch"):
@@ -79,7 +84,7 @@ def repository_is_hosted(repo):
     )
 
 
-def format_policy(policy):
+def format_policy(policy, policy_names=None):
     """
     Label a repository's policies the way the Phorge web UI labels them.
 
@@ -87,26 +92,25 @@ def format_policy(policy):
     ----------
     policy : dict
         The "policy" field of a repository record
+    policy_names : dict, optional
+        PHID to name, from phabfive.policy.resolve_policy_names. A policy can
+        carry a PHID rather than a keyword - a project, a user or a custom
+        rule - and this is what names it. Left out, or missing an entry, the
+        PHID is shown as it stands rather than guessed at.
 
     Returns
     -------
     dict
         {"View": ..., "Edit": ..., "Push": ...}, each a web-UI label for a
-        keyword constant, or the raw value - a PHID, typically - for
-        anything else. Resolving a PHID to the project or rule behind it is
-        its own piece of work.
+        keyword constant, the name of a PHID that was resolved, or the raw
+        value.
     """
     policy = policy or {}
 
-    def label(value):
-        if value is None:
-            return "(none)"
-        return POLICY_LABELS.get(value, value)
-
     return {
-        "View": label(policy.get("view")),
-        "Edit": label(policy.get("edit")),
-        "Push": label(policy.get("diffusion.push")),
+        "View": policy_label(policy.get(REPO_POLICY_FIELDS["view"]), policy_names),
+        "Edit": policy_label(policy.get(REPO_POLICY_FIELDS["edit"]), policy_names),
+        "Push": policy_label(policy.get(REPO_POLICY_FIELDS["push"]), policy_names),
     }
 
 
@@ -282,6 +286,7 @@ def build_repository_display_data(
     branches_map=None,
     tags_map=None,
     space_map=None,
+    policy_names=None,
     show_uris=False,
     show_branches=False,
     show_tags=False,
@@ -312,6 +317,9 @@ def build_repository_display_data(
         Repository id to sorted tag names
     space_map : dict, optional
         Space PHID to its name
+    policy_names : dict, optional
+        Policy PHID to its name, for the policies that name a project, a
+        user or a custom rule rather than a keyword
     show_uris, show_branches, show_tags, show_metadata : bool, optional
         Include that section
     show_description : bool, optional
@@ -325,6 +333,7 @@ def build_repository_display_data(
     branches_map = branches_map or {}
     tags_map = tags_map or {}
     space_map = space_map or {}
+    policy_names = policy_names or {}
 
     records = []
 
@@ -370,7 +379,7 @@ def build_repository_display_data(
         if space_phid:
             record["Space"] = space_map.get(space_phid, space_phid)
 
-        record["Policy"] = format_policy(fields.get("policy"))
+        record["Policy"] = format_policy(fields.get("policy"), policy_names)
 
         if show_uris:
             record["URIs"] = format_repository_uris(repo)

@@ -9,6 +9,7 @@ from phabfive.constants import (
     MANIPHEST_ORDER_DIRECTIONS,
     MANIPHEST_ORDER_FIELDS,
     PASTE_LANGUAGES,
+    POLICY_LABELS,
     REPO_STATUS_CHOICES,
 )
 
@@ -599,8 +600,8 @@ def _cached_project_records(incomplete: str) -> list:
     return records
 
 
-def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
-    """Complete tag (project) names from API.
+def _project_completions(incomplete: str) -> list:
+    """Return (project name, description or None) pairs matching the typed text.
 
     Matching is case-insensitive. Completions follow the case the user typed
     (e.g. "gun" -> "gunnar-core"), because Typer drops completions that don't
@@ -610,7 +611,35 @@ def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
     A name shared by several projects (e.g. milestones named "Sprint 1" in
     different parents) is offered once, with a description listing the
     project IDs to use instead. Milestones and subprojects are described
-    with their parent. Descriptions are shown by zsh and fish.
+    with their parent.
+    """
+    # No default values for tags - they are instance-specific
+    records = _cached_project_records(incomplete)
+
+    by_name = {}
+    for record in _matching_projects(records, incomplete.lower()):
+        by_name.setdefault(record["name"].lower(), []).append(record)
+
+    pairs = []
+    for _, matches in sorted(by_name.items()):
+        value = _in_typed_case(incomplete, matches[0]["name"])
+
+        if len(matches) > 1:
+            ids = ", ".join(
+                _describe_project_id(record)
+                for record in sorted(matches, key=lambda record: record["id"])
+            )
+            pairs.append((value, f"ambiguous, use the ID: {ids}"))
+        elif matches[0]["parent"]:
+            pairs.append((value, f"in {matches[0]['parent']}"))
+        else:
+            pairs.append((value, None))
+
+    return pairs
+
+
+def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete tag (project) names from API.
 
     Parameters
     ----------
@@ -621,31 +650,9 @@ def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
     -------
     list
         Matching project names, as (name, description) tuples where a
-        description applies
+        description applies. Descriptions are shown by zsh and fish.
     """
-    # No default values for tags - they are instance-specific
-    records = _cached_project_records(incomplete)
-
-    by_name = {}
-    for record in _matching_projects(records, incomplete.lower()):
-        by_name.setdefault(record["name"].lower(), []).append(record)
-
-    completions = []
-    for _, matches in sorted(by_name.items()):
-        value = _in_typed_case(incomplete, matches[0]["name"])
-
-        if len(matches) > 1:
-            ids = ", ".join(
-                _describe_project_id(record)
-                for record in sorted(matches, key=lambda record: record["id"])
-            )
-            completions.append((value, f"ambiguous, use the ID: {ids}"))
-        elif matches[0]["parent"]:
-            completions.append((value, f"in {matches[0]['parent']}"))
-        else:
-            completions.append(value)
-
-    return completions
+    return _as_completions(_project_completions(incomplete))
 
 
 def _in_typed_case(incomplete: str, name: str) -> str:
@@ -1031,6 +1038,63 @@ def complete_cached_host(incomplete: str) -> List[str]:
     prefix = scheme + separator
 
     return [f"{prefix}{host}" for host in hosts if host.startswith(typed)]
+
+
+def complete_policy(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete a policy option: --view, --edit-policy and --push.
+
+    The four keywords are a constant rather than a lookup, because Phorge has
+    no policy.query endpoint to ask. Past them the grammar branches on the
+    first character, and so does this: "#" completes project names and "@"
+    completes usernames, from the same lookups --tag and --assign use.
+
+    A project's display name is offered rather than its hashtag, and works:
+    the project.search "slugs" constraint normalises what it is given, so
+    "#Human Resources" resolves the same project "#human_resources" does.
+
+    @me is deliberately not offered. A policy names an account, and the
+    shortcut would have to be resolved against whoever is running the command
+    - a different thing from the placeholder the search filters accept.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching keywords, project names or usernames, described where there
+        is something to say
+    """
+    if incomplete.startswith("#"):
+        return _as_completions(_project_completions(incomplete[1:]), prefix="#")
+
+    if incomplete.startswith("@"):
+        pairs = [
+            (username, description)
+            for username, description in _user_completions(
+                incomplete[1:], include_disabled=False
+            )
+            if username != ME_SHORTCUT
+        ]
+        return _as_completions(pairs, prefix="@")
+
+    keywords = [
+        (keyword, label)
+        for keyword, label in POLICY_LABELS.items()
+        if keyword.startswith(incomplete)
+    ]
+
+    # Offered as the start of a value rather than a whole one, so the two
+    # halves of the grammar the keywords do not cover are discoverable
+    prefixes = [
+        (prefix, description)
+        for prefix, description in (("#", "a project"), ("@", "a user"))
+        if not incomplete
+    ]
+
+    return _as_completions(keywords + prefixes)
 
 
 def complete_repo_status(incomplete: str) -> List[str]:

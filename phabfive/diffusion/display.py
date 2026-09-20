@@ -21,6 +21,7 @@ register it and ``repo show`` falls back to rich. The renderer itself is
 ``phabfive.table``, app-agnostic, reading the published record.
 """
 
+import re
 from io import StringIO
 
 from rich.text import Text
@@ -60,13 +61,56 @@ def _public(record):
     return output
 
 
+# Values that obviously need no quoting: a letter, then letters, digits and
+# the punctuation YAML gives no meaning to. Anything else is handed to ruamel
+# rather than guessed at - the rules are more than the leading character, and
+# the words below look plain while YAML reads them as booleans or null.
+_OBVIOUSLY_PLAIN = re.compile(r"\A[A-Za-z][A-Za-z0-9 ._/()+-]*\Z")
+_YAML_WORDS = {"true", "false", "yes", "no", "on", "off", "null", "y", "n"}
+
+# The emitter that answers "would YAML quote this?". Its width is pinned
+# wide open because the answer has to be one line: at the default width
+# ruamel folds a long scalar across several, and the renderer prints what
+# comes back as a single line, so a long description came out with its
+# continuation unindented and the whole document stopped parsing.
+_SCALAR_YAML = YAML()
+_SCALAR_YAML.width = 2**31 - 1
+
+
 def _yaml_scalar(value):
-    """Spell a scalar the way YAML spells it, for the rich renderer."""
+    """Spell a scalar the way YAML spells it, for the rich renderer.
+
+    Rich output is YAML-shaped and is read back as YAML - that is what
+    `test_repo_list_formats_agree` asserts - so a value YAML would quote has
+    to be quoted here too. Repository policies are what made this matter: a
+    policy naming a project rendered as `Edit: #security`, which YAML reads
+    as an empty value followed by a comment, and one naming a user as
+    `Push: @admin`, where `@` is reserved and the parse fails outright. The
+    first of those is the dangerous one, because it reads back clean.
+
+    ruamel is asked rather than second-guessed, since it is what the yaml
+    renderer beside this one uses. The regex is only there to keep ordinary
+    values off that path, which costs a dump each.
+    """
     if value is True:
         return "true"
     if value is False:
         return "false"
-    return value
+
+    if not isinstance(value, str):
+        return value
+
+    if (
+        _OBVIOUSLY_PLAIN.match(value)
+        and value == value.strip()
+        and value.lower() not in _YAML_WORDS
+    ):
+        return value
+
+    stream = StringIO()
+    _SCALAR_YAML.dump({"k": value}, stream)
+
+    return stream.getvalue().split("k:", 1)[1].strip()
 
 
 def _print_pair(console, key, value, lead, indent, phabfive_instance):
