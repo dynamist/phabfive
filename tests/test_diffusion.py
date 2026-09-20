@@ -8,7 +8,11 @@ import pytest
 # phabfive imports
 from phabfive.constants import FORMAT_ALIASES
 from phabfive.diffusion import Diffusion
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveNameCollisionException,
+)
 
 
 def _repo(name, short_name=None, status="active", is_hosted=True):
@@ -127,6 +131,185 @@ class TestRepoCreateDuplicateCheck:
         }
 
         assert diffusion.create_repository(name="test") == "PHID-REPO-new"
+
+
+class TestFoldShortName:
+    """What phabfive treats as the same short name."""
+
+    def test_case_is_folded(self):
+        from phabfive.diffusion.core import fold_short_name
+
+        assert fold_short_name("MyRepo") == fold_short_name("myrepo")
+
+    def test_the_three_punctuation_characters_a_slug_may_contain_are_folded(self):
+        """Phorge allows only . - _ in a slug, so those are the whole set."""
+        from phabfive.diffusion.core import fold_short_name
+
+        folded = {
+            fold_short_name(name)
+            for name in ("myrepo", "my-repo", "my_repo", "my.repo", "My-Repo")
+        }
+
+        assert folded == {"myrepo"}
+
+    def test_a_different_name_stays_different(self):
+        from phabfive.diffusion.core import fold_short_name
+
+        assert fold_short_name("my-repo") != fold_short_name("myrepos")
+
+    def test_an_absent_name_folds_to_empty(self):
+        """A repository may carry no short name at all."""
+        from phabfive.diffusion.core import fold_short_name
+
+        assert fold_short_name(None) == ""
+
+
+class TestNearDuplicateShortNames:
+    """A name Phorge would accept, but nobody could tell apart from one in place.
+
+    Phorge refuses a short name that differs only in case - `repositorySlug`
+    is a `utf8mb4_unicode_ci` column under a unique key - but it accepts one
+    that differs only in punctuation, and a repository cannot be deleted
+    afterwards.
+    """
+
+    def test_rejects_a_case_variant(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("myrepo")]
+        }
+
+        with pytest.raises(PhabfiveNameCollisionException, match="too similar"):
+            diffusion.build_repo_create(name="MyRepo")
+
+    @pytest.mark.parametrize("name", ["my-repo", "my_repo", "my.repo", "My-Repo"])
+    def test_rejects_a_punctuation_variant(self, diffusion, name):
+        """The case Phorge itself lets through."""
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("myrepo")]
+        }
+
+        with pytest.raises(PhabfiveNameCollisionException):
+            diffusion.build_repo_create(name=name)
+
+        diffusion.phab.diffusion.repository.edit.assert_not_called()
+
+    def test_a_genuinely_different_name_is_untouched(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("myrepo")]
+        }
+
+        transactions, _ = diffusion.build_repo_create(name="genuinely-different")
+
+        assert {"type": "shortName", "value": "genuinely-different"} in transactions
+
+    def test_the_error_names_the_repository_it_collided_with(self, diffusion):
+        """The user needs to know whether they meant the existing one."""
+        existing = _repo("myrepo")
+        existing["id"] = 86
+        diffusion.phab.diffusion.repository.search.return_value = {"data": [existing]}
+
+        with pytest.raises(PhabfiveNameCollisionException, match=r"R86 \(myrepo\)"):
+            diffusion.build_repo_create(name="my-repo")
+
+    def test_an_exact_clash_still_says_already_exists(self, diffusion):
+        """And is a plain data error, because it has no override."""
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("myrepo")]
+        }
+
+        with pytest.raises(PhabfiveDataException, match="already exists") as caught:
+            diffusion.build_repo_create(name="myrepo")
+
+        assert not isinstance(caught.value, PhabfiveNameCollisionException)
+
+    def test_an_exact_clash_outranks_a_near_one_behind_it(self, diffusion):
+        """Otherwise the error offers an override that would not work."""
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("my-repo"), _repo("myrepo")]
+        }
+
+        with pytest.raises(PhabfiveDataException, match="already exists"):
+            diffusion.build_repo_create(name="myrepo")
+
+    def test_allow_similar_creates_the_near_duplicate(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("myrepo")]
+        }
+
+        transactions, _ = diffusion.build_repo_create(
+            name="my-repo", allow_similar=True
+        )
+
+        assert {"type": "shortName", "value": "my-repo"} in transactions
+
+    def test_allow_similar_does_not_reach_an_exact_clash(self, diffusion):
+        """There is nothing to override - Phorge refuses it as well."""
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("myrepo")]
+        }
+
+        with pytest.raises(PhabfiveDataException, match="already exists"):
+            diffusion.build_repo_create(name="myrepo", allow_similar=True)
+
+    def test_the_check_costs_one_listing(self, diffusion):
+        """The guard reuses the fetch the exact-match check already paid for."""
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("myrepo")]
+        }
+
+        diffusion.build_repo_create(name="genuinely-different")
+
+        assert diffusion.phab.diffusion.repository.search.call_count == 1
+
+
+class TestRenameIntoACollision:
+    """`repo edit --short-name` claims a name the same way `repo create` does."""
+
+    def _record(self, short_name="myrepo", repo_id=7):
+        record = _repo(short_name)
+        record["id"] = repo_id
+        return record
+
+    def test_rejects_a_near_duplicate_rename(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("other-repo")]
+        }
+
+        with pytest.raises(PhabfiveNameCollisionException, match="too similar"):
+            diffusion.build_repo_edit(self._record(), short_name="otherrepo")
+
+    def test_a_repository_does_not_collide_with_itself(self, diffusion):
+        """Renaming `my-repo` to `myrepo` is a repunctuation, not a clash."""
+        record = self._record(short_name="my-repo")
+        diffusion.phab.diffusion.repository.search.return_value = {"data": [record]}
+
+        transactions, _ = diffusion.build_repo_edit(record, short_name="myrepo")
+
+        assert {"type": "shortName", "value": "myrepo"} in transactions
+
+    def test_allow_similar_permits_the_rename(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("other-repo")]
+        }
+
+        transactions, _ = diffusion.build_repo_edit(
+            self._record(), short_name="otherrepo", allow_similar=True
+        )
+
+        assert {"type": "shortName", "value": "otherrepo"} in transactions
+
+    def test_an_edit_that_leaves_the_short_name_alone_fetches_nothing(self, diffusion):
+        """The listing is only worth paying for when the name is actually moving."""
+        diffusion.build_repo_edit(self._record(), default_branch="main")
+
+        diffusion.phab.diffusion.repository.search.assert_not_called()
+
+    def test_setting_the_short_name_to_what_it_already_is_fetches_nothing(
+        self, diffusion
+    ):
+        diffusion.build_repo_edit(self._record(), short_name="myrepo")
+
+        diffusion.phab.diffusion.repository.search.assert_not_called()
 
 
 class TestRepoList:
@@ -687,6 +870,14 @@ class TestMissingRepositoryIsNotATraceback:
 class TestBuildRepoEdit:
     """Repository edits describe themselves before they are applied."""
 
+    @pytest.fixture(autouse=True)
+    def _an_instance_of_one(self, diffusion):
+        """A rename now asks the instance for a clash; these tests are not about that.
+
+        TestRenameIntoACollision covers the check itself.
+        """
+        diffusion.phab.diffusion.repository.search.return_value = {"data": []}
+
     def _record(self):
         record = _repo("oldname", short_name="oldname")
         record["fields"]["defaultBranch"] = "master"
@@ -1071,6 +1262,7 @@ class TestRepoEditCli:
             "visible_to": "public",
             "editable_by": "#infrastructure",
             "can_push": "@admin",
+            "allow_similar": False,
         }
 
     def test_setting_a_push_policy_on_a_non_hosted_repository_warns(self):
@@ -1324,6 +1516,96 @@ class TestRepoCreateCli:
 
         assert result.exit_code == 1
         diffusion.apply_repo_create.assert_not_called()
+
+    def test_a_near_duplicate_is_refused_and_names_the_override(self):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.build_repo_create.side_effect = PhabfiveNameCollisionException(
+            "Repository my-repo is too similar to R86 (myrepo)"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, ["repo", "create", "my-repo"])
+
+        assert result.exit_code == 1
+        assert "too similar" in result.output
+        assert "--allow-similar" in result.output
+        assert "cannot be deleted once created" in result.output
+        mock_diffusion.apply_repo_create.assert_not_called()
+
+    def test_an_exact_clash_does_not_offer_the_override(self):
+        """It would not work - Phorge refuses an exact clash as well."""
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.build_repo_create.side_effect = PhabfiveDataException(
+            "Repository myrepo already exists as R86 (myrepo)"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, ["repo", "create", "myrepo"])
+
+        assert result.exit_code == 1
+        assert "--allow-similar" not in result.output
+
+    def test_the_near_duplicate_check_runs_before_the_dry_run_prints(self):
+        """A preview that misses the clash is worse than no preview."""
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.build_repo_create.side_effect = PhabfiveNameCollisionException(
+            "Repository my-repo is too similar to R86 (myrepo)"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(
+                diffusion_app, ["repo", "create", "my-repo", "--dry-run"]
+            )
+
+        assert result.exit_code == 1
+        assert "[DRY RUN]" not in result.output
+
+    def test_allow_similar_is_passed_through(self):
+        result, diffusion = self._invoke(["my-repo", "--allow-similar", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert diffusion.build_repo_create.call_args.kwargs["allow_similar"] is True
+
+    def test_a_rename_collision_gives_the_reason_that_fits_a_rename(self):
+        """A rename can be undone; a create cannot. They do not claim the same reason."""
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.build_repo_edit.side_effect = PhabfiveNameCollisionException(
+            "Repository otherrepo is too similar to R86 (other-repo)"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(
+                diffusion_app, ["repo", "edit", "R7", "--short-name=otherrepo"]
+            )
+
+        assert result.exit_code == 1
+        assert "rewrites the built-in URIs" in result.output
+        assert "cannot be deleted once created" not in result.output
+        assert "--allow-similar" in result.output
 
 
 def _uri_record(uri, io="observe", display="always", uri_id=1, builtin=False):

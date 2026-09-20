@@ -354,6 +354,7 @@ phabfive diffusion uri list R5 --disabled
 phabfive diffusion repo edit R5 --default-branch main --dry-run
 phabfive diffusion repo edit R5 --visible-to=public --editable-by='#infra' --can-push=admin --dry-run
 phabfive diffusion repo create <name> --dry-run
+phabfive diffusion repo create <name> --allow-similar
 phabfive diffusion uri create K1 R5 <uri> --observe --dry-run
 ```
 
@@ -405,6 +406,24 @@ nothing is an empty result - neither is a failure.
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
 `--status`. A `--short-name` change also rewrites the built-in `/source/<name>.git`
 URIs, which `--dry-run` spells out before anything is applied.
+
+`diffusion repo create` and a `repo edit --short-name` both refuse a name that
+differs from an existing repository only in **case** or in `.` `-` `_`
+punctuation - `MyRepo`, `my-repo`, `my_repo` and `my.repo` all count as the same
+name as `myrepo`. The error names the repository clashed with, by monogram, so
+it is clear whether the existing one was what was meant. `--allow-similar`
+creates or renames it anyway.
+
+This is stricter than Phorge, deliberately. Phorge stores `repositorySlug` in a
+`utf8mb4_unicode_ci` column under a unique key, so it refuses a short name that
+differs only in case or accents, but it happily accepts one that differs only in
+punctuation - and a repository cannot be deleted afterwards through Conduit or
+the web UI, only deactivated by an admin running `bin/remove destroy`. Cheap to
+create and impossible to remove is why the default is to refuse.
+
+An **exact** clash is always refused: `--allow-similar` does not reach it, because
+Phorge would refuse it as well. The check runs at build time, so `--dry-run`
+reports the clash rather than previewing a creation that cannot happen.
 
 It also sets the three policies: `--visible-to`, `--editable-by` and
 `--can-push`, named the way Phorge names the capability each one sets. Each takes

@@ -40,7 +40,10 @@ from phabfive.diffusion.validators import (
     validate_credential_type,
     validate_repo_identifier,
 )
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveDataException,
+    PhabfiveNameCollisionException,
+)
 from phabfive.policy import (
     policy_label,
     policy_lockout_message,
@@ -49,6 +52,58 @@ from phabfive.policy import (
 )
 
 log = logging.getLogger(__name__)
+
+# Phorge accepts only letters, digits, ".", "-" and "_" in a repository short
+# name (assertValidRepositorySlug, src/applications/repository/storage/
+# PhabricatorRepository.php), so those three characters are the whole of the
+# punctuation two short names can differ by.
+_SHORT_NAME_PUNCTUATION = str.maketrans("", "", "._-")
+
+
+def fold_short_name(name):
+    """Reduce a name to what makes two of them confusable.
+
+    Phorge stores `repositorySlug` in a `utf8mb4_unicode_ci` column under a
+    unique key and looks a slug up with a plain `IN`, so it already refuses a
+    short name differing from an existing one only in case or in accents. It
+    does not fold punctuation: `myrepo`, `my-repo`, `my_repo` and `my.repo`
+    are four separate repositories to Phorge, and a repository cannot be
+    deleted afterwards through Conduit or the web UI. Folding case and those
+    three characters is what closes the gap Phorge leaves.
+
+    Parameters
+    ----------
+    name : str or None
+        A repository name or short name
+
+    Returns
+    -------
+    str
+        The folded form, or "" for an empty name
+    """
+    if not name:
+        return ""
+
+    return name.translate(_SHORT_NAME_PUNCTUATION).casefold()
+
+
+def describe_repository(repo):
+    """Name a repository in an error, by monogram and by the name it carries.
+
+    Parameters
+    ----------
+    repo : dict
+        A repository record
+
+    Returns
+    -------
+    str
+        e.g. "R86 (aws-redis)", or "R86" if it carries no name at all
+    """
+    label = Diffusion.name_repository(repo)
+    monogram = f"R{repo['id']}"
+
+    return f"{monogram} ({label})" if label else monogram
 
 
 class Diffusion(Phabfive):
@@ -407,7 +462,7 @@ class Diffusion(Phabfive):
 
     # Core operations that remain in the main class
 
-    def create_repository(self, name=None, vcs=None, status=None):
+    def create_repository(self, name=None, vcs=None, status=None, allow_similar=False):
         """
         Create a new repository in Phabricator.
 
@@ -419,6 +474,9 @@ class Diffusion(Phabfive):
             Version control system, defaults to "git"
         status : str, optional
             Repository status, defaults to "active"
+        allow_similar : bool, optional
+            Create it even though an existing repository differs from it only
+            in case or punctuation
 
         Returns
         -------
@@ -430,11 +488,100 @@ class Diffusion(Phabfive):
         PhabfiveDataException
             If repository already exists or API error
         """
-        transactions, _ = self.build_repo_create(name=name, vcs=vcs, status=status)
+        transactions, _ = self.build_repo_create(
+            name=name, vcs=vcs, status=status, allow_similar=allow_similar
+        )
 
         return self.apply_repo_create(transactions)
 
-    def build_repo_create(self, name=None, vcs=None, status=None):
+    def find_name_collision(self, name, exclude_id=None):
+        """Find the repository a name would clash with, exactly or nearly.
+
+        One repository listing answers both questions, so this costs the same
+        single paged fetch the exact-match check already cost.
+
+        An exact match wins over a near one wherever both exist, whatever
+        order the listing happens to be in: an exact clash cannot be
+        overridden, so reporting a near one in its place would offer an
+        override that does not work.
+
+        Parameters
+        ----------
+        name : str
+            The name being claimed
+        exclude_id : int, optional
+            A repository to ignore, so a rename does not collide with the
+            repository being renamed
+
+        Returns
+        -------
+        tuple or None
+            (repo, exact) for the repository clashed with, or None if the
+            name is free. `exact` is True for a match Phorge itself would
+            refuse, False for one only the fold catches.
+        """
+        folded = fold_short_name(name)
+        near = None
+
+        for repo in self.get_repositories():
+            if exclude_id is not None and repo.get("id") == exclude_id:
+                continue
+
+            fields = repo.get("fields", {})
+            existing = (fields.get("name"), fields.get("shortName"))
+
+            if name in existing:
+                return repo, True
+
+            if near is None and folded:
+                if any(fold_short_name(value) == folded for value in existing):
+                    near = (repo, False)
+
+        return near
+
+    def assert_name_is_free(self, name, exclude_id=None, allow_similar=False):
+        """Refuse a name that clashes with a repository already on the instance.
+
+        Parameters
+        ----------
+        name : str
+            The name being claimed
+        exclude_id : int, optional
+            A repository to ignore, for a rename
+        allow_similar : bool, optional
+            Accept a near-duplicate. An exact match is refused regardless -
+            Phorge would refuse it too, so there is nothing to override.
+
+        Raises
+        ------
+        PhabfiveDataException
+            If a repository of that exact name already exists
+        PhabfiveNameCollisionException
+            If one differs only in case or in "." "-" "_" punctuation, unless
+            allow_similar is set
+        """
+        collision = self.find_name_collision(name, exclude_id=exclude_id)
+
+        if collision is None:
+            return
+
+        repo, exact = collision
+
+        if exact:
+            raise PhabfiveDataException(
+                f"Repository {name} already exists as {describe_repository(repo)}"
+            )
+
+        if allow_similar:
+            return
+
+        raise PhabfiveNameCollisionException(
+            f"Repository {name} is too similar to {describe_repository(repo)}, "
+            f"which already exists - they differ only in case or in "
+            f'"." "-" "_" punctuation'
+        )
+
+    def build_repo_create(self, name=None, vcs=None, status=None, allow_similar=False):
         """Compute the transactions for a new repository, without creating it.
 
         Same build/apply split as build_repo_edit, so a caller can show what
@@ -449,6 +596,9 @@ class Diffusion(Phabfive):
             Version control system, defaults to "git"
         status : str, optional
             Repository status, defaults to "active"
+        allow_similar : bool, optional
+            Create the repository even though an existing one differs from it
+            only in case or punctuation
 
         Returns
         -------
@@ -460,13 +610,13 @@ class Diffusion(Phabfive):
         ------
         PhabfiveDataException
             If a repository of that name already exists
+        PhabfiveNameCollisionException
+            If one is near enough to be confused with it, unless allow_similar
         """
         vcs = vcs or "git"
         status = status or "active"
 
-        for repo in self.get_repositories():
-            if name in (repo["fields"]["name"], repo["fields"]["shortName"]):
-                raise PhabfiveDataException(f"Repository {name} already exists")
+        self.assert_name_is_free(name, allow_similar=allow_similar)
 
         candidates = [
             ("name", name, "Name"),
@@ -1033,6 +1183,7 @@ class Diffusion(Phabfive):
         visible_to=None,
         editable_by=None,
         can_push=None,
+        allow_similar=False,
     ):
         """Compute the transactions for a repository edit, without applying them.
 
@@ -1054,6 +1205,9 @@ class Diffusion(Phabfive):
             New edit policy
         can_push : str, optional
             New push policy
+        allow_similar : bool, optional
+            Accept a new short name that differs from an existing repository
+            only in case or punctuation
 
         Returns
         -------
@@ -1068,9 +1222,24 @@ class Diffusion(Phabfive):
         PhabfiveConfigException
             If a policy value is outside the grammar
         PhabfiveDataException
-            If a policy names a project or user that does not exist
+            If a policy names a project or user that does not exist, or a new
+            short name is already taken
+        PhabfiveNameCollisionException
+            If a new short name is near enough to an existing repository to be
+            confused with it, unless allow_similar
         """
         fields = repo_record.get("fields", {})
+
+        # A rename can walk into a collision exactly as a create can, and it
+        # rewrites the built-in URIs on the way. Only pay for the repository
+        # listing when the short name is actually moving, so `repo edit
+        # --status=inactive` keeps costing what it costs today.
+        if short_name is not None and short_name != fields.get("shortName"):
+            self.assert_name_is_free(
+                short_name,
+                exclude_id=repo_record.get("id"),
+                allow_similar=allow_similar,
+            )
 
         candidates = [
             ("name", name, "Name", fields.get("name")),

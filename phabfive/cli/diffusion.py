@@ -11,7 +11,11 @@ from phabfive.cli.completers import complete_policy, complete_repo_status
 from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.constants import REPO_STATUS_CHOICES
 from phabfive.diffusion.formatters import repository_is_hosted
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveNameCollisionException,
+)
 from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
 
 diffusion_app = typer.Typer(
@@ -196,6 +200,34 @@ def repo_show(
         raise typer.Exit(1)
 
 
+# Why each command refuses a near-duplicate by default. A create and a
+# rename are not equally grave - a rename can be undone, a create cannot -
+# so they do not claim the same reason.
+_COLLISION_REASONS = {
+    "create": "A repository cannot be deleted once created",
+    "edit": "Renaming into a near-duplicate rewrites the built-in URIs as well",
+}
+
+
+def _report_collision(error, command="create", option="--allow-similar"):
+    """Report a name clash, and offer the override only where there is one.
+
+    An exact clash has no override - Phorge refuses it as well - so the hint
+    is attached to the near-duplicate case alone, which is what the dedicated
+    exception distinguishes.
+    """
+    message = f"ERROR: {error}"
+
+    if isinstance(error, PhabfiveNameCollisionException):
+        reason = _COLLISION_REASONS[command]
+        message += (
+            f"\n       {reason}, so this is refused by default."
+            f"\n       Pass {option} if you meant to."
+        )
+
+    typer.echo(message, err=True)
+
+
 @repo_app.command("create")
 def repo_create(
     ctx: typer.Context,
@@ -207,8 +239,19 @@ def repo_create(
     interactive: bool = typer.Option(
         False, "--interactive", "-i", help="Review the new repository and confirm"
     ),
+    allow_similar: bool = typer.Option(
+        False,
+        "--allow-similar",
+        help="Create it even if an existing repository differs only in case or punctuation",
+    ),
 ) -> None:
-    """Create a new repository."""
+    """Create a new repository.
+
+    A short name that differs from an existing repository only in case or in
+    `.` `-` `_` punctuation is refused, because a repository cannot be deleted
+    once created - Phorge offers no delete through Conduit or the web UI.
+    `--allow-similar` creates it anyway. An exact clash is always refused.
+    """
     from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
 
     try:
@@ -220,9 +263,11 @@ def repo_create(
     diffusion = _get_diffusion_app()
 
     try:
-        transactions, changes = diffusion.build_repo_create(name=name)
+        transactions, changes = diffusion.build_repo_create(
+            name=name, allow_similar=allow_similar
+        )
     except PhabfiveDataException as e:
-        typer.echo(f"ERROR: {e}", err=True)
+        _report_collision(e)
         raise typer.Exit(1)
 
     if dry_run:
@@ -288,6 +333,11 @@ def repo_edit(
     interactive: bool = typer.Option(
         False, "--interactive", "-i", help="Review the change and confirm"
     ),
+    allow_similar: bool = typer.Option(
+        False,
+        "--allow-similar",
+        help="Allow a --short-name that differs from another only in case or punctuation",
+    ),
 ) -> None:
     """Edit a repository.
 
@@ -301,6 +351,10 @@ def repo_edit(
     repository can be made hosted later - but `--can-push` says so on stderr,
     and `repo show` reports the policy as "Not a Hosted Repository" rather
     than as a value in force.
+
+    `--short-name` is held to the same collision rule as `repo create`: a name
+    that differs from another repository only in case or in `.` `-` `_`
+    punctuation is refused unless `--allow-similar` is given.
     """
     from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
 
@@ -378,9 +432,10 @@ def repo_edit(
             visible_to=visible_to,
             editable_by=editable_by,
             can_push=can_push,
+            allow_similar=allow_similar,
         )
     except (PhabfiveConfigException, PhabfiveDataException) as e:
-        typer.echo(f"ERROR: {e}", err=True)
+        _report_collision(e, command="edit")
         raise typer.Exit(1)
 
     if not transactions:
