@@ -299,7 +299,11 @@ def uri_create(
             typer.echo("Nothing was created.", err=True)
             raise typer.Exit(return_code or 0)
 
-    diffusion.apply_uri_create(plan)
+    try:
+        diffusion.apply_uri_create(plan)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
 
     typer.echo(uri)
 

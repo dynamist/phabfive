@@ -118,6 +118,30 @@ def find_repository(phab, repo_id, attachments=None):
     return match_repository(fetch_repositories(phab, attachments=attachments), repo_id)
 
 
+def demotion_io(uri_fields):
+    """The io value that takes a URI out of service, for this kind of URI.
+
+    Phabricator validates io per URI: a hosted (built-in) URI accepts
+    "read", while an observed or mirrored one accepts only "default",
+    "none", "observe" and "mirror". Sending "read" to the latter is
+    rejected outright, which is what made `uri create` fail on any
+    repository that observes a remote.
+
+    Parameters
+    ----------
+    uri_fields : dict
+        The "fields" of a URI record
+
+    Returns
+    -------
+    str
+        "read" for a built-in URI, "none" otherwise
+    """
+    builtin = uri_fields.get("builtin") or {}
+
+    return "read" if builtin.get("protocol") else "none"
+
+
 def fetch_branches(phab, repo_id=None, repo_callsign=None, repo_shortname=None):
     """
     Fetch branches for a repository from Phabricator API.

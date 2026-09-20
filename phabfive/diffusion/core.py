@@ -13,6 +13,7 @@ from phabfive.diffusion.fetchers import (
     fetch_branches,
     fetch_repositories,
     fetch_uris,
+    demotion_io,
     find_repository,
     match_repository,
 )
@@ -248,8 +249,8 @@ class Diffusion(Phabfive):
         """
         try:
             new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
-        except APIError:
-            raise PhabfiveDataException("No valid input or other error")
+        except APIError as e:
+            raise PhabfiveDataException(str(e))
 
         return new_repo["object"]["phid"]
 
@@ -362,8 +363,9 @@ class Diffusion(Phabfive):
             fields = uri["fields"]
             current_io = fields["io"]["effective"]
             current_display = fields["display"]["effective"]
+            target_io = demotion_io(fields)
 
-            if current_io == "read" and current_display == "never":
+            if current_io == target_io and current_display == "never":
                 # Already where the demotion would put it.
                 continue
 
@@ -373,6 +375,7 @@ class Diffusion(Phabfive):
                     "uri": fields["uri"]["display"],
                     "io": current_io,
                     "display": current_display,
+                    "target_io": target_io,
                 }
             )
 
@@ -401,7 +404,7 @@ class Diffusion(Phabfive):
                 {
                     "field": f"Demotes {demoted['uri']}",
                     "old": f"io={demoted['io']}, display={demoted['display']}",
-                    "new": "io=read, display=never",
+                    "new": f"io={demoted['target_io']}, display=never",
                 }
             )
 
@@ -409,6 +412,12 @@ class Diffusion(Phabfive):
 
     def apply_uri_create(self, plan):
         """Demote the repository's existing URIs, then add the new one.
+
+        Not atomic, and cannot be: Conduit has no transaction spanning
+        several objects. Each demotion is its own edit, so a failure part
+        way leaves the repository with some URIs already demoted and no new
+        URI to replace them. Run build_uri_create first and read what it
+        says before committing to this.
 
         Parameters
         ----------
@@ -423,7 +432,7 @@ class Diffusion(Phabfive):
         for demoted in plan["demotions"]:
             self.edit_uri(
                 uri=demoted["uri"],
-                io="read",
+                io=demoted["target_io"],
                 display="never",
                 object_identifier=demoted["id"],
             )
@@ -578,8 +587,8 @@ class Diffusion(Phabfive):
             self.phab.diffusion.uri.edit(
                 transactions=transactions, objectIdentifier=object_identifier
             )
-        except APIError:
-            raise PhabfiveDataException("No valid input or other error")
+        except APIError as e:
+            raise PhabfiveDataException(str(e))
 
     def edit_uri(
         self,
@@ -766,8 +775,8 @@ class Diffusion(Phabfive):
             self.phab.diffusion.repository.edit(
                 transactions=transactions, objectIdentifier=object_identifier
             )
-        except APIError:
-            raise PhabfiveDataException("No valid input or other error")
+        except APIError as e:
+            raise PhabfiveDataException(str(e))
 
     def edit_repository(
         self,
