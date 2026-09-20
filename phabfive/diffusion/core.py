@@ -9,7 +9,12 @@ from phabricator import APIError
 from phabfive import passphrase
 from phabfive.constants import IO_NEW_URI_CHOICES, DISPLAY_CHOICES
 from phabfive.core import Phabfive
-from phabfive.diffusion.fetchers import fetch_branches, fetch_repositories, fetch_uris
+from phabfive.diffusion.fetchers import (
+    fetch_branches,
+    fetch_repositories,
+    fetch_uris,
+    find_repository,
+)
 from phabfive.diffusion.formatters import (
     format_branches,
     format_repositories,
@@ -185,38 +190,6 @@ class Diffusion(Phabfive):
         )
 
         return new_repo["object"]["phid"]
-
-    def edit_repositories(self, names=None, status=None):
-        """
-        Edit repositories in Phabricator.
-
-        Parameters
-        ----------
-        names : list
-            List of repository names to edit
-        status : str
-            New status value
-
-        Returns
-        -------
-        bool
-            True on success
-        """
-        repos = self.get_repositories()
-
-        for repo in repos:
-            for name in names:
-                if repo["fields"]["name"] == name:
-                    transactions = self.to_transactions(
-                        {"status": status},
-                    )
-
-                    self.phab.diffusion.repository.edit(
-                        transactions=transactions,
-                        objectIdentifier=repo["id"],
-                    )
-
-        return True
 
     def create_uri(
         self, repository_name=None, new_uri=None, io=None, display=None, credential=None
@@ -533,5 +506,189 @@ class Diffusion(Phabfive):
             return {"changes": changes, "dry_run": True}
 
         self.apply_uri_edit(object_identifier, transactions)
+
+        return {"changes": changes, "dry_run": False}
+
+    def get_repo_record(self, repo_name):
+        """Fetch a repository in full, so an edit can be shown before it is made.
+
+        Parameters
+        ----------
+        repo_name : str
+            Repository monogram, callsign or short name
+
+        Returns
+        -------
+        dict
+            The repository object, with 'id', 'phid' and 'fields' keys
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the repository does not exist
+        """
+        repo = find_repository(self.phab, repo_name)
+
+        if repo is None:
+            raise PhabfiveDataException(f"Repository '{repo_name}' does not exist")
+
+        return repo
+
+    def build_repo_edit(
+        self,
+        repo_record,
+        name=None,
+        short_name=None,
+        default_branch=None,
+        status=None,
+    ):
+        """Compute the transactions for a repository edit, without applying them.
+
+        Parameters
+        ----------
+        repo_record : dict
+            The repository as it stands, from get_repo_record
+        name : str, optional
+            New human-readable name
+        short_name : str, optional
+            New short name
+        default_branch : str, optional
+            New default branch
+        status : str, optional
+            New status ("active" or "inactive")
+
+        Returns
+        -------
+        tuple
+            (transactions, changes) - the Conduit transactions to apply and a
+            human-readable description of each one. A short name change also
+            describes the built-in URIs it rewrites, which are derived from it
+            and would otherwise change with nothing having said so.
+        """
+        fields = repo_record.get("fields", {})
+
+        candidates = [
+            ("name", name, "Name", fields.get("name")),
+            ("shortName", short_name, "Short name", fields.get("shortName")),
+            (
+                "defaultBranch",
+                default_branch,
+                "Default branch",
+                fields.get("defaultBranch"),
+            ),
+            ("status", status, "Status", fields.get("status")),
+        ]
+
+        transactions = []
+        changes = []
+
+        for kind, value, label, current in candidates:
+            if value is None or current == value:
+                # Not asked for, or already at the target value.
+                continue
+
+            transactions.append({"type": kind, "value": value})
+
+            changes.append(
+                {
+                    "field": label,
+                    "old": "(none)" if current is None else str(current),
+                    "new": str(value),
+                }
+            )
+
+            if kind == "shortName":
+                # Phabricator derives the built-in clone URIs from the short
+                # name, so this one edit silently moves every /source/ path.
+                changes.append(
+                    {
+                        "field": "Built-in URIs",
+                        "old": f"/source/{current}.git",
+                        "new": f"/source/{value}.git",
+                    }
+                )
+
+        return transactions, changes
+
+    def apply_repo_edit(self, object_identifier, transactions):
+        """Send prepared transactions to Diffusion.
+
+        Parameters
+        ----------
+        object_identifier : str
+            Repository object identifier
+        transactions : list
+            Transactions from build_repo_edit
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the API rejects the edit
+        """
+        try:
+            self.phab.diffusion.repository.edit(
+                transactions=transactions, objectIdentifier=object_identifier
+            )
+        except APIError:
+            raise PhabfiveDataException("No valid input or other error")
+
+    def edit_repository(
+        self,
+        name=None,
+        short_name=None,
+        default_branch=None,
+        status=None,
+        object_identifier=None,
+        repo_record=None,
+        dry_run=False,
+    ):
+        """
+        Edit an existing repository.
+
+        Thin composition of build_repo_edit and the Conduit call, so a caller
+        that wants to show the change before making it can stop in between.
+
+        Parameters
+        ----------
+        name : str, optional
+            New human-readable name
+        short_name : str, optional
+            New short name
+        default_branch : str, optional
+            New default branch
+        status : str, optional
+            New status
+        object_identifier : str, optional
+            Repository object identifier
+        repo_record : dict, optional
+            The repository as it stands; only needed to describe the change
+        dry_run : bool
+            Show the change without making it
+
+        Returns
+        -------
+        dict
+            {'changes': [...], 'dry_run': bool}
+
+        Raises
+        ------
+        PhabfiveDataException
+            If API error occurs
+        """
+        transactions, changes = self.build_repo_edit(
+            repo_record or {},
+            name=name,
+            short_name=short_name,
+            default_branch=default_branch,
+            status=status,
+        )
+
+        if not transactions:
+            return {"changes": [], "dry_run": dry_run}
+
+        if dry_run:
+            return {"changes": changes, "dry_run": True}
+
+        self.apply_repo_edit(object_identifier, transactions)
 
         return {"changes": changes, "dry_run": False}

@@ -88,6 +88,88 @@ def repo_create(
     diffusion.create_repository(name=name)
 
 
+@repo_app.command("edit")
+def repo_edit(
+    ctx: typer.Context,
+    repo: str = typer.Argument(
+        ..., help="Repository monogram (R123), callsign or shortname"
+    ),
+    name: Optional[str] = typer.Option(
+        None, "--name", help="Set the human-readable name"
+    ),
+    short_name: Optional[str] = typer.Option(
+        None, "--short-name", help="Set the short name (rewrites built-in URIs)"
+    ),
+    default_branch: Optional[str] = typer.Option(
+        None, "--default-branch", help="Set the default branch (e.g., main)"
+    ),
+    status: Optional[str] = typer.Option(
+        None, "--status", help="Set status (active, inactive)"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show the change without making it"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirming"),
+    interactive: bool = typer.Option(
+        False, "--interactive", "-i", help="Review the change and confirm"
+    ),
+) -> None:
+    """Edit a repository."""
+    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
+
+    if all(arg is None for arg in [name, short_name, default_branch, status]):
+        typer.echo("Please input minimum one option", err=True)
+        raise typer.Exit(1)
+
+    if status is not None and status not in REPO_STATUS_CHOICES:
+        choices = ", ".join(REPO_STATUS_CHOICES)
+        typer.echo(f"ERROR: --status must be one of: {choices}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        assume_yes = resolve_assume_yes(yes, False, interactive)
+    except ValueError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
+
+    diffusion = _get_diffusion_app()
+
+    try:
+        repo_record = diffusion.get_repo_record(repo)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    object_id = repo_record["id"]
+
+    transactions, changes = diffusion.build_repo_edit(
+        repo_record,
+        name=name,
+        short_name=short_name,
+        default_branch=default_branch,
+        status=status,
+    )
+
+    if not transactions:
+        typer.echo(f"{repo}: No changes (already at target state)")
+        return
+
+    if dry_run:
+        render_changes(repo, changes, header=f"[DRY RUN] Would apply to {repo}:")
+        return
+
+    if interactive:
+        render_changes(repo, changes, header=f"Would apply to {repo}:")
+        confirmed, return_code = confirm_apply(assume_yes)
+        if not confirmed:
+            typer.echo("Nothing was changed.", err=True)
+            raise typer.Exit(return_code or 0)
+
+    diffusion.apply_repo_edit(object_id, transactions)
+
+    render_changes(repo, changes)
+
+
 # URI commands
 
 

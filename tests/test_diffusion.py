@@ -618,3 +618,168 @@ class TestMissingRepositoryIsNotATraceback:
 
         assert result.exit_code == 1
         assert "Traceback" not in result.output
+
+
+class TestBuildRepoEdit:
+    """Repository edits describe themselves before they are applied."""
+
+    def _record(self):
+        record = _repo("oldname", short_name="oldname")
+        record["fields"]["defaultBranch"] = "master"
+        return record
+
+    def test_default_branch_change(self, diffusion):
+        transactions, changes = diffusion.build_repo_edit(
+            self._record(), default_branch="main"
+        )
+
+        assert transactions == [{"type": "defaultBranch", "value": "main"}]
+        assert changes == [{"field": "Default branch", "old": "master", "new": "main"}]
+
+    def test_a_value_already_at_target_is_not_a_transaction(self, diffusion):
+        transactions, changes = diffusion.build_repo_edit(
+            self._record(), default_branch="master"
+        )
+
+        assert transactions == []
+        assert changes == []
+
+    def test_short_name_change_reports_the_built_in_uris_it_rewrites(self, diffusion):
+        """Phabricator derives /source/<shortName>.git, so a rename moves it."""
+        transactions, changes = diffusion.build_repo_edit(
+            self._record(), short_name="newname"
+        )
+
+        assert transactions == [{"type": "shortName", "value": "newname"}]
+        assert {
+            "field": "Built-in URIs",
+            "old": "/source/oldname.git",
+            "new": "/source/newname.git",
+        } in changes
+
+    def test_name_change_alone_leaves_built_in_uris_unmentioned(self, diffusion):
+        _, changes = diffusion.build_repo_edit(self._record(), name="newname")
+
+        assert [c["field"] for c in changes] == ["Name"]
+
+    def test_a_rename_sets_both_fields(self, diffusion):
+        transactions, _ = diffusion.build_repo_edit(
+            self._record(), name="newname", short_name="newname"
+        )
+
+        assert transactions == [
+            {"type": "name", "value": "newname"},
+            {"type": "shortName", "value": "newname"},
+        ]
+
+    def test_an_absent_short_name_is_described_as_none(self, diffusion):
+        record = self._record()
+        record["fields"]["shortName"] = None
+
+        _, changes = diffusion.build_repo_edit(record, short_name="newname")
+
+        assert changes[0] == {
+            "field": "Short name",
+            "old": "(none)",
+            "new": "newname",
+        }
+
+    def test_dry_run_applies_nothing(self, diffusion):
+        result = diffusion.edit_repository(
+            default_branch="main",
+            object_identifier=1,
+            repo_record=self._record(),
+            dry_run=True,
+        )
+
+        assert result["dry_run"] is True
+        diffusion.phab.diffusion.repository.edit.assert_not_called()
+
+
+class TestRepoEditCli:
+    """repo edit matches the vocabulary uri edit settled on."""
+
+    def _invoke(self, args, built=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.get_repo_record.return_value = _repo("oldname")
+        mock_diffusion.build_repo_edit.return_value = built or (
+            [{"type": "defaultBranch", "value": "main"}],
+            [{"field": "Default branch", "old": "master", "new": "main"}],
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, ["repo", "edit", *args])
+        return result, mock_diffusion
+
+    def test_dry_run_shows_the_change_without_making_it(self):
+        result, diffusion = self._invoke(["R42", "--default-branch=main", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+        assert "Default branch: master → main" in result.output
+        diffusion.apply_repo_edit.assert_not_called()
+
+    def test_applies_by_default(self):
+        result, diffusion = self._invoke(["R42", "--default-branch=main"])
+
+        assert result.exit_code == 0
+        diffusion.apply_repo_edit.assert_called_once()
+
+    def test_requires_at_least_one_option(self):
+        result, diffusion = self._invoke(["R42"])
+
+        assert result.exit_code == 1
+        diffusion.get_repo_record.assert_not_called()
+
+    def test_rejects_an_unknown_status(self):
+        result, diffusion = self._invoke(["R42", "--status=archived"])
+
+        assert result.exit_code == 1
+        diffusion.apply_repo_edit.assert_not_called()
+
+    def test_yes_and_interactive_are_mutually_exclusive(self):
+        result, diffusion = self._invoke(["R42", "--default-branch=main", "-y", "-i"])
+
+        assert result.exit_code == 1
+        diffusion.apply_repo_edit.assert_not_called()
+
+    def test_no_changes_applies_nothing(self):
+        result, diffusion = self._invoke(
+            ["R42", "--default-branch=main"], built=([], [])
+        )
+
+        assert result.exit_code == 0
+        assert "No changes" in result.output
+        diffusion.apply_repo_edit.assert_not_called()
+
+    def test_short_name_has_no_short_flag(self):
+        result, diffusion = self._invoke(["R42", "-s", "newname"])
+
+        assert result.exit_code != 0
+        diffusion.apply_repo_edit.assert_not_called()
+
+    def test_a_missing_repository_is_reported_cleanly(self):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.get_repo_record.side_effect = PhabfiveDataException(
+            "Repository 'R99' does not exist"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(
+                diffusion_app, ["repo", "edit", "R99", "--default-branch=main"]
+            )
+
+        assert result.exit_code == 1
+        assert "Traceback" not in result.output
