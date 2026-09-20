@@ -646,6 +646,7 @@ def build_task_display_data(
     show_history=False,
     show_metadata=False,
     show_comments=False,
+    show_policy=False,
     search_params=None,
 ):
     """
@@ -690,6 +691,9 @@ def build_task_display_data(
         Whether to include filter match metadata
     show_comments : bool, optional
         Whether to include comments
+    show_policy : bool, optional
+        Whether to include the policy section. Naming the policies costs a
+        ``phid.query``, so it is not paid for unless it was asked for.
     search_params : dict, optional
         Search parameters to embed in metadata Query section
 
@@ -764,9 +768,10 @@ def build_task_display_data(
             log.warning(f"Failed to resolve space PHIDs: {e}")
 
     # Name the projects, users and custom rules the policies point at. One
-    # lookup for every task on the page, and none at all when every policy is
-    # a keyword, which is the common case.
-    policy_names = resolve_task_policy_names(phab, result_data)
+    # lookup for every task on the page, none at all when every policy is a
+    # keyword, which is the common case, and none at all when the policies
+    # were not asked for.
+    policy_names = resolve_task_policy_names(phab, result_data) if show_policy else {}
 
     # Build YAML data structure
     tasks_list = []
@@ -839,8 +844,11 @@ def build_task_display_data(
         task_dict["Task"] = task_data
 
         # Policies, all three of them - a task carries "Can Interact With"
-        # where a repository carries "Can Push".
-        task_dict["Policy"] = format_task_policy(fields.get("policy"), policy_names)
+        # where a repository carries "Can Push". Gated here rather than per
+        # format, so no renderer can be the one that forgets, and gated over
+        # the resolution above too.
+        if show_policy:
+            task_dict["Policy"] = format_task_policy(fields.get("policy"), policy_names)
 
         # Display board information (current columns only)
         columns_data = item.get("attachments", {}).get("columns", {})

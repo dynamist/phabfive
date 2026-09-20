@@ -28,10 +28,11 @@
 
 ### Showing Repositories
 * **`diffusion repo show`** - Diffusion had no show command. `diffusion repo show R5 R6`
-  answers with the repository, the policies it is under and a link to it, and - only when
-  asked for - `--show-uris`, `--show-branches`, `--show-tags` and `--show-metadata`. It
-  takes several repositories, space- or comma-separated, and a repository that does not
-  exist is a failed lookup rather than an empty result, the rule `maniphest show` follows
+  answers with the repository and a link to it, and - only when asked for -
+  `--show-uris`, `--show-branches`, `--show-tags`, `--show-metadata` and
+  `--show-policy`. It takes several repositories, space- or comma-separated, and a
+  repository that does not exist is a failed lookup rather than an empty result, the
+  rule `maniphest show` follows
 * **`--show-tags`** - A repository's tags were unreachable: the branch listing asked
   `diffusion.branchquery` and then dropped every ref that was not a branch, and nothing
   called `diffusion.tagsquery` at all
@@ -45,8 +46,9 @@
   it does not recognise as a policy nobody satisfies, so `--visible-to=nonsense` would
   otherwise be answered as a permissions error rather than a spelling one
 * **Policy PHIDs are resolved to names** - `repo show` and `repo list` printed a raw
-  `PHID-PROJ-...` where a policy named a project. Both now name it, in the same spelling
-  the options take, so what a policy is shown as can be typed straight back in. They are
+  `PHID-PROJ-...` where a policy named a project. Both now name it under
+  `--show-policy` / `-P`, in the same spelling the options take, so what a policy is
+  shown as can be typed straight back in. They are
   reported under `Visible To`, `Editable By` and `Can Push` - Phorge's own labels, which
   come from one rule rather than from wherever a label happened to be read off a page.
   `AphrontFormPolicyControl` special-cases exactly three capabilities into the `-able By`
@@ -57,7 +59,8 @@
   task's third policy `Can Interact`
 * **A push policy on a repository Phorge does not host says so** - a repository that
   follows a remote stores a push policy that nothing ever consults, and phabfive printed
-  it as though it were in force. `repo show` and `repo list` now report it as
+  it as though it were in force. `repo show --show-policy` and
+  `repo list --show-policy` now report it as
   `Not a Hosted Repository`, which is the sentence Phorge's own Policies panel prints in
   place of the value. It is that string in every format rather than a null or a dropped
   key, so every repository carries the same keys and the value reads the same way in a
@@ -67,14 +70,25 @@
 * **A self-lockout is a sentence, not a traceback** - Phorge refuses a policy that would
   stop you seeing or editing the repository yourself, and `repo edit` now reports the
   sentence it answered with
+* **The `Policy` section is opt-in, in both apps** - `--show-policy` / `-P` on
+  `diffusion repo show`, `diffusion repo list` and `maniphest show`, and
+  `--show-policy` on `maniphest search`, which puts policy in the same `--show-*`
+  family as branches, tags, URIs, metadata, history and comments rather than leaving
+  it the one optional section nobody could decline. It is also what it costs: naming a
+  policy that points at a project, a user or a custom rule is a `phid.query`, which
+  `repo list` was paying once for a whole instance to render a section most callers
+  never asked for. The gate is in the record builder rather than in each renderer, so
+  every format agrees by construction, and it covers the resolution as well as the
+  rendering - without the flag no `phid.query` is made at all. Setting a policy is
+  unaffected: `--visible-to`, `--editable-by` and `--can-push` need no `--show-policy`
 
 ### Task Policies
-* **`maniphest show` reports a task's policies** - Every search response carried them and
-  every display builder discarded them. The record now holds a `Policy` section with all
-  three: `Visible To`, `Editable By` and `Can Interact`. Those are Phorge's own labels
-  rather than the API's field names, and a policy naming a project or a user is shown in
-  the same spelling the options take, so what a policy is shown as can be typed straight
-  back in
+* **`maniphest show --show-policy` reports a task's policies** - Every search response
+  carried them and every display builder discarded them. Asked for, the record holds a
+  `Policy` section with all three: `Visible To`, `Editable By` and `Can Interact`. Those
+  are Phorge's own labels rather than the API's field names, and a policy naming a
+  project or a user is shown in the same spelling the options take, so what a policy is
+  shown as can be typed straight back in. `maniphest search` takes the flag too
 * **`maniphest edit` and `maniphest create` take `--visible-to` and `--editable-by`** -
   Named after the labels Phorge's own form uses, and taking the same grammar repository
   policies take, from the same module: a keyword, a `#project`, an `@user` or a PHID,

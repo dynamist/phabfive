@@ -103,6 +103,7 @@ class TestCompletionAfterMonogram:
             "--show-history",
             "--show-metadata",
             "--show-comments",
+            "--show-policy",
         ]
 
     def test_monogram_as_a_command_argument_is_untouched(self):

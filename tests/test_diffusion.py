@@ -2121,7 +2121,9 @@ class TestRepoShowRecord:
             policy={"view": "public", "edit": "admin", "diffusion.push": "no-one"},
             is_hosted=True,
         )
-        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+        record = _showable([repo]).repo_show(["R5"], show_policy=True)["repositories"][
+            0
+        ]
 
         assert record["Policy"] == {
             "Visible To": "Public (No Login Required)",
@@ -2141,7 +2143,9 @@ class TestRepoShowRecord:
             policy={"view": "public", "edit": "admin", "diffusion.push": "users"},
             is_hosted=False,
         )
-        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+        record = _showable([repo]).repo_show(["R5"], show_policy=True)["repositories"][
+            0
+        ]
 
         assert record["Repository"]["Hosted"] is False
         assert record["Policy"]["Can Push"] == "Not a Hosted Repository"
@@ -2153,8 +2157,12 @@ class TestRepoShowRecord:
         every line, and `Repository.Hosted` in the same record is what a
         script tests - so the push slot stays a string in every format.
         """
-        hosted = _showable([_show_repo(is_hosted=True)]).repo_show(["R5"])
-        observed = _showable([_show_repo(is_hosted=False)]).repo_show(["R5"])
+        hosted = _showable([_show_repo(is_hosted=True)]).repo_show(
+            ["R5"], show_policy=True
+        )
+        observed = _showable([_show_repo(is_hosted=False)]).repo_show(
+            ["R5"], show_policy=True
+        )
 
         assert (
             hosted["repositories"][0]["Policy"].keys()
@@ -2168,7 +2176,9 @@ class TestRepoShowRecord:
             policy={"view": "public", "edit": "admin", "diffusion.push": "users"},
             is_hosted=False,
         )
-        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+        record = _showable([repo]).repo_show(["R5"], show_policy=True)["repositories"][
+            0
+        ]
 
         assert record["Policy"]["Visible To"] == "Public (No Login Required)"
         assert record["Policy"]["Editable By"] == "Administrators"
@@ -2192,7 +2202,7 @@ class TestRepoShowRecord:
             }
         }
 
-        record = diffusion.repo_show(["R5"])["repositories"][0]
+        record = diffusion.repo_show(["R5"], show_policy=True)["repositories"][0]
 
         assert record["Policy"]["Visible To"] == "#infrastructure"
 
@@ -2205,7 +2215,9 @@ class TestRepoShowRecord:
                 "diffusion.push": "users",
             }
         )
-        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+        record = _showable([repo]).repo_show(["R5"], show_policy=True)["repositories"][
+            0
+        ]
 
         assert record["Policy"]["Visible To"] == "PHID-PROJ-secret"
 
@@ -2213,7 +2225,7 @@ class TestRepoShowRecord:
         """Which is every instance that never named a project in a policy."""
         diffusion = _showable([_show_repo()])
 
-        diffusion.repo_show(["R5"])
+        diffusion.repo_show(["R5"], show_policy=True)
 
         diffusion.phab.phid.query.assert_not_called()
 
@@ -2258,7 +2270,7 @@ class TestRepoShowRecord:
     def test_the_optional_sections_are_absent_until_asked_for(self):
         record = _showable([_show_repo()]).repo_show(["R5"])["repositories"][0]
 
-        for section in ("URIs", "Branches", "Tags", "Metadata"):
+        for section in ("URIs", "Branches", "Tags", "Metadata", "Policy"):
             assert section not in record
 
     def test_show_uris_describes_each_uri(self):
@@ -2356,6 +2368,141 @@ class TestRepoShowRecord:
 
         with pytest.raises(PhabfiveDataException):
             diffusion.repo_show(["R5"], show_branches=True)
+
+
+class TestThePolicySectionIsOptIn:
+    """Policy joined the `--show-*` family, and pays for itself only when asked.
+
+    Naming a policy that carries a PHID costs a ``phid.query``, and
+    ``repo list`` paid it once for a whole instance to render a section most
+    callers never asked for. So the gate is in the record builder and it
+    covers the resolution too - which is the half that is invisible in the
+    output, and so is counted here rather than read.
+    """
+
+    def _repo(self, **kwargs):
+        """A repository whose view policy names a project, so that naming it
+        is a round trip there is something to count."""
+        return _show_repo(
+            policy={
+                "view": "PHID-PROJ-infra",
+                "edit": "admin",
+                "diffusion.push": "users",
+            },
+            is_hosted=True,
+            **kwargs,
+        )
+
+    def test_repo_show_makes_no_phid_query_without_the_flag(self):
+        diffusion = _showable([self._repo()])
+
+        diffusion.repo_show(["R5"])
+
+        diffusion.phab.phid.query.assert_not_called()
+
+    def test_repo_show_makes_one_with_the_flag(self):
+        diffusion = _showable([self._repo()])
+
+        diffusion.repo_show(["R5"], show_policy=True)
+
+        assert diffusion.phab.phid.query.call_count == 1
+        assert diffusion.phab.phid.query.call_args[1]["phids"] == ["PHID-PROJ-infra"]
+
+    def test_repo_list_makes_no_phid_query_without_the_flag(self):
+        diffusion = _listing([self._repo()])
+
+        diffusion.repo_list()
+
+        diffusion.phab.phid.query.assert_not_called()
+
+    def test_repo_list_makes_one_with_the_flag(self):
+        diffusion = _listing([self._repo()])
+
+        diffusion.repo_list(show_policy=True)
+
+        assert diffusion.phab.phid.query.call_count == 1
+
+    def test_the_section_is_absent_from_a_listing_until_asked_for(self):
+        diffusion = _listing([self._repo()])
+
+        assert "Policy" not in diffusion.repo_list()["repositories"][0]
+        assert "Policy" in diffusion.repo_list(show_policy=True)["repositories"][0]
+
+    def test_not_asked_and_not_hosted_are_different_answers(self):
+        """A repository nobody asked about says nothing about its policies.
+
+        A non-hosted repository that was asked still answers, with the marker
+        the Policies management panel prints. Collapsing the two would make a
+        missing section read as a hosting fact.
+        """
+        observed = _show_repo(is_hosted=False)
+
+        silent = _showable([observed]).repo_show(["R5"])["repositories"][0]
+        asked = _showable([observed]).repo_show(["R5"], show_policy=True)[
+            "repositories"
+        ][0]
+
+        assert "Policy" not in silent
+        assert asked["Policy"]["Can Push"] == "Not a Hosted Repository"
+
+    @pytest.mark.parametrize("output_format", ["yaml", "json", "jsonl"])
+    def test_every_format_agrees_that_it_is_absent(self, capsys, output_format):
+        """The gate is in the builder, so no renderer can be the one that
+        keeps printing it."""
+        from phabfive.diffusion.display import display_repositories
+
+        diffusion = _listing([self._repo()])
+
+        display_repositories(diffusion.repo_list(), output_format, diffusion)
+
+        assert "Policy" not in capsys.readouterr().out
+
+    @pytest.mark.parametrize("output_format", ["yaml", "json", "jsonl"])
+    def test_every_format_agrees_that_it_is_present(self, capsys, output_format):
+        from phabfive.diffusion.display import display_repositories
+
+        diffusion = _listing([self._repo()])
+
+        display_repositories(
+            diffusion.repo_list(show_policy=True), output_format, diffusion
+        )
+
+        assert "Can Push" in capsys.readouterr().out
+
+    def test_the_cli_threads_the_flag(self):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        for command, method in (("show", "repo_show"), ("list", "repo_list")):
+            for args, expected in (
+                ([], False),
+                (["--show-policy"], True),
+                (["-P"], True),
+            ):
+                mock_diffusion = MagicMock()
+                getattr(mock_diffusion, method).return_value = {
+                    "repositories": [],
+                    "missing_ids": [],
+                }
+
+                with patch(
+                    "phabfive.cli.diffusion._get_diffusion_app",
+                    return_value=mock_diffusion,
+                ):
+                    CliRunner().invoke(
+                        diffusion_app,
+                        [
+                            "repo",
+                            command,
+                            *(["R5"] if command == "show" else []),
+                            *args,
+                        ],
+                    )
+
+                call = getattr(mock_diffusion, method).call_args
+
+                assert call[1]["show_policy"] is expected
 
 
 class TestRepoShowFormats:
@@ -2491,7 +2638,14 @@ class TestRepoShowCli:
 
     def test_the_show_flags_are_passed_through(self):
         _, diffusion = self._invoke(
-            ["R5", "--show-branches", "--show-tags", "--show-uris", "--show-metadata"]
+            [
+                "R5",
+                "--show-branches",
+                "--show-tags",
+                "--show-uris",
+                "--show-metadata",
+                "--show-policy",
+            ]
         )
 
         assert diffusion.repo_show.call_args[1] == {
@@ -2499,6 +2653,7 @@ class TestRepoShowCli:
             "show_tags": True,
             "show_uris": True,
             "show_metadata": True,
+            "show_policy": True,
             "show_description": True,
         }
 
@@ -2510,6 +2665,7 @@ class TestRepoShowCli:
             "show_tags": False,
             "show_uris": False,
             "show_metadata": False,
+            "show_policy": False,
             "show_description": True,
         }
 

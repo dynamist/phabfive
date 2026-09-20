@@ -119,8 +119,8 @@ transition history and filter metadata are each behind a flag:
 phabfive --format=json maniphest show T123 --show-comments --show-history --show-metadata
 ```
 
-Short forms: `-C` comments, `-H` history, `-M` metadata. `--no-description` / `-n` drops
-the description when you only want the fields.
+Short forms: `-C` comments, `-H` history, `-M` metadata, `-P` policy.
+`--no-description` / `-n` drops the description when you only want the fields.
 
 Use `-C` whenever the question is about what was decided, agreed or reported on a task.
 Without it you are reading the summary and guessing at the rest.
@@ -142,8 +142,12 @@ phabfive maniphest parents T123
 phabfive maniphest subtasks T123
 ```
 
-Every task record carries a `Policy` section, and it holds three entries where a
+`--show-policy` / `-P` adds a `Policy` section, holding three entries where a
 repository holds three of its own:
+
+```bash
+phabfive --format=json maniphest show T123 --show-policy
+```
 
 ```yaml
   Policy:
@@ -151,6 +155,10 @@ repository holds three of its own:
     Editable By: '#infrastructure'
     Can Interact: All Users
 ```
+
+It is opt-in because naming a policy that points at a project or a user costs a
+`phid.query`, which a read that never looks at the section should not pay.
+`maniphest search --show-policy` adds it to every task on the page for one lookup.
 
 The keys are Phorge's own labels, not the API's field names. `Can Interact` is the
 one repositories do not have, and a task does not store it - it derives it from
@@ -345,6 +353,7 @@ phabfive --format=table diffusion repo list active   # a grid, for a human
 phabfive --format=json diffusion repo list all --show-uris
 phabfive --format=json diffusion repo show R5
 phabfive diffusion repo show R5 R6 --show-uris --show-branches
+phabfive --format=json diffusion repo show R5 --show-policy
 phabfive --format=json diffusion uri list R5
 phabfive --format=table diffusion uri list R5        # the matrix, one row per URI
 phabfive diffusion uri list R5 --clone
@@ -358,18 +367,19 @@ phabfive diffusion uri create K1 R5 <uri> --observe --dry-run
 ```
 
 `diffusion repo show` takes several repositories, space- or comma-separated, and
-answers with a `Link`, a `Repository` section, the `Policy` the repository is under
-and - only when asked - `URIs`, `Branches`, `Tags` and `Metadata`:
-`--show-uris`, `--show-branches`, `--show-tags`, `--show-metadata`, and
-`--no-description` to leave the description out. A repository that does not exist is
-a failed lookup, not an empty result: it is reported on stderr and the exit code is 1
-even when the other repositories asked for were shown.
+answers with a `Link` and a `Repository` section, plus - only when asked - `URIs`,
+`Branches`, `Tags`, `Metadata` and `Policy`: `--show-uris` / `-U`,
+`--show-branches` / `-B`, `--show-tags` / `-T`, `--show-metadata` / `-M`,
+`--show-policy` / `-P`, and `--no-description` to leave the description out. A
+repository that does not exist is a failed lookup, not an empty result: it is
+reported on stderr and the exit code is 1 even when the other repositories asked
+for were shown.
 
 `diffusion repo list` answers with those same records, minus the per-repository
 sections, sorted by name and filtered by the optional `active`, `inactive` or `all`
-argument. `--show-uris` adds the URIs section; branches and tags are deliberately
-not offered here, because each costs one query per repository. `--url` is a
-deprecated alias for `--show-uris` and warns on stderr.
+argument. `--show-uris` and `--show-policy` add their sections; branches and tags
+are deliberately not offered here, because each costs one query per repository.
+`--url` is a deprecated alias for `--show-uris` and warns on stderr.
 
 `diffusion uri list` answers with one record per URI, covering all four of the
 dimensions a URI has: `URI`, `Origin` (`built-in` when Phorge generated it,
@@ -426,10 +436,14 @@ would otherwise come back as a permissions error rather than a spelling one.
   Editable By: Administrators -> #infrastructure
 ```
 
-`repo show` and `repo list` report the same names under `Policy`, in the same
-spelling the options take, so what a policy is shown as can be typed straight back
-in. Phorge refuses a policy that would stop you seeing or editing the repository
-yourself, and that refusal is reported as a sentence.
+`repo show --show-policy` and `repo list --show-policy` report the same names under
+`Policy`, in the same spelling the options take, so what a policy is shown as can be
+typed straight back in. The section is opt-in because naming a policy that points at
+a project or a user costs a `phid.query`, which a read that never looks at the
+section should not pay - one lookup for a whole listing, but a lookup all the same.
+Setting a policy needs no `--show-policy`. Phorge refuses a policy that would stop
+you seeing or editing the repository yourself, and that refusal is reported as a
+sentence.
 
 ```yaml
   Policy:

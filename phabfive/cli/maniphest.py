@@ -91,6 +91,9 @@ def show(
     show_comments: bool = typer.Option(
         False, "--show-comments", "-C", help="Display comments on the task"
     ),
+    show_policy: bool = typer.Option(
+        False, "--show-policy", "-P", help="Display the task's policies"
+    ),
     no_description: bool = typer.Option(
         False, "--no-description", "-n", help="Hide the task description"
     ),
@@ -102,6 +105,7 @@ def show(
         phabfive maniphest show T123
         phabfive maniphest show T123 T456
         phabfive maniphest show T123,T456
+        phabfive maniphest show T123 --show-policy
         phabfive T123  # shortcut
     """
     _setup_output_options(ctx)
@@ -128,6 +132,7 @@ def show(
         show_history=show_history,
         show_metadata=show_metadata,
         show_comments=show_comments,
+        show_policy=show_policy,
         show_description=not no_description,
     )
 
@@ -473,6 +478,9 @@ def search(
     show_metadata: bool = typer.Option(
         False, "--show-metadata", help="Display filter match metadata"
     ),
+    show_policy: bool = typer.Option(
+        False, "--show-policy", help="Display each task's policies"
+    ),
     limit: int = typer.Option(
         100, "--limit", "-l", help="Maximum results to return, 0 for all"
     ),
@@ -573,6 +581,12 @@ def search(
             show_metadata if show_metadata else None,
             yaml_params,
             "show-metadata",
+            False,
+        )
+        final_show_policy = get_param(
+            show_policy if show_policy else None,
+            yaml_params,
+            "show-policy",
             False,
         )
         final_text_query = get_param(text_query, yaml_params, "text_query")
@@ -676,6 +690,7 @@ def search(
                 status_patterns=status_patterns,
                 show_history=final_show_history,
                 show_metadata=final_show_metadata,
+                show_policy=final_show_policy,
                 include_closed=final_include_closed,
                 limit=final_limit,
                 order=final_order,
