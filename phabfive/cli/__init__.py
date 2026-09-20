@@ -91,9 +91,10 @@ app = typer.Typer(
 def preprocess_format_alias(argv: list[str]) -> list[str]:
     """Rewrite accepted --format spellings to the OutputFormat they mean.
 
-    --format=strict is the old name for yaml, --format=ndjson the other
-    common name for jsonl. Rewriting here, before Typer parses, keeps both
-    out of the enum and out of every branch that tests the format.
+    --format=strict is the old name for yaml, --format=simple the old name
+    for value, and --format=ndjson the other common name for jsonl.
+    Rewriting here, before Typer parses, keeps all three out of the enum and
+    out of every branch that tests the format.
     """
     result = []
     i = 0
@@ -262,7 +263,8 @@ def main(
         help=(
             "Output format. Auto-detects based on TTY. "
             "table is list-shaped: list and search commands render a grid, "
-            "show commands fall back to rich."
+            "show commands fall back to rich. value prints bare values for "
+            "piping, and only passphrase and paste have one to print."
         ),
     ),
     ascii_when: AutoOption = typer.Option(

@@ -482,8 +482,8 @@ def _display_pastes(result, output_format, paste_instance):
                         f"Content: {content[:100]}{'...' if len(content) > 100 else ''}"
                     )
             console.print(tree)
-    elif output_format == "simple":
-        # Just output content for piping (like passphrase outputs secret)
+    elif output_format == "value":
+        # Just output content for piping (like passphrase outputs the secret)
         for paste_data in pastes:
             if paste_data.get("content"):
                 print(paste_data["content"])
