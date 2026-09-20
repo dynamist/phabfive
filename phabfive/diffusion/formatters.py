@@ -4,81 +4,8 @@
 
 from ruamel.yaml.scalarstring import PreservedScalarString
 
-from phabfive.constants import POLICY_LABELS, REPO_STATUS_CHOICES
-from phabfive.diffusion.fetchers import (
-    fetch_repositories,
-    fetch_uris,
-)
+from phabfive.constants import POLICY_LABELS
 from phabfive.maniphest.utils import format_timestamp
-
-
-def format_uris(phab, repo, clone_uri=False):
-    """
-    Return list of URI strings for a repository.
-
-    Parameters
-    ----------
-    phab : Phabricator
-        Phabricator API client
-    repo : str
-        Repository monogram (e.g., "R123"), callsign or short name
-    clone_uri : bool, optional
-        If True, only return clone URIs
-
-    Returns
-    -------
-    list
-        List of URI strings
-    """
-    # Passed whole: fetch_uris matches the monogram itself, and stripping the
-    # "R" here would leave it comparing a bare number against short names.
-    return fetch_uris(phab, repo_id=repo, clone_uri=clone_uri)
-
-
-def format_repositories(phab, status=None, include_url=False):
-    """
-    Return list of repository dicts with 'name' and optionally 'urls' keys.
-
-    Parameters
-    ----------
-    phab : Phabricator
-        Phabricator API client
-    status : list, optional
-        Status filter, defaults to REPO_STATUS_CHOICES
-    include_url : bool, optional
-        If True, include URLs in output
-
-    Returns
-    -------
-    list
-        List of dicts with 'name' and optionally 'urls' keys
-    """
-    status = status or REPO_STATUS_CHOICES
-
-    repos = fetch_repositories(phab, attachments={"uris": include_url})
-
-    # filter based on active or inactive status
-    repos = [repo for repo in repos if repo["fields"]["status"] in status]
-
-    # sort based on name
-    repos = sorted(
-        repos,
-        key=lambda key: key["fields"]["name"],
-    )
-
-    result = []
-    for repo in repos:
-        entry = {"name": repo["fields"].get("name", "")}
-        if include_url:
-            uris = repo["attachments"]["uris"]["uris"]
-            entry["urls"] = [
-                uri["fields"]["uri"]["effective"]
-                for uri in uris
-                if uri["fields"]["display"]["effective"] == "always"
-            ]
-        result.append(entry)
-
-    return result
 
 
 def ref_names(refs, ref_type="branch"):
@@ -183,7 +110,50 @@ def format_policy(policy):
     }
 
 
-def format_repository_uris(repo):
+def format_uri(uri, credential_names=None):
+    """
+    Describe one repository URI the way the web UI's URI table does.
+
+    The URI reported is ``uri.display`` - what the web UI shows and what a
+    caller would clone. A URI record spells itself three ways (``raw``, what
+    was typed; ``display``, what is shown; ``effective``, what Phabricator
+    resolves it to), and the two list commands used to read two different
+    ones, so `repo list --url` and `uri list` could disagree about the same
+    URI. Every caller now reads ``display``.
+
+    Parameters
+    ----------
+    uri : dict
+        A URI record, as the "uris" attachment returns it
+    credential_names : dict, optional
+        Credential PHID to its monogram. Given, the record names the
+        credential; left out, the record has no Credential field at all.
+        A secret is never read either way - naming a credential is
+        ``phid.query``, which answers with the monogram alone.
+
+    Returns
+    -------
+    dict
+        "URI", "I/O", "Display", optionally "Credential", and "Disabled"
+    """
+    fields = uri.get("fields", {})
+
+    record = {
+        "URI": fields["uri"]["display"],
+        "I/O": fields["io"]["effective"],
+        "Display": fields["display"]["effective"],
+    }
+
+    if credential_names is not None:
+        phid = fields.get("credentialPHID")
+        record["Credential"] = credential_names.get(phid, phid) if phid else "(none)"
+
+    record["Disabled"] = bool(fields.get("disabled"))
+
+    return record
+
+
+def format_repository_uris(repo, credential_names=None):
     """
     Describe a repository's URIs the way the web UI's URI table does.
 
@@ -191,23 +161,17 @@ def format_repository_uris(repo):
     ----------
     repo : dict
         A repository record, fetched with attachments={"uris": True}
+    credential_names : dict, optional
+        Credential PHID to its monogram, passed through to :func:`format_uri`
 
     Returns
     -------
     list
-        One dict per URI, with "URI", "I/O", "Display" and "Disabled" keys
+        One dict per URI
     """
     uris = repo.get("attachments", {}).get("uris", {}).get("uris", [])
 
-    return [
-        {
-            "URI": uri["fields"]["uri"]["display"],
-            "I/O": uri["fields"]["io"]["effective"],
-            "Display": uri["fields"]["display"]["effective"],
-            "Disabled": bool(uri["fields"].get("disabled")),
-        }
-        for uri in uris
-    ]
+    return [format_uri(uri, credential_names) for uri in uris]
 
 
 def build_repository_display_data(

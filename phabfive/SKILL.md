@@ -289,8 +289,10 @@ phabfive --format=json passphrase search "deploy" --type=password
 phabfive --format=json passphrase show K12 --no-secret
 
 phabfive --format=json diffusion repo list active
+phabfive --format=json diffusion repo list all --show-uris
 phabfive --format=json diffusion repo show R5
 phabfive diffusion repo show R5 R6 --show-uris --show-branches
+phabfive --format=json diffusion uri list R5
 phabfive diffusion uri list R5 --clone
 phabfive diffusion repo edit R5 --default-branch main --dry-run
 phabfive diffusion repo create <name> --dry-run
@@ -304,6 +306,18 @@ and - only when asked - `URIs`, `Branches`, `Tags` and `Metadata`:
 `--no-description` to leave the description out. A repository that does not exist is
 a failed lookup, not an empty result: it is reported on stderr and the exit code is 1
 even when the other repositories asked for were shown.
+
+`diffusion repo list` answers with those same records, minus the per-repository
+sections, sorted by name and filtered by the optional `active`, `inactive` or `all`
+argument. `--show-uris` adds the URIs section; branches and tags are deliberately
+not offered here, because each costs one query per repository. `--url` is a
+deprecated alias for `--show-uris` and warns on stderr.
+
+`diffusion uri list` answers with one record per URI - `URI`, `I/O`, `Display`,
+the `Credential` it is bound to, named by monogram, and `Disabled`. `--clone`
+keeps only the URIs the instance shows as clone URIs. A URI is reported as its
+display URI, the one the web UI shows, by `uri list`, `repo list --show-uris` and
+`repo show --show-uris` alike.
 
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
 `--status`. A `--short-name` change also rewrites the built-in `/source/<name>.git`

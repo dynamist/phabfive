@@ -18,6 +18,7 @@ from typer.testing import CliRunner
 from phabfive.cli.diffusion import diffusion_app
 from phabfive.cli.maniphest import maniphest_app
 from phabfive.cli.paste import paste_app
+from phabfive.exceptions import PhabfiveDataException
 
 runner = CliRunner()
 
@@ -117,7 +118,9 @@ class TestDiffusionUriListExitCode:
     @patch("phabfive.cli.diffusion._get_diffusion_app")
     def test_unknown_repository_exits_non_zero(self, mock_get_app):
         mock_d = MagicMock()
-        mock_d.get_uris_formatted.return_value = None
+        mock_d.uri_list.side_effect = PhabfiveDataException(
+            "Repository 'nosuchrepo' not found"
+        )
         mock_get_app.return_value = mock_d
 
         result = runner.invoke(diffusion_app, ["uri", "list", "nosuchrepo"])
@@ -129,7 +132,7 @@ class TestDiffusionUriListExitCode:
     def test_repository_without_uris_exits_zero(self, mock_get_app):
         """An empty result is not a failure."""
         mock_d = MagicMock()
-        mock_d.get_uris_formatted.return_value = []
+        mock_d.uri_list.return_value = {"uris": []}
         mock_get_app.return_value = mock_d
 
         result = runner.invoke(diffusion_app, ["uri", "list", "myrepo"])
@@ -139,7 +142,9 @@ class TestDiffusionUriListExitCode:
     @patch("phabfive.cli.diffusion._get_diffusion_app")
     def test_repository_with_uris_exits_zero(self, mock_get_app):
         mock_d = MagicMock()
-        mock_d.get_uris_formatted.return_value = ["git@example.com:org/myrepo.git"]
+        mock_d.uri_list.return_value = {
+            "uris": [{"URI": "git@example.com:org/myrepo.git"}]
+        }
         mock_get_app.return_value = mock_d
 
         result = runner.invoke(diffusion_app, ["uri", "list", "myrepo"])

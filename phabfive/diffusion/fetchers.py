@@ -186,48 +186,6 @@ def fetch_branches(phab, repo_id=None, repo_callsign=None, repo_shortname=None):
             )
 
 
-def fetch_uris(phab, repo_id=None, clone_uri=False):
-    """
-    Fetch URIs for a repository from Phabricator API.
-
-    Parameters
-    ----------
-    phab : Phabricator
-        Phabricator API client
-    repo_id : str
-        Repository monogram, callsign or short name
-    clone_uri : bool, optional
-        If True, only return clone URIs (display=always)
-
-    Returns
-    -------
-    list or None
-        List of URI strings, empty if the repository has no matching URIs.
-        None if no such repository exists, so that callers can tell an
-        unknown repository apart from one with nothing to list.
-    """
-    repos = fetch_repositories(phab, attachments={"uris": True})
-
-    match = match_repository(repos, repo_id)
-
-    if match is None:
-        return None
-
-    uris = []
-    repo_uris = match["attachments"]["uris"]["uris"]
-
-    if clone_uri:
-        for uri in repo_uris:
-            if "always" not in uri["fields"]["display"]["effective"]:
-                continue
-            uris.append(uri["fields"]["uri"]["display"])
-    else:
-        for uri in repo_uris:
-            uris.append(uri["fields"]["uri"]["display"])
-
-    return uris
-
-
 def fetch_refs(phab, repo_id, ref_type="branch"):
     """
     Fetch the branches or the tags of a repository, by numeric id.

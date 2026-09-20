@@ -162,6 +162,66 @@ def test_repo_show_on_a_repository_that_does_not_exist(phabfive_raw):
     assert "not found" in result.stderr
 
 
+def test_repo_list_lists_the_seeded_repositories(phabfive):
+    """`repo list` ignored --format entirely and printed bare names (#372)."""
+    repos = phabfive("diffusion", "repo", "list", json_output=True)
+    names = [repo["Repository"]["Name"] for repo in repos]
+
+    assert {"GUNNAR", "SPIKE"} <= {repo["Repository"]["Callsign"] for repo in repos}
+    assert names == sorted(names)
+
+
+def test_a_listed_repository_is_the_record_show_answers_with(phabfive):
+    """One builder, so a list and a show cannot describe the same thing twice."""
+    [shown] = phabfive("diffusion", "repo", "show", "GUNNAR", json_output=True)
+    listed = phabfive("diffusion", "repo", "list", json_output=True)
+
+    assert shown in listed
+
+
+def test_repo_list_formats_agree(phabfive):
+    from ruamel.yaml import YAML
+
+    load = YAML(typ="safe").load
+    args = ("diffusion", "repo", "list", "all", "--show-uris")
+
+    as_json = phabfive(*args, json_output=True)
+    as_jsonl = [
+        json.loads(line) for line in phabfive("--format", "jsonl", *args).splitlines()
+    ]
+
+    assert load(phabfive("--format", "yaml", *args)) == as_json
+    assert as_jsonl == as_json
+    assert load(phabfive("--format", "rich", *args)) == as_json
+
+
+def test_repo_list_url_is_a_deprecated_alias(phabfive_raw):
+    result = phabfive_raw("--format", "json", "diffusion", "repo", "list", "--url")
+
+    assert result.returncode == 0
+    assert "--url is deprecated" in result.stderr
+    # The warning is on stderr, so stdout is still parseable JSON - and the
+    # alias means what --show-uris means.
+    assert all("URIs" in repo for repo in json.loads(result.stdout))
+
+
+def test_uri_list_on_a_repository_without_uris(phabfive_raw):
+    """An empty result, not a failure: the seeded repositories carry no URIs."""
+    result = phabfive_raw("--format", "json", "diffusion", "uri", "list", "GUNNAR")
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_uri_list_on_a_repository_that_does_not_exist(phabfive_raw):
+    """A traceback before #372; a message and exit 1 now."""
+    result = phabfive_raw("--format", "json", "diffusion", "uri", "list", "R9999")
+
+    assert result.returncode == 1
+    assert "not found" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_repo_show_fails_on_a_partial_result(phabfive_raw):
     """GUNNAR is shown, and the exit code still says something was missed."""
     result = phabfive_raw(

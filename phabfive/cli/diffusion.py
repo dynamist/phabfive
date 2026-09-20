@@ -47,6 +47,32 @@ def _get_diffusion_app():
 # Repo commands
 
 
+def _resolve_show_uris(show_uris: bool, url: bool) -> bool:
+    """Combine --show-uris with the deprecated --url alias.
+
+    ``--url`` printed a comma-separated line of URI strings and nothing
+    else, which is not a format anything could parse. It survives as a
+    hidden alias that warns, the way ``--force`` survives as an alias for
+    ``--yes`` (``phabfive.editor.resolve_assume_yes``).
+
+    Parameters
+    ----------
+    show_uris : bool
+        Value of --show-uris
+    url : bool
+        Value of the hidden --url alias
+
+    Returns
+    -------
+    bool
+        Whether the URIs section is included
+    """
+    if url:
+        sys.stderr.write("WARNING: --url is deprecated, use --show-uris instead.\n")
+
+    return show_uris or url
+
+
 @repo_app.command("list")
 def repo_list(
     ctx: typer.Context,
@@ -55,9 +81,37 @@ def repo_list(
         help="Filter by status: active, inactive, or all",
         autocompletion=complete_repo_status,
     ),
-    url: bool = typer.Option(False, "--url", "-u", help="Show URL"),
+    show_uris: bool = typer.Option(
+        False, "--show-uris", "-U", help="Display each repository's URIs"
+    ),
+    url: bool = typer.Option(
+        False,
+        "--url",
+        "-u",
+        hidden=True,
+        help="Deprecated alias for --show-uris",
+    ),
 ) -> None:
-    """List repositories."""
+    """List repositories.
+
+    Answers with the records `repo show` answers with, minus the
+    per-repository sections. A URI is reported as its display URI, the one
+    the web UI shows, which is what `repo show --show-uris` and `uri list`
+    report too.
+
+    Branches and tags are deliberately not offered here: each costs one
+    query per repository, which a list of a large instance cannot pay.
+
+    \b
+    Examples:
+        phabfive diffusion repo list
+        phabfive diffusion repo list all --show-uris
+        phabfive --format=json diffusion repo list active
+    """
+    from phabfive.diffusion.display import display_repositories
+
+    _setup_output_options(ctx)
+    show_uris = _resolve_show_uris(show_uris, url)
     diffusion = _get_diffusion_app()
 
     if status == "all":
@@ -67,12 +121,13 @@ def repo_list(
     else:
         status_filter = ["active"]
 
-    repos = diffusion.get_repositories_formatted(status=status_filter, include_url=url)
-    for repo in repos:
-        if url:
-            typer.echo(", ".join(repo["urls"]))
-        else:
-            typer.echo(repo["name"])
+    try:
+        result = diffusion.repo_list(status=status_filter, show_uris=show_uris)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    display_repositories(result, _get_output_format(ctx), diffusion)
 
 
 @repo_app.command("show")
@@ -280,18 +335,35 @@ def uri_list(
     repo: str = typer.Argument(..., help="Repository monogram (R123) or shortname"),
     clone: bool = typer.Option(False, "--clone", "-c", help="Show clone URL(s)"),
 ) -> None:
-    """List URIs for a repository."""
+    """List URIs for a repository.
+
+    One record per URI - the URI itself, its I/O and Display behaviour, the
+    credential it is bound to and whether it is disabled. The URI reported
+    is the display URI, the one the web UI shows, which is what `repo show
+    --show-uris` and `repo list --show-uris` report too.
+
+    A credential is named by its monogram. Its secret is never read.
+
+    \b
+    Examples:
+        phabfive diffusion uri list R5
+        phabfive diffusion uri list R5 --clone
+        phabfive --format=json diffusion uri list R5
+    """
+    from phabfive.diffusion.display import display_uris
+
+    _setup_output_options(ctx)
     diffusion = _get_diffusion_app()
-    uris = diffusion.get_uris_formatted(repo=repo, clone_uri=clone)
 
     # An unknown repository is a failed lookup; a repository with no URIs
     # to show is an empty result and stays successful
-    if uris is None:
-        typer.echo(f"Repository '{repo}' not found", err=True)
+    try:
+        result = diffusion.uri_list(repo, clone_only=clone)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
-    for uri in uris:
-        typer.echo(uri)
+    display_uris(result, _get_output_format(ctx), diffusion)
 
 
 @uri_app.command("create")

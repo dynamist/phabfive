@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Display functions for Diffusion repositories.
+"""Display functions for Diffusion.
 
 Mirrors ``phabfive.display``, with one difference: a repository record is a
 plain nested dict of scalars, lists and dicts, so every format here walks
@@ -9,6 +9,11 @@ that yaml lacks, because neither knows what the fields are.
 
 Rich contributes an OSC-8 hyperlink and colour, not a different layout: the
 output is YAML-shaped, exactly as ``_display_task_rich`` is.
+
+Repositories and URIs both come through here. Nothing below knows which it
+is holding - a record is a dict, a record with a ``_url`` leads with a Link
+and one without leads with its first field - so ``repo show``, ``repo list``
+and ``uri list`` share one set of renderers and one ``--format`` switch.
 """
 
 from io import StringIO
@@ -30,14 +35,17 @@ def _public(record):
     Parameters
     ----------
     record : dict
-        A repository display record, carrying _url and _link
+        A display record, carrying _url and _link when it has a page of
+        its own. A URI has none, and then the record leads with its own
+        first field instead of an empty Link.
 
     Returns
     -------
     dict
-        The same record with a plain "Link" in front of it
+        The same record with a plain "Link" in front of it, when there is
+        one to put there
     """
-    output = {"Link": record.get("_url", "")}
+    output = {"Link": record["_url"]} if record.get("_url") else {}
 
     for key, value in record.items():
         if not key.startswith("_"):
@@ -95,6 +103,11 @@ def _print_pair(console, key, value, lead, indent, phabfive_instance):
     elif value is None:
         # ruamel writes a bare "Key:" for None; rich says the same thing.
         console.print(f"{lead}{key}:")
+    elif value == "":
+        # And it writes '' for an empty string, which a bare "Key:" would
+        # read back as None - a different value. A repository with no
+        # description is the common case for this.
+        console.print(f"{lead}{key}: ''")
     elif isinstance(value, str) and "\n" in value:
         console.print(f"{lead}{key}: |-")
         for line in value.splitlines():
@@ -133,22 +146,28 @@ def _print_mapping(console, mapping, indent, phabfive_instance, first_prefix="")
         )
 
 
-def _display_repository_rich(console, record, phabfive_instance):
-    """Display a single repository in YAML-like format using Rich.
+def _display_record_rich(console, record, phabfive_instance):
+    """Display a single record in YAML-like format using Rich.
 
     Parameters
     ----------
     console : Console
         Rich Console instance for output
     record : dict
-        A repository display record
+        A display record
     phabfive_instance : Phabfive
         Instance to access format_link() and check_line_width()
     """
-    console.print(Text.assemble("- Link: ", record.get("_link", "")))
-
     sections = {k: v for k, v in record.items() if not k.startswith("_")}
-    _print_mapping(console, sections, 2, phabfive_instance)
+
+    if record.get("_url"):
+        console.print(Text.assemble("- Link: ", record.get("_link") or record["_url"]))
+        _print_mapping(console, sections, 2, phabfive_instance)
+        return
+
+    # No page to link to - a URI has none - so the first field is what
+    # opens the list item, which is what yaml does with the same record.
+    _print_mapping(console, sections, 0, phabfive_instance, first_prefix="- ")
 
 
 def _shorten(value):
@@ -188,8 +207,8 @@ def _add_mapping(branch, mapping):
             branch.add(f"{key}: {_escape_for_rich(_shorten(value))}")
 
 
-def _display_repository_tree(console, record, phabfive_instance):
-    """Display a single repository as a Rich Tree.
+def _display_record_tree(console, record, phabfive_instance):
+    """Display a single record as a Rich Tree.
 
     The same dict every other format renders, which is the point: a global
     --format must not quietly fall back on one app.
@@ -199,31 +218,41 @@ def _display_repository_tree(console, record, phabfive_instance):
     console : Console
         Rich Console instance for output
     record : dict
-        A repository display record
+        A display record
     phabfive_instance : Phabfive
         Instance to access format_link()
     """
-    tree = Tree(record.get("_link", record.get("_url", "")))
+    sections = {k: v for k, v in record.items() if not k.startswith("_")}
+    root = record.get("_link") or record.get("_url")
 
-    _add_mapping(tree, {k: v for k, v in record.items() if not k.startswith("_")})
+    if not root:
+        # A record with no page of its own is rooted at its first field -
+        # the URI itself, for a URI - the way a list item already is.
+        fields = list(sections.items())
+        root = _escape_for_rich(_shorten(fields[0][1])) if fields else ""
+        sections = dict(fields[1:])
+
+    tree = Tree(root)
+
+    _add_mapping(tree, sections)
 
     console.print(tree)
 
 
-def display_repositories_rich(console, records, phabfive_instance):
-    """Display repositories in YAML-like format using Rich."""
+def display_records_rich(console, records, phabfive_instance):
+    """Display records in YAML-like format using Rich."""
     for record in records:
-        _display_repository_rich(console, record, phabfive_instance)
+        _display_record_rich(console, record, phabfive_instance)
 
 
-def display_repositories_tree(console, records, phabfive_instance):
-    """Display repositories as Rich Trees."""
+def display_records_tree(console, records, phabfive_instance):
+    """Display records as Rich Trees."""
     for record in records:
-        _display_repository_tree(console, record, phabfive_instance)
+        _display_record_tree(console, record, phabfive_instance)
 
 
-def display_repositories_yaml(records):
-    """Display repositories as strict YAML."""
+def display_records_yaml(records):
+    """Display records as strict YAML."""
     yaml = YAML()
     yaml.default_flow_style = False
 
@@ -233,40 +262,75 @@ def display_repositories_yaml(records):
         print(stream.getvalue(), end="")
 
 
-def display_repositories_json(records, output_format="json"):
-    """Display repositories as a JSON array, or one object per line for jsonl."""
+def display_records_json(records, output_format="json"):
+    """Display records as a JSON array, or one object per line for jsonl."""
     emit_records([_public(record) for record in records], output_format)
 
 
-def display_repositories(result, output_format, phabfive_instance):
-    """Display repo show results in the specified format.
+def display_records(records, output_format, phabfive_instance):
+    """Display records in the specified format. The one --format switch.
+
+    Every diffusion command that prints records comes through here, so a
+    format added or fixed for one of them is added or fixed for all.
 
     Parameters
     ----------
-    result : dict
-        Result from Diffusion.repo_show(), containing 'repositories'
+    records : list
+        Display records, as the formatters build them
     output_format : str
         One of 'rich', 'tree', 'yaml', 'json' or 'jsonl'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
     """
-    if not result or not result.get("repositories"):
+    if not records:
         return
 
     console = phabfive_instance.get_console()
-    records = result["repositories"]
 
     render_records(
         output_format,
         {
-            "json": lambda: display_repositories_json(records, "json"),
-            "jsonl": lambda: display_repositories_json(records, "jsonl"),
-            "tree": lambda: display_repositories_tree(
-                console, records, phabfive_instance
-            ),
-            "yaml": lambda: display_repositories_yaml(records),
-            "rich": lambda: display_repositories_rich(
-                console, records, phabfive_instance
-            ),
+            "json": lambda: display_records_json(records, "json"),
+            "jsonl": lambda: display_records_json(records, "jsonl"),
+            "tree": lambda: display_records_tree(console, records, phabfive_instance),
+            "yaml": lambda: display_records_yaml(records),
+            "rich": lambda: display_records_rich(console, records, phabfive_instance),
         },
     )
+
+
+def display_repositories(result, output_format, phabfive_instance):
+    """Display `repo show` and `repo list` results in the specified format.
+
+    Parameters
+    ----------
+    result : dict
+        Result from Diffusion.repo_show() or Diffusion.repo_list(),
+        containing 'repositories'
+    output_format : str
+        One of 'rich', 'tree', 'yaml', 'json' or 'jsonl'
+    phabfive_instance : Phabfive
+        Instance to access formatting helpers
+    """
+    if not result:
+        return
+
+    display_records(result.get("repositories"), output_format, phabfive_instance)
+
+
+def display_uris(result, output_format, phabfive_instance):
+    """Display `uri list` results in the specified format.
+
+    Parameters
+    ----------
+    result : dict
+        Result from Diffusion.uri_list(), containing 'uris'
+    output_format : str
+        One of 'rich', 'tree', 'yaml', 'json' or 'jsonl'
+    phabfive_instance : Phabfive
+        Instance to access formatting helpers
+    """
+    if not result:
+        return
+
+    display_records(result.get("uris"), output_format, phabfive_instance)
