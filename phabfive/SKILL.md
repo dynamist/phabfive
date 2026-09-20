@@ -80,8 +80,31 @@ When stdout is not a terminal phabfive already defaults to YAML, but pass `--for
 explicitly so the output does not change under you. `PHAB_FALLBACK` changes that default
 to `json` or `jsonl`, and does not accept `table`.
 
-Data goes to stdout; logging, diagnostics and group help go to stderr. Capturing stdout
-alone is safe.
+Data goes to stdout; logging, diagnostics, status lines, usage blocks and group help go
+to stderr. Capturing stdout alone is safe - `phabfive --format=json ... 2>/dev/null | jq .`
+parses for every command, including the ones that write.
+
+A command that **writes** - `maniphest create`, `maniphest edit`, `maniphest comment` and
+the bare `edit` - answers a machine-readable format with the same record `maniphest show`
+gives for the task it touched, so the link and every field arrive together:
+
+```bash
+phabfive --format=json maniphest create "probe" --yes | jq -r '.[0].Link'
+phabfive --format=json maniphest edit T123 --priority=high --yes | jq -r '.[0].Task.Priority'
+```
+
+An edit that needed no transaction still answers with the task's record: "already at the
+target state" is an answer about the task, not an absence of one. Under `rich`, `tree`,
+`table` and `value` these commands print what they always have - a URL for `create`, a
+change list for `edit`.
+
+`--dry-run` wrote nothing, so there is no record to give: it puts its preview on stderr
+and leaves stdout empty under a machine-readable format. Check the exit code, not the
+output, to tell a dry run from a refusal.
+
+Not yet wired up (#344): `paste create/edit/comment`, `diffusion repo create/edit`,
+`diffusion uri create/edit`, `cache clear`, and `maniphest create --with=TEMPLATE`. These
+still print human text whatever is asked for - do not parse their output.
 
 ## Monograms, and the one that writes
 
@@ -248,6 +271,9 @@ apply.
 phabfive maniphest create "Fix the flaky import test" --priority=high --tag Backend --dry-run
 phabfive maniphest edit T123 --status=resolved --dry-run
 phabfive maniphest edit T123 --visible-to='#infra' --editable-by=admin --dry-run
+
+# the preview is on stderr here, and stdout is empty
+phabfive --format=json maniphest edit T123 --status=resolved --dry-run
 ```
 
 `--visible-to` and `--editable-by` set who can see and who can edit a task, named after
@@ -275,7 +301,8 @@ seeing or editing the task yourself, and that refusal is reported as a sentence.
 There is no `--can-interact`: see the `Policy` section above.
 
 `--dry-run` exists on every write command except the `comment` ones, which stay
-immediate because a comment is cheap to correct. Preview first on anything that
+immediate because a comment is cheap to correct. Under `--format=json`, `jsonl` or
+`yaml` a dry run's preview is on stderr and stdout is empty. Preview first on anything that
 cannot be undone: a repository cannot be removed once created, and
 `diffusion uri create` **demotes every URI already on the repository** to
 `io=read, display=never` before adding the new one, so it can un-publish a clone

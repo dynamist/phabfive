@@ -9,7 +9,6 @@ disposable instance.
 # python std lib
 import json
 import os
-import re
 import subprocess
 import sys
 import time
@@ -80,14 +79,22 @@ def phabfive_raw(live_env):
 
 @pytest.fixture
 def create_task(phabfive):
-    """Create a task with a unique title, return (monogram, title)."""
+    """Create a task with a unique title, return (monogram, title).
+
+    Asks for `--format=json` and reads the record, rather than running a
+    regex over whatever prose the command happened to print. `maniphest
+    create` answers a machine-readable format with the same record
+    `maniphest show` gives for the new task (#344), so the Link is a
+    published field and the monogram is its last segment.
+    """
 
     def create(*args):
         title = f"E2E test {uuid.uuid4().hex[:8]}"
-        output = phabfive("maniphest", "create", title, "--yes", *args)
-        match = re.search(r"/(T\d+)\b", output)
-        assert match, f"no task link in output: {output}"
-        return match.group(1), title
+        records = phabfive(
+            "maniphest", "create", title, "--yes", *args, json_output=True
+        )
+        assert records, f"no task record in output: {records}"
+        return records[0]["Link"].rsplit("/", 1)[-1], title
 
     return create
 

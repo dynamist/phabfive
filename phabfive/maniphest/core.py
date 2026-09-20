@@ -2482,6 +2482,7 @@ class Maniphest(Phabfive):
         editable_by=None,
         dry_run=False,
         task_data=None,
+        preview=None,
     ):
         """Edit a task by ID.
 
@@ -2501,6 +2502,9 @@ class Maniphest(Phabfive):
             Show changes without applying
         task_data : dict, optional
             Already-fetched task data, passed through to build_task_edit
+        preview : file, optional
+            Stream the dry-run preview is written to; defaults to stdout.
+            A caller emitting a machine-readable record passes stderr.
 
         Raises
         ------
@@ -2532,7 +2536,10 @@ class Maniphest(Phabfive):
             from phabfive.editor import render_changes
 
             render_changes(
-                f"T{task_id}", changes, header=f"[DRY RUN] Would apply to T{task_id}:"
+                f"T{task_id}",
+                changes,
+                header=f"[DRY RUN] Would apply to T{task_id}:",
+                file=preview,
             )
             return {"task_id": task_id, "changes": changes, "dry_run": True}
 
