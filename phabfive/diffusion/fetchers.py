@@ -226,3 +226,41 @@ def fetch_uris(phab, repo_id=None, clone_uri=False):
             uris.append(uri["fields"]["uri"]["display"])
 
     return uris
+
+
+def fetch_refs(phab, repo_id, ref_type="branch"):
+    """
+    Fetch the branches or the tags of a repository, by numeric id.
+
+    Branches and tags live behind two endpoints that take the same
+    ``repository`` argument and answer with two different record shapes;
+    :func:`phabfive.diffusion.formatters.ref_names` is what reads either.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    repo_id : str or int
+        Numeric repository ID, without the "R"
+    ref_type : str, optional
+        Either "branch" (the default) or "tag"
+
+    Returns
+    -------
+    list
+        The raw ref records the endpoint returned
+
+    Raises
+    ------
+    PhabfiveDataException
+        If the API refuses, which it does for a repository whose data it
+        cannot reach even though the repository itself exists
+    """
+    query = (
+        phab.diffusion.tagsquery if ref_type == "tag" else phab.diffusion.branchquery
+    )
+
+    try:
+        return query(repository=repo_id)
+    except APIError as e:
+        raise PhabfiveDataException(e)

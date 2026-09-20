@@ -119,6 +119,16 @@ DISPLAY_ALIASES = {"hidden": "never"}
 
 REPO_STATUS_CHOICES = ["active", "inactive"]
 
+# Phorge's policy keyword constants, labelled the way its web UI labels them.
+# A policy can also carry a PHID - a project, or a custom policy rule - and
+# those are passed through unresolved rather than guessed at.
+POLICY_LABELS = {
+    "public": "Public (No Login Required)",
+    "users": "All Users",
+    "admin": "Administrators",
+    "no-one": "No One",
+}
+
 CONFIGURABLES = [
     "PHAB_TOKEN",
     "PHAB_URL",
@@ -242,6 +252,7 @@ __all__ = [
     "MONOGRAMS",
     "OutputFormat",
     "PASTE_LANGUAGES",
+    "POLICY_LABELS",
     "PRIORITY_VALUES",
     "PRIORITY_DEFAULT",
     "REPO_STATUS_CHOICES",

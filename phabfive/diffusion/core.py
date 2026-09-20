@@ -11,6 +11,7 @@ from phabfive.constants import IO_NEW_URI_CHOICES
 from phabfive.core import Phabfive
 from phabfive.diffusion.fetchers import (
     fetch_branches,
+    fetch_refs,
     fetch_repositories,
     fetch_uris,
     demotion_io,
@@ -18,9 +19,11 @@ from phabfive.diffusion.fetchers import (
     match_repository,
 )
 from phabfive.diffusion.formatters import (
-    format_branches,
+    build_repository_display_data,
+    format_refs,
     format_repositories,
     format_uris,
+    ref_names,
 )
 from phabfive.diffusion.resolvers import (
     resolve_object_identifier,
@@ -145,7 +148,130 @@ class Diffusion(Phabfive):
 
     def get_branches_formatted(self, repo):
         """Return sorted list of branch names for a repository."""
-        return format_branches(self.phab, repo)
+        return format_refs(self.phab, repo, "branch")
+
+    def get_tags_formatted(self, repo):
+        """Return sorted list of tag names for a repository."""
+        return format_refs(self.phab, repo, "tag")
+
+    def _resolve_spaces(self, repos):
+        """Name the spaces a set of repositories live in.
+
+        Parameters
+        ----------
+        repos : list
+            Repository records
+
+        Returns
+        -------
+        dict
+            Space PHID to its name. Empty when nothing is in a space, which
+            is every instance that never turned Spaces on.
+        """
+        phids = {
+            repo.get("fields", {}).get("spacePHID")
+            for repo in repos
+            if repo.get("fields", {}).get("spacePHID")
+        }
+
+        if not phids:
+            return {}
+
+        try:
+            found = self.phab.phid.query(phids=list(phids))
+        except Exception as e:
+            # Naming the space is a convenience; never fail a read over it.
+            log.warning(f"Failed to resolve space PHIDs: {e}")
+            return {}
+
+        return {
+            phid: data.get("fullName") or data.get("name") or phid
+            for phid, data in found.items()
+        }
+
+    def repo_show(
+        self,
+        repo_ids,
+        show_branches=False,
+        show_tags=False,
+        show_uris=False,
+        show_metadata=False,
+        show_description=True,
+    ):
+        """
+        Show one or more repositories in full.
+
+        Modelled on Maniphest's task_show: one lookup for all of them, the
+        records returned in the order they were asked for, and the ones that
+        do not exist reported back so the caller can exit non-zero.
+
+        Parameters
+        ----------
+        repo_ids : list[str]
+            Repository monograms, callsigns or short names
+        show_branches : bool, optional
+            Include the repository's branches
+        show_tags : bool, optional
+            Include the repository's tags
+        show_uris : bool, optional
+            Include the repository's URIs
+        show_metadata : bool, optional
+            Include PHIDs and timestamps
+        show_description : bool, optional
+            Include the description
+
+        Returns
+        -------
+        dict
+            {"repositories": [...], "missing_ids": [...]}
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the API refuses a branch or tag query
+        """
+        repos = fetch_repositories(self.phab, attachments={"uris": True})
+
+        found = []
+        missing_ids = []
+
+        for repo_id in repo_ids:
+            match = match_repository(repos, repo_id)
+
+            if match is None:
+                log.error(f"Repository '{repo_id}' not found")
+                missing_ids.append(repo_id)
+            else:
+                found.append(match)
+
+        branches_map = {}
+        tags_map = {}
+
+        for repo in found:
+            if show_branches:
+                branches_map[repo["id"]] = ref_names(
+                    fetch_refs(self.phab, repo["id"], "branch"), "branch"
+                )
+            if show_tags:
+                tags_map[repo["id"]] = ref_names(
+                    fetch_refs(self.phab, repo["id"], "tag"), "tag"
+                )
+
+        repositories = build_repository_display_data(
+            self.url,
+            self.format_link,
+            found,
+            branches_map=branches_map,
+            tags_map=tags_map,
+            space_map=self._resolve_spaces(found),
+            show_uris=show_uris,
+            show_branches=show_branches,
+            show_tags=show_tags,
+            show_metadata=show_metadata,
+            show_description=show_description,
+        )
+
+        return {"repositories": repositories, "missing_ids": missing_ids}
 
     # Core operations that remain in the main class
 

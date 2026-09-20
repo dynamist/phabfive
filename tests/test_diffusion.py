@@ -1567,3 +1567,498 @@ class TestUriEditIoCli:
         # The list it used to advertise, of which two thirds were not values.
         assert "default, read, write, never" not in output
         assert "hidden" not in output
+
+
+def _show_repo(
+    repo_id=5,
+    name="phabfive",
+    short_name="phabfive",
+    callsign=None,
+    status="active",
+    description="A CLI for Phorge",
+    policy=None,
+    space_phid=None,
+    uris=None,
+    browse_uri=None,
+    is_importing=False,
+):
+    """A repository as diffusion.repository.search answers with it."""
+    fields = {
+        "name": name,
+        "shortName": short_name,
+        "callsign": callsign,
+        "status": status,
+        "vcs": "git",
+        "defaultBranch": "master",
+        "isImporting": is_importing,
+        "description": {"raw": description},
+        "policy": policy
+        if policy is not None
+        else {"view": "users", "edit": "admin", "diffusion.push": "users"},
+        "spacePHID": space_phid,
+        "dateCreated": 1700000000,
+        "dateModified": 1700000001,
+    }
+
+    if browse_uri:
+        fields["browseUri"] = browse_uri
+
+    return {
+        "id": repo_id,
+        "phid": f"PHID-REPO-{repo_id}",
+        "fields": fields,
+        "attachments": {"uris": {"uris": uris if uris is not None else []}},
+    }
+
+
+def _show_uri(uri, io="observe", display="always", disabled=False):
+    return {
+        "id": 1,
+        "fields": {
+            "uri": {"display": uri},
+            "io": {"effective": io},
+            "display": {"effective": display},
+            "disabled": disabled,
+        },
+    }
+
+
+def _showable(repos, branches=None, tags=None):
+    """A Diffusion wired to a mock API, ready for repo_show()."""
+    with (
+        patch("phabfive.diffusion.core.Phabfive.__init__", return_value=None),
+        patch("phabfive.diffusion.core.passphrase.Passphrase"),
+    ):
+        diffusion = Diffusion()
+
+    diffusion.phab = MagicMock()
+    diffusion.url = "http://phorge.localhost"
+    diffusion.phab.diffusion.repository.search.return_value = {"data": repos}
+    diffusion.phab.diffusion.branchquery.return_value = branches or []
+    diffusion.phab.diffusion.tagsquery.return_value = tags or []
+    diffusion.phab.phid.query.return_value = {}
+
+    return diffusion
+
+
+class TestRepoShowRecord:
+    """`repo show` had no command at all; this is the record it answers with.
+
+    Nested and capitalized the way maniphest's is, with Link first, because
+    that is what `phabfive edit` reads back off stdin.
+    """
+
+    def test_link_comes_first(self):
+        result = _showable([_show_repo()]).repo_show(["R5"])
+        record = result["repositories"][0]
+
+        assert list(record)[0] == "_url"
+        assert record["_url"] == "http://phorge.localhost/R5"
+
+    def test_the_instance_own_link_wins_when_it_reports_one(self):
+        repo = _show_repo(browse_uri="http://phorge.localhost/source/phabfive/")
+        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert record["_url"] == "http://phorge.localhost/source/phabfive/"
+
+    def test_the_repository_section_names_every_way_in(self):
+        repo = _show_repo(callsign="PHAB")
+        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert record["Repository"] == {
+            "Name": "phabfive",
+            "Short Name": "phabfive",
+            "Callsign": "PHAB",
+            "Monogram": "R5",
+            "Status": "active",
+            "VCS": "git",
+            "Default Branch": "master",
+            "Description": "A CLI for Phorge",
+            "Hosted": False,
+            "Importing": False,
+        }
+
+    def test_a_monogram_a_callsign_and_a_short_name_all_resolve(self):
+        repo = _show_repo(callsign="PHAB")
+        diffusion = _showable([repo])
+
+        for identifier in ("R5", "PHAB", "phabfive"):
+            result = diffusion.repo_show([identifier])
+
+            assert result["missing_ids"] == []
+            assert result["repositories"][0]["Repository"]["Monogram"] == "R5"
+
+    def test_a_repository_that_does_not_exist_is_reported(self):
+        result = _showable([_show_repo()]).repo_show(["R5", "nope"])
+
+        assert result["missing_ids"] == ["nope"]
+        assert len(result["repositories"]) == 1
+
+    def test_policy_keywords_are_labelled_the_way_the_web_ui_labels_them(self):
+        repo = _show_repo(
+            policy={"view": "public", "edit": "admin", "diffusion.push": "no-one"}
+        )
+        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert record["Policy"] == {
+            "View": "Public (No Login Required)",
+            "Edit": "Administrators",
+            "Push": "No One",
+        }
+
+    def test_a_policy_phid_passes_through_unresolved(self):
+        """Resolving it is its own piece of work, and inventing a name is worse."""
+        repo = _show_repo(
+            policy={
+                "view": "PHID-PROJ-secret",
+                "edit": "admin",
+                "diffusion.push": "users",
+            }
+        )
+        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert record["Policy"]["View"] == "PHID-PROJ-secret"
+
+    def test_hosting_is_read_off_the_uris(self):
+        """search does not report it; a read-write URI is what it means."""
+        hosted = _show_repo(
+            uris=[_show_uri("http://phorge/source/x.git", io="readwrite")]
+        )
+        observed = _show_repo(uris=[_show_uri("git@github.com:o/x.git", io="observe")])
+
+        assert _showable([hosted]).repo_show(["R5"])["repositories"][0]["Repository"][
+            "Hosted"
+        ]
+        assert not _showable([observed]).repo_show(["R5"])["repositories"][0][
+            "Repository"
+        ]["Hosted"]
+
+    def test_an_instance_that_reports_hosting_is_believed_over_the_derivation(self):
+        repo = _show_repo(uris=[_show_uri("git@github.com:o/x.git", io="observe")])
+        repo["fields"]["isHosted"] = True
+
+        record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+
+        assert record["Repository"]["Hosted"] is True
+
+    def test_the_optional_sections_are_absent_until_asked_for(self):
+        record = _showable([_show_repo()]).repo_show(["R5"])["repositories"][0]
+
+        for section in ("URIs", "Branches", "Tags", "Metadata"):
+            assert section not in record
+
+    def test_show_uris_describes_each_uri(self):
+        repo = _show_repo(uris=[_show_uri("git@github.com:dynamist/phabfive.git")])
+        record = _showable([repo]).repo_show(["R5"], show_uris=True)["repositories"][0]
+
+        assert record["URIs"] == [
+            {
+                "URI": "git@github.com:dynamist/phabfive.git",
+                "I/O": "observe",
+                "Display": "always",
+                "Disabled": False,
+            }
+        ]
+
+    def test_show_branches_asks_branchquery(self):
+        diffusion = _showable(
+            [_show_repo()],
+            branches=[
+                {"shortName": "topic", "refType": "branch"},
+                {"shortName": "master", "refType": "branch"},
+            ],
+        )
+
+        record = diffusion.repo_show(["R5"], show_branches=True)["repositories"][0]
+
+        assert record["Branches"] == ["master", "topic"]
+        diffusion.phab.diffusion.branchquery.assert_called_once_with(repository=5)
+
+    def test_show_tags_asks_tagsquery(self):
+        """tagsquery spells the name differently, and says no refType at all."""
+        diffusion = _showable([_show_repo()], tags=[{"name": "v1.0"}, {"name": "v0.9"}])
+
+        record = diffusion.repo_show(["R5"], show_tags=True)["repositories"][0]
+
+        assert record["Tags"] == ["v0.9", "v1.0"]
+        diffusion.phab.diffusion.tagsquery.assert_called_once_with(repository=5)
+
+    def test_a_branch_ref_that_is_not_a_branch_is_left_out(self):
+        diffusion = _showable(
+            [_show_repo()],
+            branches=[
+                {"shortName": "master", "refType": "branch"},
+                {"shortName": "v1.0", "refType": "tag"},
+            ],
+        )
+
+        record = diffusion.repo_show(["R5"], show_branches=True)["repositories"][0]
+
+        assert record["Branches"] == ["master"]
+
+    def test_show_metadata_carries_the_phids_and_the_timestamps(self):
+        record = _showable([_show_repo()]).repo_show(["R5"], show_metadata=True)[
+            "repositories"
+        ][0]
+
+        assert record["Metadata"]["PHID"] == "PHID-REPO-5"
+        assert record["Metadata"]["ID"] == 5
+        assert record["Metadata"]["Created"].startswith("20")
+
+    def test_no_description_leaves_the_description_out(self):
+        record = _showable([_show_repo()]).repo_show(["R5"], show_description=False)[
+            "repositories"
+        ][0]
+
+        assert "Description" not in record["Repository"]
+
+    def test_a_space_is_named_when_the_repository_is_in_one(self):
+        diffusion = _showable([_show_repo(space_phid="PHID-SPCE-1")])
+        diffusion.phab.phid.query.return_value = {
+            "PHID-SPCE-1": {"fullName": "S2 Restricted"}
+        }
+
+        record = diffusion.repo_show(["R5"])["repositories"][0]
+
+        assert record["Space"] == "S2 Restricted"
+
+    def test_an_unnameable_space_never_fails_the_read(self):
+        diffusion = _showable([_show_repo(space_phid="PHID-SPCE-1")])
+        diffusion.phab.phid.query.side_effect = Exception("boom")
+
+        record = diffusion.repo_show(["R5"])["repositories"][0]
+
+        assert record["Space"] == "PHID-SPCE-1"
+
+    def test_an_unreachable_repository_raises_rather_than_tracebacks(self):
+        from phabricator import APIError
+
+        diffusion = _showable([_show_repo()])
+        diffusion.phab.diffusion.branchquery.side_effect = APIError(
+            "ERR", "data is unavailable"
+        )
+
+        with pytest.raises(PhabfiveDataException):
+            diffusion.repo_show(["R5"], show_branches=True)
+
+
+class TestRepoShowFormats:
+    """The formats have to agree - that is the whole point of the command."""
+
+    def _result(self, show_metadata=True):
+        repo = _show_repo(uris=[_show_uri("git@github.com:dynamist/phabfive.git")])
+        diffusion = _showable(
+            [repo],
+            branches=[{"shortName": "master", "refType": "branch"}],
+            tags=[{"name": "v1.0"}],
+        )
+
+        return diffusion, diffusion.repo_show(
+            ["R5"],
+            show_branches=True,
+            show_tags=True,
+            show_uris=True,
+            show_metadata=show_metadata,
+        )
+
+    def _render(self, capsys, output_format, show_metadata=True):
+        from phabfive.diffusion.display import display_repositories
+
+        diffusion, result = self._result(show_metadata=show_metadata)
+        display_repositories(result, output_format, diffusion)
+
+        return capsys.readouterr().out
+
+    def test_yaml_json_and_jsonl_carry_the_same_record(self, capsys):
+        import json
+
+        from ruamel.yaml import YAML
+
+        as_yaml = YAML(typ="safe").load(self._render(capsys, "yaml"))
+        as_json = json.loads(self._render(capsys, "json"))
+        as_jsonl = [
+            json.loads(line) for line in self._render(capsys, "jsonl").splitlines()
+        ]
+
+        assert as_yaml == as_json == as_jsonl
+
+    def test_rich_is_the_same_record_in_yaml_shape(self, capsys):
+        """Rich contributes hyperlinks and colour, not a different layout.
+
+        Parsed rather than compared as text, and without --show-metadata:
+        rich writes a timestamp bare the way maniphest's rich does, and a
+        YAML parser reads that as a timestamp rather than as the string
+        json and yaml agree on. Which is the reason to parse one of those
+        two and not this one.
+        """
+        import json
+
+        from ruamel.yaml import YAML
+
+        as_rich = YAML(typ="safe").load(
+            self._render(capsys, "rich", show_metadata=False)
+        )
+
+        assert as_rich == json.loads(self._render(capsys, "json", show_metadata=False))
+
+    def test_json_and_jsonl_lead_with_the_link(self, capsys):
+        import json
+
+        record = json.loads(self._render(capsys, "json"))[0]
+
+        assert list(record)[0] == "Link"
+        assert record["Link"] == "http://phorge.localhost/R5"
+
+    def test_no_internal_key_reaches_the_output(self, capsys):
+        for output_format in ("rich", "yaml", "json", "jsonl", "tree"):
+            assert "_link" not in self._render(capsys, output_format)
+            assert "_url" not in self._render(capsys, output_format)
+
+    def test_tree_renders_rather_than_falling_back(self, capsys):
+        """--format is global; a format that quietly falls back is the bug."""
+        output = self._render(capsys, "tree")
+
+        assert "Repository" in output
+        assert "Monogram: R5" in output
+        # A tree, not the YAML-shaped rich output.
+        assert "- Link:" not in output
+
+    def test_an_unknown_format_falls_back_to_rich(self, capsys):
+        assert self._render(capsys, "simple").startswith("- Link:")
+
+    def test_the_aliases_reach_the_same_renderers(self, capsys):
+        assert self._render(capsys, "strict") == self._render(capsys, "yaml")
+        assert self._render(capsys, "ndjson") == self._render(capsys, "jsonl")
+
+
+class TestRepoShowCli:
+    """The CLI wiring: how the arguments arrive and what the exit code says."""
+
+    def _invoke(self, args, result=None, side_effect=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        if side_effect is not None:
+            mock_diffusion.repo_show.side_effect = side_effect
+        else:
+            mock_diffusion.repo_show.return_value = (
+                result
+                if result is not None
+                else {"repositories": [], "missing_ids": []}
+            )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            return CliRunner().invoke(diffusion_app, ["repo", "show", *args]), (
+                mock_diffusion
+            )
+
+    def test_repositories_are_space_separated(self):
+        _, diffusion = self._invoke(["R5", "R6"])
+
+        assert diffusion.repo_show.call_args[0][0] == ["R5", "R6"]
+
+    def test_repositories_are_comma_separated_too(self):
+        _, diffusion = self._invoke(["R5,R6", "R7"])
+
+        assert diffusion.repo_show.call_args[0][0] == ["R5", "R6", "R7"]
+
+    def test_the_show_flags_are_passed_through(self):
+        _, diffusion = self._invoke(
+            ["R5", "--show-branches", "--show-tags", "--show-uris", "--show-metadata"]
+        )
+
+        assert diffusion.repo_show.call_args[1] == {
+            "show_branches": True,
+            "show_tags": True,
+            "show_uris": True,
+            "show_metadata": True,
+            "show_description": True,
+        }
+
+    def test_nothing_is_shown_by_default(self):
+        _, diffusion = self._invoke(["R5"])
+
+        assert diffusion.repo_show.call_args[1] == {
+            "show_branches": False,
+            "show_tags": False,
+            "show_uris": False,
+            "show_metadata": False,
+            "show_description": True,
+        }
+
+    def test_no_description_reaches_the_lookup(self):
+        _, diffusion = self._invoke(["R5", "-n"])
+
+        assert diffusion.repo_show.call_args[1]["show_description"] is False
+
+    def test_a_repository_that_exists_exits_zero(self):
+        result, _ = self._invoke(
+            ["R5"],
+            result={
+                "repositories": [{"_url": "u", "_link": "u", "Repository": {}}],
+                "missing_ids": [],
+            },
+        )
+
+        assert result.exit_code == 0
+
+    def test_a_missing_repository_is_a_failed_lookup(self):
+        """Not an empty result - the same rule maniphest show follows."""
+        result, _ = self._invoke(
+            ["R9999"], result={"repositories": [], "missing_ids": ["R9999"]}
+        )
+
+        assert result.exit_code == 1
+
+    def test_a_partial_result_still_fails(self):
+        result, _ = self._invoke(
+            ["R5", "R9999"],
+            result={
+                "repositories": [{"_url": "u", "_link": "u", "Repository": {}}],
+                "missing_ids": ["R9999"],
+            },
+        )
+
+        assert result.exit_code == 1
+
+    def test_an_api_failure_is_reported_rather_than_tracebacked(self):
+        result, _ = self._invoke(
+            ["R5"], side_effect=PhabfiveDataException("data is unavailable")
+        )
+
+        assert result.exit_code == 1
+        assert "data is unavailable" in result.output
+        assert "Traceback" not in result.output
+
+
+class TestRefsAreGeneralised:
+    """format_branches filtered branches out of one endpoint and dropped tags."""
+
+    def test_branches_still_list(self):
+        from phabfive.diffusion.formatters import format_refs
+
+        phab = _phab_with_repos([_repo("myrepo")])
+        phab.diffusion.branchquery.return_value = [
+            {"shortName": "main", "refType": "branch"}
+        ]
+
+        assert format_refs(phab, "myrepo") == ["main"]
+
+    def test_tags_come_from_the_tag_endpoint(self):
+        from phabfive.diffusion.formatters import format_refs
+
+        phab = _phab_with_repos([_repo("myrepo")])
+        phab.diffusion.tagsquery.return_value = [{"name": "v1.0"}]
+
+        assert format_refs(phab, "myrepo", "tag") == ["v1.0"]
+        phab.diffusion.branchquery.assert_not_called()
+
+    def test_an_unknown_repository_is_still_reported(self):
+        from phabfive.diffusion.formatters import format_refs
+
+        with pytest.raises(PhabfiveDataException, match="not a valid repository"):
+            format_refs(_phab_with_repos([]), "nope")
