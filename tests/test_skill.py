@@ -61,6 +61,26 @@ def test_prints_the_skill():
     assert "name: phabfive" in result.stdout
 
 
+def test_the_skill_encodes_on_a_windows_console():
+    """`phabfive --skill` prints the file to stdout, and on Windows that is a
+    cp1252 stream - so a character cp1252 cannot encode is a UnicodeEncodeError
+    and a non-zero exit, on that platform only.
+
+    An em dash survives (cp1252 has one); an arrow does not, which is how a
+    `→` in a dry-run example took out every Windows job and cancelled two
+    macOS ones with it.
+    """
+    text = _skill_text()
+
+    try:
+        text.encode("cp1252")
+    except UnicodeEncodeError as e:
+        raise AssertionError(
+            f"SKILL.md holds {text[e.start : e.end]!r}, which a Windows console "
+            "cannot print; use an ASCII spelling"
+        ) from None
+
+
 def test_writes_nothing_to_stderr():
     """The output is meant to be redirected straight into a SKILL.md."""
     result = _run("--skill")
