@@ -410,10 +410,18 @@ def edit(
 @branch_app.command("list")
 def branch_list(
     ctx: typer.Context,
-    repo: str = typer.Argument(..., help="Repository monogram (R123) or shortname"),
+    repo: str = typer.Argument(
+        ..., help="Repository monogram (R123), callsign or shortname"
+    ),
 ) -> None:
     """List branches for a repository."""
     diffusion = _get_diffusion_app()
-    branches = diffusion.get_branches_formatted(repo=repo)
+
+    try:
+        branches = diffusion.get_branches_formatted(repo=repo)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
     for branch_name in branches:
         typer.echo(branch_name)
