@@ -1025,9 +1025,9 @@ class Diffusion(Phabfive):
         short_name=None,
         default_branch=None,
         status=None,
-        view=None,
-        edit_policy=None,
-        push=None,
+        visible_to=None,
+        editable_by=None,
+        pushable_by=None,
     ):
         """Compute the transactions for a repository edit, without applying them.
 
@@ -1043,11 +1043,11 @@ class Diffusion(Phabfive):
             New default branch
         status : str, optional
             New status ("active" or "inactive")
-        view : str, optional
+        visible_to : str, optional
             New view policy, in the grammar phabfive.policy accepts
-        edit_policy : str, optional
-            New edit policy, from `--editable-by`
-        push : str, optional
+        editable_by : str, optional
+            New edit policy
+        pushable_by : str, optional
             New push policy
 
         Returns
@@ -1110,14 +1110,16 @@ class Diffusion(Phabfive):
 
         policy_transactions, policy_changes = self._build_policy_edit(
             fields.get("policy") or {},
-            view=view,
-            edit_policy=edit_policy,
-            push=push,
+            visible_to=visible_to,
+            editable_by=editable_by,
+            pushable_by=pushable_by,
         )
 
         return transactions + policy_transactions, changes + policy_changes
 
-    def _build_policy_edit(self, policy, view=None, edit_policy=None, push=None):
+    def _build_policy_edit(
+        self, policy, visible_to=None, editable_by=None, pushable_by=None
+    ):
         """The policy half of a repository edit.
 
         Kept apart from the scalar fields because a policy is not a scalar:
@@ -1130,7 +1132,7 @@ class Diffusion(Phabfive):
         ----------
         policy : dict
             The "policy" field of the repository as it stands
-        view, edit_policy, push : str, optional
+        visible_to, editable_by, pushable_by : str, optional
             New policies, in the grammar phabfive.policy accepts
 
         Returns
@@ -1139,9 +1141,9 @@ class Diffusion(Phabfive):
             (transactions, changes)
         """
         asked = [
-            ("view", view, "Visible To", "--visible-to"),
-            ("edit", edit_policy, "Editable By", "--editable-by"),
-            ("push", push, "Pushable By", "--pushable-by"),
+            ("view", visible_to, "Visible To", "--visible-to"),
+            ("edit", editable_by, "Editable By", "--editable-by"),
+            ("push", pushable_by, "Pushable By", "--pushable-by"),
         ]
 
         wanted = [
@@ -1216,9 +1218,9 @@ class Diffusion(Phabfive):
         short_name=None,
         default_branch=None,
         status=None,
-        view=None,
-        edit_policy=None,
-        push=None,
+        visible_to=None,
+        editable_by=None,
+        pushable_by=None,
         object_identifier=None,
         repo_record=None,
         dry_run=False,
@@ -1239,11 +1241,11 @@ class Diffusion(Phabfive):
             New default branch
         status : str, optional
             New status
-        view : str, optional
+        visible_to : str, optional
             New view policy
-        edit_policy : str, optional
+        editable_by : str, optional
             New edit policy
-        push : str, optional
+        pushable_by : str, optional
             New push policy
         object_identifier : str, optional
             Repository object identifier
@@ -1268,9 +1270,9 @@ class Diffusion(Phabfive):
             short_name=short_name,
             default_branch=default_branch,
             status=status,
-            view=view,
-            edit_policy=edit_policy,
-            push=push,
+            visible_to=visible_to,
+            editable_by=editable_by,
+            pushable_by=pushable_by,
         )
 
         if not transactions:

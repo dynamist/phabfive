@@ -868,7 +868,10 @@ class TestBuildPolicyEdit:
         in different places in Phorge, which is why they are spelled
         differently."""
         transactions, _ = diffusion.build_repo_edit(
-            self._record(), view="public", edit_policy="public", push="public"
+            self._record(),
+            visible_to="public",
+            editable_by="public",
+            pushable_by="public",
         )
 
         assert transactions == [
@@ -878,7 +881,7 @@ class TestBuildPolicyEdit:
         ]
 
     def test_the_change_names_both_ends(self, diffusion):
-        _, changes = diffusion.build_repo_edit(self._record(), view="public")
+        _, changes = diffusion.build_repo_edit(self._record(), visible_to="public")
 
         assert changes == [
             {
@@ -902,7 +905,7 @@ class TestBuildPolicyEdit:
         }
 
         transactions, changes = diffusion.build_repo_edit(
-            self._record(), edit_policy="#infrastructure"
+            self._record(), editable_by="#infrastructure"
         )
 
         assert transactions == [{"type": "edit", "value": "PHID-PROJ-infra"}]
@@ -915,21 +918,23 @@ class TestBuildPolicyEdit:
         ]
 
     def test_a_policy_already_in_place_is_not_a_transaction(self, diffusion):
-        transactions, changes = diffusion.build_repo_edit(self._record(), view="users")
+        transactions, changes = diffusion.build_repo_edit(
+            self._record(), visible_to="users"
+        )
 
         assert transactions == []
         assert changes == []
 
     def test_a_policy_outside_the_grammar_is_refused(self, diffusion):
         with pytest.raises(PhabfiveConfigException) as excinfo:
-            diffusion.build_repo_edit(self._record(), view="nonsense")
+            diffusion.build_repo_edit(self._record(), visible_to="nonsense")
 
         assert "--visible-to" in str(excinfo.value)
         diffusion.phab.diffusion.repository.edit.assert_not_called()
 
     def test_policies_ride_along_with_the_scalar_fields(self, diffusion):
         transactions, changes = diffusion.build_repo_edit(
-            self._record(), name="newname", view="public"
+            self._record(), name="newname", visible_to="public"
         )
 
         assert [t["type"] for t in transactions] == ["name", "view"]
@@ -939,7 +944,7 @@ class TestBuildPolicyEdit:
         """An older instance, or a record fetched without them."""
         record = _repo("oldname")
 
-        transactions, changes = diffusion.build_repo_edit(record, view="public")
+        transactions, changes = diffusion.build_repo_edit(record, visible_to="public")
 
         assert transactions == [{"type": "view", "value": "public"}]
         assert changes[0]["old"] == "(none)"
@@ -950,7 +955,7 @@ class TestBuildPolicyEdit:
             "data": [{"phid": "PHID-PROJ-new"}]
         }
 
-        diffusion.build_repo_edit(record, view="#new", edit_policy="public")
+        diffusion.build_repo_edit(record, visible_to="#new", editable_by="public")
 
         diffusion.phab.phid.query.assert_called_once()
 
@@ -1062,9 +1067,9 @@ class TestRepoEditCli:
             "short_name": None,
             "default_branch": None,
             "status": None,
-            "view": "public",
-            "edit_policy": "#infrastructure",
-            "push": "@admin",
+            "visible_to": "public",
+            "editable_by": "#infrastructure",
+            "pushable_by": "@admin",
         }
 
     def test_there_is_no_bare_edit_option(self):
