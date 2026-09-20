@@ -19,9 +19,9 @@ caller, task policies the next, and neither one owns the grammar.
 
 Anything outside that grammar is refused here, before a call is made, because
 the API cannot be relied on to notice. Conduit reads an unrecognised policy
-value as a policy nobody satisfies, so ``--view=nonsense`` comes back as the
-same self-lockout validation error as ``--view=no-one`` - which would report a
-typo as a permissions problem.
+value as a policy nobody satisfies, so ``--visible-to=nonsense`` comes back as
+the same self-lockout validation error as ``--visible-to=no-one`` - which would
+report a typo as a permissions problem.
 """
 
 # python std lib

@@ -149,8 +149,8 @@ POLICY_LABELS = {
 # The keywords a policy option accepts, in the order the web UI offers them.
 # There is no policy.query endpoint on Phorge, so this cannot be discovered at
 # runtime - and it has to be checked before anything is sent, because the API
-# reads an unknown keyword as "nobody", not as a typo: --view=nonsense is
-# refused with the same self-lockout error as --view=no-one.
+# reads an unknown keyword as "nobody", not as a typo: --visible-to=nonsense
+# is refused with the same self-lockout error as --visible-to=no-one.
 POLICY_KEYWORDS = list(POLICY_LABELS)
 
 # Where a repository record keeps each policy. The push one is spelled with

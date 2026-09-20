@@ -287,12 +287,12 @@ one to read.
     Making a repository public is what brings its built-in URIs into view there:
 
     ```bash
-    phabfive diffusion repo edit R10 --view public --dry-run
+    phabfive diffusion repo edit R10 --visible-to public --dry-run
     ```
 
     ```
     [DRY RUN] Would apply to http://phorge.localhost/R10 (urimatrix375):
-      View policy: All Users → Public (No Login Required)
+      Visible To: All Users → Public (No Login Required)
     ```
 
 ## `uri create` demotes every other URI

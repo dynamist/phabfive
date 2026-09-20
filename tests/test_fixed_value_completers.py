@@ -31,9 +31,9 @@ class TestRepoStatusCompletion:
 
 
 class TestPolicyCompletion:
-    """--view, --edit-policy and --push share one grammar and one completer."""
+    """The three policy options share one grammar and one completer."""
 
-    @pytest.mark.parametrize("flag", ["--view", "--edit-policy", "--push"])
+    @pytest.mark.parametrize("flag", ["--visible-to", "--editable-by", "--pushable-by"])
     def test_offers_the_keywords_and_both_prefixes(self, flag):
         """The keywords are a constant because Phorge has no policy.query to
         ask; "#" and "@" are offered as the start of a value rather than a
@@ -48,7 +48,7 @@ class TestPolicyCompletion:
         ]
 
     def test_matches_prefix(self):
-        assert _complete(["diffusion", "repo", "edit", "R5", "--view"], "no") == [
+        assert _complete(["diffusion", "repo", "edit", "R5", "--visible-to"], "no") == [
             "no-one"
         ]
 
@@ -61,7 +61,9 @@ class TestPolicyCompletion:
             "_project_completions",
             return_value=[("infrastructure", "in Ops")],
         ) as projects:
-            offered = _complete(["diffusion", "repo", "edit", "R5", "--view"], "#infra")
+            offered = _complete(
+                ["diffusion", "repo", "edit", "R5", "--visible-to"], "#infra"
+            )
 
         assert offered == ["#infrastructure"]
         projects.assert_called_once_with("infra")
@@ -70,7 +72,9 @@ class TestPolicyCompletion:
         with patch.object(
             completers, "_user_completions", return_value=[("admin", "Administrator")]
         ) as users:
-            offered = _complete(["diffusion", "repo", "edit", "R5", "--push"], "@adm")
+            offered = _complete(
+                ["diffusion", "repo", "edit", "R5", "--pushable-by"], "@adm"
+            )
 
         assert offered == ["@admin"]
         users.assert_called_once_with("adm", include_disabled=False)
@@ -84,7 +88,9 @@ class TestPolicyCompletion:
             "_user_completions",
             return_value=[("@me", "yourself"), ("admin", None)],
         ):
-            offered = _complete(["diffusion", "repo", "edit", "R5", "--view"], "@")
+            offered = _complete(
+                ["diffusion", "repo", "edit", "R5", "--visible-to"], "@"
+            )
 
         assert offered == ["@admin"]
 
