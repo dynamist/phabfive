@@ -167,27 +167,88 @@ class Diffusion(Phabfive):
         PhabfiveDataException
             If repository already exists or API error
         """
+        transactions, _ = self.build_repo_create(name=name, vcs=vcs, status=status)
+
+        return self.apply_repo_create(transactions)
+
+    def build_repo_create(self, name=None, vcs=None, status=None):
+        """Compute the transactions for a new repository, without creating it.
+
+        Same build/apply split as build_repo_edit, so a caller can show what
+        would be created before creating it. The duplicate check runs here
+        rather than at apply time, so a dry run reports the clash too.
+
+        Parameters
+        ----------
+        name : str
+            Repository name, used as the short name as well
+        vcs : str, optional
+            Version control system, defaults to "git"
+        status : str, optional
+            Repository status, defaults to "active"
+
+        Returns
+        -------
+        tuple
+            (transactions, changes) - the Conduit transactions to apply and a
+            human-readable description of each one
+
+        Raises
+        ------
+        PhabfiveDataException
+            If a repository of that name already exists
+        """
         vcs = vcs or "git"
         status = status or "active"
 
-        repos = self.get_repositories()
-
-        for repo in repos:
+        for repo in self.get_repositories():
             if name in (repo["fields"]["name"], repo["fields"]["shortName"]):
                 raise PhabfiveDataException(f"Repository {name} already exists")
 
-        transactions = self.to_transactions(
-            {
-                "name": name,
-                "shortName": name,
-                "vcs": vcs,
-                "status": status,
-            }
+        candidates = [
+            ("name", name, "Name"),
+            ("shortName", name, "Short name"),
+            ("vcs", vcs, "VCS"),
+            ("status", status, "Status"),
+        ]
+
+        transactions = [{"type": kind, "value": value} for kind, value, _ in candidates]
+
+        changes = [
+            {"field": label, "old": "(none)", "new": str(value)}
+            for _, value, label in candidates
+        ]
+
+        # The built-in clone URIs are derived from the short name, so creating
+        # the repository mints them; build_repo_edit says the same on a rename.
+        changes.append(
+            {"field": "Built-in URIs", "old": "(none)", "new": f"/source/{name}.git"}
         )
 
-        new_repo = self.phab.diffusion.repository.edit(
-            transactions=transactions,
-        )
+        return transactions, changes
+
+    def apply_repo_create(self, transactions):
+        """Send prepared transactions to Diffusion.
+
+        Parameters
+        ----------
+        transactions : list
+            Transactions from build_repo_create
+
+        Returns
+        -------
+        str
+            PHID of the new repository
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the API rejects the creation
+        """
+        try:
+            new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
+        except APIError:
+            raise PhabfiveDataException("No valid input or other error")
 
         return new_repo["object"]["phid"]
 

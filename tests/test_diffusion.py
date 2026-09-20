@@ -783,3 +783,128 @@ class TestRepoEditCli:
 
         assert result.exit_code == 1
         assert "Traceback" not in result.output
+
+
+class TestBuildRepoCreate:
+    """A new repository describes itself before it exists."""
+
+    def test_transactions_cover_every_field(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {"data": []}
+
+        transactions, _ = diffusion.build_repo_create(name="newrepo")
+
+        assert transactions == [
+            {"type": "name", "value": "newrepo"},
+            {"type": "shortName", "value": "newrepo"},
+            {"type": "vcs", "value": "git"},
+            {"type": "status", "value": "active"},
+        ]
+
+    def test_changes_describe_the_built_in_uris_it_mints(self, diffusion):
+        diffusion.phab.diffusion.repository.search.return_value = {"data": []}
+
+        _, changes = diffusion.build_repo_create(name="newrepo")
+
+        assert {
+            "field": "Built-in URIs",
+            "old": "(none)",
+            "new": "/source/newrepo.git",
+        } in changes
+
+    def test_the_duplicate_check_runs_at_build_time(self, diffusion):
+        """So a dry run reports the clash instead of passing and failing later."""
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_repo("newrepo")]
+        }
+
+        with pytest.raises(PhabfiveDataException, match="already exists"):
+            diffusion.build_repo_create(name="newrepo")
+
+        diffusion.phab.diffusion.repository.edit.assert_not_called()
+
+    def test_create_repository_still_returns_the_phid(self, diffusion):
+        """The pre-existing entry point keeps working over the new seam."""
+        diffusion.phab.diffusion.repository.search.return_value = {"data": []}
+
+        assert diffusion.create_repository(name="newrepo") == "PHID-REPO-new"
+
+
+class TestRepoCreateCli:
+    """repo create matches the vocabulary the edit commands settled on."""
+
+    def _invoke(self, args, build=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.build_repo_create.return_value = build or (
+            [{"type": "name", "value": "newrepo"}],
+            [{"field": "Name", "old": "(none)", "new": "newrepo"}],
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, ["repo", "create", *args])
+        return result, mock_diffusion
+
+    def test_dry_run_creates_nothing(self):
+        result, diffusion = self._invoke(["newrepo", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+        assert "Name: (none) → newrepo" in result.output
+        diffusion.apply_repo_create.assert_not_called()
+
+    def test_creates_by_default(self):
+        result, diffusion = self._invoke(["newrepo"])
+
+        assert result.exit_code == 0
+        diffusion.apply_repo_create.assert_called_once()
+
+    def test_an_existing_name_is_reported_cleanly(self):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.build_repo_create.side_effect = PhabfiveDataException(
+            "Repository newrepo already exists"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(diffusion_app, ["repo", "create", "newrepo"])
+
+        assert result.exit_code == 1
+        assert "already exists" in result.output
+        assert "Traceback" not in result.output
+
+    def test_a_duplicate_is_caught_before_the_dry_run_prints(self):
+        """--dry-run must fail on a clash, not report a creation that cannot happen."""
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.build_repo_create.side_effect = PhabfiveDataException(
+            "Repository newrepo already exists"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(
+                diffusion_app, ["repo", "create", "newrepo", "--dry-run"]
+            )
+
+        assert result.exit_code == 1
+        assert "[DRY RUN]" not in result.output
+
+    def test_yes_and_interactive_are_mutually_exclusive(self):
+        result, diffusion = self._invoke(["newrepo", "-y", "-i"])
+
+        assert result.exit_code == 1
+        diffusion.apply_repo_create.assert_not_called()
