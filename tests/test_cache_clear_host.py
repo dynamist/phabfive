@@ -145,14 +145,16 @@ class TestClearUrlCommand:
         _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
         _write_entry(CONF["PHAB_URL"], OTHER_TOKEN)
 
-        result = runner.invoke(app, ["cache", "clear", "--url", "phorge.example.com"])
+        result = runner.invoke(
+            app, ["--format=rich", "cache", "clear", "--url", "phorge.example.com"]
+        )
 
         assert result.exit_code == 0
         assert "Removed 2 cached lookups" in result.stdout
         assert _dirs() == []
 
     def test_rejects_a_value_naming_no_host(self, enabled_cache):
-        result = runner.invoke(app, ["cache", "clear", "--url", ""])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear", "--url", ""])
 
         assert result.exit_code == 1
         assert "does not name a host" in result.stderr
@@ -171,7 +173,7 @@ class TestTokenMismatchIsVisible:
         """Removing nothing must not read as "there was nothing to clear"."""
         _write_entry(CONF["PHAB_URL"], OTHER_TOKEN)
 
-        result = runner.invoke(app, ["cache", "clear"])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear"])
 
         assert result.exit_code == 0
         assert "Removed 0 cached lookups" in result.stdout
@@ -181,13 +183,13 @@ class TestTokenMismatchIsVisible:
     def test_quiet_when_the_configured_token_matched(self, enabled_cache):
         _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
 
-        result = runner.invoke(app, ["cache", "clear"])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear"])
 
         assert "Removed 1 cached lookup" in result.stdout
         assert "different token" not in result.stderr
 
     def test_quiet_when_the_host_has_nothing_cached(self, enabled_cache):
-        result = runner.invoke(app, ["cache", "clear"])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear"])
 
         assert "Removed 0 cached lookups" in result.stdout
         assert "different token" not in result.stderr
@@ -264,7 +266,7 @@ class TestClearNamespacesCommand:
     def test_clears_the_named_namespace(self, enabled_cache):
         self._seed(enabled_cache)
 
-        result = runner.invoke(app, ["cache", "clear", "users"])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear", "users"])
 
         assert result.exit_code == 0
         assert "(users)" in result.stdout
@@ -274,7 +276,7 @@ class TestClearNamespacesCommand:
         """A typo must not clear nothing and report success."""
         self._seed(enabled_cache)
 
-        result = runner.invoke(app, ["cache", "clear", "userz"])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear", "userz"])
 
         assert result.exit_code == 1
         assert "unknown cache namespace: userz" in result.stderr
@@ -284,7 +286,9 @@ class TestClearNamespacesCommand:
     def test_rejects_an_unknown_namespace_among_known_ones(self, enabled_cache):
         self._seed(enabled_cache)
 
-        result = runner.invoke(app, ["cache", "clear", "users", "nope"])
+        result = runner.invoke(
+            app, ["--format=rich", "cache", "clear", "users", "nope"]
+        )
 
         assert result.exit_code == 1
         assert len(cache.describe()["Namespaces"]) == 2
@@ -292,7 +296,9 @@ class TestClearNamespacesCommand:
     def test_repeating_a_namespace_names_it_once(self, enabled_cache):
         self._seed(enabled_cache)
 
-        result = runner.invoke(app, ["cache", "clear", "users", "users"])
+        result = runner.invoke(
+            app, ["--format=rich", "cache", "clear", "users", "users"]
+        )
 
         assert result.exit_code == 0
         assert "(users)" in result.stdout
@@ -301,7 +307,8 @@ class TestClearNamespacesCommand:
         self._seed(enabled_cache)
 
         result = runner.invoke(
-            app, ["cache", "clear", "--url", "phorge.example.com", "users"]
+            app,
+            ["--format=rich", "cache", "clear", "--url", "phorge.example.com", "users"],
         )
 
         assert result.exit_code == 0

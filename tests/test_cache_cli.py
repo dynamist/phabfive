@@ -21,7 +21,7 @@ class TestClear:
         cache.set("users", "one", 1)
         cache.set("users", "two", 2)
 
-        result = runner.invoke(app, ["cache", "clear"])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear"])
 
         assert result.exit_code == 0
         assert "Removed 2 cached lookups" in result.stdout
@@ -29,11 +29,11 @@ class TestClear:
 
     def test_singular_for_one_entry(self, enabled_cache):
         cache.set("users", "one", 1)
-        result = runner.invoke(app, ["cache", "clear"])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear"])
         assert "Removed 1 cached lookup from" in result.stdout
 
     def test_an_empty_cache_is_not_an_error(self, enabled_cache):
-        result = runner.invoke(app, ["cache", "clear"])
+        result = runner.invoke(app, ["--format=rich", "cache", "clear"])
         assert result.exit_code == 0
         assert "Removed 0 cached lookups" in result.stdout
 
@@ -46,7 +46,7 @@ class TestClear:
             cache.set("users", "one", 1)
 
         with patch("phabfive.core.Phabfive.read_config", side_effect=OSError("boom")):
-            result = runner.invoke(app, ["cache", "clear", "--all"])
+            result = runner.invoke(app, ["--format=rich", "cache", "clear", "--all"])
 
         assert result.exit_code == 0
         assert "Removed 1 cached lookup from every instance" in result.stdout
@@ -55,7 +55,7 @@ class TestClear:
         monkeypatch.setenv("PHAB_CACHE", "1")
         conf = dict(CONF, PHAB_URL="")
         with patch("phabfive.core.Phabfive.read_config", return_value=(conf, False)):
-            result = runner.invoke(app, ["cache", "clear"])
+            result = runner.invoke(app, ["--format=rich", "cache", "clear"])
 
         assert result.exit_code == 1
         assert "No instance is configured" in result.stderr

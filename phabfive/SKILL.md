@@ -84,10 +84,11 @@ Data goes to stdout; logging, diagnostics, status lines, usage blocks and group 
 to stderr. Capturing stdout alone is safe - `phabfive --format=json ... 2>/dev/null | jq .`
 parses for every command, including the ones that write.
 
-A command that **writes** answers a machine-readable format with the same record `show`
-gives for the object it touched, so the link and every field arrive together. That is
-`maniphest create/edit/comment`, the bare `edit`, `paste create/edit/comment`, and
-`diffusion repo create/edit` and `diffusion uri create/edit`:
+**Every** command honours `--format`, the ones that write included. A write answers a
+machine-readable format with the same record `show` gives for the object it touched, so
+the link and every field arrive together - `maniphest create/edit/comment`, the bare
+`edit`, `paste create/edit/comment`, `diffusion repo create/edit` and
+`diffusion uri create/edit`:
 
 ```bash
 phabfive --format=json maniphest create "probe" --yes | jq -r '.[0].Link'
@@ -111,8 +112,19 @@ change list for `edit`.
 and leaves stdout empty under a machine-readable format. Check the exit code, not the
 output, to tell a dry run from a refusal.
 
-Not yet wired up (#344): `cache clear`, and `maniphest create --with=TEMPLATE`. These
-still print human text whatever is asked for - do not parse their output.
+`maniphest create --with=TEMPLATE` answers with one record per task the template
+created, parents and children alike, in the order they were created.
+
+`cache clear` is the one write with no Phorge object behind it, so it has no `show`
+record to give. It answers with what it did instead, in `cache info`'s vocabulary:
+
+```json
+{"Removed": 12, "Namespaces": ["users"], "Host": null, "AllInstances": false}
+```
+
+`Namespaces` is null when every namespace was cleared, `Host` names the `--url` host
+when that was the scope, and `AllInstances` reports `--all` - so the scope is readable
+without parsing the sentence that states it.
 
 ## Monograms, and the one that writes
 
