@@ -66,6 +66,7 @@ For detailed setup instructions, see the [README](https://github.com/dynamist/ph
 
 - **[Edit CLI](edit-cli.md)** - Unified editing with auto-detection, batch operations, and smart navigation
 - **[Maniphest CLI](maniphest-cli.md)** - Complete guide to task management, including advanced transition filtering
+- **[Diffusion URIs](diffusion-uri.md)** - How a repository's URIs work: origin, I/O, display and disabled
 
 ### Development
 
