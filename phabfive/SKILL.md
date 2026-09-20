@@ -375,8 +375,8 @@ otherwise come back as a permissions error rather than a spelling one. `--dry-ru
 names both ends of the change rather than showing a PHID:
 
 ```
-  View policy: All Users → Public (No Login Required)
-  Edit policy: Administrators → #infrastructure
+  View policy: All Users -> Public (No Login Required)
+  Edit policy: Administrators -> #infrastructure
 ```
 
 `repo show` and `repo list` report the same names under `Policy`, in the same
