@@ -27,14 +27,15 @@ def validate_repo_identifier(repo_id):
 
 def validate_credential_type(credential):
     """
-    Validate credential type and extract PHID.
+    Validate a credential record and return its PHID.
 
     Valid credential types are: ssh-generated-key, ssh-key-text, token
 
     Parameters
     ----------
     credential : dict
-        Credential data from Phabricator API
+        A credential record from Passphrase.get_credential_record, with
+        'phid', 'type' and 'monogram' keys
 
     Returns
     -------
@@ -46,20 +47,15 @@ def validate_credential_type(credential):
     PhabfiveDataException
         If credential type is not valid
     """
-    credential_phid = None
     valid_credential_types = ["ssh-generated-key", "ssh-key-text", "token"]
+    credential_type = credential.get("type")
 
-    for key in credential:
-        if "PHID" in key:
-            credential_phid = key
-            credential_type = credential.get(key).get("type")
+    if credential_type not in valid_credential_types:
+        monogram = credential.get("monogram") or credential.get("phid")
 
-            if credential_type not in valid_credential_types:
-                m = credential[credential_phid]["monogram"]
-                t = credential[credential_phid]["type"]
+        raise PhabfiveDataException(
+            f"{monogram} is not type of 'ssh-generated-key', 'ssh-key-text' or 'token' "
+            f"but type '{credential_type}'"
+        )
 
-                raise PhabfiveDataException(
-                    f"{m} is not type of 'ssh-generated-key', 'ssh-key-text' or 'token' but type '{t}'"
-                )
-
-    return credential_phid
+    return credential.get("phid")

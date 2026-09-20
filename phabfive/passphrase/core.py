@@ -130,6 +130,55 @@ class Passphrase(Phabfive):
             "secret": secret,
         }
 
+    def get_credential_record(self, id_str):
+        """Fetch a credential's identity without reading its secret.
+
+        Attaching a credential to something only needs its PHID and type.
+        Phabricator holds the material and uses it server side, so asking
+        Conduit for the secret as well would read a private key for no
+        reason - and fail on a credential whose owner never granted Conduit
+        access to it, which has nothing to do with whether the credential
+        can be attached.
+
+        Parameters
+        ----------
+        id_str : str
+            Passphrase ID (e.g., "K123")
+
+        Returns
+        -------
+        dict
+            The raw credential record, with 'phid', 'type' and 'monogram'
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the ID is invalid or no such credential exists
+        PhabfiveRemoteException
+            If the API call fails
+        """
+        if not self._validate_identifier(id_str):
+            raise PhabfiveDataException(
+                f"Invalid passphrase ID '{id_str}'. Expected format: K123"
+            )
+
+        numeric_id = id_str.replace("K", "")
+
+        try:
+            response = self.phab.passphrase.query(
+                ids=[numeric_id],
+                needSecrets=0,
+            )
+        except APIError as e:
+            raise PhabfiveRemoteException(e)
+
+        data = response.get("data", {})
+
+        if not data:
+            raise PhabfiveDataException(f"K{numeric_id} has no data or other error")
+
+        return next(iter(data.values()))
+
     def get_secret(self, ids):
         """Retrieve only the secret value.
 
