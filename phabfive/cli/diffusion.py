@@ -245,6 +245,7 @@ def repo_edit(
         raise typer.Exit(1)
 
     object_id = repo_record["id"]
+    label = diffusion.link_repository(repo_record)
 
     transactions, changes = diffusion.build_repo_edit(
         repo_record,
@@ -255,15 +256,15 @@ def repo_edit(
     )
 
     if not transactions:
-        typer.echo(f"{repo}: No changes (already at target state)")
+        typer.echo(f"{label}: No changes (already at target state)")
         return
 
     if dry_run:
-        render_changes(repo, changes, header=f"[DRY RUN] Would apply to {repo}:")
+        render_changes(label, changes, header=f"[DRY RUN] Would apply to {label}:")
         return
 
     if interactive:
-        render_changes(repo, changes, header=f"Would apply to {repo}:")
+        render_changes(label, changes, header=f"Would apply to {label}:")
         confirmed, return_code = confirm_apply(assume_yes)
         if not confirmed:
             typer.echo("Nothing was changed.", err=True)
@@ -271,7 +272,7 @@ def repo_edit(
 
     diffusion.apply_repo_edit(object_id, transactions)
 
-    render_changes(repo, changes)
+    render_changes(label, changes)
 
 
 # URI commands
@@ -440,7 +441,7 @@ def edit(
     object_id = uri_record["id"]
     # A URI string does not identify a repository - two can carry the same
     # remote - so name the repository as well as the URI being changed.
-    label = f"{diffusion.describe_repository(repo_record)} {uri}"
+    label = diffusion.link_repository(repo_record)
 
     try:
         transactions, changes = diffusion.build_uri_edit(
@@ -458,6 +459,11 @@ def edit(
     if not transactions:
         typer.echo(f"{label}: No changes (already at target state)")
         return
+
+    # An edit that does not touch the URI - a --disable, say - would
+    # otherwise never say which URI on the repository it meant.
+    if not any(change["field"] == "URI" for change in changes):
+        changes = [{"field": "URI", "old": None, "new": uri}] + changes
 
     if dry_run:
         render_changes(label, changes, header=f"[DRY RUN] Would apply to {label}:")

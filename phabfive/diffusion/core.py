@@ -609,11 +609,51 @@ class Diffusion(Phabfive):
         str
             e.g. "R86 (aws-redis)", or just "R86" when it has no name
         """
-        fields = repo.get("fields", {})
-        name = fields.get("shortName") or fields.get("callsign") or fields.get("name")
+        name = Diffusion.name_repository(repo)
         monogram = f"R{repo['id']}"
 
         return f"{monogram} ({name})" if name else monogram
+
+    @staticmethod
+    def name_repository(repo):
+        """The most human of the names a repository carries, if any.
+
+        Parameters
+        ----------
+        repo : dict
+            A repository record
+
+        Returns
+        -------
+        str or None
+            Short name, else callsign, else name, else None
+        """
+        fields = repo.get("fields", {})
+
+        return fields.get("shortName") or fields.get("callsign") or fields.get("name")
+
+    def link_repository(self, repo):
+        """Point at a repository on this instance, by monogram.
+
+        The change itself already names the remote being edited, so the
+        header is the place to say which Phabricator object it belongs to -
+        and to say it in a form that can be opened or pasted back into the
+        CLI.
+
+        Parameters
+        ----------
+        repo : dict
+            A repository record
+
+        Returns
+        -------
+        str
+            e.g. "https://phabricator.example.com/R86 (aws-redis)"
+        """
+        name = Diffusion.name_repository(repo)
+        url = f"{self.url}/R{repo['id']}"
+
+        return f"{url} ({name})" if name else url
 
     def _describe_credential(self, credential_phid):
         """Name a credential for display, never revealing its secret.
