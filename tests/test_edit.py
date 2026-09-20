@@ -853,6 +853,161 @@ class TestBuildTaskEdit:
         maniphest.phab.maniphest.edit.assert_called_once()
 
 
+@mock.patch("phabfive.maniphest.core.Phabfive.__init__", return_value=None)
+class TestBuildTaskEditColumn:
+    """A column that is already the task's column is not a move (#404)."""
+
+    # Two boards that both have a "Backlog", which is why the comparison is
+    # by PHID and not by name.
+    COLUMNS = {
+        "PHID-PROJ-qa": {
+            "PHID-PCOL-qa-backlog": {"name": "Backlog", "sequence": 0},
+            "PHID-PCOL-qa-doing": {"name": "Doing", "sequence": 1},
+        },
+        "PHID-PROJ-ops": {
+            "PHID-PCOL-ops-backlog": {"name": "Backlog", "sequence": 0},
+            "PHID-PCOL-ops-done": {"name": "Done", "sequence": 1},
+        },
+    }
+
+    @staticmethod
+    def _task(board_columns=None, projects=None):
+        """A task sitting in ``board_columns`` ({board PHID: column PHID})."""
+        boards = {
+            board: {"columns": [{"phid": column}]}
+            for board, column in (board_columns or {}).items()
+        }
+        return {
+            "id": 93,
+            "phid": "PHID-TASK-93",
+            "fields": {
+                "name": "A task",
+                "priority": {"value": 50, "name": "Normal"},
+                "status": {"value": "open", "name": "Open"},
+                "ownerPHID": None,
+                "description": {"raw": "old text"},
+                "spacePHID": "PHID-SPCE-1",
+            },
+            "attachments": {
+                "columns": {"boards": boards},
+                "projects": {
+                    "projectPHIDs": list(
+                        projects if projects is not None else (board_columns or {})
+                    )
+                },
+                "subscribers": {"subscriberPHIDs": []},
+            },
+        }
+
+    @contextlib.contextmanager
+    def _maniphest(self):
+        from phabfive.maniphest.core import Maniphest
+
+        maniphest = Maniphest()
+        maniphest.phab = mock.MagicMock()
+        maniphest.url = "https://phorge.example.com/"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+        with mock.patch(
+            "phabfive.maniphest.fetchers.get_column_info",
+            side_effect=lambda phab, board_phid: self.COLUMNS[board_phid],
+        ):
+            yield maniphest
+
+    def test_the_column_the_task_is_in_is_not_a_move(self, mock_init):
+        with self._maniphest() as maniphest:
+            transactions, changes = maniphest.build_task_edit(
+                "93",
+                self._task({"PHID-PROJ-qa": "PHID-PCOL-qa-backlog"}),
+                board_phid="PHID-PROJ-qa",
+                column="Backlog",
+            )
+
+        assert transactions == []
+        assert changes == []
+
+    def test_a_column_only_no_op_reports_no_changes(self, mock_init, capsys):
+        """The observable half of #404: the short-circuit now fires."""
+        from phabfive.edit.formatters import display_changes
+
+        with self._maniphest() as maniphest:
+            result = maniphest.edit_task_by_id(
+                task_id="93",
+                board_phid="PHID-PROJ-qa",
+                column="Backlog",
+                task_data=self._task({"PHID-PROJ-qa": "PHID-PCOL-qa-backlog"}),
+            )
+            display_changes("T93", result)
+
+            maniphest.phab.maniphest.edit.assert_not_called()
+
+        assert result["changes"] == []
+        assert "T93: No changes (already at target state)" in capsys.readouterr().out
+
+    def test_another_column_on_that_board_is_a_move(self, mock_init):
+        with self._maniphest() as maniphest:
+            transactions, changes = maniphest.build_task_edit(
+                "93",
+                self._task({"PHID-PROJ-qa": "PHID-PCOL-qa-backlog"}),
+                board_phid="PHID-PROJ-qa",
+                column="Doing",
+            )
+
+        assert transactions == [
+            {"type": "column", "value": ["PHID-PCOL-qa-doing"]},
+        ]
+        assert changes == [{"field": "Column", "old": "Backlog", "new": "Doing"}]
+
+    def test_a_board_the_task_is_not_on_still_moves_and_adds(self, mock_init):
+        """No current column is not the target column, and the board is joined."""
+        with self._maniphest() as maniphest:
+            transactions, changes = maniphest.build_task_edit(
+                "93",
+                self._task({}),
+                board_phid="PHID-PROJ-qa",
+                column="Backlog",
+            )
+
+        assert transactions == [
+            {"type": "projects.add", "value": ["PHID-PROJ-qa"]},
+            {"type": "column", "value": ["PHID-PCOL-qa-backlog"]},
+        ]
+        assert changes == [{"field": "Column", "old": "(none)", "new": "Backlog"}]
+
+    def test_a_same_named_column_on_another_board_is_not_the_task_s_column(
+        self, mock_init
+    ):
+        """Comparing names would call this a no-op; comparing PHIDs does not."""
+        task = self._task(
+            {
+                "PHID-PROJ-qa": "PHID-PCOL-qa-backlog",
+                "PHID-PROJ-ops": "PHID-PCOL-ops-done",
+            }
+        )
+
+        with self._maniphest() as maniphest:
+            transactions, changes = maniphest.build_task_edit(
+                "93", task, board_phid="PHID-PROJ-ops", column="Backlog"
+            )
+
+        assert transactions == [
+            {"type": "column", "value": ["PHID-PCOL-ops-backlog"]},
+        ]
+        assert changes == [{"field": "Column", "old": "Done", "new": "Backlog"}]
+
+    def test_forward_from_the_last_column_is_not_a_move(self, mock_init):
+        """_navigate_column stays put at the end of the board."""
+        with self._maniphest() as maniphest:
+            transactions, changes = maniphest.build_task_edit(
+                "93",
+                self._task({"PHID-PROJ-ops": "PHID-PCOL-ops-done"}),
+                board_phid="PHID-PROJ-ops",
+                column="forward",
+            )
+
+        assert transactions == []
+        assert changes == []
+
+
 class TestStdinAutoDetection:
     """Tests for stdin auto-detection."""
 
