@@ -43,22 +43,10 @@ maniphest_app = typer.Typer(
 
 def _get_maniphest_app():
     """Get Maniphest app instance with config error handling."""
-    import requests
-
+    from phabfive.cli.apps import get_app
     from phabfive.maniphest import Maniphest
 
-    try:
-        return Maniphest()
-    except PhabfiveConfigException as e:
-        from phabfive.setup import offer_setup_on_error
-
-        if not offer_setup_on_error(str(e)):
-            raise typer.Exit(1)
-        # If setup succeeded, try again
-        return Maniphest()
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
-        raise typer.Exit(1)
+    return get_app(Maniphest)
 
 
 def _display_tasks(
@@ -829,22 +817,10 @@ def search(
 
 def _get_edit_app():
     """Get Edit app instance with config error handling."""
-    import requests
-
+    from phabfive.cli.apps import get_app
     from phabfive.edit import Edit
 
-    try:
-        return Edit()
-    except PhabfiveConfigException as e:
-        from phabfive.setup import offer_setup_on_error
-
-        if not offer_setup_on_error(str(e)):
-            raise typer.Exit(1)
-        # If setup succeeded, try again
-        return Edit()
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
-        raise typer.Exit(1)
+    return get_app(Edit)
 
 
 @maniphest_app.command()

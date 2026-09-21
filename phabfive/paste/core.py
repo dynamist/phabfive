@@ -18,9 +18,6 @@ log = logging.getLogger(__name__)
 
 
 class Paste(Phabfive):
-    def __init__(self):
-        super(Paste, self).__init__()
-
     def _validate_identifier(self, id_):
         return re.match(f"^{MONOGRAMS['paste']}$", id_)
 

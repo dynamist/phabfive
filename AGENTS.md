@@ -170,8 +170,10 @@ Complex features use a consistent subpackage structure:
   what keeps passphrase values out of the cache by construction. Do not add a
   transparent wrapper.
 - `Phabfive.read_config()` is a classmethod so the cache can key entries by
-  `PHAB_URL` without constructing `Phabfive()`, which would cost two round trips
-  (`update_interfaces` + `verify_connection`) on every completion
+  `PHAB_URL` without constructing `Phabfive()`, which validates a whole
+  configuration the key does not need. Constructing makes no request any more -
+  the client is built on first use - but that first use still costs an
+  `update_interfaces` round trip before the lookup
 - Every cache operation is best effort — a miss must never raise, or completion
   breaks
 - A cached call site must use a fetch that **fails** on error. Helpers that

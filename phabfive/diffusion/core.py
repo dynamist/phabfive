@@ -2,6 +2,7 @@
 
 """Main Diffusion class that orchestrates all submodules."""
 
+import functools
 import logging
 
 from phabricator import APIError
@@ -109,9 +110,10 @@ def describe_repository(repo):
 
 
 class Diffusion(Phabfive):
-    def __init__(self):
-        super(Diffusion, self).__init__()
-        self.passphrase = passphrase.Passphrase()
+    @functools.cached_property
+    def passphrase(self):
+        """A Passphrase sharing this instance's configuration and client."""
+        return passphrase.Passphrase._from_parent(self)
 
     # Wrapper methods that delegate to submodules while maintaining self.phab access
 

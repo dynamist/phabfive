@@ -81,9 +81,6 @@ log = logging.getLogger(__name__)
 
 
 class Maniphest(Phabfive):
-    def __init__(self):
-        super(Maniphest, self).__init__()
-
     # Wrapper methods that delegate to submodules while maintaining self.phab access
 
     def _resolve_project_phids(self, project: str) -> list[str]:

@@ -237,9 +237,49 @@ class Phabfive:
                     f"(length: {len(line)}). Use --format=yaml for guaranteed valid YAML output."
                 )
 
-    def __init__(self):
-        """ """
-        self.conf = self.load_config()
+    def __init__(
+        self, url=None, token=None, *, config=None, verify=False, select_host=None
+    ):
+        """Configure an instance and, if asked, check the connection.
+
+        With no arguments the configuration is discovered the way the command
+        discovers it - /etc and ~/.config yaml, `.arcconfig` in the git root,
+        `~/.arcrc` and the environment; see `read_config`.
+
+        Passing any of `url`, `token` or `config` configures the instance
+        explicitly instead, and nothing is discovered: the hard-coded defaults,
+        then `config`, then `url` and `token`. A program that knows where it is
+        talking to is then independent of whoever runs it and wherever they
+        run it from.
+
+        Parameters
+        ----------
+        url : str, optional
+            The instance, e.g. ``https://phorge.example.com``. The ``/api/``
+            suffix is added when missing.
+        token : str, optional
+            A Conduit API token.
+        config : dict, optional
+            Any of the CONFIGURABLES keys, e.g. ``{"PHAB_SPACE": "S2"}``.
+        verify : bool
+            Check the connection now with a ``user.whoami`` call. Off by
+            default, so constructing makes no request at all: the client is
+            built on first use, and a bad token surfaces from the first call.
+        select_host : callable, optional
+            Called with the list of hosts when ``~/.arcrc`` holds several and
+            nothing says which to use. Returns the chosen one. Only consulted
+            when discovering.
+
+        Raises
+        ------
+        PhabfiveConfigException
+            When a required value is missing or malformed.
+        """
+        if url is None and token is None and config is None:
+            self.conf = self.load_config(select_host=select_host)
+        else:
+            self.conf = self._explicit_config(url, token, config)
+            self._explicit_phab_url = bool(self.conf.get("PHAB_URL"))
 
         maxlen = 8 + len(max(dict(self.conf).keys(), key=len))
 
@@ -281,7 +321,49 @@ class Phabfive:
 
         self.url = f"{url.scheme}://{url.netloc}"
 
-        self.verify_connection()
+        if verify:
+            self.verify_connection()
+
+    @classmethod
+    def _explicit_config(cls, url, token, config):
+        """Build a configuration from arguments alone, discovering nothing."""
+        config = dict(config or {})
+
+        unknown = sorted(set(config) - set(CONFIGURABLES))
+        if unknown:
+            raise PhabfiveConfigException(
+                f"Unknown configuration key(s): {', '.join(unknown)}. "
+                f"Known keys: {', '.join(CONFIGURABLES)}"
+            )
+
+        conf = copy.deepcopy(DEFAULTS)
+        conf.update(config)
+        if url is not None:
+            conf["PHAB_URL"] = url
+        if token is not None:
+            conf["PHAB_TOKEN"] = token
+
+        # Forgive the one thing everybody gets wrong: the instance's address
+        # rather than its API endpoint.
+        if conf["PHAB_URL"]:
+            conf["PHAB_URL"] = cls._normalize_url(conf["PHAB_URL"])
+
+        return conf
+
+    @classmethod
+    def _from_parent(cls, parent):
+        """Make an instance that shares `parent`'s configuration and client.
+
+        For an app that needs another app's methods - Diffusion reading
+        credentials through Passphrase, Edit editing through Maniphest.
+        Constructing the sibling would read the configuration again, and
+        build and connect a second client to the same host.
+        """
+        child = cls.__new__(cls)
+        for name in ("conf", "url", "phab", "_explicit_phab_url"):
+            if hasattr(parent, name):
+                setattr(child, name, getattr(parent, name))
+        return child
 
     def _client_factory(self):
         """Return the recipe for this instance's Conduit client.
@@ -343,7 +425,7 @@ class Phabfive:
             )
 
     @classmethod
-    def _load_arcrc(cls, current_conf):
+    def _load_arcrc(cls, current_conf, select_host=None):
         """
         Load configuration from Arcanist's ~/.arcrc file.
 
@@ -449,7 +531,14 @@ class Phabfive:
                             f"Default host '{default_host}' in .arcrc doesn't match any configured host"
                         )
 
-                if not result:
+                if not result and select_host is not None:
+                    # No default or default didn't match: the caller chooses
+                    selected = select_host(list(hosts.keys()))
+                    result["PHAB_URL"] = selected
+                    token = hosts[selected].get("token")
+                    if token:
+                        result["PHAB_TOKEN"] = token
+                elif not result:
                     # No default or default didn't match
                     if sys.stdin.isatty():
                         from InquirerPy import inquirer as inq
@@ -537,18 +626,18 @@ class Phabfive:
         log.debug(f"Using PHAB_URL from .arcconfig: {normalized}")
         return {"PHAB_URL": normalized}
 
-    def load_config(self):
+    def load_config(self, select_host=None):
         """
         Load configuration and remember whether PHAB_URL was chosen explicitly.
 
         See read_config for the search order.
         """
-        conf, explicit_phab_url = type(self).read_config()
+        conf, explicit_phab_url = type(self).read_config(select_host=select_host)
         self._explicit_phab_url = explicit_phab_url
         return conf
 
     @classmethod
-    def read_config(cls):
+    def read_config(cls, select_host=None):
         """
         Load configuration from configuration files and environment variables.
 
@@ -563,9 +652,16 @@ class Phabfive:
           7. `~/.arcrc` (Arcanist configuration)
           8. environment variables
 
-        A classmethod because the cache needs PHAB_URL to key its entries, and
-        building a Phabfive() to get it would cost two API round trips
-        (update_interfaces and verify_connection) on every shell completion.
+        A classmethod because the cache needs PHAB_URL to key its entries
+        before it knows whether it will ask the server anything, and a
+        Phabfive() validates a whole configuration it does not need.
+
+        Parameters
+        ----------
+        select_host : callable, optional
+            Called with the list of hosts when ~/.arcrc holds several, no
+            PHAB_URL is configured and ~/.arcrc names no default. Returns the
+            chosen host.
 
         Returns
         -------
@@ -678,7 +774,7 @@ class Phabfive:
         arcrc_lookup_conf = dict(conf)
         if "PHAB_URL" in environ and environ["PHAB_URL"]:
             arcrc_lookup_conf["PHAB_URL"] = environ["PHAB_URL"]
-        arcrc_conf = cls._load_arcrc(arcrc_lookup_conf)
+        arcrc_conf = cls._load_arcrc(arcrc_lookup_conf, select_host=select_host)
         if arcrc_conf:
             log.debug("Merging configuration from ~/.arcrc")
             anyconfig.merge(conf, arcrc_conf)

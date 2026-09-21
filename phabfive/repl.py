@@ -19,9 +19,6 @@ except ImportError:
 
 
 class Repl(Phabfive):
-    def __init__(self):
-        super().__init__()
-
     def run(self):
         print("phabfive REPL")
         print("  phab  - Phabricator API client")

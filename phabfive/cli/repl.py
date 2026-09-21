@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 """REPL command for phabfive CLI."""
 
-import sys
-
 import typer
 
-from phabfive.exceptions import PhabfiveConfigException
 
 repl_app = typer.Typer(
     help="Enter a REPL with API access",
@@ -16,18 +13,7 @@ repl_app = typer.Typer(
 @repl_app.callback(invoke_without_command=True)
 def repl_callback(ctx: typer.Context) -> None:
     """Start an interactive REPL session with Phabricator API access."""
-    import requests
-
+    from phabfive.cli.apps import get_app
     from phabfive.repl import Repl
 
-    try:
-        repl = Repl()
-        repl.run()
-    except PhabfiveConfigException as e:
-        from phabfive.setup import offer_setup_on_error
-
-        if not offer_setup_on_error(str(e)):
-            raise typer.Exit(1)
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
-        raise typer.Exit(1)
+    get_app(Repl).run()

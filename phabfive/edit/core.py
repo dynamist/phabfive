@@ -5,6 +5,7 @@ Provides a unified edit command that auto-detects object type from monogram
 and routes to the appropriate editor.
 """
 
+import functools
 import logging
 import sys
 
@@ -26,10 +27,10 @@ log = logging.getLogger(__name__)
 class Edit(Phabfive):
     """Edit handler for Phabricator objects."""
 
-    def __init__(self):
-        """Initialize the Edit handler."""
-        super().__init__()
-        self.maniphest = Maniphest()
+    @functools.cached_property
+    def maniphest(self):
+        """A Maniphest sharing this instance's configuration and client."""
+        return Maniphest._from_parent(self)
 
     def edit_objects(
         self,

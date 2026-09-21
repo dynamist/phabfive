@@ -29,9 +29,6 @@ CREDENTIAL_TYPE_FILTERS = {
 
 
 class Passphrase(Phabfive):
-    def __init__(self):
-        super(Passphrase, self).__init__()
-
     def _validate_identifier(self, id_):
         return re.match(f"^{MONOGRAMS['passphrase']}$", id_)
 
