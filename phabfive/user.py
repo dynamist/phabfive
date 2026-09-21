@@ -38,9 +38,6 @@ def _contains(field, text):
 
 
 class User(Phabfive):
-    def __init__(self):
-        super(User, self).__init__()
-
     def whoami(self):
         """Return filtered user info dict with userName, realName, primaryEmail, uri."""
         try:

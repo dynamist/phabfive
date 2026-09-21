@@ -93,11 +93,10 @@ def _phab_with_repos(repos):
 
 def _listing(repos):
     """A Diffusion wired to a mock API, ready for repo_list() and uri_list()."""
-    with (
-        patch("phabfive.diffusion.core.Phabfive.__init__", return_value=None),
-        patch("phabfive.diffusion.core.passphrase.Passphrase"),
-    ):
+    with patch("phabfive.diffusion.core.Phabfive.__init__", return_value=None):
         diffusion = Diffusion()
+    # Built from the parent on first use, so it is replaced rather than patched
+    diffusion.passphrase = MagicMock()
 
     diffusion.phab = _phab_with_repos(repos)
     diffusion.url = "http://phorge.localhost"
@@ -109,11 +108,10 @@ def _listing(repos):
 
 @pytest.fixture
 def diffusion():
-    with (
-        patch("phabfive.diffusion.core.Phabfive.__init__", return_value=None),
-        patch("phabfive.diffusion.core.passphrase.Passphrase"),
-    ):
+    with patch("phabfive.diffusion.core.Phabfive.__init__", return_value=None):
         diffusion = Diffusion()
+    # Built from the parent on first use, so it is replaced rather than patched
+    diffusion.passphrase = MagicMock()
     diffusion.phab = MagicMock()
     diffusion.phab.diffusion.repository.edit.return_value = {
         "object": {"phid": "PHID-REPO-new"}
@@ -2595,11 +2593,10 @@ def _show_uri(uri, io="observe", display="always", disabled=False, builtin=None)
 
 def _showable(repos, branches=None, tags=None):
     """A Diffusion wired to a mock API, ready for repo_show()."""
-    with (
-        patch("phabfive.diffusion.core.Phabfive.__init__", return_value=None),
-        patch("phabfive.diffusion.core.passphrase.Passphrase"),
-    ):
+    with patch("phabfive.diffusion.core.Phabfive.__init__", return_value=None):
         diffusion = Diffusion()
+    # Built from the parent on first use, so it is replaced rather than patched
+    diffusion.passphrase = MagicMock()
 
     diffusion.phab = MagicMock()
     diffusion.url = "http://phorge.localhost"

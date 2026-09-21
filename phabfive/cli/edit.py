@@ -17,28 +17,15 @@ from phabfive.cli.completers import (
 )
 from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.editor import resolve_assume_yes
-from phabfive.exceptions import PhabfiveConfigException
 from phabfive.policy import POLICY_GRAMMAR
 
 
 def _get_edit_app():
     """Get Edit app instance with config error handling."""
-    import requests
-
+    from phabfive.cli.apps import get_app
     from phabfive.edit import Edit
 
-    try:
-        return Edit()
-    except PhabfiveConfigException as e:
-        from phabfive.setup import offer_setup_on_error
-
-        if not offer_setup_on_error(str(e)):
-            raise typer.Exit(1)
-        # If setup succeeded, try again
-        return Edit()
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
-        raise typer.Exit(1)
+    return get_app(Edit)
 
 
 def edit_command(

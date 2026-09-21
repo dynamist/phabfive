@@ -36,22 +36,10 @@ diffusion_app.add_typer(uri_app, name="uri")
 
 def _get_diffusion_app():
     """Get Diffusion app instance with config error handling."""
-    import requests
-
+    from phabfive.cli.apps import get_app
     from phabfive.diffusion import Diffusion
 
-    try:
-        return Diffusion()
-    except PhabfiveConfigException as e:
-        from phabfive.setup import offer_setup_on_error
-
-        if not offer_setup_on_error(str(e)):
-            raise typer.Exit(1)
-        # If setup succeeded, try again
-        return Diffusion()
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
-        raise typer.Exit(1)
+    return get_app(Diffusion)
 
 
 def _show_repos_after_write(ctx, diffusion, repo_ids):

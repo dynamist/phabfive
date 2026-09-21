@@ -7,6 +7,7 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
+from phabfive.cli.apps import new_app
 from phabfive.cli.completers import complete_user_role
 from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
@@ -43,7 +44,7 @@ def whoami(
     _setup_output_options(ctx)
 
     try:
-        user = User()
+        user = new_app(User)
 
         if all_hosts or not user.has_explicit_phab_url():
             results = user.whoami_all_hosts()
@@ -138,7 +139,7 @@ def search(
     _setup_output_options(ctx)
 
     try:
-        user = User()
+        user = new_app(User)
         records = user.search(
             query=query,
             username=username,

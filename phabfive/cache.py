@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """On-disk cache for the API lookups that shell completion repeats.
 
-Every API-backed completion queries the server on each TAB, and building a
-Phabfive() to do it costs two round trips of its own (update_interfaces and
-verify_connection) before the lookup even starts. A TAB pressed twice, which
+Every API-backed completion queries the server on each TAB, and the first
+call through a Phabfive() costs a round trip of its own (update_interfaces,
+for the method list) before the lookup even starts. A TAB pressed twice, which
 is how bash is normally driven, pays all of that twice.
 
 Call sites opt in. Nothing here hooks the Phabricator client, so an API

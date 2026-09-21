@@ -39,7 +39,7 @@ class SetupWizard:
             from phabfive.core import Phabfive
 
             # Try to create a Phabfive instance - this validates config and connection
-            phabfive = Phabfive()
+            phabfive = Phabfive(verify=True)
             whoami = phabfive.phab.user.whoami()
             username = whoami.get("userName", "unknown")
 

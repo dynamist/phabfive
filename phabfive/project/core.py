@@ -62,9 +62,6 @@ def check_project_color(color):
 
 
 class Project(Phabfive):
-    def __init__(self):
-        super(Project, self).__init__()
-
     def get_project(self, ident, attachments=None):
         """Resolve one project identifier to its project.search record.
 

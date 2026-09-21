@@ -28,7 +28,6 @@ from phabfive.cli.output import (
 )
 from phabfive.constants import MONOGRAMS
 from phabfive.editor import resolve_assume_yes
-from phabfive.exceptions import PhabfiveConfigException
 from phabfive.display import render_records
 from phabfive.json_output import emit_records
 from phabfive.table import display_records_table
@@ -40,22 +39,10 @@ paste_app = typer.Typer(
 
 def _get_paste_app():
     """Get Paste app instance with config error handling."""
-    import requests
-
+    from phabfive.cli.apps import get_app
     from phabfive.paste import Paste
 
-    try:
-        return Paste()
-    except PhabfiveConfigException as e:
-        from phabfive.setup import offer_setup_on_error
-
-        if not offer_setup_on_error(str(e)):
-            raise typer.Exit(1)
-        # If setup succeeded, try again
-        return Paste()
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
-        raise typer.Exit(1)
+    return get_app(Paste)
 
 
 def _show_pastes_after_write(ctx, paste_instance, paste_ids):

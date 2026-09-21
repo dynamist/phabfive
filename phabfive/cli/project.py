@@ -40,22 +40,10 @@ project_app = typer.Typer(
 
 def _get_project_app():
     """Get Project app instance with config error handling."""
-    import requests
-
+    from phabfive.cli.apps import get_app
     from phabfive.project import Project
 
-    try:
-        return Project()
-    except PhabfiveConfigException as e:
-        from phabfive.setup import offer_setup_on_error
-
-        if not offer_setup_on_error(str(e)):
-            raise typer.Exit(1)
-        # If setup succeeded, try again
-        return Project()
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
-        raise typer.Exit(1)
+    return get_app(Project)
 
 
 def _show_projects_after_write(ctx, project, idents):
