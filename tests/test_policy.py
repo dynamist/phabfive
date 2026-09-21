@@ -16,6 +16,7 @@ import pytest
 from phabfive.constants import POLICY_KEYWORDS
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.policy import (
+    PHID_QUERY_CHUNK,
     policy_label,
     policy_lockout_message,
     resolve_policy_names,
@@ -216,6 +217,40 @@ class TestNaming:
         phab.phid.query.side_effect = RuntimeError("boom")
 
         assert resolve_policy_names(phab, ["PHID-PROJ-a"]) == {}
+
+    def test_many_phids_are_asked_about_in_chunks(self):
+        """An audit of every project can carry hundreds of policy PHIDs.
+
+        They are named a chunk at a time rather than in one request, and
+        every one of them still comes back named.
+        """
+        phids = [f"PHID-PROJ-{n:04d}" for n in range(PHID_QUERY_CHUNK * 2 + 1)]
+        phab = MagicMock()
+        phab.phid.query.side_effect = lambda phids: _Result(
+            {
+                phid: {"type": "PROJ", "uri": f"http://x/tag/{phid[-4:]}/"}
+                for phid in phids
+            }
+        )
+
+        names = resolve_policy_names(phab, phids)
+
+        assert phab.phid.query.call_count == 3
+        assert all(
+            len(call.kwargs["phids"]) <= PHID_QUERY_CHUNK
+            for call in phab.phid.query.call_args_list
+        )
+        assert len(names) == len(phids)
+
+    def test_a_failed_chunk_leaves_only_its_own_phids_unnamed(self):
+        phids = [f"PHID-PROJ-{n:04d}" for n in range(PHID_QUERY_CHUNK + 1)]
+        phab = MagicMock()
+        phab.phid.query.side_effect = [
+            RuntimeError("boom"),
+            _Result({phids[-1]: {"type": "PROJ", "uri": "http://x/tag/last/"}}),
+        ]
+
+        assert resolve_policy_names(phab, phids) == {phids[-1]: "#last"}
 
 
 class TestLockout:
