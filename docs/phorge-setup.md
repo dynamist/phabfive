@@ -56,6 +56,12 @@ Eight RMI GUNNAR team members for testing (all share the same password as admin 
 - **tommy.svensson** - Tommy Svensson (tommy.svensson@air.rmi.se)
 - **viola.larsson** - Viola Larsson (viola.larsson@air.rmi.se)
 
+Two more accounts exist so that `user search --role` has something to find. Neither
+has a password:
+
+- **deploy.bot** - Deploy Bot, a bot account (role `bot`)
+- **former.employee** - Former Employee, a disabled account (role `disabled`)
+
 ### Default Projects
 
 Seven projects with 5-column workboards (Backlog → Up Next → In Progress → In Review → Done):

@@ -6,5 +6,7 @@
   {"username": "sonja.bergstrom", "email": "sonja.bergstrom@air.rmi.se", "realname": "Sonja Bergström"},
   {"username": "gabriel.blomqvist", "email": "gabriel.blomqvist@air.rmi.se", "realname": "Gabriel Blomqvist"},
   {"username": "sebastian.soderberg", "email": "sebastian.soderberg@air.rmi.se", "realname": "Sebastian Söderberg"},
-  {"username": "tommy.svensson", "email": "tommy.svensson@air.rmi.se", "realname": "Tommy Svensson"}
+  {"username": "tommy.svensson", "email": "tommy.svensson@air.rmi.se", "realname": "Tommy Svensson"},
+  {"username": "deploy.bot", "email": "deploy.bot@air.rmi.se", "realname": "Deploy Bot", "bot": true},
+  {"username": "former.employee", "email": "former.employee@air.rmi.se", "realname": "Former Employee", "disabled": true}
 ]
