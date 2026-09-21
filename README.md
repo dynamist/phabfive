@@ -259,13 +259,29 @@ The library prints nothing, prompts for nothing and leaves `os.environ` alone.
 It logs through the `logging` module under the `phabfive` logger, and the
 records it returns hold plain strings.
 
+**Errors.** Everything phabfive raises on purpose is a `PhabfiveException`:
+
+| | |
+|---|---|
+| `PhabfiveConfigException` | configuration missing or malformed, or an argument phabfive cannot use |
+| `PhabfiveInputException` | an argument's value is wrong - also a `ValueError` |
+| `PhabfiveDataException` | the data does not allow it |
+| `PhabfiveNotFoundException` | the object does not exist, or is not visible - also a `LookupError` |
+| `PhabfiveNameCollisionException` | a new name is too close to an existing one |
+| `PhabfiveRemoteException` | the server could not be asked, or refused |
+| `PhabfiveAPIException` | Conduit answered with an error; carries `.code` and `.message` |
+| `PhabfiveConnectionException` | the server could not be reached |
+
+A program never needs to import `phabricator` or `requests` to catch what
+phabfive raises.
+
 Every public name is resolved lazily, so `import phabfive` loads no third-party
 module; the module holding a name is imported the first time the name is used.
 
 | | |
 |---|---|
 | Apps | `Maniphest`, `Paste`, `Diffusion`, `Passphrase`, `Project`, `User`, and their base `Phabfive` |
-| Errors | `PhabfiveException`, and its subclasses `PhabfiveConfigException`, `PhabfiveDataException`, `PhabfiveNameCollisionException`, `PhabfiveRemoteException` |
+| Errors | `PhabfiveException`, and its subclasses - see below |
 | Version | `__version__` |
 
 Other modules keep their own `__all__` - `phabfive.transitions`,
