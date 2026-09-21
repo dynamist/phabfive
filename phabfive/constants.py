@@ -236,19 +236,21 @@ PROJECT_POLICY_TRANSACTIONS = {
     "join": "join",
 }
 
-# The statuses `project search --status` takes, spelled the way project.search
-# spells them. "active" is the default and "all" asks for no status filter at
-# all - the word `diffusion repo list all` and `maniphest search --status=all`
-# use for the same thing, so every search says "which statuses" alike. --all
-# is shorthand for it.
+# The statuses `project search --status` takes. "active" is the default and
+# "any" asks for no status filter at all - the word `maniphest search
+# --status=any` uses for the same thing, so both searches say "which
+# statuses" alike. The deprecated --all is an alias for it.
 PROJECT_STATUS_ACTIVE = "active"
 PROJECT_STATUS_ARCHIVED = "archived"
-PROJECT_STATUS_ALL = "all"
+PROJECT_STATUS_ANY = "any"
 PROJECT_STATUS_CHOICES = [
     PROJECT_STATUS_ACTIVE,
     PROJECT_STATUS_ARCHIVED,
-    PROJECT_STATUS_ALL,
+    PROJECT_STATUS_ANY,
 ]
+
+# How project.search spells "any status" in its own status constraint
+PROJECT_STATUS_ALL = "all"
 
 # The icons a stock Phorge offers a project, for completion only. The set is
 # instance configuration (projects.icons) and no Conduit method reports it,

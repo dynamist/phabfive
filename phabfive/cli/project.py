@@ -25,7 +25,7 @@ from phabfive.cli.output import (
 )
 from phabfive.constants import (
     PROJECT_STATUS_ACTIVE,
-    PROJECT_STATUS_ALL,
+    PROJECT_STATUS_ANY,
     PROJECT_STATUS_CHOICES,
 )
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
@@ -224,11 +224,11 @@ def project_search(
     status: Optional[str] = typer.Option(
         None,
         "--status",
-        help="Which projects by status: active (default), archived, or all",
+        help="Which projects by status: active (default), archived, or any",
         autocompletion=complete_project_status,
     ),
     include_all: bool = typer.Option(
-        False, "--all", help="Include archived projects (same as --status=all)"
+        False, "--all", hidden=True, help="Deprecated alias for --status=any"
     ),
     icon: Optional[List[str]] = typer.Option(
         None,
@@ -264,7 +264,7 @@ def project_search(
 
     With no filter at all it lists every active project, subprojects and
     milestones included. --status=archived lists the archived ones, and
-    --status=all, or --all for short, lists both. Unlike `maniphest search` it does not narrow to
+    --status=any lists both. Unlike `maniphest search` it does not narrow to
     PHAB_SPACE on its own: a Space is filtered on only when --space names
     one, so a listing is never quietly missing the projects in other Spaces.
 
@@ -280,7 +280,7 @@ def project_search(
         phabfive project search --parent='#development' --milestones
         phabfive project search --icon=group --color=red,blue
         phabfive project search --status=archived
-        phabfive --format=jsonl project search --all --show-policy -l 0
+        phabfive --format=jsonl project search --status=any --show-policy -l 0
     """
     from phabfive.project.display import display_projects
 
@@ -290,14 +290,16 @@ def project_search(
         raise typer.Exit(1)
 
     if include_all:
-        if status not in (None, PROJECT_STATUS_ALL):
+        sys.stderr.write("WARNING: --all is deprecated, use --status=any instead.\n")
+
+        if status not in (None, PROJECT_STATUS_ANY):
             typer.echo(
-                f"ERROR: --all means --status=all, and cannot be combined "
+                f"ERROR: --all means --status=any, and cannot be combined "
                 f"with --status={status}",
                 err=True,
             )
             raise typer.Exit(1)
-        status = PROJECT_STATUS_ALL
+        status = PROJECT_STATUS_ANY
 
     status = status or PROJECT_STATUS_ACTIVE
 
