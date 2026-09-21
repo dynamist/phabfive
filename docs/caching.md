@@ -46,15 +46,15 @@ token itself is never written out — only a hash of it names the directory.
 
 Entries hold only what completion reads back: a username, a real name and
 whether the account is disabled; a project's id, name and parent name; a
-Space's monogram and name; and the plain lists of priority names and status
-keys. No PHIDs, no policies, no dates.
+Space's monogram and name; and the plain lists of priority names, status keys
+and project icon keys. No PHIDs, no policies, no dates.
 
 ## How long entries live
 
 | Data | Fresh for |
 |---|---|
 | Usernames, Spaces | 24 hours |
-| Priorities, statuses | 7 days |
+| Priorities, statuses, project icons | 7 days |
 | Project names | 5 minutes |
 
 User lists change rarely and instance configuration barely changes at all, while
@@ -71,7 +71,11 @@ finds `GUNNAR-Core` on the server — though only names *starting* with what you
 typed are ever offered, because the shell discards the rest.
 
 Priorities and statuses are whole lists for the instance, so there is nothing
-to narrow: one lookup a week answers every TAB. Spaces are a whole list too,
+to narrow: one lookup a week answers every TAB. Project icons are the same kind
+of list, with one difference: the icon set is instance configuration that no
+Conduit method reports, so `--icon <TAB>` offers Phorge's stock icons plus every
+icon a project on the instance actually carries. An icon that is configured but
+not used by any project yet is not offered, and is still accepted when typed. Spaces are a whole list too,
 and the one that gains most from being kept: they have no search endpoint, so
 finding them means asking `phid.lookup` about `S1`, `S2`, `S3`… over the whole
 range, which is two requests before anything can be offered.
@@ -81,7 +85,9 @@ range, which is two requests before anything can be offered.
 Completion is advisory. A name that is not offered can still be typed, and the
 server resolves it normally — so the worst a stale entry does is make you type
 a colleague's name in full. A new project shows up within five minutes, but a
-newly configured priority or status can take a week. After somebody joins,
+newly configured priority or status can take a week. A project created or
+edited through `phabfive project` shows up straight away: the write drops the
+`projects` namespace, and `project-icons` too when it set an icon. After somebody joins,
 leaves or is renamed, after a project is created, or after the instance's
 priorities or statuses are reconfigured:
 
@@ -102,8 +108,8 @@ phabfive cache clear --all   # drop every instance's, works without credentials
 
 Naming a namespace keeps the rest: after somebody is renamed, `cache clear users`
 costs one slower username completion instead of re-fetching every project too. The
-namespaces are `users`, `projects`, `columns`, `spaces`, `priorities` and
-`statuses`, and they complete, showing what each currently holds:
+namespaces are `users`, `projects`, `project-icons`, `columns`, `spaces`,
+`priorities` and `statuses`, and they complete, showing what each currently holds:
 
 ```console
 $ phabfive cache clear <TAB>

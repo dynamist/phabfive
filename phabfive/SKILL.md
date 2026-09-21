@@ -1,13 +1,13 @@
 ---
 name: phabfive
-description: "Read and change Phabricator/Phorge objects - Maniphest tasks, Pastes, Diffusion repositories and Passphrase credentials - through the phabfive CLI. Use when the user names phabfive or a Phabricator/Phorge instance, or refers to a T, P, K or R monogram such as T123. Do not use for other issue trackers such as Jira, GitHub or GitLab. Requires PHAB_URL and PHAB_TOKEN."
+description: "Read and change Phabricator/Phorge objects - Maniphest tasks, Pastes, Diffusion repositories, Projects and Passphrase credentials - through the phabfive CLI. Use when the user names phabfive or a Phabricator/Phorge instance, or refers to a T, P, K or R monogram such as T123. Do not use for other issue trackers such as Jira, GitHub or GitLab. Requires PHAB_URL and PHAB_TOKEN."
 ---
 
 # phabfive
 
 phabfive is a command line client for Phabricator and Phorge. It covers Maniphest
-(tasks), Paste, Diffusion (repositories) and Passphrase (credentials), and prints
-machine-readable YAML or JSON on request.
+(tasks), Paste, Diffusion (repositories), Projects and Passphrase (credentials), and
+prints machine-readable YAML or JSON on request.
 
 Before anything else, confirm the CLI is configured and can reach a server:
 
@@ -35,6 +35,7 @@ Then print a group's subcommands by running the group on its own:
 phabfive maniphest
 phabfive paste
 phabfive diffusion
+phabfive project
 phabfive passphrase
 phabfive user
 phabfive cache
@@ -65,8 +66,8 @@ Global options must come **before** the subcommand. `phabfive maniphest show T12
 - `rich`, `tree` and `table` are for humans. `rich` refuses to render a line longer than
   4096 characters and raises instead, which real task descriptions do hit.
 - `table` is a grid, and list-shaped: `diffusion repo list`, `diffusion uri list`,
-  `maniphest search`, `maniphest parents`, `maniphest subtasks` and `paste search` render
-  one row per record. A `show` command registers no table and falls back to `rich`. The
+  `maniphest search`, `maniphest parents`, `maniphest subtasks`, `paste search` and
+  `project search` render one row per record. A `show` command registers no table and falls back to `rich`. The
   columns are derived from the record, a cell is cut to 60 characters, and a column empty
   in every row is dropped - so never parse it, ask for `json` instead.
 - `value` prints bare values - no keys, no header, no decoration - for piping. Which
@@ -87,16 +88,18 @@ parses for every command, including the ones that write.
 **Every** command honours `--format`, the ones that write included. A write answers a
 machine-readable format with the same record `show` gives for the object it touched, so
 the link and every field arrive together - `maniphest create/edit/comment`, the bare
-`edit`, `paste create/edit/comment`, `diffusion repo create/edit` and
-`diffusion uri create/edit`:
+`edit`, `paste create/edit/comment`, `diffusion repo create/edit`,
+`diffusion uri create/edit` and `project create/edit`:
 
 ```bash
 phabfive --format=json maniphest create "probe" --yes | jq -r '.[0].Link'
 phabfive --format=json maniphest edit T123 --priority=high --yes | jq -r '.[0].Task.Priority'
 phabfive --format=json paste create "notes" --content=- --yes | jq -r '.[0].Link'
 phabfive --format=json diffusion repo create probe --yes | jq -r '.[0].Repository.Monogram'
+phabfive --format=json project create "Probe" | jq -r '.[0].Project.Hashtag'
 ```
 
+`project edit` reports by ID for the same reason, since `--name` moves the hashtag.
 `repo edit` reports by monogram, because `--short-name` can move the short name out from
 under the identifier you looked it up by. A URI write answers with the repository's URI
 records - what `diffusion uri list` gives - because a URI has no page of its own and
@@ -545,6 +548,70 @@ that nothing will consult it yet.
 
 A repository is addressable by monogram (`R5`), callsign or short name. Not every
 repository has a short name, so prefer the monogram when scripting.
+
+```bash
+phabfive --format=json project show '#development'
+phabfive --format=json project show '#humans' --show-members
+phabfive --format=json project show 13 --show-policy --show-metadata
+phabfive --format=table project search
+phabfive --format=json project search --member=@me
+phabfive --format=json project search --parent='#development' --milestones
+phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0
+phabfive project create "Platform" --icon=infrastructure --member=@me,@alice --dry-run
+phabfive project create "Backend" --parent='#platform' --dry-run
+phabfive project create "Sprint 2" --milestone-of='#platform' --dry-run
+phabfive project edit '#platform' --add-member=@bob --remove-member=@alice --dry-run
+phabfive project edit '#platform' --add-slug=plat --editable-by='#platform' --dry-run
+```
+
+A project is named by `#hashtag`, bare hashtag, ID, PHID or exact name - quote a
+hashtag, or the shell reads `#` as a comment. A milestone has no hashtag and usually
+shares its name with other teams' milestones ("Sprint 1"), so name one by its ID: a
+name two projects share is refused, and the error lists the ID of each. There is no
+monogram shortcut for projects.
+
+`project show` answers with a `Link` and a `Project` section - `Name`, `Hashtag`,
+`Status`, `Icon`, `Color`, `Parent`, `Milestone`, `Description` - and `Space`, plus
+`Policy` (`--show-policy` / `-P`), `Members` (`--show-members`) and `Metadata`
+(`--show-metadata` / `-M`) when asked. Every project carries the same `Project` keys,
+a milestone included: `Hashtag` is null on a milestone and `Parent` is null on a root
+project. `Members` lists each member as `Username`, `Name` and `Roles`, the roles
+passed through from Phorge unchanged - `bot`, `admin`, `disabled`, `verified` and so
+on - which is how to tell a bot account from a person:
+
+```bash
+phabfive --format=json project show '#humans' --show-members \
+  | jq -r '.[0].Members[] | select(.Roles | index("bot") | not) | .Username'
+```
+
+`project search` answers with those same records, sorted by name. `--status` picks
+`active` (the default), `archived` or `any`; `--all` is a deprecated alias for
+`--status=any` and warns on stderr. Subprojects and milestones are included unless
+`--milestones` or `--no-milestones` says otherwise. The other filters are `--member`,
+`--parent`, `--ancestor`, `--icon`, `--color` and `--space`, and a free-text query as
+the argument. Like `maniphest search` it looks only in `PHAB_SPACE` unless `--space`
+names other Spaces, so every project on the instance is
+`--status=any --space='*' -l 0`; `--show-policy` costs one extra lookup for the whole
+listing, not one per project.
+
+`project create` takes `--description`, `--icon`, `--color`, `--slug`, `--member`,
+`--space` and the three policies, and `--parent` for a subproject or `--milestone-of`
+for a milestone, which takes no `--icon` or `--slug`. `project edit` takes `--name`,
+`--description`, `--icon`, `--color`, `--add-slug`, `--add-member`, `--remove-member`,
+`--space` and the three policies; anything already at its target is left out, and
+adding a hashtag keeps the ones already there. A name whose hashtag another project
+has is refused before anything is sent. The list options are repeatable and
+comma-separated: `--member=@a,@b --member=@c`.
+
+The policies are `--visible-to`, `--editable-by` and `--joinable-by`, in the same
+grammar as a repository's, reported under `Policy` as `Visible To`, `Editable By` and
+`Joinable By` - a project being the one object whose third capability is in the
+`-able By` family. Restricting a project's view or edit policy to the project itself
+locks out anyone not in it, you included, unless you are a member; Phorge refuses
+that and it is reported as a sentence.
+
+A project cannot be archived, unarchived or deleted through Conduit - there is no
+transaction for it - so do that in the web UI.
 
 Search constraints are named per application and are not interchangeable: `paste search`
 has `--author` but no `--assigned`, and a constraint borrowed from another app fails with

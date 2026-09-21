@@ -150,6 +150,39 @@
   cell arrives whole. `table` is a human format and is deliberately not accepted for
   `PHAB_FALLBACK`
 
+### Projects
+* **`project show`, `project search`, `project create` and `project edit`** - phabfive
+  had no way to manage a project (#418). A project is named by `#hashtag`, bare
+  hashtag, ID, PHID or exact name; a name two projects share, as every team's
+  "Sprint 1" milestone does, is refused with the ID of each rather than one being
+  picked
+* **`--show-members`** - Lists each member with their `Username`, `Name` and
+  `Roles`, the roles passed through from Phorge unchanged - `bot`, `admin`,
+  `disabled` - which is what lets a script tell a bot account from a person
+* **Subprojects and milestones** - `project create --parent` and `--milestone-of`,
+  and `project search --parent`, `--ancestor` and `--milestones`
+* **Project policies** - `--visible-to`, `--editable-by` and `--joinable-by` on
+  `project create` and `project edit`, in the shared policy grammar, and
+  `--show-policy` reports them as `Visible To`, `Editable By` and `Joinable By`
+* **Auditing every project** - `phabfive --format=jsonl project search --status=any
+  --space='*' --show-policy -l 0` lists every project on the instance with its
+  policies, one per line, at the cost of one extra lookup for the whole listing.
+  `project search` looks in `PHAB_SPACE` unless `--space` says otherwise, as
+  `maniphest search` does, and `--status` takes `active`, `archived` or `any`
+* **Hashtags are kept** - `project edit --add-slug` reads the full list of hashtags
+  before adding one, because Phorge's hashtag transaction replaces the list and
+  `project.search` reports only the primary one
+* **Repeatable and comma-separated** - `--member @a,@b --member @c` names three
+  members, and every list option on the project commands reads that way.
+  `maniphest edit --subscribe` goes through the same rule, and now drops a name
+  given twice
+* **`--icon` completion** - Offers Phorge's stock icons plus every icon in use on
+  the instance, cached for a week in the new `project-icons` namespace, since the
+  icon set is instance configuration no Conduit method reports. A project write
+  drops the cached project names, so a new or renamed project completes at once
+* A project cannot be archived, unarchived or deleted through Conduit, so none of
+  these commands can
+
 ### Newline-Delimited JSON Output
 * **`--format=jsonl`** - Emits one JSON object per line with no wrapping array
   ([JSON Lines](https://jsonlines.org/)), written and flushed per record. Works
