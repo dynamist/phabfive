@@ -107,6 +107,16 @@ phabfive --format=json project show '#humans' --show-members \
 Naming the members costs one `user.search` for all of them, and it is only made
 when `--show-members` is given.
 
+`phabfive user search` gives each user in the same shape (`Username`, `Name`,
+`Roles`) under `User`. That makes the other half of a membership check a diff.
+For example, to list every person who can use the instance but is not in `#humans`:
+
+```bash
+comm -23 \
+  <(phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0 | jq -r .User.Username | sort) \
+  <(phabfive --format=json project show '#humans' --show-members | jq -r '.[0].Members[].Username' | sort)
+```
+
 ## Searching projects
 
 ```bash

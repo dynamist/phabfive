@@ -66,8 +66,9 @@ Global options must come **before** the subcommand. `phabfive maniphest show T12
 - `rich`, `tree` and `table` are for humans. `rich` refuses to render a line longer than
   4096 characters and raises instead, which real task descriptions do hit.
 - `table` is a grid, and list-shaped: `diffusion repo list`, `diffusion uri list`,
-  `maniphest search`, `maniphest parents`, `maniphest subtasks`, `paste search` and
-  `project search` render one row per record. A `show` command registers no table and falls back to `rich`. The
+  `maniphest search`, `maniphest parents`, `maniphest subtasks`, `paste search`,
+  `project search` and `user search` render one row per record. A `show` command
+  registers no table and falls back to `rich`. The
   columns are derived from the record, a cell is cut to 60 characters, and a column empty
   in every row is dropped - so never parse it, ask for `json` instead.
 - `value` prints bare values - no keys, no header, no decoration - for piping. Which
@@ -619,6 +620,29 @@ that and it is reported as a sentence.
 
 A project cannot be archived, unarchived or deleted through Conduit - there is no
 transaction for it - so do that in the web UI.
+
+```bash
+phabfive --format=table user search
+phabfive --format=json user search viola
+phabfive --format=json user search --role=admin
+phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0
+```
+
+`user search` lists users, each as a `Link` and a `User` section of `Username`,
+`Name` and `Roles` - the same record `project show --show-members` gives for each
+member, so the two compare directly. `Metadata` is added with `--show-metadata` /
+`-M`. The roles are Phorge's own: `disabled`, `bot`, `list` (a mailing list),
+`admin`, `verified`, `approved` and `activated`. `--role` keeps users with every
+role named and `--not-role` drops users with any of them, both repeatable and
+comma-separated; an unknown role is refused. So every person who can use the
+instance is `--not-role=bot,list,disabled`, and the members of a project who are
+missing from it are a diff away:
+
+```bash
+comm -23 \
+  <(phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0 | jq -r .User.Username | sort) \
+  <(phabfive --format=json project show '#humans' --show-members | jq -r '.[0].Members[].Username' | sort)
+```
 
 Search constraints are named per application and are not interchangeable: `paste search`
 has `--author` but no `--assigned`, and a constraint borrowed from another app fails with
