@@ -8,7 +8,7 @@ import pytest
 import requests
 import typer
 
-from phabfive.cli.apps import get_app, new_app
+from phabfive.cli.apps import get_app, new_app, prompt_host
 from phabfive.exceptions import PhabfiveConfigException
 
 
@@ -19,7 +19,15 @@ class TestNewApp:
 
         new_app(cls)
 
-        cls.assert_called_once_with(verify=True)
+        cls.assert_called_once_with(verify=True, select_host=prompt_host)
+
+
+class TestPromptHost:
+    def test_no_terminal_declines(self):
+        """Declining leaves core to explain how to choose; nothing blocks."""
+        with mock.patch("sys.stdin") as stdin:
+            stdin.isatty.return_value = False
+            assert prompt_host(["https://a/api/", "https://b/api/"]) is None
 
 
 class TestGetApp:
