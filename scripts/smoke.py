@@ -16,11 +16,21 @@ container image -- so the checks cannot drift apart between them.
     python scripts/smoke.py --venv /tmp/fresh-venv
     python scripts/smoke.py --venv .venv --expect-version 0.10.0.dev0
 
+phabfive is also a library, and --venv adds a check for that: the wheel has
+to import and resolve every name in phabfive.__all__ without dragging in the
+CLI. Note that phabfive/__init__.py reaches its modules through
+import_module(<variable>), which PyInstaller's module graph cannot follow --
+the frozen builds are whole only because phabfive/cli/ imports every library
+module statically. A module that only _LAZY reaches needs a --hidden-import in
+the release workflow, and nothing here would catch its absence: the library
+check runs for --venv only.
+
 Deliberately imports nothing outside the standard library: it has to run on a
 bare CI runner and inside a distro image that has no pip.
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -46,6 +56,10 @@ COMMAND_GROUPS = ["maniphest", "diffusion", "passphrase", "paste", "user", "cach
 # So only require that it looks like a version, and compare versions with
 # canonical_version() rather than as strings.
 VERSION_PATTERN = re.compile(r"^\d+\.\d+[0-9A-Za-z.\-+]*$")
+
+# What phabfive/__init__.py reports when importlib.metadata has no phabfive to
+# find. Importable, but never a real release artifact -- see check_version.
+NO_METADATA_VERSION = "0.0.0+unknown"
 
 # A frozen build that lost a module reports it as a traceback on stderr and
 # still exits non-zero, which a "did it fail?" check alone would accept.
@@ -73,6 +87,24 @@ def resolve_executable(args) -> str:
             return os.path.abspath(candidate)
 
     sys.exit(f"no phabfive console script in venv: {args.venv}")
+
+
+def resolve_python(venv) -> str:
+    """The interpreter inside `venv`, for the library import check.
+
+    Absolute but deliberately *not* resolved: bin/python is a symlink to the
+    base interpreter, and following it lands outside the venv, where
+    sys.prefix no longer finds pyvenv.cfg and the venv's site-packages is
+    never put on sys.path. The check would then fail with ModuleNotFoundError
+    on a wheel that installed perfectly. Hence os.path.abspath, never
+    os.path.realpath or Path.resolve.
+    """
+    for relative in ("bin/python", "Scripts/python.exe", "Scripts/python"):
+        candidate = os.path.join(venv, *relative.split("/"))
+        if os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+
+    sys.exit(f"no python in venv: {venv}")
 
 
 def smoke_env(home: str, url: str = DEAD_URL) -> dict:
@@ -156,15 +188,88 @@ def check_version(executable, home, timeout, expected):
     Every module under phabfive/cli/ is imported at the top of
     phabfive/cli/__init__.py, so this alone is what catches an undeclared
     dependency like the missing click.
+
+    A build that did not carry the distribution metadata does not fail to
+    start: phabfive.__version__ falls back to NO_METADATA_VERSION so that a
+    vendored or never-installed tree stays importable as a library. That
+    string matches VERSION_PATTERN, and a run without --expect-version would
+    go green on a build that lost its dist-info, so reject it outright. A
+    release artifact has its metadata or it is broken.
     """
     output = expect_success(executable, ["--version"], home, timeout).strip()
 
     if not VERSION_PATTERN.match(output):
         raise Failure(f"not a version: {output!r}")
+    if output == NO_METADATA_VERSION:
+        raise Failure(
+            "reported the no-metadata fallback -- the build lost its dist-info"
+        )
     if expected and canonical_version(output) != canonical_version(expected):
         raise Failure(f"reported {output!r}, expected {expected!r}")
 
     return output
+
+
+# Run inside the venv's own interpreter. One program, so the whole library
+# contract is one subprocess: the front door opens, the version is real, every
+# promised name resolves, and neither the import nor touching the names drags
+# in the CLI or changes the environment.
+LIBRARY_PROGRAM = """
+import json, os, sys
+before = dict(os.environ)
+import phabfive
+
+heavy = [n for n in ("phabricator", "requests", "rich", "typer", "click")
+         if n in sys.modules]
+missing = [n for n in phabfive.__all__ if not hasattr(phabfive, n)]
+cli = [n for n in ("typer", "click", "InquirerPy", "phabfive.cli")
+       if n in sys.modules]
+json.dump(
+    {"version": phabfive.__version__, "heavy": heavy, "missing": missing,
+     "cli": cli, "environ": before == dict(os.environ),
+     "names": len(phabfive.__all__)},
+    sys.stdout,
+)
+"""
+
+
+def check_library_import(python, home, timeout):
+    """`import phabfive` works, promises what it says, and stays cheap.
+
+    tests/test_public_api.py covers this against the source tree; this covers
+    it against the artifact a consumer actually installs. It is the only check
+    that treats phabfive as a library rather than a command, so it is what
+    would catch a build that stopped shipping a module, a py.typed that went
+    missing, or a dependency only the library path needs going undeclared.
+
+    Venv only: a one-file executable has no interpreter to drive, and is not a
+    library consumer.
+    """
+    code, output = run(python, ["-c", LIBRARY_PROGRAM], home, timeout)
+    if code != 0:
+        raise Failure(f"import phabfive failed\n{indent(output)}")
+
+    try:
+        result = json.loads(output)
+    except json.JSONDecodeError:
+        raise Failure(f"no result\n{indent(output)}")
+
+    if result["missing"]:
+        raise Failure(
+            f"__all__ promises names that do not resolve: {result['missing']}"
+        )
+    if result["version"] == NO_METADATA_VERSION:
+        raise Failure("imported, but the distribution metadata is missing")
+    if result["heavy"]:
+        raise Failure(
+            f"a bare `import phabfive` pulled in {', '.join(result['heavy'])}"
+        )
+    if result["cli"]:
+        raise Failure(f"touching the public names imported {', '.join(result['cli'])}")
+    if not result["environ"]:
+        raise Failure("importing phabfive changed os.environ")
+
+    return f"{result['names']} names, nothing eager"
 
 
 def check_help(executable, home, timeout):
@@ -343,6 +448,17 @@ def main() -> int:
     ]
     checks += [
         ("--skill", lambda home: check_skill(executable, home, args.timeout)),
+    ]
+    if args.venv:
+        # Only a venv has an interpreter to import phabfive with.
+        python = resolve_python(args.venv)
+        checks += [
+            (
+                "library import",
+                lambda home: check_library_import(python, home, args.timeout),
+            ),
+        ]
+    checks += [
         (
             "shell completion",
             lambda home: check_completion(executable, home, args.timeout),
