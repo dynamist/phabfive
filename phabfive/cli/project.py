@@ -19,6 +19,7 @@ from phabfive.cli.completers import (
     forget_projects,
 )
 from phabfive.cli.output import (
+    _echo_no_match_hint,
     _get_output_format,
     _setup_output_options,
     is_machine_format,
@@ -329,6 +330,7 @@ def project_search(
 
     if not result.get("projects"):
         typer.echo("No projects found", err=True)
+        _echo_no_match_hint(query)
         return
 
     display_projects(result, _get_output_format(ctx), project, tabular=True)

@@ -21,6 +21,7 @@ from phabfive.cli.completers import (
     complete_user_filter,
 )
 from phabfive.cli.output import (
+    _echo_no_match_hint,
     _get_output_format,
     _setup_output_options,
     is_machine_format,
@@ -148,6 +149,7 @@ def search(
 
     if not pastes:
         typer.echo("No pastes found", err=True)
+        _echo_no_match_hint(text_query)
         return
 
     # Format output

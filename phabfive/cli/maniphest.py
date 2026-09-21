@@ -26,6 +26,7 @@ from phabfive.cli.completers import (
     complete_user_list_filter,
 )
 from phabfive.cli.output import (
+    _echo_no_match_hint,
     _get_output_format,
     _setup_output_options,
     is_machine_format,
@@ -817,6 +818,13 @@ def search(
             raise typer.Exit(1)
 
         _display_tasks(result, output_format, maniphest, tabular=True)
+
+        # An empty search printed nothing at all. When it searched for text,
+        # say why that may be, since the likeliest reason is a part of a word
+        # given to a search that matches whole words.
+        if final_text_query and not (result or {}).get("tasks"):
+            typer.echo("No tasks found", err=True)
+            _echo_no_match_hint(final_text_query)
 
 
 def _get_edit_app():
