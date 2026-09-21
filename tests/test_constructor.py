@@ -208,3 +208,20 @@ class TestSelectHost:
     def test_a_declining_callback_explains_how_to_choose(self, arcrc):
         with pytest.raises(PhabfiveConfigException, match="set PHAB_URL"):
             Phabfive._load_arcrc({}, select_host=lambda hosts: None)
+
+
+class TestProcessEnvironment:
+    def test_reading_the_configuration_changes_no_variable(self, monkeypatch):
+        monkeypatch.delenv("XDG_CONFIG_DIRS", raising=False)
+        before = dict(os.environ)
+
+        Phabfive.read_config()
+
+        assert dict(os.environ) == before
+
+    @pytest.mark.parametrize("platform", ["linux", "freebsd14"])
+    def test_the_system_configuration_is_in_etc(self, monkeypatch, platform):
+        monkeypatch.setattr("sys.platform", platform)
+        monkeypatch.setenv("XDG_CONFIG_DIRS", "/somewhere/else")
+
+        assert Phabfive._site_config_base() == "/etc/phabfive"

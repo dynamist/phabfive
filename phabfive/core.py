@@ -609,6 +609,21 @@ class Phabfive:
         log.debug(f"Using PHAB_URL from .arcconfig: {normalized}")
         return {"PHAB_URL": normalized}
 
+    @staticmethod
+    def _site_config_base():
+        """Where the system-wide configuration lives, less its suffix.
+
+        `/etc/phabfive`, so `/etc/phabfive.yaml` and `/etc/phabfive.d/`. This
+        used to be reached by setting os.environ["XDG_CONFIG_DIRS"] = "/etc"
+        before asking appdirs, which rewrote the variable for the whole
+        process - and for every program that imported phabfive, and every
+        child it started. appdirs only reads XDG on Linux and the BSDs, so
+        elsewhere its answer is still the one to use.
+        """
+        if sys.platform == "darwin" or sys.platform.startswith("win"):
+            return appdirs.site_config_dir("phabfive")
+        return "/etc/phabfive"
+
     def load_config(self, select_host=None):
         """
         Load configuration and remember whether PHAB_URL was chosen explicitly.
@@ -657,9 +672,7 @@ class Phabfive:
         log.debug("Loading configuration defaults")
         conf = copy.deepcopy(DEFAULTS)
 
-        os.environ["XDG_CONFIG_DIRS"] = "/etc"
-
-        site_conf_file = os.path.join(f"{appdirs.site_config_dir('phabfive')}.yaml")
+        site_conf_file = f"{cls._site_config_base()}.yaml"
         log.debug(f"Loading configuration file: {site_conf_file}")
         anyconfig.merge(
             conf,
@@ -675,9 +688,7 @@ class Phabfive:
             },
         )
 
-        site_conf_dir = os.path.join(
-            appdirs.site_config_dir("phabfive") + ".d", "*.yaml"
-        )
+        site_conf_dir = os.path.join(f"{cls._site_config_base()}.d", "*.yaml")
         log.debug(f"Loading configuration files: {site_conf_dir}")
         anyconfig.merge(
             conf,

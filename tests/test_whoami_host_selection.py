@@ -38,7 +38,10 @@ def _load_config(tmp_path, environ, arcrc=None, user_yaml=None, arcconfig=None):
         os.chmod(user_conf, 0o600)
 
     with (
-        mock.patch("appdirs.site_config_dir", return_value=str(tmp_path / "site")),
+        mock.patch(
+            "phabfive.core.Phabfive._site_config_base",
+            return_value=str(tmp_path / "site"),
+        ),
         mock.patch(
             "appdirs.user_config_dir", return_value=str(user_conf).replace(".yaml", "")
         ),
