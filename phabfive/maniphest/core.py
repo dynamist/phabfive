@@ -909,9 +909,11 @@ class Maniphest(Phabfive):
         order         (str, optional): Result ordering as "<field>[:asc|:desc]", e.g.
                       "updated:asc". Defaults to "priority", matching Phorge's own default.
         """
-        # Validation - require at least one filter
+        # Validation - require at least one filter. include_closed counts: it
+        # is how a caller asks for every task on purpose (#419).
         has_other_filters = any(
             [
+                include_closed,
                 text_query,
                 tag,
                 assigned,

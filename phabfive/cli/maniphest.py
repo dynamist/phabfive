@@ -510,7 +510,11 @@ def search(
     updated_before: Optional[str] = typer.Option(
         None, "--updated-before", help="Tasks updated more than TIME ago"
     ),
-    include_all: bool = typer.Option(False, "--all", help="Include closed tasks"),
+    include_all: bool = typer.Option(
+        False,
+        "--all",
+        help="Include closed tasks; on its own, list every task (with -l 0)",
+    ),
     column: Optional[str] = typer.Option(
         None,
         "--column",
@@ -708,7 +712,9 @@ def search(
         # "order:" on every run.
         final_order = get_param(order, yaml_params, "order")
 
-        # Check if any search criteria provided
+        # Check if any search criteria provided. A bare "search" still prints
+        # usage rather than querying the whole instance, but --all says so on
+        # purpose: it is how a script walks every task, open or closed.
         has_criteria = any(
             [
                 final_text_query,
@@ -717,7 +723,10 @@ def search(
                 final_author,
                 final_space,
                 final_created_after,
+                final_created_before,
                 final_updated_after,
+                final_updated_before,
+                final_include_closed,
                 column_patterns,
                 priority_patterns,
                 status_patterns,
