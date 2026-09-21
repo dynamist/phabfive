@@ -1407,3 +1407,55 @@ class TestEditExpansion:
 
         result = preprocess_monograms(["phabfive", "edit", "P123"])
         assert result == ["phabfive", "paste", "edit", "P123"]
+
+
+class TestBatchSummary:
+    """#423: a dry run does not claim edits, and no-ops are counted apart."""
+
+    def _summary(self, **kwargs):
+        import io
+
+        from phabfive.cli.edit_flow import _print_summary
+
+        out = io.StringIO()
+        _print_summary(file=out, **kwargs)
+        return out.getvalue().strip()
+
+    def test_a_real_run_says_edited(self):
+        assert self._summary(applied=2, skipped=0, total=2, quit_early=False) == (
+            "Edited 2/2 tasks"
+        )
+
+    def test_a_dry_run_says_would(self):
+        summary = self._summary(
+            applied=2, skipped=0, total=2, quit_early=False, dry_run=True
+        )
+
+        assert summary == "Would edit 2/2 tasks (dry run)"
+
+    def test_tasks_already_at_target_are_counted_apart(self):
+        summary = self._summary(
+            applied=1, skipped=0, total=3, quit_early=False, unchanged=2
+        )
+
+        assert summary == "Edited 1/3 tasks, 2 already at target"
+
+    def test_quitting_counts_only_what_was_never_reached(self):
+        summary = self._summary(
+            applied=1, skipped=1, total=6, quit_early=True, unchanged=1, failed=1
+        )
+
+        assert summary.endswith("2 left unchanged (quit)")
+
+    def test_the_batch_dry_run_end_to_end(self, capsys):
+        from phabfive.cli.edit_flow import edit_tasks_batch
+
+        maniphest = TestBatchReview._maniphest()
+
+        retcode = edit_tasks_batch(
+            TestBatchReview._tasks(2), maniphest, status="resolved", dry_run=True
+        )
+
+        assert retcode == 0
+        assert "Would edit 2/2 tasks (dry run)" in capsys.readouterr().out
+        maniphest.apply_task_edit.assert_not_called()
