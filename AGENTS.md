@@ -204,6 +204,24 @@ That order applies only when a class is constructed with no arguments. `Phabfive
 token=, config=)` is explicit instead: defaults, then `config`, then `url`/`token`, and
 nothing is discovered.
 
+### Exceptions (`exceptions.py`)
+
+- Library code raises a specific `PhabfiveException` subclass, never a bare
+  `ValueError` or `PhabfiveException`; `tests/test_exceptions.py` pins it. A bad argument
+  value is `PhabfiveInputException` (also a `ValueError`), something that does not exist
+  is `PhabfiveNotFoundException` (also a `LookupError`). Each new type subclasses the one
+  whose CLI handlers already answer its kind, so moving a raise to it never loses a handler
+- `phabfive/conduit.py` is the only place that sees `phabricator.APIError` or `requests`
+  exceptions: it translates them into `PhabfiveAPIException` (same `.code`, `.message` and
+  `str()`) and `PhabfiveConnectionException`. Catch those; a test fails if any other
+  module imports `requests` or names `APIError`, because such a handler would be dead code
+- Tests that fake `__init__` and assign `.phab = MagicMock()` bypass `Conduit`, so their
+  mocks must raise the phabfive types, not `APIError`
+- `exceptions.py` stays standard-library only
+- `cli_entrypoint` answers any `PhabfiveException` no command caught with one line and exit
+  status 1. It runs outside click's main loop, so it leaves with `sys.exit`, never
+  `typer.Exit`
+
 ### Constructing an App
 
 - **Library defaults, command choices.** `Phabfive(url=None, token=None, *, config=None,

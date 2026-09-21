@@ -56,6 +56,13 @@
   each built a second app. `verify=True` checks the connection at once; the command always
   asks for that, so it still fails before doing anything. Apps used internally now share
   their parent's client
+* **Errors a program can catch without the client's libraries** - Conduit errors are
+  `PhabfiveAPIException`, with the `.code` and `.message` of the `phabricator.APIError`
+  they replace, and an unreachable server is `PhabfiveConnectionException`; both are
+  `PhabfiveRemoteException`s. A bad argument value is `PhabfiveInputException`, also a
+  `ValueError`, and an object that does not exist is `PhabfiveNotFoundException`, also a
+  `LookupError`. Nothing phabfive raises on purpose is a bare `ValueError` any more.
+  Closes #440, #441
 * **The library never prompts, prints or writes the environment** - choosing between
   several `~/.arcrc` hosts goes through a `select_host` callback, which the command answers
   with its prompt; reading the configuration no longer rewrites `XDG_CONFIG_DIRS`; building
@@ -255,6 +262,17 @@
 
 ## Bug Fixes
 
+* **Errors past the first request printed a traceback.** A token the server refuses,
+  a server that stops answering mid-command and a malformed `--created-after`
+  value all ended in Python tracebacks. Each is now one line on stderr and exit
+  status 1, e.g. `Error: ERR-INVALID-AUTH: API token "..." is not valid.`
+* **`diffusion uri edit` printed a traceback when Phorge rejected the edit.** It now
+  reports the validation error as `ERROR: ...` and exits 1, like every other apply path.
+  Fixes #394
+* **`maniphest create --with` exited 0 when the template file did not exist.** It is an
+  error now, and exits 1
+* **Interrupting phabfive printed a traceback of its own.** `cli_entrypoint` raised
+  `typer.Exit` outside click's main loop; it exits 130 now
 * **`passphrase show` and `passphrase search` ignored `--hyperlink` and `--ascii`.** They
   never applied the output options every other command does
 * **`diffusion repo edit` understated which built-in URIs a rename rewrites.** The

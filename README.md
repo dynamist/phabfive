@@ -273,7 +273,19 @@ records it returns hold plain strings.
 | `PhabfiveConnectionException` | the server could not be reached |
 
 A program never needs to import `phabricator` or `requests` to catch what
-phabfive raises.
+phabfive raises:
+
+```python
+from phabfive import Maniphest, PhabfiveAPIException, PhabfiveNotFoundException
+
+try:
+    Maniphest(url=url, token=token).task_show([123])
+except PhabfiveNotFoundException:
+    ...
+except PhabfiveAPIException as e:
+    if e.code == "ERR-INVALID-AUTH":
+        ...
+```
 
 Every public name is resolved lazily, so `import phabfive` loads no third-party
 module; the module holding a name is imported the first time the name is used.
