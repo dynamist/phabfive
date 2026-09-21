@@ -393,6 +393,34 @@ MANIPHEST_ORDER_CHOICES = [
     )
 ]
 
+# Every key "maniphest search" reads from a template's "search:" section. The
+# CLI looks each one up with get_param, so a key missing here is documented,
+# read, and yet refused when the template is loaded.
+SEARCH_TEMPLATE_KEYS = frozenset(
+    {
+        "text_query",
+        "tag",
+        "include",
+        "exclude",
+        "assigned",
+        "author",
+        "space",
+        "created-after",
+        "created-before",
+        "updated-after",
+        "updated-before",
+        "column",
+        "priority",
+        "status",
+        "all",
+        "show-history",
+        "show-metadata",
+        "show-policy",
+        "limit",
+        "order",
+    }
+)
+
 __all__ = [
     "AutoOption",
     "MISSING_CONFIG_HINTS",
@@ -425,6 +453,7 @@ __all__ = [
     "REPO_POLICY_TRANSACTIONS",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
+    "SEARCH_TEMPLATE_KEYS",
     "TASK_POLICY_FIELDS",
     "TASK_POLICY_TRANSACTIONS",
     "URI_ROLES",
