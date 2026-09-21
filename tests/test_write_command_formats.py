@@ -70,11 +70,10 @@ def a_maniphest(task_id=123, **record):
         "tag_slugs": [],
         "base_url": "https://phorge.example.com",
     }
-    instance.add_task_comment.return_value = (True, {"phid": "PHID-TASK-x"})
-    instance.get_task_info.return_value = (
-        True,
-        {"uri": f"https://phorge.example.com/T{task_id}"},
-    )
+    instance.add_task_comment.return_value = {"phid": "PHID-TASK-x"}
+    instance.get_task_info.return_value = {
+        "uri": f"https://phorge.example.com/T{task_id}"
+    }
     instance.task_show.return_value = {
         "tasks": [a_task_record(task_id, **record)],
         "missing_ids": [],

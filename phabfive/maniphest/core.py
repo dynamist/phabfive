@@ -1542,27 +1542,41 @@ class Maniphest(Phabfive):
         )
 
     def add_task_comment(self, ticket_identifier, comment_string):
-        """
-        :type ticket_identifier: str
-        :type comment_string: str
+        """Comment on a task.
+
+        Parameters
+        ----------
+        ticket_identifier : str
+            The task, e.g. "T123"
+        comment_string : str
+
+        Returns
+        -------
+        dict
+            The edited object, with its "id" and "phid"
         """
         result = self.phab.maniphest.edit(
             transactions=self.to_transactions({"comment": comment_string}),
             objectIdentifier=ticket_identifier,
         )
 
-        return (True, result["object"])
+        return result["object"]
 
     def get_task_info(self, task_id):
-        """
-        :type task_id: int
+        """Return maniphest.info's answer for a task: its uri, status and so on.
+
+        Parameters
+        ----------
+        task_id : int
         """
         # FIXME: Add validation and extraction of the int part of the task_id
-        result = self.phab.maniphest.info(task_id=task_id)
-
-        return (True, result)
+        return self.phab.maniphest.info(task_id=task_id)
 
     def create_tasks_from_yaml(self, create_config, dry_run=False):
+        """Create the tasks a creation template file describes.
+
+        Reads the file and hands it to create_tasks_from_config; see there.
+        """
         if not create_config:
             raise PhabfiveConfigException("Must specify a config file path")
 
@@ -1574,6 +1588,23 @@ class Maniphest(Phabfive):
         with open(create_config) as stream:
             yaml_loader = YAML()
             root_data = yaml_loader.load(stream)
+
+        return self.create_tasks_from_config(root_data, dry_run=dry_run)
+
+    def create_tasks_from_config(self, config, dry_run=False):
+        """Create the tasks a creation template describes, from its data.
+
+        For a program that holds the template as data rather than as a file:
+        `config` is what the template file would parse to, with its
+        `variables` and `tasks` (see docs/create-templates.md).
+
+        Returns
+        -------
+        dict
+            With "dry_run": True and the "tasks" that would be created, or
+            the "task_ids" that were.
+        """
+        root_data = config
 
         if dry_run:
             log.warning("DRY RUN: Tasks will not be created in Phabricator")
@@ -2112,7 +2143,7 @@ class Maniphest(Phabfive):
 
             # Fetch the task to get the URI
             task_id = task_object["id"]
-            _, task_info = self.get_task_info(task_id)
+            task_info = self.get_task_info(task_id)
             task_uri = task_info.get("uri", f"{self.url}T{task_id}")
 
             # Extract base URL from task URI for building tag URLs
@@ -2155,7 +2186,7 @@ class Maniphest(Phabfive):
 
         Raises
         ------
-        ValueError
+        PhabfiveNotFoundException
             If task not found
         """
         result = self.phab.maniphest.search(
@@ -2229,8 +2260,10 @@ class Maniphest(Phabfive):
 
         Raises
         ------
-        ValueError
-            On validation or API errors
+        PhabfiveInputException
+            On an argument value that cannot be used
+        PhabfiveNotFoundException
+            On a task, user or column that does not exist
         PhabfiveConfigException
             If a policy value is outside the grammar
         PhabfiveDataException
@@ -2595,7 +2628,6 @@ class Maniphest(Phabfive):
         editable_by=None,
         dry_run=False,
         task_data=None,
-        preview=None,
     ):
         """Edit a task by ID.
 
@@ -2615,14 +2647,18 @@ class Maniphest(Phabfive):
             Show changes without applying
         task_data : dict, optional
             Already-fetched task data, passed through to build_task_edit
-        preview : file, optional
-            Stream the dry-run preview is written to; defaults to stdout.
-            A caller emitting a machine-readable record passes stderr.
+
+        Returns
+        -------
+        dict
+            {"task_id", "changes"}, plus "dry_run": True for a dry run, which
+            builds the changes and sends nothing. Nothing is printed; a
+            caller that wants a preview renders "changes" itself.
 
         Raises
         ------
-        ValueError
-            On validation or API errors
+        PhabfiveException
+            As build_task_edit and apply_task_edit raise
         """
         transactions, changes = self.build_task_edit(
             task_id,
@@ -2646,14 +2682,6 @@ class Maniphest(Phabfive):
             return {"task_id": task_id, "changes": []}
 
         if dry_run:
-            from phabfive.cli.editor import render_changes
-
-            render_changes(
-                f"T{task_id}",
-                changes,
-                header=f"[DRY RUN] Would apply to T{task_id}:",
-                file=preview,
-            )
             return {"task_id": task_id, "changes": changes, "dry_run": True}
 
         self.apply_task_edit(task_id, transactions)
@@ -2793,8 +2821,10 @@ class Maniphest(Phabfive):
 
         Raises
         ------
-        ValueError
-            If column not found or navigation invalid
+        PhabfiveNotFoundException
+            If the column is not on the board
+        PhabfiveDataException
+            If the task is in no column on the board to navigate from
         """
         from phabfive.maniphest.fetchers import get_column_info
 
