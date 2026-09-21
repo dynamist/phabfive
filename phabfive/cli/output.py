@@ -44,6 +44,18 @@ def _setup_output_options(ctx: typer.Context) -> None:
         )
 
 
+def _echo_no_match_hint(query) -> None:
+    """Explain Phorge's search operators after a text search found nothing.
+
+    On stderr, so a program reading stdout still sees an empty result.
+    """
+    from phabfive.fulltext import no_match_hint
+
+    hint = no_match_hint(query)
+    if hint:
+        typer.echo(hint, err=True)
+
+
 # The formats a program parses, as opposed to the ones a person reads.
 # A command that writes rather than reads - create, edit, comment - answers
 # one of these with the record `show` would give for the object it touched,

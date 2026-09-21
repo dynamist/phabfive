@@ -247,6 +247,13 @@ phabfive --format=json maniphest search --author=@me --created-after=2w --status
 phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
 ```
 
+- The text argument goes to Phorge's full-text search as it stands, in `maniphest search`,
+  `paste search` and `project search` alike. It matches **whole words**, stemmed:
+  `migration` finds "migrations" but `igrat` finds nothing. Write `~igrat` to match part
+  of a word; `"a phrase"`, `-word` to leave a word out and `title:word` also work. An
+  empty text search says so on stderr and suggests the `~` form - retry with it before
+  concluding that nothing matches. `user search` is the exception: its text matches any
+  part of a username or real name.
 - `--tag` filters by project or workboard, and supports wildcards and `,` for OR and `+`
   for AND (`--tag "Backend*+Sprint 42"`).
 - `--assigned` and `--author` accept a username or `@me`.

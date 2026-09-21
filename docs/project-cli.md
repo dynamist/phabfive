@@ -133,7 +133,7 @@ Subprojects and milestones are included.
 
 | Option | Keeps projects |
 | --- | --- |
-| `QUERY` (argument) | Matching the text, the way the web UI's search box matches it |
+| `QUERY` (argument) | Matching the text in the name or description, the way the web UI's search box matches it: whole words, and `~eam` for part of a word. See [Free-text search](maniphest-cli.md#free-text-search) |
 | `--member` | That any of these users is a member of: `@user`, `user` or `@me` |
 | `--parent` | Directly beneath this project |
 | `--ancestor` | Anywhere beneath this project |

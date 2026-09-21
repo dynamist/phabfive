@@ -183,7 +183,30 @@ phabfive maniphest search "database migration" --status="in:Open"
 **How it works:**
 - Searches both task titles and descriptions
 - Case-insensitive matching
-- Uses Phabricator's built-in full-text search
+- Uses Phabricator's built-in full-text search, the same as the web UI's search box
+- Matches **whole words**, stemmed: `migration` finds "migrations", but `igrat` finds nothing
+
+The text is passed to Phorge as it stands, so its search operators work here:
+
+| Written as | Matches |
+| --- | --- |
+| `word` | The whole word, stemmed |
+| `~word` | Any word containing it: `~igrat` finds "migration" |
+| `"a phrase"` | Those words in that order |
+| `-word` | Leaves out what contains the word |
+| `title:word` | Only the title is searched |
+
+When a text search finds nothing, phabfive says so on stderr and suggests the same
+search with `~` in front of each plain word:
+
+```console
+$ phabfive maniphest search igrat
+No tasks found
+Text search matches whole words, not parts of words. To match part of a word, prefix it with ~: '~igrat'
+Other operators: "a phrase" in that order, -word to leave a word out, title:word to search only titles.
+```
+
+`paste search` and `project search` take the same syntax and give the same hint.
 
 ### Basic Project Filtering
 

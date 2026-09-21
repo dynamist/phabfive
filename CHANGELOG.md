@@ -150,6 +150,16 @@
   cell arrives whole. `table` is a human format and is deliberately not accepted for
   `PHAB_FALLBACK`
 
+### Text Search Hints
+* **An empty text search explains itself** - `maniphest search igrat` found
+  nothing and printed nothing, because Phorge's full-text search matches whole
+  words and "igrat" is only part of one. `maniphest search`, `paste search` and
+  `project search` now say on stderr that nothing was found, that text matches
+  whole words, and suggest the query with `~` in front of each plain word - `~igrat`
+  - which is Phorge's own operator for part of a word. The text is still sent as it
+  stands, so the operators the web UI takes (`~word`, `"a phrase"`, `-word`,
+  `title:word`) work here too. stdout stays empty
+
 ### Users
 * **`user search`** - phabfive could not list users (#428). `user search` answers
   with `Username`, `Name` and `Roles` for each one, the record
