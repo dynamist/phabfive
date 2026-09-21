@@ -192,8 +192,8 @@ class User(Phabfive):
         Parameters
         ----------
         query : str, optional
-            Free text, matched against usernames and real names the way the
-            web UI's search box matches it
+            Text to find anywhere in a username or real name, ignoring case:
+            "holm" finds rholm and hholm
         roles : list, optional
             Roles a user must have, every one of them
         not_roles : list, optional
@@ -234,8 +234,11 @@ class User(Phabfive):
 
         constraints = {}
 
+        # nameLike, not query. query is the full-text index, which matches
+        # whole words only - "holm" found neither rholm nor hholm - while
+        # nameLike matches any part of the username or the real name.
         if query:
-            constraints["query"] = query
+            constraints["nameLike"] = query
 
         # A role the server can filter on is sent as a constraint, so the
         # pages carry only matching users. The rest are matched here.

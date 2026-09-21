@@ -75,9 +75,13 @@ class FakeUserSearch:
                     for user in found
                     if (role in user["fields"]["roles"]) == constraints[flag]
                 ]
-        if "query" in constraints:
+        if "nameLike" in constraints:
+            text = constraints["nameLike"].lower()
             found = [
-                u for u in found if constraints["query"] in u["fields"]["username"]
+                u
+                for u in found
+                if text in u["fields"]["username"].lower()
+                or text in u["fields"]["realName"].lower()
             ]
 
         start = int(after or 0)
@@ -198,12 +202,14 @@ class TestSearch:
         assert len(user.search()) == len(USERS)
         assert len(_search(user).calls) == 3
 
-    def test_a_query_is_sent_as_is(self):
+    def test_a_query_matches_any_part_of_a_name(self):
+        """Not query, which only matches whole words: "holm" missed rholm."""
         user = _app()
 
-        user.search(query="vio")
+        records = user.search(query="ploy")
 
-        assert _search(user).calls[0]["constraints"] == {"query": "vio"}
+        assert _search(user).calls[0]["constraints"] == {"nameLike": "ploy"}
+        assert _names(records) == ["deploybot"]
 
     def test_an_unknown_role_is_refused(self):
         user = _app()
