@@ -83,6 +83,52 @@ on a pull request that skips the deployment.
 
 ## Architecture
 
+### Public API (`__init__.py`)
+- The package's `__all__` is the **promise**: `Phabfive`, the app classes, the exception
+  types and `__version__`. Each submodule carries its own `__all__` listing its *full*
+  public surface, and a name in a module's `__all__` but not the package's is public and
+  reached one import deeper - `transitions`, `policy`, `constants`, `ordering`,
+  `pagination` and friends are deliberately in that tier
+- Names resolve through a PEP 562 module `__getattr__` against `_LAZY`, which maps each
+  name to the module that exports it - the subpackage for an app class, not its `core`.
+  `_SUBMODULES` resolves `phabfive.maniphest` and friends as attributes, and `__dir__`
+  offers both. Resolved values are cached into `globals()`, so `__getattr__` runs once
+  per name
+- **Do not turn this into eager imports.** Two separate reasons: eagerly, `import
+  phabfive` would pull in phabricator, requests, anyconfig and rich for a consumer who
+  wants one class - and the `phabricator` package reads `~/.arcrc` and `./.arcconfig` as
+  it imports, so that is file I/O, not just time. And `phabfive/cli/__init__.py` sets
+  `os.environ["TYPER_USE_RICH"]` as it imports, so `cli` must stay out of `_SUBMODULES`:
+  touching an attribute on `phabfive` must never mutate the process environment.
+  `repl`, `setup`, `display`, `record_display`, `table`, `json_output`, `cache` and
+  `editor` stay out too: none of them is library code. `tests/test_public_api.py`
+  asserts all of this out of process, because by the time the rest of the suite runs
+  everything is already in `sys.modules`
+- `__version__` is lazy too, and falls back to `0.0.0+unknown` rather than raising, so a
+  vendored or never-installed tree stays importable. `--version` prints it, and
+  `scripts/smoke.py` rejects that string, so an artifact that lost its dist-info still
+  fails. Keep the literal `version("phabfive")` call: PyInstaller scans for it
+- **Three places list the same names** - `__all__`, `_LAZY`, and the `TYPE_CHECKING`
+  import block - and all three are load-bearing. `__all__` must be literal strings,
+  because ruff cannot see a computed one and flags the TYPE_CHECKING imports as F401.
+  mypy's `no_implicit_reexport` refuses to re-export a name missing from `__all__`. And a
+  name in `__all__` and TYPE_CHECKING but missing from `_LAZY` type checks perfectly
+  while raising `AttributeError` at runtime - which is why `tests/test_public_api.py`
+  parses the file with `ast` and asserts the block equals `_LAZY`
+- `__getattr__` returns **`object`, not `Any`**, so a consumer's typo is not silently
+  well-typed. Correct names keep their real types from the TYPE_CHECKING block
+- PyInstaller's module graph cannot follow `import_module(<variable>)`, so `_LAZY` is
+  invisible to it. The frozen builds are whole only because `phabfive/cli/` imports
+  every library module statically - a module only `_LAZY` reaches needs a
+  `--hidden-import` in `.github/workflows/release.yml`
+- `init_logging` lives in `phabfive/cli/log_setup.py`: configuring the root logger is
+  the application's decision, never a library's
+- typer, click, rich and InquirerPy stay unconditional runtime dependencies rather than
+  moving behind a `[cli]` extra (#443). `[project.scripts]` installs unconditionally
+  while extras do not, so `pip install phabfive` would ship a `phabfive` command that
+  dies on `import typer`. The import-time cost is solved by the laziness above; what an
+  extra would save is install weight
+
 ### CLI Layer (`cli/`)
 - Uses `typer` for argument parsing with built-in shell completion
 - Modular structure: `__init__.py` (main app), `maniphest.py`, `diffusion.py`, `paste.py`, `user.py`, `passphrase.py`, `repl.py`
@@ -280,9 +326,15 @@ Renovate (Mend app, `renovate.json`) is the only bot, batching everything into o
 
 Version is defined only in `pyproject.toml`. Access it via:
 ```python
-from importlib.metadata import version
-version("phabfive")
+import phabfive
+phabfive.__version__
 ```
+
+`phabfive.__version__` is resolved on first access and falls back to `0.0.0+unknown`
+when there is no distribution metadata to read - see the Public API section. So it
+differs from `importlib.metadata.version("phabfive")` on an uninstalled source tree,
+where the latter raises `PackageNotFoundError`. `scripts/smoke.py` rejects the fallback
+string, so a built artifact missing its metadata is still caught.
 
 ## Release Workflow
 

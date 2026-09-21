@@ -217,6 +217,40 @@ export PHAB_URL=https://yourserver.com/api/
 
 </details>
 
+## Using phabfive as a library
+
+The command is built on classes that return plain data, and those are exported
+from the top level:
+
+```python
+from phabfive import Maniphest, User
+
+print(User().whoami()["userName"])
+
+result = Maniphest().task_show([123])
+for task in result["tasks"]:
+    print(task["_url"], task["Task"]["Name"], task["Task"]["Status"])
+```
+
+A record is the same one `--format=json` prints, so the shapes described for the
+CLI hold here too. Constructing a class reads the configuration the way the
+command does - `PHAB_URL` and `PHAB_TOKEN` from the environment, `~/.arcrc`,
+`.arcconfig` - and checks the connection.
+
+Every public name is resolved lazily, so `import phabfive` loads no third-party
+module; the module holding a name is imported the first time the name is used.
+
+| | |
+|---|---|
+| Apps | `Maniphest`, `Paste`, `Diffusion`, `Passphrase`, `Project`, `User`, and their base `Phabfive` |
+| Errors | `PhabfiveException`, and its subclasses `PhabfiveConfigException`, `PhabfiveDataException`, `PhabfiveNameCollisionException`, `PhabfiveRemoteException` |
+| Version | `__version__` |
+
+Other modules keep their own `__all__` - `phabfive.transitions`,
+`phabfive.policy`, `phabfive.constants` - and are public from there, but are
+not part of the narrower promise above. `phabfive.cli` and the display modules
+are not library code at all.
+
 ## Documentation
 
 - **[Full CLI Reference](https://phabfive.readthedocs.io)** - Complete command documentation
