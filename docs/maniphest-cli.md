@@ -252,7 +252,27 @@ phabfive maniphest search "migration" --tag "Database" --column="in:In Progress"
 ```
 
 !!! important
-    **Validation:** At least one filter is required (text query, --tag, --include, --created-after, --created-before, --updated-after, --updated-before, --column, --priority, or --status) to prevent accidentally querying all tasks.
+    **Validation:** At least one filter is required (text query, --tag, --include, --assigned, --author, --space, --created-after, --created-before, --updated-after, --updated-before, --column, --priority, --status or --all) to prevent accidentally querying all tasks.
+
+### Listing Every Task
+
+`--all` on its own is a deliberate request for every task, open or closed. Like
+every search it is confined to the default Space (`PHAB_SPACE`, `S1` unless
+configured), so add `--space='*'` to reach tasks in every Space, and `-l 0` to
+lift the default limit of 100:
+
+```bash
+# Every task you can see, in every Space, one JSON object per line
+phabfive --format=jsonl maniphest search --all --space='*' -l 0
+
+# The same with each task's policies, for an audit
+phabfive --format=jsonl maniphest search --all --space='*' --show-policy -l 0
+```
+
+Leaving out `--space='*'` is the easy mistake in a script that means to touch
+every task: tasks in other Spaces are silently not listed.
+
+A bare `phabfive maniphest search` still prints usage and queries nothing.
 
 ### Pinning Tasks Into or Out of Results
 

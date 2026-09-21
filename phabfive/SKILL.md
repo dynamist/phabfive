@@ -258,6 +258,9 @@ phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
   `title`, `relevance`. Default `priority`. `relevance` takes no direction.
 
 A search with no criteria at all prints usage and exits 0 rather than returning every task.
+`--all` on its own is the deliberate way to ask for every task. Like every search it is
+confined to the default Space, so a script that means every task passes
+`--all --space='*' -l 0`; without `--space='*'`, tasks in other Spaces are silently missing.
 
 Output timestamps are local time, `%Y-%m-%dT%H:%M:%S`.
 

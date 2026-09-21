@@ -2043,6 +2043,34 @@ class TestTaskSearchTextQuery:
         assert "No search criteria specified" in str(exc_info.value)
 
     @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_task_search_include_closed_alone_lists_every_task(self, mock_init):
+        """include_closed alone is a deliberate request for every task (#419):
+        it sends no constraint but the space, and closed tasks are not
+        filtered out."""
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {
+                "phid": "PHID-SPCE-1",
+                "name": "Global",
+                "fullName": "Global",
+                "uri": "/S1",
+            }
+        }
+        maniphest.url = "https://phabricator.example.com"
+        page = MagicMock(response={"data": []})
+        page.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = page
+
+        maniphest.task_search(include_closed=True)
+
+        assert maniphest.phab.maniphest.search.called
+        constraints = maniphest.phab.maniphest.search.call_args[1]["constraints"]
+        assert set(constraints) <= {"spaces"}
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_with_text_and_date_filters(self, mock_init, capsys):
         """Test text search with date filters."""
         mock_init.return_value = None
