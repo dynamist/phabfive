@@ -531,39 +531,22 @@ class Phabfive:
                             f"Default host '{default_host}' in .arcrc doesn't match any configured host"
                         )
 
-                if not result and select_host is not None:
-                    # No default or default didn't match: the caller chooses
-                    selected = select_host(list(hosts.keys()))
-                    result["PHAB_URL"] = selected
-                    token = hosts[selected].get("token")
-                    if token:
-                        result["PHAB_TOKEN"] = token
-                elif not result:
-                    # No default or default didn't match
-                    if sys.stdin.isatty():
-                        from InquirerPy import inquirer as inq
-
-                        host_urls = list(hosts.keys())
-                        selected = inq.select(
-                            message="Multiple hosts found in ~/.arcrc. Select server:",
-                            choices=host_urls,
-                        ).execute()
-                        result["PHAB_URL"] = selected
-                        token = hosts[selected].get("token")
-                        if token:
-                            result["PHAB_TOKEN"] = token
-                        print(
-                            f"Tip: to skip this prompt, set PHAB_URL or add "
-                            f'"config":{{"default":"{selected}"}} to ~/.arcrc',
-                            file=sys.stderr,
-                        )
-                    else:
+                if not result:
+                    # No default, or it matched nothing: the caller may choose,
+                    # and one that cannot - no callback, or a callback that
+                    # declines by returning None - gets told how to decide.
+                    selected = select_host(list(hosts)) if select_host else None
+                    if selected is None:
                         host_list = "\n  - ".join(hosts.keys())
                         raise PhabfiveConfigException(
                             f"Multiple hosts found in ~/.arcrc but PHAB_URL is not configured. "
                             f"Please set PHAB_URL to specify which host to use:\n  - {host_list}\n\n"
                             f"Example: export PHAB_URL=https://phorge.example.com/api/"
                         )
+                    result["PHAB_URL"] = selected
+                    token = hosts[selected].get("token")
+                    if token:
+                        result["PHAB_TOKEN"] = token
 
         return result
 

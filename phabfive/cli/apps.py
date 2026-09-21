@@ -16,13 +16,38 @@ import typer
 from phabfive.exceptions import PhabfiveConfigException
 
 
+def prompt_host(hosts):
+    """Ask which of several ~/.arcrc hosts to use, when there is someone to ask.
+
+    Returns None without a terminal, which leaves phabfive to explain how to
+    choose one - a pipeline or a cron job must never block on a prompt.
+    """
+    if not sys.stdin.isatty():
+        return None
+
+    from InquirerPy import inquirer
+
+    selected = inquirer.select(
+        message="Multiple hosts found in ~/.arcrc. Select server:",
+        choices=list(hosts),
+    ).execute()
+    print(
+        f"Tip: to skip this prompt, set PHAB_URL or add "
+        f'"config":{{"default":"{selected}"}} to ~/.arcrc',
+        file=sys.stderr,
+    )
+    return selected
+
+
 def new_app(cls):
     """Construct `cls` the way the command always has.
 
     The configuration is discovered and the connection is verified, so a
     command fails before it has done anything rather than halfway through.
+    Several ~/.arcrc hosts and nothing to choose between them is answered
+    with a prompt at a terminal.
     """
-    return cls(verify=True)
+    return cls(verify=True, select_host=prompt_host)
 
 
 def get_app(cls):
@@ -48,4 +73,4 @@ def get_app(cls):
         raise typer.Exit(1)
 
 
-__all__ = ["get_app", "new_app"]
+__all__ = ["get_app", "new_app", "prompt_host"]

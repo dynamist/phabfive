@@ -9,6 +9,7 @@ from unittest import mock
 
 import pytest
 
+from phabfive.cli.apps import prompt_host
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException
 
@@ -303,7 +304,7 @@ class TestArcrcMultipleHosts:
         ]
 
     def test_multiple_hosts_interactive_selector(self, tmp_path):
-        """Test that interactive selector picks the selected host."""
+        """Test that the command's interactive selector picks the selected host."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
@@ -329,14 +330,14 @@ class TestArcrcMultipleHosts:
             ) as mock_select,
         ):
             mock_stdin.isatty.return_value = True
-            result = self.phabfive._load_arcrc({})
+            result = self.phabfive._load_arcrc({}, select_host=prompt_host)
 
         assert result["PHAB_URL"] == "https://phorge-b.example.com/api/"
         assert result["PHAB_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         mock_select.assert_called_once()
 
     def test_multiple_hosts_interactive_prints_tip(self, tmp_path, capsys):
-        """Test that interactive selector prints tip to stderr."""
+        """Test that the command's interactive selector prints tip to stderr."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
@@ -360,7 +361,7 @@ class TestArcrcMultipleHosts:
             mock.patch("InquirerPy.inquirer.select", return_value=mock_prompt),
         ):
             mock_stdin.isatty.return_value = True
-            self.phabfive._load_arcrc({})
+            self.phabfive._load_arcrc({}, select_host=prompt_host)
 
         captured = capsys.readouterr()
         assert "Tip:" in captured.err

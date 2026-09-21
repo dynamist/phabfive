@@ -194,3 +194,17 @@ class TestSelectHost:
             "PHAB_URL": "https://phorge-b.example.com/api/",
             "PHAB_TOKEN": "b" * 32,
         }
+
+    def test_without_a_callback_a_terminal_is_not_prompted(self, arcrc):
+        """A library never prompts; that is the command's decision."""
+        with mock.patch("sys.stdin") as stdin:
+            stdin.isatty.return_value = True
+            with mock.patch("InquirerPy.inquirer.select") as select:
+                with pytest.raises(PhabfiveConfigException, match="Multiple hosts"):
+                    Phabfive._load_arcrc({})
+
+        select.assert_not_called()
+
+    def test_a_declining_callback_explains_how_to_choose(self, arcrc):
+        with pytest.raises(PhabfiveConfigException, match="set PHAB_URL"):
+            Phabfive._load_arcrc({}, select_host=lambda hosts: None)
