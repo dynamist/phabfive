@@ -132,8 +132,16 @@ jobs:
         shell: bash
         run: |
           echo "from phabfive.cli import cli_entrypoint; cli_entrypoint()" > _entry.py
+          # --copy-metadata phabfive because --version reads phabfive.__version__,
+          # which falls back to 0.0.0+unknown rather than failing when the
+          # metadata is missing. smoke.py rejects that string; this keeps it from
+          # ever being reported. phabfive/__init__.py resolves its public names
+          # through import_module(<variable>), which PyInstaller cannot follow,
+          # so a library module no phabfive.cli module imports needs a
+          # --hidden-import here.
           pyinstaller --onefile --name phabfive _entry.py \
             --collect-data phabfive \
+            --copy-metadata phabfive \
             --collect-data rich \
             --copy-metadata rich \
             --collect-data phabricator \
