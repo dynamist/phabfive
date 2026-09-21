@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 
 # phabfive imports
 from phabfive.cli import app
+from phabfive.cli.output import is_machine_format
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.project import Project
@@ -118,6 +119,20 @@ class FakePhab:
         self.user.whoami.return_value = {"phid": "PHID-USER-admin", "userName": "admin"}
         self.phid = MagicMock()
         self.phid.query.side_effect = self._phid_query
+        self.slugs = {}
+        self.project.query.side_effect = self._project_query
+
+    def _project_query(self, phids=None, **_):
+        """The legacy method, the only one that reports every hashtag."""
+        data = {}
+        for project in self.projects:
+            if project["phid"] in (phids or []):
+                primary = project["fields"]["slug"]
+                data[project["phid"]] = {
+                    "slugs": ([primary] if primary else [])
+                    + self.slugs.get(project["phid"], [])
+                }
+        return {"data": data}
 
     def _project_search(
         self, constraints=None, attachments=None, limit=100, after=None, **_
@@ -424,15 +439,31 @@ class TestSearch:
         with pytest.raises(PhabfiveConfigException):
             _app(phab).search(status="closed")
 
-    def test_all_and_archived_cannot_be_combined(self, phab):
-        result = _invoke(phab, ["project", "search", "--all", "--archived"])
+    @pytest.mark.parametrize(
+        "args", [["--all"], ["--status=all"], ["--all", "--status=all"]]
+    )
+    def test_all_is_short_for_status_all(self, phab, args, restore_output_format):
+        result = _invoke(phab, ["--format=json", "project", "search", *args])
+
+        assert result.exit_code == 0, result.output
+        assert self._constraints(phab)["status"] == "all"
+
+    def test_all_contradicting_status_is_refused(self, phab):
+        result = _invoke(phab, ["project", "search", "--all", "--status=archived"])
 
         assert result.exit_code == 1
         assert "cannot be combined" in result.stderr
 
+    def test_an_unknown_status_is_refused_before_any_call(self, phab):
+        result = _invoke(phab, ["project", "search", "--status=closed"])
+
+        assert result.exit_code == 1
+        assert "--status must be one of: active, archived, all" in result.stderr
+        phab.project.search.assert_not_called()
+
     def test_nothing_found_leaves_stdout_empty(self, phab, restore_output_format):
         result = _invoke(
-            phab, ["--format=json", "project", "search", "--archived", "nope"]
+            phab, ["--format=json", "project", "search", "--status=archived", "nope"]
         )
 
         assert result.exit_code == 0
@@ -487,3 +518,258 @@ class TestAudit:
             if any(phid.startswith("PHID-PROJ-") for phid in call.kwargs["phids"])
         ]
         assert len(policy_calls) == 1
+
+
+class TestCreate:
+    def _build(self, phab, name="Platform", **options):
+        return _app(phab).build_project_create(name, **options)
+
+    def test_every_option_becomes_a_transaction(self, phab):
+        transactions, _ = self._build(
+            phab,
+            description="Things",
+            icon="infrastructure",
+            color="red",
+            slugs=["#plat", "platform-team"],
+            members=["@admin", "@deploybot"],
+            visible_to="users",
+            editable_by="#humans",
+            joinable_by="admin",
+        )
+
+        assert transactions == [
+            {"type": "name", "value": "Platform"},
+            {"type": "description", "value": "Things"},
+            {"type": "icon", "value": "infrastructure"},
+            {"type": "color", "value": "red"},
+            {"type": "slugs", "value": ["plat", "platform-team"]},
+            {
+                "type": "members.add",
+                "value": ["PHID-USER-admin", "PHID-USER-deploybot"],
+            },
+            {"type": "view", "value": "users"},
+            {"type": "edit", "value": "PHID-PROJ-20"},
+            {"type": "join", "value": "admin"},
+        ]
+
+    def test_a_policy_is_previewed_by_name(self, phab):
+        _, changes = self._build(phab, editable_by="#humans", joinable_by="admin")
+
+        assert {"field": "Editable By", "old": None, "new": "#humans"} in changes
+        assert {"field": "Joinable By", "old": None, "new": "Administrators"} in changes
+
+    def test_a_subproject(self, phab):
+        transactions, changes = self._build(phab, parent="#development")
+
+        assert {"type": "parent", "value": "PHID-PROJ-12"} in transactions
+        assert {"field": "Parent", "old": None, "new": "#development"} in changes
+
+    def test_a_milestone_may_share_its_name(self, phab):
+        transactions, _ = self._build(phab, name="Sprint 1", milestone_of="#qa")
+
+        assert {"type": "milestone", "value": "PHID-PROJ-14"} in transactions
+        # No hashtag lookup for a milestone: it has none to collide with
+        phab.project.search.assert_called_once_with(constraints={"slugs": ["qa"]})
+
+    def test_a_taken_hashtag_is_refused_before_anything_is_sent(self, phab):
+        with pytest.raises(PhabfiveDataException, match="same hashtag as #development"):
+            self._build(phab, name="Development")
+
+        phab.project.edit.assert_not_called()
+
+    def test_parent_and_milestone_of_contradict(self, phab):
+        with pytest.raises(PhabfiveConfigException, match="cannot be combined"):
+            self._build(phab, parent="#qa", milestone_of="#qa")
+
+    @pytest.mark.parametrize("option", [{"icon": "tag"}, {"slugs": ["x"]}])
+    def test_a_milestone_takes_no_icon_or_hashtag(self, phab, option):
+        """Phorge ignores the one and never reports the other."""
+        with pytest.raises(PhabfiveConfigException, match="milestone takes no"):
+            self._build(phab, name="Sprint 2", milestone_of="#qa", **option)
+
+    def test_an_unknown_member_names_itself(self, phab):
+        with pytest.raises(PhabfiveDataException, match="'@ghost'"):
+            self._build(phab, members=["@admin", "@ghost"])
+
+    def test_a_lockout_is_reported_as_a_sentence(self, phab):
+        from phabricator import APIError
+
+        phab.project.edit.side_effect = APIError(
+            "ERR-CONDUIT-CORE",
+            "Validation errors:\n  - The edit policy of this object would no "
+            "longer allow you to edit the object.",
+        )
+
+        with pytest.raises(PhabfiveDataException, match="Nothing was changed"):
+            _app(phab).apply_project_create([{"type": "name", "value": "x"}])
+
+
+class TestEdit:
+    def _build(self, phab, ident="#humans", **options):
+        project = _app(phab)
+        return project.build_project_edit(
+            project.get_project_for_edit(ident), **options
+        )
+
+    def test_nothing_to_change_is_no_transaction(self, phab):
+        transactions, changes = self._build(
+            phab,
+            name="Humans",
+            color="blue",
+            add_members=["@admin"],
+            visible_to="users",
+            joinable_by="admin",
+        )
+
+        assert transactions == []
+        assert changes == []
+
+    def test_only_the_members_not_already_in_are_added(self, phab):
+        phab.users["PHID-USER-viola"] = _user("viola")
+
+        transactions, changes = self._build(phab, add_members=["@admin", "@viola"])
+
+        assert transactions == [{"type": "members.add", "value": ["PHID-USER-viola"]}]
+        assert changes == [{"field": "Members", "old": None, "new": "Added: @viola"}]
+
+    def test_only_members_who_are_in_are_removed(self, phab):
+        phab.users["PHID-USER-viola"] = _user("viola")
+
+        transactions, _ = self._build(phab, remove_members=["@deploybot", "@viola"])
+
+        assert transactions == [
+            {"type": "members.remove", "value": ["PHID-USER-deploybot"]}
+        ]
+
+    def test_adding_and_removing_the_same_member_is_refused(self, phab):
+        with pytest.raises(PhabfiveConfigException, match="both add and remove"):
+            self._build(phab, add_members=["@admin"], remove_members=["@admin"])
+
+    def test_adding_a_hashtag_keeps_the_ones_already_there(self, phab):
+        """The slugs transaction replaces the list, so the list is sent whole."""
+        phab.slugs["PHID-PROJ-20"] = ["people"]
+
+        transactions, changes = self._build(phab, add_slugs=["#folk", "people"])
+
+        assert transactions == [
+            {"type": "slugs", "value": ["humans", "people", "folk"]}
+        ]
+        assert changes == [{"field": "Hashtags", "old": None, "new": "Added: #folk"}]
+
+    def test_a_policy_change_names_both_ends(self, phab):
+        transactions, changes = self._build(phab, editable_by="admin")
+
+        assert transactions == [{"type": "edit", "value": "admin"}]
+        assert changes == [
+            {"field": "Editable By", "old": "#humans", "new": "Administrators"}
+        ]
+
+    def test_a_rename_into_a_taken_hashtag_is_refused(self, phab):
+        with pytest.raises(PhabfiveDataException, match="same hashtag"):
+            self._build(phab, name="Development")
+
+    def test_a_milestone_takes_no_icon(self, phab):
+        with pytest.raises(PhabfiveConfigException, match="is a milestone"):
+            self._build(phab, ident="13", icon="tag")
+
+    def test_no_option_is_a_usage_error(self, phab):
+        result = _invoke(phab, ["project", "edit", "#humans"])
+
+        assert result.exit_code == 1
+        phab.project.edit.assert_not_called()
+
+    def test_a_bad_policy_is_refused_before_the_instance_is_reached(self, phab):
+        result = _invoke(phab, ["project", "edit", "#humans", "--joinable-by=nonsense"])
+
+        assert result.exit_code == 1
+        assert "--joinable-by must be one of" in result.stderr
+        phab.project.search.assert_not_called()
+
+
+MACHINE = ["yaml", "json", "jsonl"]
+HUMAN = ["rich", "tree", "table", "value"]
+
+
+class TestWriteFormats:
+    """A machine format answers a write with the `project show` record (#344)."""
+
+    @pytest.mark.parametrize("output_format", MACHINE + HUMAN)
+    def test_create(self, phab, output_format, restore_output_format):
+        phab.project.edit.return_value = {"object": {"id": 12, "phid": "PHID-PROJ-12"}}
+
+        result = _invoke(
+            phab, [f"--format={output_format}", "project", "create", "Platform"]
+        )
+
+        assert result.exit_code == 0, result.output
+        if is_machine_format(output_format):
+            assert "Development" in result.stdout
+            assert "Name: Platform" in result.stderr
+        else:
+            assert "Name: Platform" in result.stdout
+            assert "Development" not in result.stdout
+
+    def test_json_create_parses_on_its_own(self, phab, restore_output_format):
+        phab.project.edit.return_value = {"object": {"id": 12, "phid": "PHID-PROJ-12"}}
+
+        result = _invoke(phab, ["--format=json", "project", "create", "Platform"])
+
+        [record] = json.loads(result.stdout)
+        assert record["Link"] == f"{URL}/project/view/12/"
+
+    def test_dry_run_leaves_stdout_empty(self, phab, restore_output_format):
+        result = _invoke(
+            phab, ["--format=json", "project", "create", "Platform", "--dry-run"]
+        )
+
+        assert result.exit_code == 0
+        assert result.stdout == ""
+        assert "[DRY RUN] Would create Platform:" in result.stderr
+        phab.project.edit.assert_not_called()
+
+    def test_edit_emits_the_record_by_id(self, phab, restore_output_format):
+        result = _invoke(
+            phab, ["--format=json", "project", "edit", "#humans", "--name=People"]
+        )
+
+        assert result.exit_code == 0, result.output
+        phab.project.edit.assert_called_once_with(
+            transactions=[{"type": "name", "value": "People"}],
+            objectIdentifier="PHID-PROJ-20",
+        )
+        [record] = json.loads(result.stdout)
+        assert record["Link"] == f"{URL}/project/view/20/"
+
+    def test_an_edit_needing_nothing_still_has_a_record(
+        self, phab, restore_output_format
+    ):
+        result = _invoke(
+            phab, ["--format=json", "project", "edit", "#humans", "--color=blue"]
+        )
+
+        assert result.exit_code == 0
+        assert "No changes" in result.stderr
+        assert json.loads(result.stdout)[0]["Project"]["Name"] == "Humans"
+        phab.project.edit.assert_not_called()
+
+    def test_edit_dry_run_leaves_stdout_empty(self, phab, restore_output_format):
+        result = _invoke(
+            phab,
+            ["--format=json", "project", "edit", "#humans", "--color=red", "--dry-run"],
+        )
+
+        assert result.stdout == ""
+        assert "Color: blue → red" in result.stderr
+        phab.project.edit.assert_not_called()
+
+    def test_a_write_drops_the_cached_project_completions(self, phab):
+        with patch("phabfive.cli.project.forget_projects") as forget:
+            _invoke(phab, ["project", "edit", "#humans", "--icon=tag"])
+
+        forget.assert_called_once_with(icons=True)
+
+    def test_a_dry_run_leaves_the_cache_alone(self, phab):
+        with patch("phabfive.cli.project.forget_projects") as forget:
+            _invoke(phab, ["project", "edit", "#humans", "--icon=tag", "--dry-run"])
+
+        forget.assert_not_called()
