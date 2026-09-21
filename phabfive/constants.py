@@ -23,6 +23,26 @@ FORMAT_ALIASES = {
     "simple": "value",
 }
 
+# The formats a program parses, as opposed to the ones a person reads.
+# A command that writes rather than reads - create, edit, comment - answers
+# one of these with the record `show` would give for the object it touched,
+# and answers the rest with the human text it has always printed.
+MACHINE_FORMATS = frozenset({"yaml", "json", "jsonl"})
+
+
+def is_machine_format(output_format: str) -> bool:
+    """Whether the caller asked for output a program is going to parse.
+
+    Aliases resolve first, so ``strict`` and ``ndjson`` answer the same as
+    the formats they name. ``value`` is deliberately not in the set: it is
+    bare values for a shell pipeline, and a URL on its own already is one.
+
+    Lives here rather than in phabfive.cli.output because phabfive.edit asks
+    it too, and library code must not import the CLI - that module imports
+    typer.
+    """
+    return FORMAT_ALIASES.get(output_format, output_format) in MACHINE_FORMATS
+
 
 class AutoOption(str, Enum):
     """Auto-detect option for --ascii and --hyperlink."""
@@ -466,6 +486,7 @@ __all__ = [
     "IO_NEW_URI_CHOICES",
     "IO_URI_ALIASES",
     "IO_URI_VALUES",
+    "MACHINE_FORMATS",
     "COMMENTS_SUPPORTED",
     "MANIPHEST_ORDER_CHOICES",
     "MANIPHEST_ORDER_DEFAULT",
@@ -491,4 +512,5 @@ __all__ = [
     "URI_ROLE_DISABLED",
     "VALIDATION_HINTS",
     "VALIDATORS",
+    "is_machine_format",
 ]

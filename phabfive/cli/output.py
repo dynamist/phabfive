@@ -12,6 +12,9 @@ it instead of writing a sixth copy.
 
 import typer
 
+# Re-exported: every CLI module imports them from here.
+from phabfive.constants import MACHINE_FORMATS, is_machine_format  # noqa: F401
+
 
 def _get_output_format(ctx: typer.Context) -> str:
     """Get the output format from context, or auto-detect it.
@@ -54,22 +57,3 @@ def _echo_no_match_hint(query) -> None:
     hint = no_match_hint(query)
     if hint:
         typer.echo(hint, err=True)
-
-
-# The formats a program parses, as opposed to the ones a person reads.
-# A command that writes rather than reads - create, edit, comment - answers
-# one of these with the record `show` would give for the object it touched,
-# and answers the rest with the human text it has always printed.
-MACHINE_FORMATS = frozenset({"yaml", "json", "jsonl"})
-
-
-def is_machine_format(output_format: str) -> bool:
-    """Whether the caller asked for output a program is going to parse.
-
-    Aliases resolve first, so ``strict`` and ``ndjson`` answer the same as
-    the formats they name. ``value`` is deliberately not in the set: it is
-    bare values for a shell pipeline, and a URL on its own already is one.
-    """
-    from phabfive.constants import FORMAT_ALIASES
-
-    return FORMAT_ALIASES.get(output_format, output_format) in MACHINE_FORMATS
