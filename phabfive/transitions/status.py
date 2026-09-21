@@ -5,6 +5,11 @@ Status transition pattern matching for task statuses.
 
 This module provides pattern matching for task status changes,
 supporting conditions like 'from:Open', 'to:Resolved', 'in:Blocked', 'raised', 'lowered'.
+
+It also owns the scope keywords 'open', 'closed' and 'any', which say which
+statuses a search reaches at all rather than how a task got there. A search
+reaches open tasks unless told otherwise, so 'in:Resolved' on its own can never
+match - 'any+in:Resolved' can. See resolve_status_scope.
 """
 
 import logging
@@ -21,8 +26,13 @@ log = logging.getLogger(__name__)
 # Valid condition types for status patterns
 # Types that require a status value (e.g., "in:Open")
 VALID_STATUS_CONDITION_TYPES = ["from", "to", "in", "been", "never"]
+# Keywords that name which statuses a search reaches: every open one (the
+# default), every closed one, or any at all. They AND with the transition
+# conditions like any other keyword ("any+in:Resolved").
+STATUS_SCOPE_KEYWORDS = ["open", "closed", "any"]
+STATUS_SCOPE_DEFAULT = "open"
 # Special keywords that don't require a value
-VALID_STATUS_KEYWORDS = ["raised", "lowered"]
+VALID_STATUS_KEYWORDS = ["raised", "lowered"] + STATUS_SCOPE_KEYWORDS
 # Valid direction modifiers for "from" patterns
 VALID_STATUS_DIRECTIONS = ["raised", "lowered"]
 
@@ -38,6 +48,42 @@ FALLBACK_STATUS_ORDER = {
     "duplicate": 4,
     "resolved": 5,
 }
+
+# Closed status keys, used only if maniphest.querystatuses cannot be read.
+# Phorge's defaults; "spite" is one of them.
+FALLBACK_CLOSED_STATUSES = ["resolved", "wontfix", "invalid", "duplicate", "spite"]
+
+
+def closed_status_names(api_response=None):
+    """The lowercased keys and display names of every closed status.
+
+    maniphest.querystatuses lists closed statuses by key ("wontfix") while a
+    task reports its status by name ("Wontfix"), and a custom status can make
+    the two differ by more than case, so both are collected.
+
+    Parameters
+    ----------
+    api_response : dict, optional
+        Full response from maniphest.querystatuses
+
+    Returns
+    -------
+    set
+        Lowercased closed status keys and names
+    """
+    if not api_response:
+        return set(FALLBACK_CLOSED_STATUSES)
+
+    closed = api_response.get("closedStatuses") or {}
+    keys = closed.values() if isinstance(closed, dict) else closed
+    status_map = api_response.get("statusMap") or {}
+
+    names = set()
+    for key in keys:
+        names.add(str(key).lower())
+        if key in status_map:
+            names.add(str(status_map[key]).lower())
+    return names
 
 
 def _build_status_order_from_api(api_response):
@@ -140,7 +186,7 @@ class StatusPattern:
             negated = cond.get("negated", False)
             prefix = "not:" if negated else ""
 
-            if cond_type in ("raised", "lowered"):
+            if cond_type in VALID_STATUS_KEYWORDS:
                 parts.append(f"{prefix}{cond_type}")
             else:
                 status = cond.get("status", "")
@@ -192,6 +238,8 @@ class StatusPattern:
             result = self._matches_raised(status_transactions)
         elif condition_type == "lowered":
             result = self._matches_lowered(status_transactions)
+        elif condition_type in STATUS_SCOPE_KEYWORDS:
+            result = self._matches_scope(condition_type, current_status)
         else:
             log.warning(f"Unknown condition type: {condition_type}")
             result = False
@@ -200,6 +248,15 @@ class StatusPattern:
             result = not result
 
         return result
+
+    def _matches_scope(self, scope, current_status):
+        """Check whether the current status is within a scope keyword."""
+        if scope == "any":
+            return True
+        if not current_status:
+            return False
+        is_closed = current_status.lower() in closed_status_names(self.api_response)
+        return is_closed if scope == "closed" else not is_closed
 
     def _matches_from(self, condition, status_transactions):
         """Match 'from:STATUS[:direction]' pattern."""
@@ -406,3 +463,123 @@ def parse_status_patterns(patterns_str, api_response=None):
         patterns.append(StatusPattern(conditions, api_response))
 
     return patterns
+
+
+def _group_scope(pattern, default):
+    """The statuses one AND group can match, as a subset of {open, closed}.
+
+    A group that names no scope keyword gets the default. Keywords narrow:
+    "open+closed" can match nothing, "not:open" is "closed".
+    """
+    everything = {"open", "closed"}
+    scope = set(everything)
+    named = False
+
+    for condition in pattern.conditions:
+        keyword = condition.get("type")
+        if keyword not in STATUS_SCOPE_KEYWORDS:
+            continue
+        named = True
+        reach = everything if keyword == "any" else {keyword}
+        if condition.get("negated"):
+            reach = everything - reach
+        scope &= reach
+
+    if not named:
+        return everything if default == "any" else {default}, False
+    return scope, True
+
+
+def resolve_status_scope(patterns, default=STATUS_SCOPE_DEFAULT):
+    """Decide which statuses to ask the server for, from parsed --status patterns.
+
+    The scope keywords are what keeps a status search cheap: the server is
+    asked only for the statuses some group can match, so a transition
+    pattern on its own still costs no history fetches for closed tasks.
+
+    - A group without a scope keyword reaches ``default`` - open, unless the
+      caller widened it (the deprecated --all makes it "any").
+    - The server scope is the union of what the groups reach.
+    - Groups made of nothing but scope keywords are answered by the server
+      alone, so when every group is like that no pattern is left to check
+      and no task history is fetched.
+    - Otherwise a group that reaches less than the server scope gets its
+      default made explicit, so the client still enforces it when another
+      group widened the fetch (``been:Blocked,closed+in:Resolved``).
+
+    Parameters
+    ----------
+    patterns : list or None
+        StatusPattern objects from parse_status_patterns
+    default : str
+        Scope of a group that names none: "open" or "any"
+
+    Returns
+    -------
+    tuple
+        (scope, patterns): scope is "open", "closed" or "any"; patterns is
+        the list still to check on the client, or None
+    """
+    if not patterns:
+        return default, patterns
+
+    reached = set()
+    groups = []
+    for pattern in patterns:
+        scope, named = _group_scope(pattern, default)
+        reached |= scope
+        groups.append((pattern, scope, named))
+
+    if reached == {"open"}:
+        server_scope = "open"
+    elif reached == {"closed"}:
+        server_scope = "closed"
+    else:
+        # Both, or nothing at all (a self-contradicting "open+closed"):
+        # fetch everything and let the client reject what cannot match
+        server_scope = "any"
+
+    only_keywords = all(
+        all(c.get("type") in STATUS_SCOPE_KEYWORDS for c in p.conditions)
+        for p in patterns
+    )
+    if only_keywords and reached:
+        return server_scope, None
+
+    remaining = []
+    for pattern, scope, named in groups:
+        if not named and default != "any" and server_scope != default:
+            pattern = StatusPattern(
+                pattern.conditions + [{"type": default}], pattern.api_response
+            )
+        remaining.append(pattern)
+
+    return server_scope, remaining
+
+
+def unreachable_conditions(patterns, default=STATUS_SCOPE_DEFAULT, api_response=None):
+    """Name the ``in:`` conditions that can never match within their group's scope.
+
+    ``--status=in:Resolved`` asks for tasks currently Resolved among open
+    tasks, which is none - the classic way to get an empty result and no
+    explanation. Only a plain ``in:`` is judged; the other conditions are
+    about history and can legitimately name a status outside the scope.
+
+    Returns
+    -------
+    list
+        (condition string, scope) pairs, one per unreachable condition
+    """
+    closed = closed_status_names(api_response)
+    found = []
+
+    for pattern in patterns or []:
+        scope, _ = _group_scope(pattern, default)
+        for condition in pattern.conditions:
+            if condition.get("type") != "in" or condition.get("negated"):
+                continue
+            is_closed = str(condition.get("status", "")).lower() in closed
+            if ("closed" if is_closed else "open") not in scope:
+                found.append((f"in:{condition.get('status')}", "/".join(sorted(scope))))
+
+    return found

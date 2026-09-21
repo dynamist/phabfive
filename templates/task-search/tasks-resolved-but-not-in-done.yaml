@@ -3,7 +3,7 @@
 
 search:
   tag: "*"
-  status: "in:Resolved,in:Duplicate"
+  status: "closed+in:Resolved,closed+in:Duplicate"
   column: "not:in:Done"
   show-history: true
 

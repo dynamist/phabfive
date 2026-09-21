@@ -91,7 +91,7 @@ title: "Second Search Name"
 description: "What this search does"
 search:
   tag: "project-name"
-  status: "in:Resolved"
+  status: "closed+in:Resolved"
   updated-after: "1w"  # Can also use plain numbers: 7 (defaults to days)
 
 ---
@@ -113,7 +113,9 @@ search:
   [Result Ordering](maniphest-cli.md#result-ordering)
 - `column`: Column transition patterns
 - `priority`: Priority transition patterns
-- `status`: Status transition patterns
+- `status`: Status scope (`open`, `closed`, `any`) and transition patterns, e.g.
+  `"closed+in:Resolved"`. See [Status Scope](maniphest-cli.md#status-scope-open-closed-any)
+- `all`: Deprecated, use `status: any`. Still honoured, with a warning
 - `show-history`: Display transition history (true/false)
 - `show-metadata`: Display filter match metadata (true/false)
 - `show-policy`: Display each task's policies (true/false). Off by default: naming a
