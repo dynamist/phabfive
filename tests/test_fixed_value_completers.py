@@ -9,6 +9,7 @@ from click.shell_completion import ShellComplete
 
 # phabfive imports
 from phabfive.cli import app, completers
+from phabfive.constants import PROJECT_COLORS, PROJECT_ICONS
 
 
 def _complete(args, incomplete):
@@ -167,3 +168,53 @@ class TestPasteTagCompletion:
             side_effect=lambda fetch, default: fetch(phab),
         ):
             assert _complete(args, "B") == ["Backend"]
+
+
+class TestProjectColorCompletion:
+    """Phorge fixes the colours in its code, so the list is exact."""
+
+    @pytest.mark.parametrize("command", [["project", "search"]])
+    def test_offers_every_color(self, command):
+        assert _complete([*command, "--color"], "") == PROJECT_COLORS
+
+    def test_matches_prefix(self):
+        assert _complete(["project", "search", "--color"], "gr") == ["green", "grey"]
+
+
+class TestProjectIconCompletion:
+    """The icons are instance configuration no Conduit method reports."""
+
+    def _phab(self, icons):
+        phab = MagicMock()
+        phab.project.search.return_value = {
+            "data": [{"fields": {"icon": {"key": icon}}} for icon in icons],
+            "cursor": {"after": None},
+        }
+        return phab
+
+    def test_adds_the_icons_in_use_to_the_stock_ones(self):
+        phab = self._phab(["tag", "rocket", "milestone"])
+
+        icons = completers._fetch_project_icons(phab)
+
+        assert icons[: len(PROJECT_ICONS)] == PROJECT_ICONS
+        assert icons[len(PROJECT_ICONS) :] == ["rocket"]
+
+    def test_asks_about_archived_projects_too(self):
+        phab = self._phab([])
+
+        completers._fetch_project_icons(phab)
+
+        assert phab.project.search.call_args.kwargs["constraints"] == {"status": "all"}
+
+    def test_offers_the_stock_icons_when_the_api_fails(self):
+        with patch.object(
+            completers, "_get_values_with_api_fallback", side_effect=lambda f, d: d
+        ):
+            assert _complete(["project", "search", "--icon"], "gr") == ["group"]
+
+    def test_milestone_is_not_offered(self):
+        with patch.object(
+            completers, "_get_values_with_api_fallback", side_effect=lambda f, d: d
+        ):
+            assert "milestone" not in _complete(["project", "search", "--icon"], "")

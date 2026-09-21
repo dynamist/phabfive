@@ -217,6 +217,71 @@ TASK_POLICY_TRANSACTIONS = {
     "edit": "edit",
 }
 
+# Where a project record keeps each policy. project.search reports all three
+# on every project, unprefixed.
+PROJECT_POLICY_FIELDS = {
+    "view": "view",
+    "edit": "edit",
+    "join": "join",
+}
+
+# The Conduit transaction types that set a project's policies. project.edit
+# answers an unknown type by listing every valid one, and "view", "edit" and
+# "join" are all among them - a project is the one object here whose third
+# capability is settable, and it is the third member of the "-able By"
+# family Phorge's web UI names: "Joinable By".
+PROJECT_POLICY_TRANSACTIONS = {
+    "view": "view",
+    "edit": "edit",
+    "join": "join",
+}
+
+# What `project search` filters on by default, and what --all and --archived
+# ask for instead. project.search spells the three this way.
+PROJECT_STATUS_ACTIVE = "active"
+PROJECT_STATUS_ARCHIVED = "archived"
+PROJECT_STATUS_ALL = "all"
+
+# The icons a stock Phorge offers a project, for completion only. The set is
+# instance configuration (projects.icons) and no Conduit method reports it,
+# so completion adds whatever icons are actually in use, and the server is
+# what validates the value sent. "milestone" is left out: Phorge gives it to
+# every milestone and offers it for nothing else.
+PROJECT_ICONS = [
+    "project",
+    "tag",
+    "policy",
+    "group",
+    "folder",
+    "timeline",
+    "goal",
+    "release",
+    "bugs",
+    "cleanup",
+    "umbrella",
+    "communication",
+    "organization",
+    "infrastructure",
+    "account",
+    "experimental",
+]
+
+# The colours a project can be, in the order the web UI offers them. Unlike
+# the icons this set is fixed in Phorge's code, not configuration, so the
+# list is exact.
+PROJECT_COLORS = [
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "blue",
+    "indigo",
+    "violet",
+    "pink",
+    "grey",
+    "checkered",
+]
+
 CONFIGURABLES = [
     "PHAB_TOKEN",
     "PHAB_URL",
@@ -247,6 +312,7 @@ CACHE_TTLS = {
     "spaces": 86400,  # 24 hours
     "priorities": 604800,  # 7 days
     "statuses": 604800,  # 7 days
+    "project-icons": 604800,  # 7 days
     "projects": 300,  # 5 minutes
     "columns": 300,  # 5 minutes
 }
