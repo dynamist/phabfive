@@ -10,6 +10,9 @@ from phabfive.constants import (
     MANIPHEST_ORDER_FIELDS,
     PASTE_LANGUAGES,
     POLICY_LABELS,
+    PROJECT_COLORS,
+    PROJECT_ICONS,
+    PROJECT_STATUS_ALL,
     REPO_STATUS_CHOICES,
 )
 
@@ -1114,6 +1117,77 @@ def complete_repo_status(incomplete: str) -> List[str]:
         Matching status completions
     """
     return _complete_fixed(incomplete, REPO_STATUS_CHOICES + ["all"])
+
+
+# The icons in use on the instance, cached for as long as the priorities and
+# statuses are, and for the same reason: they are instance configuration
+PROJECT_ICON_CACHE_NAMESPACE = "project-icons"
+
+
+def _fetch_project_icons(phab) -> List[str]:
+    """The stock icons, plus every icon a project on the instance carries.
+
+    The icon set is instance configuration (projects.icons) and no Conduit
+    method reports it, so the icons in use are the closest the API comes to
+    naming a custom one. A configured icon that no project uses yet is not
+    offered - the server still takes it.
+
+    Lets a failed lookup fail, so that _cached_values falls back to the
+    stock list without writing it down as the instance's answer.
+    """
+    from phabfive.pagination import search_all_pages
+
+    projects = search_all_pages(
+        phab.project.search, constraints={"status": PROJECT_STATUS_ALL}
+    )
+    in_use = {
+        (project.get("fields", {}).get("icon") or {}).get("key") for project in projects
+    }
+
+    # "milestone" is Phorge's to give to a milestone, not a value to choose
+    in_use -= {None, "milestone"}
+
+    return PROJECT_ICONS + sorted(in_use - set(PROJECT_ICONS))
+
+
+def complete_project_icon(incomplete: str) -> List[str]:
+    """Complete a project icon: the stock ones and any in use on the instance."""
+    icons = _cached_values(
+        PROJECT_ICON_CACHE_NAMESPACE, _fetch_project_icons, PROJECT_ICONS
+    )
+
+    return _complete_fixed(incomplete, icons)
+
+
+def complete_project_color(incomplete: str) -> List[str]:
+    """Complete a project colour, from the set Phorge fixes in its code."""
+    return _complete_fixed(incomplete, PROJECT_COLORS)
+
+
+def forget_projects(icons=False) -> None:
+    """Drop the cached project completions after a project was written.
+
+    A project created or renamed would otherwise not complete, or complete
+    under its old name, until the cache expired. Only the namespaces are
+    dropped - nothing a write returns is ever put into the cache - and it is
+    best effort, like every cache operation: a write that succeeded must not
+    be reported as failed because a cache file could not be removed.
+
+    Parameters
+    ----------
+    icons : bool, optional
+        Drop the cached icons too, for a write that set one - so a custom
+        icon just used is offered straight away
+    """
+    namespaces = [PROJECT_CACHE_NAMESPACE]
+
+    if icons:
+        namespaces.append(PROJECT_ICON_CACHE_NAMESPACE)
+
+    try:
+        cache.clear(namespaces=namespaces)
+    except Exception:
+        pass
 
 
 def complete_passphrase_type(incomplete: str) -> List[str]:

@@ -14,6 +14,7 @@ SUBCOMMANDS = [
     "passphrase",
     "diffusion",
     "paste",
+    "project",
     "user",
     "maniphest",
 ]
@@ -47,7 +48,7 @@ class TestRootCompletion:
         assert "T" in _values(["--format", "json"], "")
 
     def test_typed_prefix_completes_subcommands_only(self):
-        assert _values([], "p") == ["passphrase", "paste"]
+        assert _values([], "p") == ["passphrase", "paste", "project"]
 
     @pytest.mark.parametrize("letter", ["T", "K", "P", "R"])
     def test_bare_letter_is_not_offered(self, letter):

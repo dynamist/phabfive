@@ -39,6 +39,7 @@ GROUPS = [
     ["passphrase"],
     ["diffusion"],
     ["paste"],
+    ["project"],
     ["user"],
     ["maniphest"],
     ["diffusion", "repo"],
@@ -87,7 +88,15 @@ def test_root_lists_its_own_commands():
     result = runner.invoke(app, ["-v"])
 
     output = _output(result)
-    for command in ("cache", "passphrase", "diffusion", "paste", "user", "maniphest"):
+    for command in (
+        "cache",
+        "passphrase",
+        "diffusion",
+        "paste",
+        "project",
+        "user",
+        "maniphest",
+    ):
         assert command in output
 
 

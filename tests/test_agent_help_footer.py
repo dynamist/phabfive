@@ -38,6 +38,7 @@ GROUPS = [
     ["passphrase"],
     ["diffusion"],
     ["paste"],
+    ["project"],
     ["user"],
     ["maniphest"],
     ["diffusion", "repo"],
@@ -48,6 +49,7 @@ LEAVES = [
     ["maniphest", "show"],
     ["maniphest", "search"],
     ["paste", "create"],
+    ["project", "search"],
     ["passphrase", "show"],
     ["edit"],
 ]

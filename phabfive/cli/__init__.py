@@ -20,6 +20,7 @@ from phabfive.cli.edit import edit_command
 from phabfive.cli.maniphest import maniphest_app
 from phabfive.cli.passphrase import passphrase_app
 from phabfive.cli.paste import paste_app
+from phabfive.cli.project import project_app
 from phabfive.cli.repl import repl_app
 from phabfive.cli.shell_completion import MonogramGroup, install_bash_escaping
 from phabfive.cli.user import user_app
@@ -317,6 +318,7 @@ app.add_typer(passphrase_app, name="passphrase")
 app.add_typer(diffusion_app, name="diffusion")
 app.command(name="edit")(edit_command)
 app.add_typer(paste_app, name="paste")
+app.add_typer(project_app, name="project")
 app.add_typer(user_app, name="user")
 app.add_typer(maniphest_app, name="maniphest")
 # Show repl command only if ptpython is installed (phabfive[repl])
