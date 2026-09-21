@@ -11,8 +11,11 @@ from urllib.parse import urlparse
 from phabricator import APIError, Phabricator
 
 # phabfive imports
+from phabfive.constants import USER_ROLE_CONSTRAINTS, USER_ROLES
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
+from phabfive.maniphest.utils import format_timestamp
+from phabfive.pagination import iter_pages
 
 log = logging.getLogger(__name__)
 
@@ -175,3 +178,140 @@ class User(Phabfive):
                 "The file contains sensitive credentials and should only be readable by you. "
                 f"Please run: chmod 600 {file_path}"
             )
+
+    def search(
+        self,
+        query=None,
+        roles=None,
+        not_roles=None,
+        show_metadata=False,
+        limit=None,
+    ):
+        """Search users, filtered by the roles Phorge reports on them.
+
+        Parameters
+        ----------
+        query : str, optional
+            Free text, matched against usernames and real names the way the
+            web UI's search box matches it
+        roles : list, optional
+            Roles a user must have, every one of them
+        not_roles : list, optional
+            Roles a user must not have, any of them
+        show_metadata : bool, optional
+            Include the Metadata section
+        limit : int, optional
+            How many matching users to return in total; None for all of them
+
+        Returns
+        -------
+        list
+            One record per user, sorted by username
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If a role is not one Phorge reports, or is both asked for and
+            excluded
+        PhabfiveRemoteException
+            If the search fails
+        """
+        roles = list(dict.fromkeys(roles or []))
+        not_roles = list(dict.fromkeys(not_roles or []))
+
+        unknown = [role for role in roles + not_roles if role not in USER_ROLES]
+        if unknown:
+            raise PhabfiveConfigException(
+                f"Unknown role {', '.join(repr(role) for role in unknown)}, "
+                f"expected one of: {', '.join(USER_ROLES)}"
+            )
+
+        both = [role for role in roles if role in not_roles]
+        if both:
+            raise PhabfiveConfigException(
+                f"Cannot both require and exclude {', '.join(both)}"
+            )
+
+        constraints = {}
+
+        if query:
+            constraints["query"] = query
+
+        # A role the server can filter on is sent as a constraint, so the
+        # pages carry only matching users. The rest are matched here.
+        for role, wanted in [(role, True) for role in roles] + [
+            (role, False) for role in not_roles
+        ]:
+            if role in USER_ROLE_CONSTRAINTS:
+                constraints[USER_ROLE_CONSTRAINTS[role]] = wanted
+
+        local_roles = [role for role in roles if role not in USER_ROLE_CONSTRAINTS]
+        local_not_roles = [
+            role for role in not_roles if role not in USER_ROLE_CONSTRAINTS
+        ]
+
+        def matches(user):
+            held = set(user.get("fields", {}).get("roles") or [])
+            return all(role in held for role in local_roles) and not any(
+                role in held for role in local_not_roles
+            )
+
+        filtering_here = bool(local_roles or local_not_roles)
+
+        users = []
+
+        try:
+            # A limit can only be forwarded when every match the server sends
+            # counts; filtering here means counting matches ourselves, and
+            # stopping as soon as there are enough.
+            for page in iter_pages(
+                self.phab.user.search,
+                limit=None if filtering_here else limit,
+                constraints=constraints,
+            ):
+                users.extend(user for user in page if matches(user))
+
+                if limit is not None and len(users) >= limit:
+                    users = users[:limit]
+                    break
+        except APIError as e:
+            raise PhabfiveRemoteException(e)
+
+        users.sort(key=lambda user: user["fields"]["username"].casefold())
+
+        return [self._user_record(user, show_metadata) for user in users]
+
+    def _user_record(self, user, show_metadata=False):
+        """One user as a display record.
+
+        The User section is what `project show --show-members` lists for
+        each member - Username, Name and Roles, the roles passed through
+        unchanged - so the two can be compared line for line.
+        """
+        fields = user.get("fields", {})
+        username = fields.get("username", "")
+        url = f"{self.url}/p/{username}/"
+
+        record = {
+            "_url": url,
+            "_link": self.format_link(url, username),
+            "User": {
+                "Username": username,
+                "Name": fields.get("realName") or "",
+                "Roles": list(fields.get("roles") or []),
+            },
+        }
+
+        if show_metadata:
+            record["Metadata"] = {
+                "PHID": user.get("phid", ""),
+                "ID": user.get("id"),
+                "Created": format_timestamp(fields["dateCreated"])
+                if fields.get("dateCreated")
+                else "",
+                "Modified": format_timestamp(fields["dateModified"])
+                if fields.get("dateModified")
+                else "",
+            }
+
+        return record
