@@ -5,7 +5,6 @@ import os
 import re
 import sys
 from importlib import resources
-from importlib.metadata import version
 from typing import Optional
 
 # Disable Typer's Rich formatting for help text to remove fancy boxes
@@ -13,6 +12,7 @@ os.environ.setdefault("TYPER_USE_RICH", "0")
 
 import typer
 
+import phabfive
 from phabfive.cli.log_setup import init_logging
 from phabfive.cli.cache import cache_app
 from phabfive.cli.diffusion import diffusion_app
@@ -210,7 +210,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
 def version_callback(value: bool) -> None:
     """Show version and exit."""
     if value:
-        typer.echo(version("phabfive"))
+        typer.echo(phabfive.__version__)
         raise typer.Exit()
 
 
