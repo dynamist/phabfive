@@ -259,6 +259,34 @@ The library prints nothing, prompts for nothing and leaves `os.environ` alone.
 It logs through the `logging` module under the `phabfive` logger, and the
 records it returns hold plain strings.
 
+**Editing.** `Edit.plan()` works out what an edit would change on each task and
+changes nothing; `Edit.apply()` makes one planned edit. The review, confirmation
+and preview the command puts between them are yours to decide:
+
+```python
+from phabfive import Edit
+
+edit = Edit(url=url, token=token)
+plan = edit.plan("T1,T2,T3", status="resolved", comment="Done in the migration")
+
+for failure in plan.failures:
+    print(f"{failure.monogram}: {failure.error}")
+
+for task_edit in plan.edits:
+    if task_edit.noop:
+        continue  # already resolved
+    for change in task_edit.changes:
+        print(task_edit.monogram, change["field"], change["old"], "->", change["new"])
+    edit.apply(task_edit)
+```
+
+Validation is all or nothing: if any task cannot be fetched, or is on several
+boards when a column was asked for without `tag=`, `plan()` raises
+`PhabfiveValidationException` naming every one and plans nothing.
+`plan.needs_confirmation` says whether a title, description or policy would
+change - the edits the command asks about. `edit.apply_all(plan)` applies every
+edit and stops at the first the server refuses.
+
 **Errors.** Everything phabfive raises on purpose is a `PhabfiveException`:
 
 | | |
@@ -266,6 +294,7 @@ records it returns hold plain strings.
 | `PhabfiveConfigException` | configuration missing or malformed, or an argument phabfive cannot use |
 | `PhabfiveInputException` | an argument's value is wrong - also a `ValueError` |
 | `PhabfiveDataException` | the data does not allow it |
+| `PhabfiveValidationException` | some of several tasks failed validation, so none was changed; carries `.problems` |
 | `PhabfiveNotFoundException` | the object does not exist, or is not visible - also a `LookupError` |
 | `PhabfiveNameCollisionException` | a new name is too close to an existing one |
 | `PhabfiveRemoteException` | the server could not be asked, or refused |
@@ -292,7 +321,8 @@ module; the module holding a name is imported the first time the name is used.
 
 | | |
 |---|---|
-| Apps | `Maniphest`, `Paste`, `Diffusion`, `Passphrase`, `Project`, `User`, and their base `Phabfive` |
+| Apps | `Maniphest`, `Paste`, `Diffusion`, `Passphrase`, `Project`, `User`, `Edit`, and their base `Phabfive` |
+| Edits | `EditPlan`, `TaskEdit`, `EditFailure` |
 | Errors | `PhabfiveException`, and its subclasses - see below |
 | Version | `__version__` |
 

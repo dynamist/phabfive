@@ -23,6 +23,12 @@
 * **The `~/.config/phabfive.yaml` credentials deprecation is a log message.** It reads
   `WARNING - ~/.config/phabfive.yaml contains ...` rather than `WARNING: ...`, and `-q`
   now silences it
+* **Breaking change for Python callers: `Edit.edit_objects` is gone.** It returned an exit
+  code and printed; `Edit.plan()` and `Edit.apply()` replace it for a program, and the
+  command's flow is `phabfive.cli.edit_flow.run_edit`. `phabfive.editor` moved to
+  `phabfive.cli.editor`, `Maniphest.edit_task_by_id` lost its `preview` parameter and
+  prints nothing, and `Maniphest.add_task_comment` and `Maniphest.get_task_info` return
+  their result rather than `(True, result)`
 * **`phabfive.init_logging` moved to `phabfive.cli.log_setup`.** Configuring the root
   logger is the command's decision, not the library's, so the package root no longer
   offers it
@@ -56,6 +62,12 @@
   each built a second app. `verify=True` checks the connection at once; the command always
   asks for that, so it still fails before doing anything. Apps used internally now share
   their parent's client
+* **Plan an edit, then apply it** - `Edit.plan("T1,T2", status="resolved")` returns an
+  `EditPlan` of `TaskEdit`s (the transactions and the changes each would make) and
+  `EditFailure`s, and changes nothing; `Edit.apply()` makes one edit. Validation is all or
+  nothing and raises `PhabfiveValidationException` naming every task that failed.
+  `Maniphest.create_tasks_from_config()` creates from a creation template held as data.
+  Closes #442
 * **Errors a program can catch without the client's libraries** - Conduit errors are
   `PhabfiveAPIException`, with the `.code` and `.message` of the `phabricator.APIError`
   they replace, and an unreachable server is `PhabfiveConnectionException`; both are
@@ -269,6 +281,9 @@
 * **`diffusion uri edit` printed a traceback when Phorge rejected the edit.** It now
   reports the validation error as `ERROR: ...` and exits 1, like every other apply path.
   Fixes #394
+* **A batch dry run said "Edited N/N tasks".** It now says `Would edit N/N tasks (dry run)`,
+  and in any run a task already at the target is counted apart, as `N already at target`.
+  Closes #423
 * **`maniphest create --with` exited 0 when the template file did not exist.** It is an
   error now, and exits 1
 * **Interrupting phabfive printed a traceback of its own.** `cli_entrypoint` raised

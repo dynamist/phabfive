@@ -54,6 +54,7 @@ BANNED = [
     "phabfive.core",
     "phabfive.maniphest",
     "phabfive.diffusion",
+    "phabfive.edit",
     "phabfive.passphrase",
     "phabfive.paste",
     "phabfive.project",
@@ -118,6 +119,7 @@ class TestResolution:
     def test_app_classes_share_the_base(self):
         for name in (
             "Diffusion",
+            "Edit",
             "Maniphest",
             "Passphrase",
             "Paste",

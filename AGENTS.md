@@ -222,6 +222,17 @@ nothing is discovered.
   status 1. It runs outside click's main loop, so it leaves with `sys.exit`, never
   `typer.Exit`
 
+### Editing (`edit/`)
+
+- `phabfive.edit` is data only: `plan_task_edits` (`Edit.plan`) validates every task
+  atomically and builds an `EditPlan`; `Edit.apply` sends one `TaskEdit`. Nothing under
+  `phabfive/edit/` prints, prompts or reads stdin
+- `phabfive/cli/edit_flow.py` is the command: `run_edit` reads IDs or stdin YAML, opens
+  `$EDITOR`, reviews, confirms, previews, prints the summary and returns the exit status.
+  `phabfive edit` and `maniphest edit` import it inside the function; tests patch
+  `phabfive.cli.edit_flow.run_edit`
+- `phabfive/cli/editor.py` holds `$EDITOR`, the prompts and `typer.confirm`
+
 ### Constructing an App
 
 - **Library defaults, command choices.** `Phabfive(url=None, token=None, *, config=None,
