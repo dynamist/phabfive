@@ -20,11 +20,30 @@
   `--force required for non-interactive mode` error, are gone. Two or more are reviewed one
   at a time at a terminal. `--dry-run` still previews anything
 * **`--force` is deprecated in favour of `--yes`.** It still works, hidden, and warns
+* **`phabfive.init_logging` moved to `phabfive.cli.log_setup`.** Configuring the root
+  logger is the command's decision, not the library's, so the package root no longer
+  offers it
 * **`--format=simple` is now `--format=value`.** The old spelling still works - it is
   rewritten in argv the way `strict` and `ndjson` are - so no script has to change. Only
   `value` is offered by `--help` and by shell completion
 
 ## New Features
+
+### Using phabfive as a Library
+* **The library surface is exported from the top level** - `from phabfive import
+  Maniphest` works without knowing the module layout. `__all__` is the supported
+  promise: `Phabfive`, `Maniphest`, `Paste`, `Diffusion`, `Passphrase`, `Project`,
+  `User`, the five exception types and `__version__`. Each module also declares its own
+  `__all__`; a name listed there but not at the top level is public and importable from
+  its module, just not part of the narrower promise. Existing submodule imports are
+  unchanged. Closes #438
+* **`import phabfive` is lazy** - every public name is resolved on first use (PEP 562),
+  so the import loads no third-party module and costs about 2ms rather than 75ms, and
+  nothing that merely touches an attribute on `phabfive` can reach the CLI or its
+  `TYPER_USE_RICH` environment variable
+* **`phabfive.__version__`** - read on first access, and falls back to `0.0.0+unknown`
+  on a source tree that was never installed rather than raising
+* **`py.typed`** - the package is marked as typed for consumers' type checkers
 
 ### Showing Repositories
 * **`diffusion repo show`** - Diffusion had no show command. `diffusion repo show R5 R6`
@@ -239,6 +258,12 @@
   name a project or a user. The helper moved to `phabfive/display.py` when
   Maniphest's `Policy` section became its second caller; the older task fields around
   that section still print bare, so a task's rich output is not YAML in general
+* `scripts/smoke.py --venv` now also imports phabfive as a library in the venv's own
+  interpreter, and asserts every `__all__` name resolves without pulling in the CLI. Both
+  that check and `--version` reject the `0.0.0+unknown` fallback, so a release artifact
+  that lost its dist-info still fails - a fallback matches the version pattern, and would
+  otherwise pass a run given no `--expect-version`. The PyInstaller builds copy
+  phabfive's metadata explicitly
 * All JSON serialization now goes through `phabfive/json_output.py`, so `json` and
   `jsonl` are built from the same record builders and cannot drift apart
 * Paste and passphrase JSON output gained builder/printer splits, matching what
