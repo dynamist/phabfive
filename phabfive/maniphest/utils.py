@@ -12,7 +12,10 @@ from typing import Optional
 
 from jinja2 import Environment, Template, meta
 
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveDataException,
+    PhabfiveInputException,
+)
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +83,7 @@ def parse_time_with_unit(time_value):
     time_str = str(time_value).strip()
 
     if not time_str:
-        raise ValueError("Time value cannot be empty")
+        raise PhabfiveInputException("Time value cannot be empty")
 
     # Define unit conversions to days
     unit_to_days = {
@@ -96,7 +99,9 @@ def parse_time_with_unit(time_value):
         # If it's just a number, treat as days
         days = float(time_str)
         if days < 0:
-            raise ValueError(f"Time value cannot be negative: '{time_value}'")
+            raise PhabfiveInputException(
+                f"Time value cannot be negative: '{time_value}'"
+            )
         return days
     except ValueError as e:
         # If it's a negative value error, re-raise it
@@ -108,7 +113,7 @@ def parse_time_with_unit(time_value):
     # Extract numeric part and unit suffix
     match = re.match(r"^(-?[0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]+)$", time_str)
     if not match:
-        raise ValueError(
+        raise PhabfiveInputException(
             f"Invalid time format: '{time_value}'. "
             f"Expected format: NUMBER[UNIT] where UNIT is one of: h, d, w, m, y. "
             f"Examples: '7d', '1w', '2m', '1y', '12h', or just '7' (defaults to days)"
@@ -119,15 +124,17 @@ def parse_time_with_unit(time_value):
 
     if unit not in unit_to_days:
         valid_units = ", ".join(sorted(unit_to_days.keys()))
-        raise ValueError(f"Invalid time unit: '{unit}'. Valid units are: {valid_units}")
+        raise PhabfiveInputException(
+            f"Invalid time unit: '{unit}'. Valid units are: {valid_units}"
+        )
 
     try:
         numeric_value = float(numeric_part)
     except ValueError:
-        raise ValueError(f"Invalid numeric value: '{numeric_part}'")
+        raise PhabfiveInputException(f"Invalid numeric value: '{numeric_part}'")
 
     if numeric_value < 0:
-        raise ValueError(f"Time value cannot be negative: '{time_value}'")
+        raise PhabfiveInputException(f"Time value cannot be negative: '{time_value}'")
 
     # Convert to days
     days = numeric_value * unit_to_days[unit]

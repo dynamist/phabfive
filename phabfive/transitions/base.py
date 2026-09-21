@@ -7,7 +7,9 @@ This module provides common parsing logic used by column, status, and priority
 transition modules.
 """
 
-from phabfive.exceptions import PhabfiveException
+from phabfive.exceptions import (
+    PhabfiveInputException,
+)
 
 
 def parse_negation_prefix(condition_str):
@@ -66,7 +68,7 @@ def parse_condition_parts(
     # Patterns with parameters: type:value or type:value:direction
     if ":" not in condition_str:
         all_types = valid_condition_types + valid_keywords
-        raise PhabfiveException(
+        raise PhabfiveInputException(
             f"Invalid {entity_name} condition syntax: '{condition_str}'. "
             f"Expected format: TYPE:{entity_name.upper()} (e.g., 'in:Value', 'not:in:Done'). "
             f"Valid types: {', '.join(all_types)}"
@@ -77,19 +79,19 @@ def parse_condition_parts(
 
     if condition_type not in valid_condition_types:
         all_types = valid_condition_types + valid_keywords
-        raise PhabfiveException(
+        raise PhabfiveInputException(
             f"Invalid {entity_name} condition type: '{condition_type}'. "
             f"Valid types: {', '.join(all_types)}"
         )
 
     if len(parts) < 2:
-        raise PhabfiveException(
+        raise PhabfiveInputException(
             f"Missing {entity_name} name for condition: '{condition_str}'"
         )
 
     value = parts[1].strip()
     if not value:
-        raise PhabfiveException(
+        raise PhabfiveInputException(
             f"Empty {entity_name} name in condition: '{condition_str}'"
         )
 
@@ -130,13 +132,13 @@ def parse_direction(parts_info, condition_str, valid_directions, entity_name):
         return None
 
     if parts_info["type"] != "from":
-        raise PhabfiveException(
+        raise PhabfiveInputException(
             f"Direction modifier only allowed for 'from' patterns, got: '{condition_str}'"
         )
 
     direction = parts_info["extra_parts"][0].strip()
     if direction not in valid_directions:
-        raise PhabfiveException(
+        raise PhabfiveInputException(
             f"Invalid direction: '{direction}'. "
             f"Valid directions: {', '.join(valid_directions)}"
         )
@@ -167,7 +169,7 @@ def split_pattern_groups(patterns_str, entity_name):
         If pattern string is empty
     """
     if not patterns_str or not patterns_str.strip():
-        raise PhabfiveException(f"Empty {entity_name} pattern")
+        raise PhabfiveInputException(f"Empty {entity_name} pattern")
 
     result = []
 
@@ -186,6 +188,6 @@ def split_pattern_groups(patterns_str, entity_name):
             result.append(and_parts)
 
     if not result:
-        raise PhabfiveException(f"No valid {entity_name} patterns found")
+        raise PhabfiveInputException(f"No valid {entity_name} patterns found")
 
     return result

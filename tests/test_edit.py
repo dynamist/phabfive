@@ -9,6 +9,8 @@ from unittest import mock
 # 3rd party imports
 import pytest
 
+from phabfive.exceptions import PhabfiveDataException, PhabfiveNotFoundException
+
 
 @pytest.fixture(autouse=True)
 def mock_config(monkeypatch):
@@ -350,7 +352,7 @@ class TestColumnNavigation:
             assert result == "PHID-PCOL-1"
 
     def test_navigate_invalid_column_name_raises_error(self):
-        """Test navigating to non-existent column raises ValueError."""
+        """A column that is not on the board is not found."""
         from phabfive.maniphest import Maniphest
 
         m = Maniphest()
@@ -372,7 +374,9 @@ class TestColumnNavigation:
         with mock.patch(
             "phabfive.maniphest.fetchers.get_column_info", return_value=columns
         ):
-            with pytest.raises(ValueError, match="Column 'Invalid' not found"):
+            with pytest.raises(
+                PhabfiveNotFoundException, match="Column 'Invalid' not found"
+            ):
                 m._navigate_column("123", task_data, "Invalid", "PHID-PROJ-board")
 
 
@@ -1104,7 +1108,7 @@ Task:
 """
 
         with mock.patch("sys.stdin", StringIO(yaml_data)):
-            with pytest.raises(ValueError, match="missing 'Link' field"):
+            with pytest.raises(PhabfiveDataException, match="missing 'Link' field"):
                 parse_yaml_from_stdin(edit_app.parse_monogram)
 
     def test_parse_list_document_from_yaml(self):
@@ -1153,7 +1157,7 @@ Task:
 """
 
         with mock.patch("sys.stdin", StringIO(yaml_data)):
-            with pytest.raises(ValueError, match="missing 'Link' field"):
+            with pytest.raises(PhabfiveDataException, match="missing 'Link' field"):
                 parse_yaml_from_stdin(edit_app.parse_monogram)
 
     def test_parses_what_display_tasks_yaml_emits(self):

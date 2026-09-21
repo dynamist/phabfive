@@ -322,7 +322,7 @@ def create(
         # Template mode
         try:
             result = maniphest.create_tasks_from_yaml(with_template, dry_run=dry_run)
-        except PhabfiveConfigException as e:
+        except (PhabfiveConfigException, PhabfiveDataException) as e:
             sys.stderr.write(f"Error: {e}\n")
             raise typer.Exit(1)
         if result and result.get("dry_run"):

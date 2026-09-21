@@ -26,6 +26,7 @@ from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
     PhabfiveException,
+    PhabfiveNotFoundException,
     PhabfiveRemoteException,
 )
 from phabfive.maniphest.fetchers import (
@@ -627,10 +628,10 @@ class Maniphest(Phabfive):
         template_file = Path(template_path)
 
         if not template_file.exists():
-            raise PhabfiveException(f"Template file not found: {template_path}")
+            raise PhabfiveConfigException(f"Template file not found: {template_path}")
 
         if not template_file.is_file():
-            raise PhabfiveException(f"Path is not a file: {template_path}")
+            raise PhabfiveConfigException(f"Path is not a file: {template_path}")
 
         try:
             with open(template_file, "r", encoding="utf-8") as f:
@@ -638,32 +639,32 @@ class Maniphest(Phabfive):
                 # Load all documents from the YAML file
                 documents = list(yaml_loader.load_all(f))
         except Exception as e:
-            raise PhabfiveException(
+            raise PhabfiveDataException(
                 f"Failed to parse template file {template_path}: {e}"
             )
 
         if not documents:
-            raise PhabfiveException("Template file contains no documents")
+            raise PhabfiveDataException("Template file contains no documents")
 
         search_configs = []
         supported_params = SEARCH_TEMPLATE_KEYS
 
         for i, data in enumerate(documents):
             if not isinstance(data, dict):
-                raise PhabfiveException(
+                raise PhabfiveDataException(
                     f"Document {i + 1} in YAML file must contain a dictionary at root level"
                 )
 
             search_params = data.get("search", {})
             if not isinstance(search_params, dict):
-                raise PhabfiveException(
+                raise PhabfiveDataException(
                     f"Document {i + 1}: 'search' section must be a dictionary"
                 )
 
             # Validate supported parameters
             invalid_params = set(search_params.keys()) - supported_params
             if invalid_params:
-                raise PhabfiveException(
+                raise PhabfiveDataException(
                     f"Document {i + 1}: Unsupported search parameters: {', '.join(invalid_params)}. "
                     f"Supported: {', '.join(sorted(supported_params))}"
                 )
@@ -1563,11 +1564,12 @@ class Maniphest(Phabfive):
 
     def create_tasks_from_yaml(self, create_config, dry_run=False):
         if not create_config:
-            raise PhabfiveException("Must specify a config file path")
+            raise PhabfiveConfigException("Must specify a config file path")
 
         if not Path(create_config).is_file():
-            log.error(f"Config file '{create_config}' do not exists")
-            return
+            raise PhabfiveConfigException(
+                f"Config file '{create_config}' does not exist"
+            )
 
         with open(create_config) as stream:
             yaml_loader = YAML()
@@ -2162,7 +2164,7 @@ class Maniphest(Phabfive):
         )
 
         if not result["data"]:
-            raise ValueError(f"Task T{task_id} not found")
+            raise PhabfiveNotFoundException(f"Task T{task_id} not found")
 
         return result["data"][0]
 
@@ -2386,12 +2388,12 @@ class Maniphest(Phabfive):
                 user_phid = whoami.get("phid")
                 new_username = whoami.get("userName", assign)
                 if not user_phid:
-                    raise ValueError("Failed to get current user's PHID")
+                    raise PhabfiveRemoteException("Failed to get current user's PHID")
             else:
                 user_phid = self._resolve_user_phid(assign)
                 new_username = assign
                 if not user_phid:
-                    raise ValueError(f"User not found: {assign}")
+                    raise PhabfiveNotFoundException(f"User not found: {assign}")
             current_owner = task_data["fields"]["ownerPHID"]
             if user_phid != current_owner:
                 transactions.append({"type": "owner", "value": user_phid})
@@ -2451,12 +2453,14 @@ class Maniphest(Phabfive):
                     user_phid = whoami.get("phid")
                     display_name = whoami.get("userName", username)
                     if not user_phid:
-                        raise ValueError("Failed to get current user's PHID")
+                        raise PhabfiveRemoteException(
+                            "Failed to get current user's PHID"
+                        )
                 else:
                     user_phid = self._resolve_user_phid(username)
                     display_name = username
                     if not user_phid:
-                        raise ValueError(f"User not found: {username}")
+                        raise PhabfiveNotFoundException(f"User not found: {username}")
                 # Only add if not already subscribed
                 if user_phid not in current_subscribers:
                     subscriber_phids.append(user_phid)
@@ -2809,14 +2813,16 @@ class Maniphest(Phabfive):
                     current_column_phid = columns[0]["phid"]
 
             if not current_column_phid:
-                raise ValueError(
+                raise PhabfiveDataException(
                     f"Task T{task_id} is not currently in any column on this board"
                 )
 
             # Find current position
             current_info = column_info.get(current_column_phid)
             if not current_info:
-                raise ValueError("Could not determine current column position")
+                raise PhabfiveDataException(
+                    "Could not determine current column position"
+                )
 
             current_seq = current_info["sequence"]
 
@@ -2845,7 +2851,7 @@ class Maniphest(Phabfive):
 
             # Not found
             available = [col_data["name"] for col_data in column_info.values()]
-            raise ValueError(
+            raise PhabfiveNotFoundException(
                 f"Column '{column_name}' not found on board. Available: {available}"
             )
 
