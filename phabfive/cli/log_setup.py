@@ -1,0 +1,55 @@
+# -*- coding: utf-8 -*-
+"""Logging setup for the phabfive command.
+
+Lives under cli/ because configuring the root logger is the application's
+decision, never a library's: a program that imports phabfive keeps whatever
+logging it already has.
+"""
+
+# python stdlib
+import logging
+import logging.config
+import sys
+
+
+def init_logging(log_level):
+    """
+    Init logging settings with default set to INFO
+    """
+    _log_level = logging.getLevelName(log_level)
+
+    if isinstance(_log_level, str):
+        print(
+            "CRITICAL - Undefined log-level set, please use any of the defined log levels inside Python logging module",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if log_level == "DEBUG":
+        msg = "%(levelname)s - %(name)s:%(lineno)s - %(message)s"
+    else:
+        msg = "%(levelname)s - %(message)s"
+
+    logging_conf = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "root": {
+            "level": log_level,
+            "handlers": ["console"],
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "level": log_level,
+                "formatter": "simple",
+                "stream": sys.stderr,
+            },
+        },
+        "formatters": {
+            "simple": {
+                "format": f"{msg}",
+            },
+        },
+    }
+
+    logging.config.dictConfig(logging_conf)
