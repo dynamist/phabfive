@@ -245,7 +245,7 @@ def project_search(
     space: Optional[str] = typer.Option(
         None,
         "--space",
-        help="Projects in these Spaces (name, monogram or pattern; comma-separated)",
+        help="Projects in these Spaces (name, monogram or pattern; comma-separated; '*' for all). Default: PHAB_SPACE",
         autocompletion=complete_space_filter,
     ),
     show_policy: bool = typer.Option(
@@ -262,11 +262,10 @@ def project_search(
 ) -> None:
     """Search projects.
 
-    With no filter at all it lists every active project, subprojects and
-    milestones included. --status=archived lists the archived ones, and
-    --status=any lists both. Unlike `maniphest search` it does not narrow to
-    PHAB_SPACE on its own: a Space is filtered on only when --space names
-    one, so a listing is never quietly missing the projects in other Spaces.
+    With no filter at all it lists every active project in PHAB_SPACE,
+    subprojects and milestones included. --status=archived lists the archived ones, and
+    --status=any lists both. Like `maniphest search` it looks in PHAB_SPACE
+    unless --space names other Spaces; --space='*' looks in every one.
 
     Naming the policies costs one extra lookup for the whole listing, not one
     per project, so an audit of every project on the instance is a single
@@ -280,7 +279,7 @@ def project_search(
         phabfive project search --parent='#development' --milestones
         phabfive project search --icon=group --color=red,blue
         phabfive project search --status=archived
-        phabfive --format=jsonl project search --status=any --show-policy -l 0
+        phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0
     """
     from phabfive.project.display import display_projects
 
@@ -316,7 +315,7 @@ def project_search(
             status=status,
             icons=split_list_option(icon),
             colors=split_list_option(color),
-            spaces=split_list_option(space),
+            spaces=split_list_option(space) or None,
             show_policy=show_policy,
             show_members=show_members,
             # A limit is how many projects to return, not the page size to

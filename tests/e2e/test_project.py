@@ -179,12 +179,13 @@ def test_a_self_lockout_is_a_sentence(create_project, phabfive_raw):
 
 
 def test_audit_lists_every_project_one_per_line(phabfive_raw, conduit):
-    """`phabfive --format=jsonl project search --status=any --show-policy -l 0`"""
+    """`phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0`"""
     result = phabfive_raw(
         "--format=jsonl",
         "project",
         "search",
         "--status=any",
+        "--space=*",
         "--show-policy",
         "-l",
         "0",

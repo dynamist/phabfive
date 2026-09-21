@@ -207,12 +207,23 @@ def _app(phab):
 
     project.phab = phab
     project.url = URL
+    project.conf = {"PHAB_SPACE": "S1"}
     project.format_link = lambda url, text: url
 
     return project
 
 
 ALL = [DEVELOPMENT, SPRINT_DEV, QA, SPRINT_QA, HUMANS, OLD]
+
+
+@pytest.fixture(autouse=True)
+def spaces():
+    """Resolve a Space pattern to a PHID named after it, without the API."""
+    with patch(
+        "phabfive.project.core.resolve_space_phids",
+        side_effect=lambda phab, space: [f"PHID-SPCE-{space}"],
+    ) as resolve:
+        yield resolve
 
 
 @pytest.fixture
@@ -401,11 +412,35 @@ class TestSearch:
         assert self._constraints(phab)["status"] == "active"
         assert "Old Project" not in [r["Project"]["Name"] for r in result["projects"]]
 
-    def test_no_space_is_assumed(self, phab):
-        """PHAB_SPACE narrows a task search, never a project search."""
+    def test_narrowed_to_phab_space_by_default(self, phab):
+        """The way a task search is, so the two agree on where they look."""
+        _app(phab).search()
+
+        assert self._constraints(phab)["spaces"] == ["PHID-SPCE-S1"]
+
+    def test_a_named_space_replaces_the_default(self, phab):
+        _app(phab).search(spaces=["S2", "S3"])
+
+        assert self._constraints(phab)["spaces"] == ["PHID-SPCE-S2", "PHID-SPCE-S3"]
+
+    def test_star_is_every_space_and_no_constraint(self, phab, spaces):
+        _app(phab).search(spaces=["*"])
+
+        assert "spaces" not in self._constraints(phab)
+        spaces.assert_not_called()
+
+    def test_a_default_that_cannot_be_resolved_is_every_space(self, phab, spaces):
+        spaces.side_effect = RuntimeError("no such space")
+
         _app(phab).search()
 
         assert "spaces" not in self._constraints(phab)
+
+    def test_a_named_space_that_cannot_be_resolved_fails(self, phab, spaces):
+        spaces.side_effect = PhabfiveDataException("no such space")
+
+        with pytest.raises(PhabfiveDataException):
+            _app(phab).search(spaces=["Nowhere"])
 
     def test_members_are_resolved_to_phids(self, phab):
         _app(phab).search(members=["@admin", "@deploybot"])
@@ -480,7 +515,7 @@ class TestSearch:
 
 
 class TestAudit:
-    """`phabfive --format=jsonl project search --status=any --show-policy -l 0`
+    """`phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0`
 
     Every project on the instance, with its policy, one object per line -
     across pages, archived and milestones included, in one policy lookup.
@@ -491,6 +526,7 @@ class TestAudit:
         "project",
         "search",
         "--status=any",
+        "--space=*",
         "--show-policy",
         "-l",
         "0",
