@@ -7,6 +7,8 @@ import logging
 from phabricator import APIError
 
 from phabfive.constants import (
+    PROJECT_COLORS,
+    PROJECT_MILESTONE_ICON,
     PROJECT_POLICY_FIELDS,
     PROJECT_POLICY_TRANSACTIONS,
     PROJECT_STATUS_ACTIVE,
@@ -37,6 +39,26 @@ from phabfive.project.formatters import (
 from phabfive.project.resolvers import resolve_project, resolve_user_phids
 
 log = logging.getLogger(__name__)
+
+
+def check_project_color(color):
+    """Refuse a colour Phorge does not have, before anything is sent.
+
+    The colours are fixed in Phorge's code - projects.colors relabels them
+    but cannot add one - so an unknown key is a typo. A write would be
+    refused by the server anyway, but a dry run would not reach it and a
+    search would answer with nothing at all.
+
+    Raises
+    ------
+    PhabfiveConfigException
+        If the colour is not one of PROJECT_COLORS
+    """
+    if color and color not in PROJECT_COLORS:
+        raise PhabfiveConfigException(
+            f"Unknown project color '{color}', "
+            f"expected one of: {', '.join(PROJECT_COLORS)}"
+        )
 
 
 class Project(Phabfive):
@@ -218,7 +240,10 @@ class Project(Phabfive):
             "active" (the default), "archived", or "any" for no status
             filter at all
         icons, colors : list, optional
-            Icon and colour keys, any of which matches
+            Icon and colour keys, any of which matches. A milestone cannot
+            have either of its own: Phorge shows every milestone with the
+            "milestone" icon and its parent's colour, and so does this
+            search - see _search_milestones_by_look.
         spaces : list, optional
             Space names, monograms or patterns, any of which matches. None
             means PHAB_SPACE, and "*" among them means every Space.
@@ -235,7 +260,7 @@ class Project(Phabfive):
         Raises
         ------
         PhabfiveConfigException
-            If a status is unknown
+            If a status or colour is unknown
         PhabfiveDataException
             If a user, project or Space named does not exist, or the search
             fails
@@ -245,6 +270,11 @@ class Project(Phabfive):
                 f"Unknown project status '{status}', "
                 f"expected one of: {', '.join(PROJECT_STATUS_CHOICES)}"
             )
+
+        # A search would answer an unknown colour with an empty result, not
+        # an error. Icons are instance configuration and cannot be checked.
+        for color in colors or []:
+            check_project_color(color)
 
         constraints = {
             "status": PROJECT_STATUS_ALL if status == PROJECT_STATUS_ANY else status
@@ -271,21 +301,20 @@ class Project(Phabfive):
         if milestones is not None:
             constraints["isMilestone"] = bool(milestones)
 
-        if icons:
-            constraints["icons"] = list(icons)
-
-        if colors:
-            constraints["colors"] = list(colors)
-
         space_phids = self._resolve_search_spaces(spaces)
         if space_phids:
             constraints["spaces"] = space_phids
 
         attachments = {"members": True} if show_members else None
 
-        found = fetch_projects(
-            self.phab, constraints=constraints, attachments=attachments, limit=limit
-        )
+        if icons or colors:
+            found = self._search_by_look(
+                constraints, attachments, icons, colors, milestones, limit
+            )
+        else:
+            found = fetch_projects(
+                self.phab, constraints=constraints, attachments=attachments, limit=limit
+            )
         found = sorted(
             found,
             key=lambda project: (
@@ -299,6 +328,97 @@ class Project(Phabfive):
         )
 
         return {"projects": projects}
+
+    def _search_by_look(
+        self, constraints, attachments, icons, colors, milestones, limit
+    ):
+        """Search by icon and colour, the way Phorge shows them.
+
+        project.search matches its icons and colors constraints against the
+        values stored on a project. A milestone has stored ones too - but
+        Phorge never shows them: it gives every milestone the "milestone"
+        icon and its parent's colour, and those are also what project.search
+        reports in the milestone's own fields. Left to the server, a search
+        for the colour a milestone is shown in misses it, and a search for
+        the colour it happens to have stored finds it.
+
+        So the server is asked for projects that are not milestones, whose
+        stored values are the ones shown, and milestones are matched here:
+        on the "milestone" icon, and on whether their parent is of a colour
+        asked for. The parents are looked up with the same colors constraint,
+        which keeps "colour" meaning the colour a project was given - an
+        archived parent included, which Phorge shows as "disabled".
+
+        Parameters
+        ----------
+        constraints : dict
+            Every other constraint of the search
+        attachments : dict or None
+            project.search attachments
+        icons, colors : list or None
+            What --icon and --color asked for
+        milestones : bool or None
+            --milestones / --no-milestones
+        limit : int or None
+            How many projects to return in total
+
+        Returns
+        -------
+        list
+            project.search result items
+        """
+        found = []
+
+        if milestones is not True:
+            look = {"isMilestone": False}
+            if icons:
+                look["icons"] = list(icons)
+            if colors:
+                look["colors"] = list(colors)
+            found += fetch_projects(
+                self.phab,
+                constraints={**constraints, **look},
+                attachments=attachments,
+                limit=limit,
+            )
+
+        if milestones is not False and (not icons or PROJECT_MILESTONE_ICON in icons):
+            candidates = fetch_projects(
+                self.phab,
+                constraints={**constraints, "isMilestone": True},
+                attachments=attachments,
+            )
+
+            if colors and candidates:
+                parent_phids = sorted(
+                    {
+                        (item["fields"].get("parent") or {}).get("phid")
+                        for item in candidates
+                    }
+                    - {None}
+                )
+                # Every status: an archived parent still has the colour it
+                # was given, which is what a milestone takes from it
+                parents = fetch_projects(
+                    self.phab,
+                    constraints={
+                        "phids": parent_phids,
+                        "colors": list(colors),
+                        "status": PROJECT_STATUS_ALL,
+                    },
+                )
+                matching = {parent["phid"] for parent in parents}
+                candidates = [
+                    item
+                    for item in candidates
+                    if (item["fields"].get("parent") or {}).get("phid") in matching
+                ]
+
+            found += candidates
+
+        # Two searches, so the limit is applied to what they found together;
+        # the caller sorts by name, as it does a single search
+        return found[:limit] if limit else found
 
     def _resolve_search_spaces(self, spaces):
         """The Space PHIDs a search is narrowed to, or None for every Space.
@@ -471,14 +591,19 @@ class Project(Phabfive):
                 "either a subproject or a milestone"
             )
 
-        if milestone_of and (icon or slugs):
-            # Phorge ignores an icon on a milestone, and stores a hashtag on
-            # one that project.search never reports - neither does what it
-            # was asked to, so neither is sent.
+        if milestone_of and (icon or color or slugs):
+            # Phorge shows a milestone with the milestone icon and its
+            # parent's colour whatever is stored on it, and stores a hashtag
+            # on one that project.search never reports - none of them does
+            # what it was asked to, so none is sent. A stored colour is worse
+            # than ignored: project.search matches it, so the milestone would
+            # turn up under a colour it is never shown in.
             raise PhabfiveConfigException(
-                "A milestone takes no --icon or --slug: its icon is fixed and "
-                "it has no hashtag"
+                "A milestone takes no --icon, --color or --slug: its icon is "
+                "fixed, its colour is its parent's, and it has no hashtag"
             )
+
+        check_project_color(color)
 
         transactions = []
         changes = []
@@ -630,11 +755,16 @@ class Project(Phabfive):
         fields = project.get("fields", {})
         is_milestone = fields.get("milestone") is not None
 
-        if is_milestone and (icon or add_slugs):
+        if is_milestone and (icon or color or add_slugs):
+            # Phorge refuses an icon or colour transaction on a milestone
+            # outright ("invalid type"), so say why before it does
             raise PhabfiveConfigException(
                 f"{describe_project(project)} is a milestone, which takes no "
-                "--icon or --add-slug: its icon is fixed and it has no hashtag"
+                "--icon, --color or --add-slug: its icon is fixed, its colour "
+                "is its parent's, and it has no hashtag"
             )
+
+        check_project_color(color)
 
         if add_members and remove_members:
             both = set(add_members) & set(remove_members)
