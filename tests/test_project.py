@@ -439,14 +439,22 @@ class TestSearch:
         with pytest.raises(PhabfiveConfigException):
             _app(phab).search(status="closed")
 
+    def test_any_is_what_phorge_calls_all(self, phab):
+        _app(phab).search(status="any")
+
+        assert self._constraints(phab)["status"] == "all"
+
     @pytest.mark.parametrize(
-        "args", [["--all"], ["--status=all"], ["--all", "--status=all"]]
+        "args", [["--all"], ["--status=any"], ["--all", "--status=any"]]
     )
-    def test_all_is_short_for_status_all(self, phab, args, restore_output_format):
+    def test_all_is_a_deprecated_alias_for_status_any(
+        self, phab, args, restore_output_format
+    ):
         result = _invoke(phab, ["--format=json", "project", "search", *args])
 
         assert result.exit_code == 0, result.output
         assert self._constraints(phab)["status"] == "all"
+        assert ("deprecated" in result.stderr) == ("--all" in args)
 
     def test_all_contradicting_status_is_refused(self, phab):
         result = _invoke(phab, ["project", "search", "--all", "--status=archived"])
@@ -458,7 +466,7 @@ class TestSearch:
         result = _invoke(phab, ["project", "search", "--status=closed"])
 
         assert result.exit_code == 1
-        assert "--status must be one of: active, archived, all" in result.stderr
+        assert "--status must be one of: active, archived, any" in result.stderr
         phab.project.search.assert_not_called()
 
     def test_nothing_found_leaves_stdout_empty(self, phab, restore_output_format):
@@ -472,13 +480,21 @@ class TestSearch:
 
 
 class TestAudit:
-    """`phabfive --format=jsonl project search --all --show-policy -l 0`
+    """`phabfive --format=jsonl project search --status=any --show-policy -l 0`
 
     Every project on the instance, with its policy, one object per line -
     across pages, archived and milestones included, in one policy lookup.
     """
 
-    ARGV = ["--format=jsonl", "project", "search", "--all", "--show-policy", "-l", "0"]
+    ARGV = [
+        "--format=jsonl",
+        "project",
+        "search",
+        "--status=any",
+        "--show-policy",
+        "-l",
+        "0",
+    ]
 
     def test_every_project_on_one_line_each(self, restore_output_format):
         phab = FakePhab(ALL, users=[ADMIN], page_size=2)

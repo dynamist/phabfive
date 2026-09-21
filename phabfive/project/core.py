@@ -10,6 +10,8 @@ from phabfive.constants import (
     PROJECT_POLICY_FIELDS,
     PROJECT_POLICY_TRANSACTIONS,
     PROJECT_STATUS_ACTIVE,
+    PROJECT_STATUS_ALL,
+    PROJECT_STATUS_ANY,
     PROJECT_STATUS_CHOICES,
 )
 from phabfive.core import Phabfive
@@ -213,7 +215,7 @@ class Project(Phabfive):
             True lists only milestones, False only projects that are not
             milestones, None both
         status : str, optional
-            "active" (the default), "archived", or "all" for no status
+            "active" (the default), "archived", or "any" for no status
             filter at all
         icons, colors : list, optional
             Icon and colour keys, any of which matches
@@ -243,7 +245,9 @@ class Project(Phabfive):
                 f"expected one of: {', '.join(PROJECT_STATUS_CHOICES)}"
             )
 
-        constraints = {"status": status}
+        constraints = {
+            "status": PROJECT_STATUS_ALL if status == PROJECT_STATUS_ANY else status
+        }
 
         if query:
             constraints["query"] = query
