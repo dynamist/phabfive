@@ -8,6 +8,24 @@ def test_users(conduit, seed, admin_username):
     assert sorted(user["fields"]["username"] for user in found) == sorted(usernames)
 
 
+def test_bot_and_disabled_users(conduit, seed):
+    """The seed flags an account as a bot or disabled, and Phorge reports it."""
+    flagged = [
+        user for user in seed["users"] if user.get("bot") or user.get("disabled")
+    ]
+    assert flagged, "the seed has no bot or disabled account to filter on"
+
+    found = conduit(
+        "user.search",
+        constraints={"usernames": [user["username"] for user in flagged]},
+    )["data"]
+    roles = {user["fields"]["username"]: user["fields"]["roles"] for user in found}
+
+    for user in flagged:
+        assert ("bot" in roles[user["username"]]) == bool(user.get("bot"))
+        assert ("disabled" in roles[user["username"]]) == bool(user.get("disabled"))
+
+
 def test_projects_and_milestones(conduit, seed):
     projects = conduit("project.search", limit=100)["data"]
     by_name = {}

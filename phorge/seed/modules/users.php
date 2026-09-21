@@ -17,10 +17,14 @@ final class PhabfiveUsersSeedModule extends PhabfiveSeedModule {
       $user = $this->loadUser($record['username']);
 
       if (!$user) {
+        // A bot and a disabled account, so that the roles user.search
+        // reports on them - "bot", "disabled" - exist to be filtered on.
         $user = id(new PhabricatorUser())
           ->setUsername($record['username'])
           ->setRealName($record['realname'])
-          ->setIsApproved(1);
+          ->setIsApproved(1)
+          ->setIsSystemAgent((int)!empty($record['bot']))
+          ->setIsDisabled((int)!empty($record['disabled']));
 
         $email = id(new PhabricatorUserEmail())
           ->setAddress($record['email'])
@@ -33,7 +37,10 @@ final class PhabfiveUsersSeedModule extends PhabfiveSeedModule {
         $this->log(pht('Created user "%s".', $record['username']));
       }
 
-      if (phutil_nonempty_string($password)) {
+      // Neither a bot nor a disabled account logs in with a password
+      $can_log_in = empty($record['bot']) && empty($record['disabled']);
+
+      if ($can_log_in && phutil_nonempty_string($password)) {
         PhabfiveSeedPasswords::ensure($user, $password);
       }
     }
