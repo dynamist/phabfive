@@ -225,17 +225,39 @@ from the top level:
 ```python
 from phabfive import Maniphest, User
 
-print(User().whoami()["userName"])
+maniphest = Maniphest(url="https://phorge.example.com", token="api-...")
 
-result = Maniphest().task_show([123])
+result = maniphest.task_show([123])
 for task in result["tasks"]:
     print(task["_url"], task["Task"]["Name"], task["Task"]["Status"])
+
+created = maniphest.create_task("Rotate the build keys", tags=["Security"])
+print(created["uri"])
 ```
 
 A record is the same one `--format=json` prints, so the shapes described for the
-CLI hold here too. Constructing a class reads the configuration the way the
-command does - `PHAB_URL` and `PHAB_TOKEN` from the environment, `~/.arcrc`,
-`.arcconfig` - and checks the connection.
+CLI hold here too.
+
+**Configuration.** Passing `url`, `token` or `config` configures an instance from
+those alone - the `/api/` suffix is added when missing, and `config` takes the
+other settings, such as `{"PHAB_SPACE": "S2"}`. Nothing is read from the
+environment or any file, so the program behaves the same whoever runs it.
+With no arguments, `Maniphest()` discovers its configuration exactly as the
+command does: `PHAB_URL` and `PHAB_TOKEN` from the environment, `~/.arcrc`,
+`.arcconfig` in the git root, and the yaml files under `/etc` and
+`~/.config`. When `~/.arcrc` holds several hosts and nothing picks one,
+`select_host=` is called with the list to choose from; without it that is an
+error, never a prompt.
+
+**Connecting.** Constructing makes no request. The client is built on the first
+call, so a wrong token shows up as a `PhabfiveRemoteException` from that call;
+pass `verify=True` to check the connection immediately instead. An app that
+uses another internally - `Diffusion` reading credentials through `Passphrase` -
+shares one client with it.
+
+The library prints nothing, prompts for nothing and leaves `os.environ` alone.
+It logs through the `logging` module under the `phabfive` logger, and the
+records it returns hold plain strings.
 
 Every public name is resolved lazily, so `import phabfive` loads no third-party
 module; the module holding a name is imported the first time the name is used.
