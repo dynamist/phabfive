@@ -9,6 +9,7 @@ CLI for [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https
 - **Maniphest** - Full task management: create, show, edit, search, comment, parents/subtasks
 - **Paste** - Create, show, edit, search, and comment on pastes
 - **Diffusion** - Repository management, branches and tags, and URI configuration
+- **Projects** - Create, show, edit and search projects, subprojects and milestones, with their members and roles
 - **Passphrase** - Search, list, and retrieve secrets (passwords, tokens, SSH keys, notes)
 - **User** - User info and interactive setup wizard
 
@@ -16,7 +17,7 @@ Cross-cutting features:
 
 - **Monogram shortcuts** - `phabfive T123` expands to `phabfive maniphest show T123`
 - **Batch editing** - Edit multiple objects at once: `phabfive edit T1,T2,T3 --status=resolved`
-- **Policies** - Read and set who can see, edit and push to repositories and tasks: `--show-policy`, `--visible-to`, `--editable-by`, `--can-push`
+- **Policies** - Read and set who can see, edit, join and push to repositories, tasks and projects: `--show-policy`, `--visible-to`, `--editable-by`, `--joinable-by`, `--can-push`
 - **Shell completion** - Tab completion for commands, options, and values
 - **Machine-readable output** - `--format=json`, `--format=jsonl` or `--format=yaml` for scripting and AI agents
 - **Table output** - `--format=table` renders a grid for the commands that answer with a list
@@ -150,6 +151,12 @@ phabfive maniphest edit T123 --space=S3
 phabfive maniphest show T123 --show-policy
 phabfive maniphest edit T123 --visible-to='#infra' --editable-by=admin --dry-run
 phabfive diffusion repo edit R5 --visible-to=public --can-push='#infra' --dry-run
+
+# Projects - members with their roles, subprojects and milestones
+phabfive project show '#backend' --show-members
+phabfive project create "Sprint 7" --milestone-of='#backend' --dry-run
+phabfive project edit '#backend' --add-member=@alice,@bob --joinable-by=admin --dry-run
+phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0
 
 # Smart navigation - raise/lower priority, move columns forward/backward
 phabfive edit T123 --priority=raise

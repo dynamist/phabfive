@@ -8,6 +8,7 @@ nav:
     - Introduction: 'index.md'
     - Maniphest CLI: 'maniphest-cli.md'
     - Edit CLI: 'edit-cli.md'
+    - Project CLI: 'project-cli.md'
     - Diffusion URIs: 'diffusion-uri.md'
     - Policies: 'policies.md'
     - Search Templates: 'search-templates.md'

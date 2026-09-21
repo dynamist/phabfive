@@ -2,11 +2,11 @@
 
 Every object in Phorge carries policies: who may see it, who may change it, and
 — depending on the application — one capability of its own. phabfive can read
-those policies on repositories and on tasks, and set them on both.
+those policies on repositories, tasks and projects, and set them on all three.
 
 The grammar a policy value is written in is the same everywhere, which is why it
 is documented here once rather than twice. It lives in `phabfive/policy.py` for
-the same reason: neither Diffusion nor Maniphest owns it.
+the same reason: no one application owns it.
 
 ## Overview
 
@@ -14,8 +14,9 @@ the same reason: neither Diffusion nor Maniphest owns it.
 | --- | --- | --- |
 | Diffusion | `diffusion repo show --show-policy`, `diffusion repo list --show-policy` | `diffusion repo edit --visible-to`, `--editable-by`, `--can-push` |
 | Maniphest | `maniphest show --show-policy`, `maniphest search --show-policy` | `maniphest edit` and `maniphest create`, `--visible-to` and `--editable-by` |
+| Projects | `project show --show-policy`, `project search --show-policy` | `project edit` and `project create`, `--visible-to`, `--editable-by` and `--joinable-by` |
 
-Each object reports three policies. Two of them are the same on both:
+Each object reports three policies. Two of them are the same on all three:
 
 | Shown as | Means | Settable |
 | --- | --- | --- |
@@ -23,6 +24,7 @@ Each object reports three policies. Two of them are the same on both:
 | `Editable By` | Who can change it | yes |
 | `Can Push` (repositories) | Who can push to it | yes, and only meaningful on a hosted repository |
 | `Can Interact` (tasks) | Who can comment on it | **no** — Phorge derives it |
+| `Joinable By` (projects) | Who can join it without being added | yes |
 
 The two special cases are covered under [Can Interact is derived](#can-interact-is-derived)
 and [Can Push needs a hosted repository](#can-push-needs-a-hosted-repository).
@@ -30,8 +32,8 @@ They are the parts most likely to look like a bug and are not one.
 
 ## The value grammar
 
-Every policy option — `--visible-to`, `--editable-by` and `--can-push` — takes
-the same set of values:
+Every policy option — `--visible-to`, `--editable-by`, `--can-push` and
+`--joinable-by` — takes the same set of values:
 
 | Value | Means |
 | --- | --- |
@@ -146,7 +148,7 @@ phabfive maniphest show T237 --show-policy --no-description
   Subtasks: []
 ```
 
-The flag is on four commands:
+The flag is on six commands:
 
 | Command | Flag | Short form |
 | --- | --- | --- |
@@ -154,6 +156,8 @@ The flag is on four commands:
 | `diffusion repo list` | `--show-policy` | `-P` |
 | `maniphest show` | `--show-policy` | `-P` |
 | `maniphest search` | `--show-policy` | — |
+| `project show` | `--show-policy` | `-P` |
+| `project search` | `--show-policy` | `-P` |
 
 !!! note
 
@@ -232,6 +236,59 @@ phabfive maniphest create "Rotate the deploy key" --description="Scratch" \
 
 `phabfive edit T123 --visible-to=...` routes to `maniphest edit` and behaves
 identically. See [Edit CLI](edit-cli.md).
+
+## Project policies
+
+A project's third policy is `Joinable By`: who may join it without being added.
+It is the third member of Phorge's `-able By` family, so a project is the one
+object here whose three policies all read that way:
+
+```bash
+phabfive project show '#scratch_12684' --show-policy --no-description
+```
+
+```
+- Link: http://phorge.localhost/project/view/20/
+  Project:
+    Name: Scratch 12684
+    Hashtag: '#scratch_12684'
+    Status: active
+    Icon: tag
+    Color: green
+    Parent:
+    Milestone:
+  Space: S1 Default
+  Policy:
+    Visible To: '#scratch_12684'
+    Editable By: All Users
+    Joinable By: Administrators
+```
+
+All three can be set, on `project create` and on `project edit`:
+
+```bash
+phabfive project edit '#scratch_12684' --editable-by='#scratch_12684' --joinable-by=users --dry-run
+```
+
+```
+[DRY RUN] Would apply to http://phorge.localhost/project/view/20/ (Scratch 12684):
+  Editable By: All Users → #scratch_12684
+  Joinable By: Administrators → All Users
+```
+
+A project's policy can name the project itself, which limits it to its members.
+You have to be one of them, or Phorge refuses the edit as a
+[self-lockout](#self-lockout). `project create --member=@me` makes you a member
+at creation time.
+
+To audit every project on the instance:
+
+```bash
+phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0
+```
+
+That is one line per project, with its policy section, and costs one extra
+lookup for the whole listing. See [Project CLI](project-cli.md).
 
 ## Can Interact is derived
 
@@ -453,4 +510,5 @@ Manage credential policies in the web UI.
 
 - [Maniphest CLI](maniphest-cli.md) — task management, search and output formats
 - [Edit CLI](edit-cli.md) — single, batch and piped editing
+- [Project CLI](project-cli.md) — projects, their members, subprojects and milestones
 - [Diffusion URIs](diffusion-uri.md) — a repository's URIs, which are a separate axis from its policies
