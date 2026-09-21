@@ -451,3 +451,6 @@ class Passphrase(Phabfive):
                 raise PhabfiveDataException(f"K{numeric_id} not found or access denied")
 
         return credentials
+
+
+__all__ = ["Passphrase"]

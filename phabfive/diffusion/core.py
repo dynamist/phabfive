@@ -1519,3 +1519,6 @@ class Diffusion(Phabfive):
         self.apply_repo_edit(object_identifier, transactions)
 
         return {"changes": changes, "dry_run": False}
+
+
+__all__ = ["Diffusion"]

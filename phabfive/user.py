@@ -354,3 +354,6 @@ class User(Phabfive):
             }
 
         return record
+
+
+__all__ = ["User"]
