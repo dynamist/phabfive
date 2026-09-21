@@ -592,14 +592,18 @@ phabfive --format=json project show '#humans' --show-members \
 `--status=any` and warns on stderr. Subprojects and milestones are included unless
 `--milestones` or `--no-milestones` says otherwise. The other filters are `--member`,
 `--parent`, `--ancestor`, `--icon`, `--color` and `--space`, and a free-text query as
-the argument. Like `maniphest search` it looks only in `PHAB_SPACE` unless `--space`
+the argument. `--icon` and `--color` match what Phorge shows: a milestone is the
+`milestone` icon and its parent's color, and an archived project matches the color it
+was given, not the `disabled` it is shown as. An unknown color is refused; an unknown
+icon (they are instance configuration) matches nothing. Like `maniphest search` it looks only in `PHAB_SPACE` unless `--space`
 names other Spaces, so every project on the instance is
 `--status=any --space='*' -l 0`; `--show-policy` costs one extra lookup for the whole
 listing, not one per project.
 
 `project create` takes `--description`, `--icon`, `--color`, `--slug`, `--member`,
 `--space` and the three policies, and `--parent` for a subproject or `--milestone-of`
-for a milestone, which takes no `--icon` or `--slug`. `project edit` takes `--name`,
+for a milestone, which takes no `--icon`, `--color` or `--slug` (`edit` refuses those
+on a milestone too). `project edit` takes `--name`,
 `--description`, `--icon`, `--color`, `--add-slug`, `--add-member`, `--remove-member`,
 `--space` and the three policies; anything already at its target is left out, and
 adding a hashtag keeps the ones already there. A name whose hashtag another project

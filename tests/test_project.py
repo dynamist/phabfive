@@ -99,6 +99,11 @@ ADMIN = _user("admin", "Administrator", roles=("admin", "verified"))
 DEPLOYBOT = _user("deploybot", "Deploy Bot", roles=("bot", "verified"))
 
 
+def _stored(project, what):
+    """The icon or colour stored on a project, which a search matches."""
+    return project.get("_stored", {}).get(what) or project["fields"][what]["key"]
+
+
 class FakePhab:
     """Just enough of project.search and user.search to answer like Phorge.
 
@@ -153,6 +158,18 @@ class FakePhab:
         if "name" in constraints:
             word = constraints["name"].lower()
             found = [p for p in found if word in p["fields"]["name"].lower()]
+        if "isMilestone" in constraints:
+            found = [
+                p
+                for p in found
+                if (p["fields"]["milestone"] is not None) == constraints["isMilestone"]
+            ]
+        # Like Phorge, icons and colors match the values stored on a project,
+        # which for a milestone are not the ones its fields report
+        if "icons" in constraints:
+            found = [p for p in found if _stored(p, "icon") in constraints["icons"]]
+        if "colors" in constraints:
+            found = [p for p in found if _stored(p, "color") in constraints["colors"]]
 
         status = constraints.get("status", "active")
         if status != "all":
@@ -825,3 +842,158 @@ class TestWriteFormats:
             _invoke(phab, ["project", "edit", "#humans", "--icon=tag", "--dry-run"])
 
         forget.assert_not_called()
+
+
+def _milestone(pid, parent, stored_color, number=1):
+    """A milestone as Phorge reports it: the milestone icon and its parent's
+    colour in its fields, with whatever was stored on it kept apart."""
+    project = _project(
+        pid,
+        f"Sprint {number}",
+        parent=parent,
+        milestone=number,
+        icon="milestone",
+        color=parent["fields"]["color"]["key"],
+    )
+    project["_stored"] = {"icon": "project", "color": stored_color}
+    return project
+
+
+class TestSearchByLook:
+    """--icon and --color match what Phorge shows, milestones included."""
+
+    GREEN = _project(40, "Green Team", slug="green_team", color="green", icon="group")
+    RED = _project(41, "Red Team", slug="red_team", color="red")
+    ARCHIVED_RED = _project(
+        42, "Old Red", slug="old_red", color="disabled", status="archived"
+    )
+    # Stored blue, shown green: the case the server gets wrong
+    GREEN_SPRINT = _milestone(43, GREEN, stored_color="blue")
+    # Stored green, shown red
+    RED_SPRINT = _milestone(44, RED, stored_color="green")
+    ARCHIVED_SPRINT = _milestone(45, ARCHIVED_RED, stored_color="blue")
+
+    @pytest.fixture
+    def phab(self):
+        self.ARCHIVED_RED["_stored"] = {"color": "red"}
+        return FakePhab(
+            [
+                self.GREEN,
+                self.RED,
+                self.ARCHIVED_RED,
+                self.GREEN_SPRINT,
+                self.RED_SPRINT,
+                self.ARCHIVED_SPRINT,
+            ],
+            users=[ADMIN],
+        )
+
+    def _names(self, phab, **kwargs):
+        result = _app(phab).search(spaces=["*"], **kwargs)
+        return sorted(
+            (r["Project"]["Name"], r["_url"].rstrip("/").rsplit("/", 1)[-1])
+            for r in result["projects"]
+        )
+
+    def test_a_milestone_is_found_by_the_colour_it_is_shown_in(self, phab):
+        assert self._names(phab, colors=["green"]) == [
+            ("Green Team", "40"),
+            ("Sprint 1", "43"),
+        ]
+
+    def test_a_milestone_is_not_found_by_its_hidden_stored_colour(self, phab):
+        assert self._names(phab, colors=["blue"]) == []
+
+    def test_an_archived_parent_keeps_the_colour_it_was_given(self, phab):
+        """Phorge shows an archived project as "disabled"; its milestones
+        still take the colour it was given."""
+        assert self._names(phab, colors=["red"], status="any") == [
+            ("Old Red", "42"),
+            ("Red Team", "41"),
+            ("Sprint 1", "44"),
+            ("Sprint 1", "45"),
+        ]
+
+    def test_colours_or(self, phab):
+        # The active ones: both teams and all three milestones, the archived
+        # parent's included - the milestone itself is active
+        assert len(self._names(phab, colors=["green", "red"])) == 5
+
+    def test_milestone_icon_finds_milestones(self, phab):
+        assert [pid for _, pid in self._names(phab, icons=["milestone"])] == [
+            "43",
+            "44",
+            "45",
+        ]
+
+    def test_a_milestone_is_not_found_by_its_hidden_stored_icon(self, phab):
+        assert self._names(phab, icons=["project"]) == [("Red Team", "41")]
+
+    def test_icon_and_colour_and(self, phab):
+        assert self._names(phab, icons=["group"], colors=["green"]) == [
+            ("Green Team", "40")
+        ]
+        assert self._names(phab, icons=["milestone"], colors=["green"]) == [
+            ("Sprint 1", "43")
+        ]
+
+    def test_no_milestones(self, phab):
+        assert self._names(phab, colors=["green"], milestones=False) == [
+            ("Green Team", "40")
+        ]
+
+    def test_only_milestones(self, phab):
+        assert self._names(phab, colors=["green"], milestones=True) == [
+            ("Sprint 1", "43")
+        ]
+
+    def test_the_limit_applies_to_both_searches_together(self, phab):
+        assert len(self._names(phab, colors=["green"], limit=1)) == 1
+
+    def test_without_icon_or_colour_it_is_one_search(self, phab):
+        _app(phab).search(spaces=["*"])
+
+        assert phab.project.search.call_count == 1
+
+    def test_an_unknown_colour_is_refused_before_any_call(self, phab):
+        with pytest.raises(PhabfiveConfigException, match="Unknown project color"):
+            _app(phab).search(colors=["green", "grean"])
+
+        phab.project.search.assert_not_called()
+
+    def test_disabled_is_not_a_colour_to_ask_for(self, phab):
+        with pytest.raises(PhabfiveConfigException, match="expected one of"):
+            _app(phab).search(colors=["disabled"])
+
+    def test_the_cli_reports_an_unknown_colour(self, phab):
+        result = _invoke(phab, ["project", "search", "--color=grean"])
+
+        assert result.exit_code == 1
+        assert "Unknown project color 'grean'" in result.stderr
+
+
+class TestColourOnWrites:
+    def test_create_refuses_an_unknown_colour(self, phab):
+        with pytest.raises(PhabfiveConfigException, match="Unknown project color"):
+            _app(phab).build_project_create("New", color="grean")
+
+    def test_create_refuses_a_colour_on_a_milestone(self, phab):
+        """Phorge would store it, show the parent's colour instead, and let a
+        search find the milestone under the stored one."""
+        with pytest.raises(PhabfiveConfigException, match="--color"):
+            _app(phab).build_project_create(
+                "Sprint 2", milestone_of="#development", color="red"
+            )
+
+    def test_edit_refuses_a_colour_on_a_milestone(self, phab):
+        app = _app(phab)
+        milestone = app.get_project("13")
+
+        with pytest.raises(PhabfiveConfigException, match="is a milestone"):
+            app.build_project_edit(milestone, color="red")
+
+    def test_edit_refuses_an_unknown_colour(self, phab):
+        app = _app(phab)
+
+        with pytest.raises(PhabfiveConfigException, match="Unknown project color"):
+            app.build_project_edit(app.get_project("#humans"), color="grean")

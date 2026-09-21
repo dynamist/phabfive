@@ -276,9 +276,14 @@ PROJECT_ICONS = [
     "experimental",
 ]
 
+# The icon Phorge gives every milestone, whatever icon is stored on it
+PROJECT_MILESTONE_ICON = "milestone"
+
 # The colours a project can be, in the order the web UI offers them. Unlike
-# the icons this set is fixed in Phorge's code, not configuration, so the
-# list is exact.
+# the icons this set is fixed in Phorge's code: projects.colors can relabel a
+# colour or change the default, but cannot add one, and phabfive uses the
+# keys, not the labels - so the list is exact. Phorge also shows "disabled"
+# for an archived project, but that is a display colour nobody can choose.
 PROJECT_COLORS = [
     "red",
     "orange",

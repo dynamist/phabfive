@@ -136,6 +136,37 @@ Subprojects and milestones are included.
 `--status=any` is the same word `maniphest search` uses. `--all` is a
 deprecated alias for it and prints a warning on stderr.
 
+### Icons and colors
+
+`--icon` and `--color` match the icon and color Phorge shows, which for a
+milestone is not what is stored on it. Phorge shows every milestone with the
+`milestone` icon and its parent's color, so that is what phabfive matches:
+
+```bash
+# Every milestone
+phabfive project search --icon=milestone
+
+# Green projects, and the milestones of green projects
+phabfive project search --color=green
+```
+
+Phorge's own `project.search` matches the values stored on a milestone
+instead, and those are hidden: `--color=green` there would miss a milestone
+shown in green and find one shown in some other color. phabfive asks the server
+only about projects that are not milestones, and matches milestones itself
+by their parent. So a search by icon or color is two or three requests rather
+than one.
+
+Phorge also shows an archived project as `disabled`, whatever color it has.
+`--color` matches the color it was given, so `--status=archived --color=red`
+finds the archived red projects, and their milestones take that color too.
+`disabled` is not a color you can ask for.
+
+The colors are fixed in Phorge's code: `projects.colors` can relabel one, but not
+add one. So an unknown color is refused, with the list of valid ones. Icons are
+instance configuration (`projects.icons`), and no Conduit method lists them, so
+an unknown icon cannot be told from a custom one: it simply matches nothing.
+
 `project search` looks in `PHAB_SPACE` unless `--space` says otherwise, the same
 as `maniphest search`. A project that has no Space of its own belongs to the
 default Space, so it is still found.
@@ -180,7 +211,7 @@ phabfive project create "Platform" --icon=infrastructure --color=blue \
 | Option | Sets |
 | --- | --- |
 | `--description` | The description |
-| `--icon`, `--color` | The icon and color. Tab completion offers them, and the server checks them |
+| `--icon`, `--color` | The icon and color. Tab completion offers them; an unknown color is refused before anything is sent, and the server checks the icon |
 | `--slug` | Additional hashtags, besides the one Phorge derives from the name |
 | `--member` | Members |
 | `--space` | The Space to create it in |
@@ -215,9 +246,12 @@ phabfive project create "Sprint 2" --milestone-of='#development' --dry-run
 Phorge numbers milestones within their parent. Any number of milestones may share
 a name, so the hashtag check does not apply to them.
 
-A milestone takes neither `--icon` nor `--slug`. Phorge ignores an icon on a
-milestone. It stores a hashtag on one, but `project.search` never reports it
-back. Neither would do what it seems to, so phabfive refuses both.
+A milestone takes no `--icon`, `--color` or `--slug`, on `create` or on `edit`.
+Phorge always shows a milestone with the `milestone` icon and its parent's color,
+whatever is stored on it. It stores a hashtag on one, but `project.search` never
+reports it back. None of them would do what it seems to, and a stored color is
+worse than ignored: Phorge's own search matches it, so the milestone would turn
+up under a color it is never shown in. phabfive refuses all three.
 
 ## Editing a project
 

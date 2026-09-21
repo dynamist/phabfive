@@ -239,7 +239,8 @@ def project_search(
     color: Optional[List[str]] = typer.Option(
         None,
         "--color",
-        help="Projects of any of these colors (repeatable, or comma-separated)",
+        help="Projects of any of these colors (repeatable, or comma-separated); "
+        "a milestone has its parent's",
         autocompletion=complete_project_color,
     ),
     space: Optional[str] = typer.Option(
