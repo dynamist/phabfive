@@ -200,6 +200,35 @@ Config precedence (later overrides earlier):
 7. `~/.arcrc` (provides PHAB_TOKEN for matched URL)
 8. Environment variables
 
+That order applies only when a class is constructed with no arguments. `Phabfive(url=,
+token=, config=)` is explicit instead: defaults, then `config`, then `url`/`token`, and
+nothing is discovered.
+
+### Constructing an App
+
+- **Library defaults, command choices.** `Phabfive(url=None, token=None, *, config=None,
+  verify=False, select_host=None)`. By default constructing makes no request - `self.phab`
+  is a `phabfive.conduit.Conduit` that builds the client and calls `update_interfaces` on
+  first use. The command wants to fail fast, and to prompt for an `~/.arcrc` host, so it
+  constructs through `phabfive/cli/apps.py` (`get_app`/`new_app`), which passes
+  `verify=True, select_host=prompt_host` and applies `PHAB_FALLBACK`. A new command must use
+  `get_app` rather than constructing an app itself
+- **No terminal, no process state in core.** Nothing under `phabfive/` outside `cli/`,
+  `setup.py`, `repl.py` and the display modules may print, prompt, `sys.exit` or write
+  `os.environ`/class-level output state as a side effect of constructing or calling a class.
+  The InquirerPy host prompt lives in `cli/apps.py`; the yaml deprecation is `log.warning`;
+  `/etc/phabfive` is named by `_site_config_base()` instead of rewriting `XDG_CONFIG_DIRS`
+- **Output defaults are plain.** `_hyperlink_when` defaults to `"never"` and
+  `_output_format` to `None`, so records a program receives hold `str`, not `rich.Text`.
+  Every CLI command calls `_setup_output_options(ctx)` to get the terminal behaviour
+- **Siblings share a client.** `Diffusion.passphrase` and `Edit.maniphest` are
+  `cached_property`s built by `_from_parent()`. Never construct a sibling app inside
+  another; it would discover the configuration and connect a second time
+- `phabfive.core.Phabricator` is looked up when the client is built, so tests can keep
+  patching it. Tests that fake `__init__` and assign `.phab = MagicMock()` bypass `Conduit`
+  entirely, and have to assign sibling apps (`diffusion.passphrase = MagicMock()`) and any
+  attribute a real instance has, such as `conf`
+
 ## AI Agent Usage
 
 ### UX Consistency Between Phorge Apps

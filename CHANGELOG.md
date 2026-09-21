@@ -20,6 +20,9 @@
   `--force required for non-interactive mode` error, are gone. Two or more are reviewed one
   at a time at a terminal. `--dry-run` still previews anything
 * **`--force` is deprecated in favour of `--yes`.** It still works, hidden, and warns
+* **The `~/.config/phabfive.yaml` credentials deprecation is a log message.** It reads
+  `WARNING - ~/.config/phabfive.yaml contains ...` rather than `WARNING: ...`, and `-q`
+  now silences it
 * **`phabfive.init_logging` moved to `phabfive.cli.log_setup`.** Configuring the root
   logger is the command's decision, not the library's, so the package root no longer
   offers it
@@ -44,6 +47,21 @@
 * **`phabfive.__version__`** - read on first access, and falls back to `0.0.0+unknown`
   on a source tree that was never installed rather than raising
 * **`py.typed`** - the package is marked as typed for consumers' type checkers
+* **Configure a class from arguments** - `Maniphest(url=..., token=...)`, with the other
+  settings in `config={...}`, configures an instance from those alone and discovers
+  nothing, so a program behaves the same whoever runs it and wherever. With no arguments
+  the configuration is discovered as before. Closes #439
+* **Constructing makes no request** - the Conduit client is built on the first call, which
+  used to cost two round trips per instance and four for `Diffusion` and `Edit`, which
+  each built a second app. `verify=True` checks the connection at once; the command always
+  asks for that, so it still fails before doing anything. Apps used internally now share
+  their parent's client
+* **The library never prompts, prints or writes the environment** - choosing between
+  several `~/.arcrc` hosts goes through a `select_host` callback, which the command answers
+  with its prompt; reading the configuration no longer rewrites `XDG_CONFIG_DIRS`; building
+  an instance no longer sets the process-wide `PHAB_FALLBACK` format; returned records hold
+  plain strings rather than `rich` hyperlinks; and `rich` is not imported until something
+  displays
 
 ### Showing Repositories
 * **`diffusion repo show`** - Diffusion had no show command. `diffusion repo show R5 R6`
@@ -237,6 +255,8 @@
 
 ## Bug Fixes
 
+* **`passphrase show` and `passphrase search` ignored `--hyperlink` and `--ascii`.** They
+  never applied the output options every other command does
 * **`diffusion repo edit` understated which built-in URIs a rename rewrites.** The
   warning is the only signal that a rename breaks existing clones, and it was wrong
   three ways: it fired only on `--short-name`, although Phorge builds the clone URIs

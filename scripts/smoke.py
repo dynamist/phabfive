@@ -212,8 +212,8 @@ def check_version(executable, home, timeout, expected):
 
 # Run inside the venv's own interpreter. One program, so the whole library
 # contract is one subprocess: the front door opens, the version is real, every
-# promised name resolves, and neither the import nor touching the names drags
-# in the CLI or changes the environment.
+# promised name resolves, an app can be constructed from arguments without a
+# request, and none of it drags in the CLI or changes the environment.
 LIBRARY_PROGRAM = """
 import json, os, sys
 before = dict(os.environ)
@@ -222,15 +222,17 @@ import phabfive
 heavy = [n for n in ("phabricator", "requests", "rich", "typer", "click")
          if n in sys.modules]
 missing = [n for n in phabfive.__all__ if not hasattr(phabfive, n)]
-cli = [n for n in ("typer", "click", "InquirerPy", "phabfive.cli")
+maniphest = phabfive.Maniphest(url=%(url)r, token=%(token)r)
+cli = [n for n in ("typer", "click", "InquirerPy", "rich", "phabfive.cli")
        if n in sys.modules]
 json.dump(
     {"version": phabfive.__version__, "heavy": heavy, "missing": missing,
      "cli": cli, "environ": before == dict(os.environ),
+     "requested": maniphest.phab.is_built,
      "names": len(phabfive.__all__)},
     sys.stdout,
 )
-"""
+""" % {"url": DEAD_URL, "token": SMOKE_TOKEN}
 
 
 def check_library_import(python, home, timeout):
@@ -265,9 +267,14 @@ def check_library_import(python, home, timeout):
             f"a bare `import phabfive` pulled in {', '.join(result['heavy'])}"
         )
     if result["cli"]:
-        raise Failure(f"touching the public names imported {', '.join(result['cli'])}")
+        raise Failure(
+            f"touching the public names or constructing an app imported "
+            f"{', '.join(result['cli'])}"
+        )
     if not result["environ"]:
         raise Failure("importing phabfive changed os.environ")
+    if result["requested"]:
+        raise Failure("constructing an app made a request")
 
     return f"{result['names']} names, nothing eager"
 

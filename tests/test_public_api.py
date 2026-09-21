@@ -24,6 +24,7 @@ the third type checks perfectly while raising AttributeError at runtime.
 import ast
 import importlib
 import importlib.metadata
+import json
 import os
 import subprocess
 import sys
@@ -255,6 +256,39 @@ class TestLaziness:
             "print(before == dict(os.environ))"
         )
         assert out == "True"
+
+    def test_constructing_an_app_stays_a_library(self, tmp_path):
+        """Build a Maniphest the way a program would, in a bare interpreter.
+
+        An empty HOME and cwd leave nothing to discover, the discard port
+        would refuse any request, and the environment is compared before and
+        after: constructing must make no request, change no variable and load
+        nothing of the command's.
+        """
+        code = (
+            "import json, os, sys; before = dict(os.environ); import phabfive; "
+            "m = phabfive.Maniphest(url='http://127.0.0.1:9', "
+            "token='api-" + "a" * 28 + "'); "
+            "print(json.dumps({'built': m.phab.is_built, "
+            "'environ': before == dict(os.environ), "
+            "'loaded': [n for n in ('typer', 'click', 'InquirerPy', 'rich', "
+            "'phabfive.cli') if n in sys.modules]}))"
+        )
+        env = {k: v for k, v in os.environ.items() if not k.startswith("PHAB_")}
+        env["HOME"] = str(tmp_path)
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {
+            "built": False,
+            "environ": True,
+            "loaded": [],
+        }
 
     def test_exceptions_do_not_import_the_client(self):
         """Catching phabfive's errors must not cost the Conduit client."""
