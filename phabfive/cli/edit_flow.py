@@ -567,6 +567,7 @@ def edit_tasks_batch(
 
     # Phase 2: Process every planned task
     success_count = 0
+    unchanged_count = 0
     skipped_count = 0
     error_count = 0
     quit_early = False
@@ -589,7 +590,7 @@ def edit_tasks_batch(
 
         if entry.noop:
             print(f"{monogram}: No changes (already at target state)", file=preview)
-            success_count += 1
+            unchanged_count += 1
             settled_ids.append(task_id)
             continue
 
@@ -640,7 +641,14 @@ def edit_tasks_batch(
         review_stream.close()
 
     _print_summary(
-        success_count, skipped_count, len(plan.entries), quit_early, file=preview
+        success_count,
+        skipped_count,
+        len(plan.entries),
+        quit_early,
+        file=preview,
+        unchanged=unchanged_count,
+        failed=error_count,
+        dry_run=dry_run,
     )
 
     # One query for the batch, and the same records `maniphest show` gives.
@@ -669,13 +677,32 @@ def report_validation_failure(error):
     sys.stderr.write("\nNo tasks were modified (atomic batch failure).\n")
 
 
-def _print_summary(applied, skipped, total, quit_early, file=None):
-    """Report what happened, naming anything left untouched."""
-    parts = [f"Edited {applied}/{total} tasks"]
+def _print_summary(
+    applied,
+    skipped,
+    total,
+    quit_early,
+    file=None,
+    unchanged=0,
+    failed=0,
+    dry_run=False,
+):
+    """Report what happened, naming anything left untouched.
+
+    `applied` counts the tasks that changed - or would have, in a dry run,
+    which says so rather than claiming an edit it did not make (#423). A task
+    already at the target is counted apart, since nothing was done to it.
+    """
+    if dry_run:
+        parts = [f"Would edit {applied}/{total} tasks (dry run)"]
+    else:
+        parts = [f"Edited {applied}/{total} tasks"]
+    if unchanged:
+        parts.append(f"{unchanged} already at target")
     if skipped:
         parts.append(f"{skipped} skipped")
     if quit_early:
-        remaining = total - applied - skipped
+        remaining = total - applied - unchanged - skipped - failed
         parts.append(f"{remaining} left unchanged (quit)")
 
     print(f"\n{', '.join(parts)}", file=file or sys.stdout)
