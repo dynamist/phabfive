@@ -4,7 +4,6 @@
 
 import logging
 
-from phabricator import APIError
 
 from phabfive.constants import (
     PROJECT_COLORS,
@@ -17,7 +16,11 @@ from phabfive.constants import (
     PROJECT_STATUS_CHOICES,
 )
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveAPIException,
+    PhabfiveConfigException,
+    PhabfiveDataException,
+)
 from phabfive.maniphest.resolvers import (
     describe_space,
     describe_space_phid,
@@ -694,7 +697,7 @@ class Project(Phabfive):
         """
         try:
             result = self.phab.project.edit(transactions=transactions)
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(policy_lockout_message(e) or str(e))
 
         return result["object"]
@@ -883,13 +886,13 @@ class Project(Phabfive):
         PhabfiveDataException
             If the API rejects the edit. A policy that would take the project
             away from whoever is applying it is reported as the sentence
-            Phorge answered with rather than as the APIError around it.
+            Phorge answered with rather than as the PhabfiveAPIException around it.
         """
         try:
             self.phab.project.edit(
                 transactions=transactions, objectIdentifier=object_identifier
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(policy_lockout_message(e) or str(e))
 
     def _build_policy_edit(

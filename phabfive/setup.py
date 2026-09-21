@@ -7,11 +7,13 @@ import os
 import re
 import sys
 
-from phabricator import Phabricator, APIError
+from phabricator import Phabricator
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
 
+from phabfive.conduit import Conduit
 from phabfive.constants import VALIDATORS
+from phabfive.exceptions import PhabfiveRemoteException
 
 
 log = logging.getLogger(__name__)
@@ -172,8 +174,10 @@ class SetupWizard:
         self.console.print("[bold][3/3] Verifying connection...[/bold]")
 
         try:
-            phab = Phabricator(host=self.phab_url, token=self.phab_token)
-            phab.update_interfaces()
+            url, token = self.phab_url, self.phab_token
+            # Through Conduit, which loads the interfaces and raises
+            # phabfive's errors rather than the client's
+            phab = Conduit(lambda: Phabricator(host=url, token=token))
             whoami = phab.user.whoami()
 
             username = whoami.get("userName", "unknown")
@@ -191,7 +195,7 @@ class SetupWizard:
 
             return True
 
-        except APIError as e:
+        except PhabfiveRemoteException as e:
             self.console.print(f"[red]> Connection failed: {e}[/red]")
             self.console.print("[red]Please check your URL and token.[/red]\n")
 

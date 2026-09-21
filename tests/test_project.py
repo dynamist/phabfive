@@ -661,9 +661,9 @@ class TestCreate:
             self._build(phab, members=["@admin", "@ghost"])
 
     def test_a_lockout_is_reported_as_a_sentence(self, phab):
-        from phabricator import APIError
+        from phabfive.exceptions import PhabfiveAPIException
 
-        phab.project.edit.side_effect = APIError(
+        phab.project.edit.side_effect = PhabfiveAPIException(
             "ERR-CONDUIT-CORE",
             "Validation errors:\n  - The edit policy of this object would no "
             "longer allow you to edit the object.",

@@ -443,9 +443,9 @@ class TestBuildPolicyEdit:
     def test_a_self_lockout_is_reported_as_a_sentence(self, maniphest):
         """Phorge refuses the edit; the stack trace around it says nothing the
         sentence does not."""
-        from phabricator import APIError
+        from phabfive.exceptions import PhabfiveAPIException
 
-        maniphest.phab.maniphest.edit.side_effect = APIError(
+        maniphest.phab.maniphest.edit.side_effect = PhabfiveAPIException(
             "ERR-CONDUIT-CORE",
             "Validation errors:\n  - The view policy of this object would no "
             "longer allow you to view the object.",

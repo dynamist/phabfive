@@ -8,11 +8,10 @@ import re
 # phabfive imports
 from phabfive.constants import MONOGRAMS
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import PhabfiveAPIException, PhabfiveDataException
 from phabfive.pagination import search_all_pages
 
 # 3rd party imports
-from phabricator import APIError
 
 log = logging.getLogger(__name__)
 
@@ -97,7 +96,7 @@ class Paste(Phabfive):
 
         try:
             id_and_phid = self.phab.paste.edit(transactions=transactions)
-        except APIError as a:
+        except PhabfiveAPIException as a:
             raise PhabfiveDataException(str(a).replace("ERR-CONDUIT-CORE: ", ""))
 
         return id_and_phid["object"]
@@ -317,7 +316,7 @@ class Paste(Phabfive):
                 objectIdentifier=f"P{paste_id}",
                 transactions=transactions,
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(str(e).replace("ERR-CONDUIT-CORE: ", ""))
 
         return {"paste_id": paste_id, "changes": changes}
@@ -337,7 +336,7 @@ class Paste(Phabfive):
                 objectIdentifier=f"P{paste_id}",
                 transactions=[{"type": "comment", "value": comment_text}],
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(str(e).replace("ERR-CONDUIT-CORE: ", ""))
 
         return {"success": True, "paste_id": paste_id}

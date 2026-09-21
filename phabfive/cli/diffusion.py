@@ -870,7 +870,11 @@ def edit(
             typer.echo("Nothing was changed.", err=True)
             raise typer.Exit(return_code or 0)
 
-    diffusion.apply_uri_edit(object_id, transactions)
+    try:
+        diffusion.apply_uri_edit(object_id, transactions)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
 
     render_changes(label, changes, file=preview)
 

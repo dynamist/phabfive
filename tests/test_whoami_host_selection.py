@@ -11,7 +11,7 @@ import os
 from unittest import mock
 from unittest.mock import MagicMock, patch
 
-from phabricator import APIError
+from phabfive.exceptions import PhabfiveAPIException
 from typer.testing import CliRunner
 
 from phabfive.cli.user import user_app
@@ -126,7 +126,9 @@ class TestWhoamiForHost:
 
     def test_api_error_is_captured(self):
         phab = MagicMock()
-        phab.user.whoami.side_effect = APIError("ERR-INVALID-AUTH", "bad token")
+        phab.user.whoami.side_effect = PhabfiveAPIException(
+            "ERR-INVALID-AUTH", "bad token"
+        )
 
         result = self._user()._whoami_for_host(
             "https://phorge.example.com/api/", TOKEN, phab=phab

@@ -5,7 +5,6 @@
 import functools
 import logging
 
-from phabricator import APIError
 
 from phabfive import passphrase
 from phabfive.constants import (
@@ -44,6 +43,7 @@ from phabfive.diffusion.validators import (
     validate_repo_identifier,
 )
 from phabfive.exceptions import (
+    PhabfiveAPIException,
     PhabfiveDataException,
     PhabfiveNameCollisionException,
 )
@@ -674,7 +674,7 @@ class Diffusion(Phabfive):
         """
         try:
             new_repo = self.phab.diffusion.repository.edit(transactions=transactions)
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(str(e))
 
         return new_repo["object"]["phid"]
@@ -854,7 +854,7 @@ class Diffusion(Phabfive):
 
         try:
             self.phab.diffusion.uri.edit(transactions=plan["transactions"])
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(str(e))
 
     def get_uri_record(self, repo_name, uri_name):
@@ -1089,7 +1089,7 @@ class Diffusion(Phabfive):
             self.phab.diffusion.uri.edit(
                 transactions=transactions, objectIdentifier=object_identifier
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(str(e))
 
     def edit_uri(
@@ -1440,13 +1440,13 @@ class Diffusion(Phabfive):
             If the API rejects the edit. A policy that would take the
             repository away from whoever is applying it is rejected this way,
             and is reported as the sentence Phorge answered with rather than
-            as the APIError around it.
+            as the PhabfiveAPIException around it.
         """
         try:
             self.phab.diffusion.repository.edit(
                 transactions=transactions, objectIdentifier=object_identifier
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(policy_lockout_message(e) or str(e))
 
     def edit_repository(

@@ -352,7 +352,7 @@ class TestSetupWizardVerifyConnection:
 
     def test_verify_connection_api_error(self):
         """Test connection verification with API error."""
-        from phabricator import APIError
+        from phabfive.exceptions import PhabfiveAPIException
 
         with (
             mock.patch("phabfive.setup.Phabricator") as mock_phab,
@@ -361,7 +361,7 @@ class TestSetupWizardVerifyConnection:
         ):
             mock_instance = mock_phab.return_value
             mock_instance.update_interfaces.return_value = None
-            mock_instance.user.whoami.side_effect = APIError(
+            mock_instance.user.whoami.side_effect = PhabfiveAPIException(
                 "ERR-CONDUIT-CORE", "Invalid token"
             )
 
