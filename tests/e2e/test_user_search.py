@@ -52,6 +52,12 @@ def test_the_record_is_a_project_member_record(phabfive):
     assert admin["User"] == member
 
 
+def test_a_query_matches_any_part_of_a_name(phabfive):
+    """The full-text query matched whole words only, so "holm" missed rholm."""
+    assert _usernames(phabfive, "lomqvist") == ["gabriel.blomqvist"]
+    assert _usernames(phabfive, "istrator") == ["admin"]
+
+
 def test_an_unknown_role_exits_non_zero(phabfive_raw):
     result = phabfive_raw("user", "search", "--role=admn")
 
