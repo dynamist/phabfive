@@ -342,11 +342,14 @@ def complete_status(incomplete: str) -> List[str]:
 def complete_status_filter(incomplete: str) -> List[str]:
     """Complete status filter patterns (maniphest search).
 
-    Offers status names, pattern prefixes (e.g., "in:open") and the
-    raised/lowered keywords.
+    Offers status names, pattern prefixes (e.g., "in:open"), the
+    raised/lowered keywords and the open/closed/any scope keywords.
     """
+    from phabfive.transitions.status import STATUS_SCOPE_KEYWORDS
+
     completions = _complete_with_prefixes(incomplete, _get_statuses())
     completions.extend(_starting_with(incomplete, FILTER_DIRECTION_KEYWORDS))
+    completions.extend(_starting_with(incomplete, STATUS_SCOPE_KEYWORDS))
     return completions
 
 

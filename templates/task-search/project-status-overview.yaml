@@ -14,7 +14,7 @@ title: "✅ Recently Resolved Tasks"
 description: "Tasks completed in the last week"
 search:
   tag: "*"
-  status: "in:Resolved"
+  status: "closed+in:Resolved"
   updated-after: 7
   show-metadata: true
 

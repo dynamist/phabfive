@@ -2070,6 +2070,79 @@ class TestTaskSearchTextQuery:
         constraints = maniphest.phab.maniphest.search.call_args[1]["constraints"]
         assert set(constraints) <= {"spaces"}
 
+    def _scoped_search(self, mock_init, status):
+        """Run task_search with --status=STATUS against a mocked instance."""
+        from phabfive.transitions import parse_status_patterns
+
+        mock_init.return_value = None
+        maniphest = Maniphest()
+        maniphest.phab = MagicMock()
+        maniphest.url = "https://phabricator.example.com"
+        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.phab.phid.lookup.return_value = {
+            "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global"}
+        }
+        status_map = {
+            "openStatuses": ["open"],
+            "closedStatuses": {"1": "resolved", "2": "wontfix"},
+            "statusMap": {"open": "Open", "resolved": "Resolved", "wontfix": "Wontfix"},
+        }
+        maniphest.phab.maniphest.querystatuses.return_value = status_map
+        page = MagicMock(
+            response={
+                "data": [
+                    {
+                        "id": 1,
+                        "phid": "PHID-TASK-1",
+                        "fields": {
+                            "name": "Task",
+                            "status": {"value": "resolved", "name": "Resolved"},
+                            "priority": {"name": "Normal", "value": 50},
+                        },
+                        "attachments": {"columns": {"boards": {}}},
+                    }
+                ]
+            }
+        )
+        page.get.return_value = {"after": None}
+        maniphest.phab.maniphest.search.return_value = page
+
+        maniphest.task_search(status_patterns=parse_status_patterns(status, status_map))
+
+        return maniphest
+
+    @pytest.mark.parametrize(
+        "status, statuses",
+        [
+            ("open", ["open"]),
+            ("closed", ["resolved", "wontfix"]),
+            ("any", None),
+            ("closed,open", None),
+        ],
+    )
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_task_search_scope_keyword_is_asked_of_the_server(
+        self, mock_init, status, statuses
+    ):
+        """A scope keyword becomes the statuses constraint and fetches no
+        history: nothing is left to check task by task (#419)."""
+        maniphest = self._scoped_search(mock_init, status)
+
+        constraints = maniphest.phab.maniphest.search.call_args[1]["constraints"]
+        assert constraints.get("statuses") == statuses
+        maniphest.phab.transaction.search.assert_not_called()
+
+    @patch("phabfive.maniphest.core.Phabfive.__init__")
+    def test_task_search_unreachable_in_condition_warns(self, mock_init, caplog):
+        """--status=in:Resolved reaches open tasks only, which cannot match."""
+        with caplog.at_level("WARNING"):
+            maniphest = self._scoped_search(mock_init, "in:Resolved")
+
+        first_call = maniphest.phab.maniphest.search.call_args_list[0]
+        assert first_call[1]["constraints"]["statuses"] == ["open"]
+        assert "--status in:Resolved cannot match" in caplog.text
+        assert "any+in:Resolved" in caplog.text
+
     @patch("phabfive.maniphest.core.Phabfive.__init__")
     def test_task_search_with_text_and_date_filters(self, mock_init, capsys):
         """Test text search with date filters."""

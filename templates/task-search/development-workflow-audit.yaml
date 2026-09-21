@@ -28,6 +28,6 @@ search:
 title: "🏁 Tasks Resolved But Not in Done"
 description: "Cleanup needed - resolved tasks still on active boards"
 search:
-  status: "in:Resolved,in:Duplicate"
+  status: "closed+in:Resolved,closed+in:Duplicate"
   column: "not:in:Done"
   show-history: false

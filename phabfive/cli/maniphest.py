@@ -513,7 +513,8 @@ def search(
     include_all: bool = typer.Option(
         False,
         "--all",
-        help="Include closed tasks; on its own, list every task (with -l 0)",
+        hidden=True,
+        help="Deprecated: use --status=any",
     ),
     column: Optional[str] = typer.Option(
         None,
@@ -530,7 +531,8 @@ def search(
     status: Optional[str] = typer.Option(
         None,
         "--status",
-        help="Filter tasks by status transitions",
+        help="Filter by status: open (default), closed, any, or transition "
+        "patterns; AND them with + (e.g. any+in:Resolved)",
         autocompletion=complete_status_filter,
     ),
     show_history: bool = typer.Option(
@@ -701,6 +703,31 @@ def search(
             "all",
             False,
         )
+        if final_include_closed:
+            # --all only ever lifted the open-only default, which is what
+            # --status=any says without promising "every task" (#419).
+            if include_all:
+                typer.echo(
+                    "WARNING: --all is deprecated, use --status=any instead.", err=True
+                )
+            else:
+                typer.echo(
+                    "WARNING: 'all: true' in a search template is deprecated, "
+                    "use 'status: any' instead.",
+                    err=True,
+                )
+            named_scopes = {
+                condition.get("type")
+                for pattern in status_patterns or []
+                for condition in pattern.conditions
+            } & {"open", "closed"}
+            if named_scopes:
+                typer.echo(
+                    f"ERROR: --all cannot be combined with --status "
+                    f"{'/'.join(sorted(named_scopes))}; use --status alone",
+                    err=True,
+                )
+                raise typer.Exit(1)
         final_limit = get_param(
             limit if limit != 100 else None,
             yaml_params,
@@ -713,8 +740,9 @@ def search(
         final_order = get_param(order, yaml_params, "order")
 
         # Check if any search criteria provided. A bare "search" still prints
-        # usage rather than querying the whole instance, but --all says so on
-        # purpose: it is how a script walks every task, open or closed.
+        # usage rather than querying the whole instance; --status=any is how a
+        # script asks for every task on purpose, and the deprecated --all
+        # still counts as the same request.
         has_criteria = any(
             [
                 final_text_query,

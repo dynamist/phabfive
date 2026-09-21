@@ -252,27 +252,31 @@ phabfive maniphest search "migration" --tag "Database" --column="in:In Progress"
 ```
 
 !!! important
-    **Validation:** At least one filter is required (text query, --tag, --include, --assigned, --author, --space, --created-after, --created-before, --updated-after, --updated-before, --column, --priority, --status or --all) to prevent accidentally querying all tasks.
+    **Validation:** At least one filter is required (text query, --tag, --include, --assigned, --author, --space, --created-after, --created-before, --updated-after, --updated-before, --column, --priority or --status) to prevent accidentally querying all tasks. `--status=any` on its own is the deliberate way to ask for all of them.
 
 ### Listing Every Task
 
-`--all` on its own is a deliberate request for every task, open or closed. Like
-every search it is confined to the default Space (`PHAB_SPACE`, `S1` unless
-configured), so add `--space='*'` to reach tasks in every Space, and `-l 0` to
-lift the default limit of 100:
+`--status=any` on its own is a deliberate request for every task, open or
+closed. Like every search it is confined to the default Space (`PHAB_SPACE`,
+`S1` unless configured), so add `--space='*'` to reach tasks in every Space, and
+`-l 0` to lift the default limit of 100:
 
 ```bash
 # Every task you can see, in every Space, one JSON object per line
-phabfive --format=jsonl maniphest search --all --space='*' -l 0
+phabfive --format=jsonl maniphest search --status=any --space='*' -l 0
 
 # The same with each task's policies, for an audit
-phabfive --format=jsonl maniphest search --all --space='*' --show-policy -l 0
+phabfive --format=jsonl maniphest search --status=any --space='*' --show-policy -l 0
 ```
 
 Leaving out `--space='*'` is the easy mistake in a script that means to touch
 every task: tasks in other Spaces are silently not listed.
 
 A bare `phabfive maniphest search` still prints usage and queries nothing.
+
+`--all` is a deprecated spelling of `--status=any`. It still works, prints a
+warning, and is refused together with `--status=open` or `--status=closed`.
+See [Status Scope](#status-scope-open-closed-any).
 
 ### Pinning Tasks Into or Out of Results
 
@@ -907,6 +911,47 @@ Common use cases include:
 - **Audit status history**: See complete status change history for tasks
 - **Monitor workflow progression**: Find tasks that reached specific milestones
 
+### Status Scope: open, closed, any
+
+A search reaches **open** tasks unless told otherwise. Three keywords say which
+statuses it reaches instead, and are asked of the server rather than checked
+task by task:
+
+| Keyword | Reaches |
+|---------|---------|
+| `open` | Every open status (the default) |
+| `closed` | Every closed status: Resolved, Wontfix, Invalid, Duplicate, and any custom closed status |
+| `any` | Every status |
+
+```bash
+# Every closed task on the board
+phabfive maniphest search --tag "My Project" --status=closed
+
+# Every task, open or closed
+phabfive maniphest search --tag "My Project" --status=any
+```
+
+A keyword ANDs with the transition patterns below like any other condition.
+A pattern on its own keeps the open default, so it costs no history lookups
+for closed tasks - which also means a pattern about a closed status needs a
+scope:
+
+```bash
+# Nothing: only open tasks are reached, and none of them is Resolved
+phabfive maniphest search --tag "My Project" --status="in:Resolved"
+
+# Currently Resolved tasks
+phabfive maniphest search --tag "My Project" --status="closed+in:Resolved"
+
+# Tasks that were ever Blocked, open or closed
+phabfive maniphest search --tag "My Project" --status="any+been:Blocked"
+```
+
+phabfive warns when an `in:` condition cannot match within its scope, as in
+the first example. Each comma-separated group has its own scope: in
+`--status="in:Open,closed+in:Resolved"` the first group still reaches open
+tasks only.
+
 ### Status Pattern Types
 
 | Pattern | Description | Example |
@@ -920,6 +965,7 @@ Common use cases include:
 | `never:STATUS` | Task was never at STATUS | `never:Blocked` |
 | `raised` | Task had any status progression | `raised` |
 | `lowered` | Task had any status regression | `lowered` |
+| `open`, `closed`, `any` | Which statuses the search reaches; see [Status Scope](#status-scope-open-closed-any) | `closed+in:Resolved` |
 | `not:PATTERN` | Negates any pattern above | `not:in:Open`, `not:raised` |
 
 **Negation Prefix `not:`**
@@ -957,11 +1003,11 @@ The tool dynamically fetches status information from your Phabricator/Phorge ins
 # Find tasks currently Open
 phabfive maniphest search --tag "My Project" --status="in:Open"
 
-# Find tasks that were ever Resolved
-phabfive maniphest search --tag "My Project" --status="been:Resolved"
+# Find tasks that were ever Resolved, open or closed now
+phabfive maniphest search --tag "My Project" --status="any+been:Resolved"
 
-# Find tasks that progressed from Open
-phabfive maniphest search --tag "My Project" --status="from:Open:raised"
+# Find tasks that progressed from Open, open or closed now
+phabfive maniphest search --tag "My Project" --status="any+from:Open:raised"
 
 # Find tasks that had any status progression
 phabfive maniphest search --tag "My Project" --status=raised
@@ -976,7 +1022,7 @@ You can combine all three filter types for powerful queries:
 phabfive maniphest search '*' \
   --column='to:Done' \
   --priority='from:Normal:raised' \
-  --status='in:Resolved'
+  --status='closed+in:Resolved'
 
 # Tasks in progress that have been blocked
 phabfive maniphest search --tag "My Project" \
@@ -985,9 +1031,8 @@ phabfive maniphest search --tag "My Project" \
 
 # Recently completed tasks that were never blocked
 phabfive maniphest search --tag "My Project" \
-  --status="to:Resolved" \
-  --updated-after=7 \
-  --status="never:Blocked"
+  --status="closed+to:Resolved+never:Blocked" \
+  --updated-after=7
 ```
 
 ### Status OR/AND Logic
@@ -999,7 +1044,7 @@ Same as column and priority patterns, status patterns support OR (comma) and AND
 phabfive maniphest search --tag "My Project" --status="in:Open,in:Blocked"
 
 # Tasks raised from Open AND currently Resolved
-phabfive maniphest search --tag "My Project" --status="from:Open:raised+in:Resolved"
+phabfive maniphest search --tag "My Project" --status="closed+from:Open:raised+in:Resolved"
 ```
 
 ### Status Negation Patterns
@@ -1007,8 +1052,8 @@ phabfive maniphest search --tag "My Project" --status="from:Open:raised+in:Resol
 Use the `not:` prefix to negate status patterns:
 
 ```bash
-# Tasks NOT currently Open
-phabfive maniphest search --tag "My Project" --status="not:in:Open"
+# Tasks NOT currently Open, closed ones included
+phabfive maniphest search --tag "My Project" --status="any+not:in:Open"
 
 # Tasks whose status has NOT progressed
 phabfive maniphest search --tag "My Project" --status="not:raised"

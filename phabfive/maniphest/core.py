@@ -104,6 +104,21 @@ class Maniphest(Phabfive):
         api_status = self._get_api_status_map()
         return api_status.get("openStatuses", ["open"])
 
+    def _get_closed_statuses(self):
+        """
+        Get list of closed status keys from the API.
+
+        maniphest.querystatuses lists them as a dict of index to key rather
+        than as a list, unlike openStatuses.
+
+        Returns
+        -------
+        list
+            List of closed status key strings (e.g., ["resolved", "wontfix"])
+        """
+        closed = self._get_api_status_map().get("closedStatuses") or {}
+        return list(closed.values()) if isinstance(closed, dict) else list(closed)
+
     def _validate_priority(self, priority):
         """Validate and normalize priority value."""
         return validate_priority(priority)
@@ -728,7 +743,7 @@ class Maniphest(Phabfive):
 
     def _build_search_constraints(
         self,
-        include_closed=False,
+        status_scope="open",
         text_query=None,
         assigned_phids=None,
         author_phids=None,
@@ -752,10 +767,14 @@ class Maniphest(Phabfive):
         """
         constraints = {}
 
-        if not include_closed:
+        if status_scope == "open":
             open_statuses = self._get_open_statuses()
             constraints["statuses"] = open_statuses
             log.info(f"Filtering to open statuses: {open_statuses}")
+        elif status_scope == "closed":
+            closed_statuses = self._get_closed_statuses()
+            constraints["statuses"] = closed_statuses
+            log.info(f"Filtering to closed statuses: {closed_statuses}")
 
         if text_query:
             log.info(f"Free-text search: '{text_query}'")
@@ -894,6 +913,9 @@ class Maniphest(Phabfive):
                       Filters tasks based on priority transitions (from, to, in, been, never, raised, lowered).
         status_patterns (list, optional): List of StatusPattern objects to filter by.
                       Filters tasks based on status transitions (from, to, in, been, never, raised, lowered).
+                      The scope keywords open, closed and any decide which statuses are fetched
+                      at all; a group naming none reaches open tasks only. See
+                      phabfive.transitions.status.resolve_status_scope.
         show_history (bool, optional): If True, display column, priority, and status transition history for each task.
                       Must be explicitly requested; not auto-enabled by filters.
         show_metadata (bool, optional): If True, display which boards/priorities/statuses matched the filters.
@@ -901,16 +923,16 @@ class Maniphest(Phabfive):
                       phid.query for the whole page, which a search that was not asked for a policy
                       does not pay.
                       Shows MatchedBoards list, MatchedPriority, and MatchedStatus boolean for debugging filter logic.
-        include_closed (bool, optional): If True, include tasks with closed statuses
-                      (resolved, wontfix, invalid, duplicate, spite). Default is False,
-                      which filters out closed tasks at API level. --status filters are additive.
+        include_closed (bool, optional): Deprecated, as --all is: the same as a status
+                      scope of "any" for every --status group that names no scope of its own.
         limit         (int, optional): Maximum number of tasks to return. Default is 100.
                       Applied after ordering, so it keeps the top N of the requested order.
         order         (str, optional): Result ordering as "<field>[:asc|:desc]", e.g.
                       "updated:asc". Defaults to "priority", matching Phorge's own default.
         """
-        # Validation - require at least one filter. include_closed counts: it
-        # is how a caller asks for every task on purpose (#419).
+        # Validation - require at least one filter. A scope keyword alone
+        # (--status=any) counts, as a status pattern always has, and so does
+        # include_closed, the deprecated spelling of the same thing (#419).
         has_other_filters = any(
             [
                 include_closed,
@@ -931,6 +953,27 @@ class Maniphest(Phabfive):
 
         if not has_other_filters and not include_task_ids:
             raise PhabfiveConfigException("No search criteria specified")
+
+        # Which statuses the server is asked for. Groups made only of scope
+        # keywords are answered by the server, so --status=any costs no
+        # history fetch; a transition pattern keeps the open default.
+        from phabfive.transitions.status import (
+            resolve_status_scope,
+            unreachable_conditions,
+        )
+
+        default_scope = "any" if include_closed else "open"
+        status_map = self._get_api_status_map() if status_patterns else None
+        for condition, scope in unreachable_conditions(
+            status_patterns, default_scope, status_map
+        ):
+            log.warning(
+                f"--status {condition} cannot match: the search reaches {scope} "
+                f"tasks only. Add a scope, e.g. --status='any+{condition}'"
+            )
+        status_scope, status_patterns = resolve_status_scope(
+            status_patterns, default_scope
+        )
 
         # Resolved before anything is fetched so a bad --order fails fast, and
         # so library callers get the same validation the CLI does.
@@ -1086,7 +1129,7 @@ class Maniphest(Phabfive):
             else:
                 log.info("No tag specified, searching across all projects")
             constraints = self._build_search_constraints(
-                include_closed=include_closed,
+                status_scope=status_scope,
                 text_query=text_query,
                 assigned_phids=assigned_phids,
                 author_phids=author_phids,
@@ -1100,7 +1143,7 @@ class Maniphest(Phabfive):
             result_data = self._search_all_pages(constraints, order=api_order)
         else:
             base_constraints = self._build_search_constraints(
-                include_closed=include_closed,
+                status_scope=status_scope,
                 text_query=text_query,
                 assigned_phids=assigned_phids,
                 author_phids=author_phids,

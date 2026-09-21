@@ -239,14 +239,15 @@ default Space unless `--space` says otherwise.
 ```bash
 phabfive --format=json maniphest search "let's encrypt"
 phabfive --format=json maniphest search --tag Backend --assigned=@me
-phabfive --format=json maniphest search --author=@me --created-after=2w --all
+phabfive --format=json maniphest search --author=@me --created-after=2w --status=any
 phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
 ```
 
 - `--tag` filters by project or workboard, and supports wildcards and `,` for OR and `+`
   for AND (`--tag "Backend*+Sprint 42"`).
 - `--assigned` and `--author` accept a username or `@me`.
-- `--all` includes closed tasks; they are excluded by default.
+- `--status=open|closed|any` sets which statuses a search reaches; it is `open` by default,
+  so closed tasks are excluded unless asked for. `--all` is a deprecated `--status=any`.
 - `--include T123` pins a task into the results whatever the filters say; `--exclude T123`
   removes one. Include bypasses the limit, exclude is applied before it.
 - Dates are **relative only**: `h`, `d`, `w`, `m` (30 days), `y` (365 days); a bare number
@@ -258,9 +259,10 @@ phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
   `title`, `relevance`. Default `priority`. `relevance` takes no direction.
 
 A search with no criteria at all prints usage and exits 0 rather than returning every task.
-`--all` on its own is the deliberate way to ask for every task. Like every search it is
-confined to the default Space, so a script that means every task passes
-`--all --space='*' -l 0`; without `--space='*'`, tasks in other Spaces are silently missing.
+`--status=any` on its own is the deliberate way to ask for every task. Like every search it
+is confined to the default Space, so a script that means every task passes
+`--status=any --space='*' -l 0`; without `--space='*'`, tasks in other Spaces are silently
+missing.
 
 Output timestamps are local time, `%Y-%m-%dT%H:%M:%S`.
 
@@ -278,6 +280,11 @@ Grammar: `from:`, `to:`, `in:`, `been:`, `never:`. `,` separates OR groups, `+` 
 conditions inside a group, `not:` negates a single condition. A third `:direction` part
 (`forward`/`backward` for columns, `raised`/`lowered` for priority and status) is legal
 only on `from:`.
+
+A `--status` pattern still reaches open tasks only, so `--status='in:Resolved'` matches
+nothing and warns. AND a scope into the group: `--status='closed+in:Resolved'`,
+`--status='any+been:Blocked'`. A group of nothing but `open`/`closed`/`any` is answered by
+the server and fetches no history.
 
 These filters fetch each candidate task's full transaction history — one API call per
 task. On a broad search that is slow; narrow with `--tag` and `--limit` first.
