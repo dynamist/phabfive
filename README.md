@@ -11,7 +11,7 @@ CLI for [Phabricator](https://www.phacility.com/phabricator/) and [Phorge](https
 - **Diffusion** - Repository management, branches and tags, and URI configuration
 - **Projects** - Create, show, edit and search projects, subprojects and milestones, with their members and roles
 - **Passphrase** - Search, list, and retrieve secrets (passwords, tokens, SSH keys, notes)
-- **User** - User info and interactive setup wizard
+- **User** - Search users and filter them by role, user info, and an interactive setup wizard
 
 Cross-cutting features:
 
@@ -157,6 +157,9 @@ phabfive project show '#backend' --show-members
 phabfive project create "Sprint 7" --milestone-of='#backend' --dry-run
 phabfive project edit '#backend' --add-member=@alice,@bob --joinable-by=admin --dry-run
 phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0
+
+# Users - every person, with bots, mailing lists and disabled accounts left out
+phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0
 
 # Smart navigation - raise/lower priority, move columns forward/backward
 phabfive edit T123 --priority=raise

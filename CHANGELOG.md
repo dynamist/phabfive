@@ -150,6 +150,17 @@
   cell arrives whole. `table` is a human format and is deliberately not accepted for
   `PHAB_FALLBACK`
 
+### Users
+* **`user search`** - phabfive could not list users (#428). `user search` answers
+  with `Username`, `Name` and `Roles` for each one, the record
+  `project show --show-members` gives for a member, so the two compare directly.
+  `--role` keeps users with every role named and `--not-role` drops users with any
+  of them; `--not-role=bot,list,disabled` is every person who can use the instance.
+  `bot`, `disabled`, `list` and `admin` are filtered by `user.search` itself, the
+  rest on the records it returns
+* The local Phorge seed has a bot, deploy.bot, and a disabled account,
+  former.employee
+
 ### Projects
 * **`project show`, `project search`, `project create` and `project edit`** - phabfive
   had no way to manage a project (#418). A project is named by `#hashtag`, bare
