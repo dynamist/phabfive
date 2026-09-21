@@ -2830,3 +2830,6 @@ class Maniphest(Phabfive):
             raise ValueError(
                 f"Column '{column_name}' not found on board. Available: {available}"
             )
+
+
+__all__ = ["Maniphest"]

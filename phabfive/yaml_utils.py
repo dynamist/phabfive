@@ -71,3 +71,9 @@ def group_objects_by_type(objects):
     for obj in objects:
         grouped[obj["object_type"]].append(obj)
     return dict(grouped)
+
+
+__all__ = [
+    "group_objects_by_type",
+    "parse_yaml_from_stdin",
+]

@@ -355,3 +355,6 @@ class Paste(Phabfive):
             URL string for the paste
         """
         return f"{self.url}/P{paste_id}"
+
+
+__all__ = ["Paste"]

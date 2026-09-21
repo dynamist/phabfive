@@ -431,3 +431,6 @@ class Edit(Phabfive):
             log.debug(f"Failed to edit task T{task_id}: {e}")
             sys.stderr.write(f"Error editing T{task_id}: {e}\n")
             return 1
+
+
+__all__ = ["Edit"]

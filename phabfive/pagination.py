@@ -121,3 +121,11 @@ def search_all_pages(search, limit=None, **kwargs):
     return [
         record for page in iter_pages(search, limit=limit, **kwargs) for record in page
     ]
+
+
+__all__ = [
+    "MAX_PAGE_SIZE",
+    "iter_pages",
+    "page_records",
+    "search_all_pages",
+]
