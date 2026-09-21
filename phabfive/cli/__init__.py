@@ -13,7 +13,7 @@ os.environ.setdefault("TYPER_USE_RICH", "0")
 
 import typer
 
-from phabfive import init_logging
+from phabfive.cli.log_setup import init_logging
 from phabfive.cli.cache import cache_app
 from phabfive.cli.diffusion import diffusion_app
 from phabfive.cli.edit import edit_command
