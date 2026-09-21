@@ -194,11 +194,11 @@ class Project(Phabfive):
         """
         Search projects, as the records `show` answers with.
 
-        No Space is assumed. PHAB_SPACE narrows a task search by default, but
-        a project search is how an instance is audited, and an audit that
-        quietly left out the projects in other Spaces would be wrong without
-        saying so - so a Space is filtered on only when one is named, the
-        way `diffusion repo list` does it.
+        Narrowed to PHAB_SPACE unless spaces names others, the way a task
+        search is, so the two searches agree on where they look. "*" means
+        every Space, and is sent as no Space constraint at all rather than as
+        a list of every Space - which is what an audit of the whole instance
+        asks for.
 
         Parameters
         ----------
@@ -220,7 +220,8 @@ class Project(Phabfive):
         icons, colors : list, optional
             Icon and colour keys, any of which matches
         spaces : list, optional
-            Space names, monograms or patterns, any of which matches
+            Space names, monograms or patterns, any of which matches. None
+            means PHAB_SPACE, and "*" among them means every Space.
         show_policy, show_members : bool, optional
             Include that section
         limit : int, optional
@@ -276,11 +277,9 @@ class Project(Phabfive):
         if colors:
             constraints["colors"] = list(colors)
 
-        if spaces:
-            space_phids = []
-            for space in spaces:
-                space_phids.extend(resolve_space_phids(self.phab, space))
-            constraints["spaces"] = list(dict.fromkeys(space_phids))
+        space_phids = self._resolve_search_spaces(spaces)
+        if space_phids:
+            constraints["spaces"] = space_phids
 
         attachments = {"members": True} if show_members else None
 
@@ -300,6 +299,53 @@ class Project(Phabfive):
         )
 
         return {"projects": projects}
+
+    def _resolve_search_spaces(self, spaces):
+        """The Space PHIDs a search is narrowed to, or None for every Space.
+
+        Parameters
+        ----------
+        spaces : list or None
+            What --space named. None falls back to PHAB_SPACE, which takes
+            the same comma-separated patterns.
+
+        Returns
+        -------
+        list or None
+            Space PHIDs, or None when "*" asked for every Space - or when the
+            default could not be resolved, which is warned about rather than
+            failing a search nobody asked to narrow.
+        """
+        from_config = spaces is None
+
+        if from_config:
+            default_space = self.conf.get("PHAB_SPACE", "S1") or ""
+            spaces = [part.strip() for part in default_space.split(",") if part.strip()]
+
+        if not spaces or "*" in spaces:
+            return None
+
+        try:
+            space_phids = []
+            for space in spaces:
+                space_phids.extend(resolve_space_phids(self.phab, space))
+        except Exception as e:
+            if not from_config:
+                raise
+            log.warning(
+                f"Could not resolve default space '{', '.join(spaces)}': {e}. "
+                "Showing all spaces."
+            )
+            return None
+
+        if from_config:
+            log.info(
+                f"Filtering to space(s): {', '.join(spaces)} (from PHAB_SPACE). "
+                "Projects in other spaces are excluded; "
+                "use --space='*' to include all spaces."
+            )
+
+        return list(dict.fromkeys(space_phids))
 
     # Writing
 
