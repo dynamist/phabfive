@@ -5,7 +5,7 @@ import fnmatch
 import logging
 
 # phabfive imports
-from phabfive.exceptions import PhabfiveException
+from phabfive.exceptions import PhabfiveInputException
 
 log = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ def _parse_single_project(project_str):
     project_str = project_str.strip()
 
     if not project_str:
-        raise PhabfiveException("Empty project name in pattern")
+        raise PhabfiveInputException("Empty project name in pattern")
 
     return project_str
 
@@ -164,7 +164,7 @@ def parse_project_patterns(patterns_str):
     [ProjectPattern(["ProjectA", "ProjectB"])]
     """
     if not patterns_str or not patterns_str.strip():
-        raise PhabfiveException("Empty project pattern")
+        raise PhabfiveInputException("Empty project pattern")
 
     patterns = []
 
@@ -193,6 +193,6 @@ def parse_project_patterns(patterns_str):
             patterns.append(ProjectPattern(project_names))
 
     if not patterns:
-        raise PhabfiveException("No valid project patterns found")
+        raise PhabfiveInputException("No valid project patterns found")
 
     return patterns

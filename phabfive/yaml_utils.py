@@ -5,6 +5,7 @@ import sys
 from collections import defaultdict
 
 from ruamel.yaml import YAML
+from phabfive.exceptions import PhabfiveDataException
 
 
 def parse_yaml_from_stdin(parse_monogram_func):
@@ -43,7 +44,7 @@ def parse_yaml_from_stdin(parse_monogram_func):
             for entry in entries:
                 # Extract monogram from Link field
                 if "Link" not in entry:
-                    raise ValueError("YAML document missing 'Link' field")
+                    raise PhabfiveDataException("YAML document missing 'Link' field")
 
                 link = entry["Link"]
                 object_type, object_id = parse_monogram_func(link)
@@ -53,7 +54,7 @@ def parse_yaml_from_stdin(parse_monogram_func):
                 )
 
     except Exception as e:
-        raise ValueError(f"Failed to parse YAML from stdin: {e}")
+        raise PhabfiveDataException(f"Failed to parse YAML from stdin: {e}")
 
     return objects
 

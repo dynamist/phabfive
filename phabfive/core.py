@@ -25,6 +25,7 @@ from phabfive.constants import (
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
+    PhabfiveInputException,
 )
 
 # 3rd party imports
@@ -869,7 +870,7 @@ class Phabfive:
         if match:
             return ("paste", match.group(1))
 
-        raise ValueError(f"No valid monogram found in: {text}")
+        raise PhabfiveInputException(f"No valid monogram found in: {text}")
 
     def parse_object_ids(self, object_id_str):
         """Parse object ID string which may contain comma-separated IDs.
@@ -887,7 +888,7 @@ class Phabfive:
         ids = [s.strip() for s in object_id_str.split(",") if s.strip()]
 
         if not ids:
-            raise ValueError("No valid object IDs provided")
+            raise PhabfiveInputException("No valid object IDs provided")
 
         results = []
         seen_types = set()
@@ -899,7 +900,7 @@ class Phabfive:
 
         # Check for mixed types
         if len(seen_types) > 1:
-            raise ValueError(
+            raise PhabfiveInputException(
                 f"Cannot mix object types in a single edit command: {seen_types}"
             )
 
