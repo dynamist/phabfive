@@ -5,7 +5,7 @@
 import itertools
 import json
 import logging
-from functools import lru_cache
+import functools
 from pathlib import Path
 
 from jinja2 import Template
@@ -80,6 +80,27 @@ from phabfive.project_filters import parse_project_patterns
 log = logging.getLogger(__name__)
 
 
+def _once_per_instance(method):
+    """Remember a no-argument method's answer on the instance that gave it.
+
+    Replaces @lru_cache(maxsize=1), which kept its one entry in a cache
+    shared by the class: it held the last instance alive, and two instances
+    used in turn - two hosts, say - evicted each other on every call, each
+    eviction costing the round trip again.
+    """
+    attribute = f"_once_{method.__name__}"
+
+    @functools.wraps(method)
+    def wrapper(self):
+        try:
+            return self.__dict__[attribute]
+        except KeyError:
+            value = self.__dict__[attribute] = method(self)
+            return value
+
+    return wrapper
+
+
 class Maniphest(Phabfive):
     # Wrapper methods that delegate to submodules while maintaining self.phab access
 
@@ -146,17 +167,17 @@ class Maniphest(Phabfive):
         """Build board information dict with current columns only."""
         return build_task_boards(boards, project_phid_to_name)
 
-    @lru_cache(maxsize=1)
+    @_once_per_instance
     def _get_api_priority_map(self):
         """Get mapping from Phabricator API numeric values to human-readable priority names."""
         return get_api_priority_map()
 
-    @lru_cache(maxsize=1)
+    @_once_per_instance
     def _get_api_status_map(self):
         """Get status information from Phabricator API."""
         return get_api_status_map(self.phab)
 
-    @lru_cache(maxsize=1)
+    @_once_per_instance
     def _get_all_spaces(self):
         """Every Space the viewer can see, probed once per command.
 

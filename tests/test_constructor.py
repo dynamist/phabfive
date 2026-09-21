@@ -242,3 +242,30 @@ class TestLibraryOutputDefaults:
         app = Phabfive(url=URL, token=TOKEN)
 
         app.check_line_width("x" * (Phabfive.MAX_LINE_WIDTH + 1))
+
+
+class TestPerInstanceLookups:
+    """Maniphest's status map is fetched once per instance, not per class."""
+
+    def test_fetched_once_per_instance(self, phabricator):
+        app = Maniphest(url=URL, token=TOKEN)
+        with mock.patch(
+            "phabfive.maniphest.core.get_api_status_map", return_value={"a": 1}
+        ) as fetch:
+            assert app._get_api_status_map() == {"a": 1}
+            assert app._get_api_status_map() == {"a": 1}
+
+        fetch.assert_called_once()
+
+    def test_two_instances_do_not_share_or_evict(self, phabricator):
+        one = Maniphest(url=URL, token=TOKEN)
+        two = Maniphest(url="https://other.example.com/api/", token=TOKEN)
+        with mock.patch(
+            "phabfive.maniphest.core.get_api_status_map",
+            side_effect=lambda phab: {"phab": phab},
+        ) as fetch:
+            for _ in range(3):
+                assert one._get_api_status_map() == {"phab": one.phab}
+                assert two._get_api_status_map() == {"phab": two.phab}
+
+        assert fetch.call_count == 2
