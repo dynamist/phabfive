@@ -176,18 +176,17 @@ def comment(
     _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
 
-    result = maniphest.add_task_comment(ticket_id, comment_text)
+    maniphest.add_task_comment(ticket_id, comment_text)
 
-    if result[0]:
-        task_id = int(ticket_id[1:])
+    task_id = int(ticket_id[1:])
 
-        if is_machine_format(_get_output_format(ctx)):
-            _show_tasks_after_write(ctx, maniphest, [task_id])
-            return
+    if is_machine_format(_get_output_format(ctx)):
+        _show_tasks_after_write(ctx, maniphest, [task_id])
+        return
 
-        # Query the ticket to fetch the URI for it
-        _, ticket = maniphest.get_task_info(task_id)
-        typer.echo(ticket["uri"])
+    # Query the ticket to fetch the URI for it
+    ticket = maniphest.get_task_info(task_id)
+    typer.echo(ticket["uri"])
 
 
 @maniphest_app.command()

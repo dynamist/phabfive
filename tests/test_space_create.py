@@ -164,7 +164,7 @@ class TestCreatingInASpace:
 
         phab.maniphest.edit.return_value = {"object": {"id": 5, "phid": "PHID-TASK-5"}}
         maniphest.get_task_info = MagicMock(
-            return_value=(None, {"uri": "https://phorge.example.com/T5"})
+            return_value={"uri": "https://phorge.example.com/T5"}
         )
         return maniphest
 
@@ -249,6 +249,28 @@ class TestCreatingFromATemplate:
 
         maniphest.create_tasks_from_yaml(config)
 
+        transactions = phab.maniphest.edit.call_args.kwargs["transactions"]
+        assert {"type": "space", "value": "PHID-SPCE-10"} in transactions
+
+    def test_a_template_held_as_data_needs_no_file(self, mock_init):
+        """create_tasks_from_config is the same creation, from a dict."""
+        phab = _phab({1: "Default", 10: "Archive"})
+        maniphest = self._maniphest(phab)
+
+        result = maniphest.create_tasks_from_config(
+            {
+                "variables": {},
+                "tasks": [
+                    {
+                        "title": "Archive the old plans",
+                        "description": "Somewhere out of the way",
+                        "space": "Archive",
+                    }
+                ],
+            }
+        )
+
+        assert result == {"task_ids": [5]}
         transactions = phab.maniphest.edit.call_args.kwargs["transactions"]
         assert {"type": "space", "value": "PHID-SPCE-10"} in transactions
 

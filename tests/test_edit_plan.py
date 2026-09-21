@@ -196,3 +196,19 @@ class TestApply:
             "1",
             "3",
         ]
+
+
+def test_edit_task_by_id_dry_run_prints_nothing(capsys):
+    """The preview is the caller's to render; the method only returns it."""
+    from phabfive.maniphest import Maniphest
+
+    with mock.patch("phabfive.core.Phabricator"):
+        maniphest = Maniphest(url=URL, token=TOKEN)
+    changes = [{"field": "Status", "old": "Open", "new": "Resolved"}]
+    with mock.patch.object(
+        Maniphest, "build_task_edit", return_value=([{"type": "status"}], changes)
+    ):
+        result = maniphest.edit_task_by_id("1", status="resolved", dry_run=True)
+
+    assert result == {"task_id": "1", "changes": changes, "dry_run": True}
+    assert capsys.readouterr() == ("", "")
