@@ -47,7 +47,11 @@ def new_app(cls):
     Several ~/.arcrc hosts and nothing to choose between them is answered
     with a prompt at a terminal.
     """
-    return cls(verify=True, select_host=prompt_host)
+    app = cls(verify=True, select_host=prompt_host)
+    # PHAB_FALLBACK is configuration, but the format it names is the
+    # command's concern, so it is the command that applies it.
+    app.set_fallback_format(app.conf.get("PHAB_FALLBACK", "yaml"))
+    return app
 
 
 def get_app(cls):

@@ -101,6 +101,7 @@ def _app(page_size=100):
     user.phab = MagicMock()
     user.phab.user.search.side_effect = FakeUserSearch(USERS, page_size=page_size)
     user.url = URL
+    user.conf = {}
     user.format_link = lambda url, text: url
 
     return user

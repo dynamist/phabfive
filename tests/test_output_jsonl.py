@@ -154,13 +154,24 @@ class TestFallbackFormat:
                 assert Phabfive._get_auto_format() == "rich"
 
     def test_ndjson_in_config_is_resolved_to_jsonl(self):
+        """The command applies PHAB_FALLBACK when it builds its app."""
+        from phabfive.cli.apps import new_app
+
         # CONF's token is not 32 characters, which the validator demands
         conf = dict(CONF, PHAB_TOKEN="api-" + "a" * 28, PHAB_FALLBACK="ndjson")
         with patch.object(Phabfive, "read_config", return_value=(conf, True)):
             with patch("phabfive.core.Phabricator"):
-                Phabfive()
+                new_app(Phabfive)
         assert Phabfive._fallback_format == "jsonl"
         Phabfive._fallback_format = "yaml"
+
+    def test_constructing_leaves_the_fallback_alone(self):
+        """A library constructing an instance does not set process-wide state."""
+        conf = dict(CONF, PHAB_TOKEN="api-" + "a" * 28, PHAB_FALLBACK="jsonl")
+        with patch.object(Phabfive, "read_config", return_value=(conf, True)):
+            with patch("phabfive.core.Phabricator"):
+                Phabfive()
+        assert Phabfive._fallback_format == "yaml"
 
 
 def _maniphest_with_two_tasks():

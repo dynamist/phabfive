@@ -53,3 +53,8 @@ def init_logging(log_level):
     }
 
     logging.config.dictConfig(logging_conf)
+
+    # anyconfig narrates every file it looks for; the command has its own
+    # debug output for that. Set here rather than when phabfive.core is
+    # imported, because a library does not adjust other libraries' loggers.
+    logging.getLogger("anyconfig").setLevel(logging.ERROR)

@@ -225,3 +225,20 @@ class TestProcessEnvironment:
         monkeypatch.setenv("XDG_CONFIG_DIRS", "/somewhere/else")
 
         assert Phabfive._site_config_base() == "/etc/phabfive"
+
+
+class TestLibraryOutputDefaults:
+    """Without the command setting them, output options suit a program."""
+
+    def test_links_are_plain_strings(self, phabricator):
+        app = Phabfive(url=URL, token=TOKEN)
+
+        link = app.format_link("https://phorge.example.com/T1", "T1")
+
+        assert link == "https://phorge.example.com/T1"
+        assert type(link) is str
+
+    def test_no_rich_line_width_limit(self, phabricator):
+        app = Phabfive(url=URL, token=TOKEN)
+
+        app.check_line_width("x" * (Phabfive.MAX_LINE_WIDTH + 1))
