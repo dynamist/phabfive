@@ -409,6 +409,8 @@ SEARCH_TEMPLATE_KEYS = frozenset(
         "created-before",
         "updated-after",
         "updated-before",
+        "visible-to",
+        "editable-by",
         "column",
         "priority",
         "status",

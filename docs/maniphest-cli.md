@@ -252,7 +252,7 @@ phabfive maniphest search "migration" --tag "Database" --column="in:In Progress"
 ```
 
 !!! important
-    **Validation:** At least one filter is required (text query, --tag, --include, --assigned, --author, --space, --created-after, --created-before, --updated-after, --updated-before, --column, --priority or --status) to prevent accidentally querying all tasks. `--status=any` on its own is the deliberate way to ask for all of them.
+    **Validation:** At least one filter is required (text query, --tag, --include, --assigned, --author, --space, --created-after, --created-before, --updated-after, --updated-before, --visible-to, --editable-by, --column, --priority or --status) to prevent accidentally querying all tasks. `--status=any` on its own is the deliberate way to ask for all of them.
 
 ### Listing Every Task
 
@@ -273,6 +273,30 @@ Leaving out `--space='*'` is the easy mistake in a script that means to touch
 every task: tasks in other Spaces are silently not listed.
 
 A bare `phabfive maniphest search` still prints usage and queries nothing.
+
+### Filtering by Policy
+
+`--visible-to` and `--editable-by` keep the tasks whose view or edit policy is
+exactly the value given, in the same grammar `maniphest edit` takes: `public`,
+`users`, `admin`, `no-one`, a `#project`, an `@user` or a PHID. See
+[Policies](policies.md).
+
+```bash
+# Every task, in every Space, still editable by All Users
+phabfive --format=jsonl maniphest search --status=any --space='*' --editable-by=users -l 0
+
+# Open tasks only #infrastructure can see
+phabfive maniphest search --visible-to='#infrastructure'
+```
+
+The match is on the stored policy, not on who can see or edit the task:
+`--visible-to=users` finds tasks set to "All Users", not every task a logged-in
+user could open. Both options together must both match.
+
+`maniphest.search` has no policy constraint, so phabfive filters the tasks it
+fetched. The filter runs before `--limit`, so `-l 10` keeps the first ten tasks
+that match. A value outside the grammar, or a project or user that does not
+exist, is an error before anything is fetched.
 
 `--all` is a deprecated spelling of `--status=any`. It still works, prints a
 warning, and is refused together with `--status=open` or `--status=closed`.

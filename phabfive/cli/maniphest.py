@@ -498,6 +498,18 @@ def search(
         help="Filter by Space (supports wildcards)",
         autocompletion=complete_space_filter,
     ),
+    visible_to: Optional[str] = typer.Option(
+        None,
+        "--visible-to",
+        help=f"Only tasks whose view policy is exactly this ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    editable_by: Optional[str] = typer.Option(
+        None,
+        "--editable-by",
+        help=f"Only tasks whose edit policy is exactly this ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
     created_after: Optional[str] = typer.Option(
         None, "--created-after", help="Tasks created within TIME (e.g., 1h, 7d, 2w)"
     ),
@@ -693,6 +705,8 @@ def search(
         final_assigned = get_param(assigned, yaml_params, "assigned")
         final_author = get_param(author, yaml_params, "author")
         final_space = get_param(space, yaml_params, "space")
+        final_visible_to = get_param(visible_to, yaml_params, "visible-to")
+        final_editable_by = get_param(editable_by, yaml_params, "editable-by")
         final_created_after = get_param(created_after, yaml_params, "created-after")
         final_created_before = get_param(created_before, yaml_params, "created-before")
         final_updated_after = get_param(updated_after, yaml_params, "updated-after")
@@ -750,6 +764,8 @@ def search(
                 final_assigned,
                 final_author,
                 final_space,
+                final_visible_to,
+                final_editable_by,
                 final_created_after,
                 final_created_before,
                 final_updated_after,
@@ -777,6 +793,8 @@ def search(
                 assigned=final_assigned,
                 author=final_author,
                 space=final_space,
+                visible_to=final_visible_to,
+                editable_by=final_editable_by,
                 created_after=final_created_after,
                 created_before=final_created_before,
                 updated_after=final_updated_after,
@@ -791,7 +809,10 @@ def search(
                 limit=final_limit,
                 order=final_order,
             )
-        except PhabfiveConfigException as e:
+        except (PhabfiveConfigException, PhabfiveDataException) as e:
+            # A policy value outside the grammar is a config error, a project
+            # or user it names that does not exist a data error; both are
+            # found before anything is fetched
             typer.echo(f"ERROR: {e}", err=True)
             raise typer.Exit(1)
 
