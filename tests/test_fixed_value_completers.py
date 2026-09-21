@@ -218,3 +218,23 @@ class TestProjectIconCompletion:
             completers, "_get_values_with_api_fallback", side_effect=lambda f, d: d
         ):
             assert "milestone" not in _complete(["project", "search", "--icon"], "")
+
+
+class TestForgetProjects:
+    """A project write drops the cached completions, and never fails over it."""
+
+    def test_drops_the_projects(self):
+        with patch.object(completers.cache, "clear") as clear:
+            completers.forget_projects()
+
+        clear.assert_called_once_with(namespaces=["projects"])
+
+    def test_drops_the_icons_too_when_one_was_set(self):
+        with patch.object(completers.cache, "clear") as clear:
+            completers.forget_projects(icons=True)
+
+        clear.assert_called_once_with(namespaces=["projects", "project-icons"])
+
+    def test_a_cache_that_cannot_be_cleared_is_not_an_error(self):
+        with patch.object(completers.cache, "clear", side_effect=OSError("denied")):
+            completers.forget_projects()

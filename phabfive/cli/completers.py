@@ -13,6 +13,7 @@ from phabfive.constants import (
     PROJECT_COLORS,
     PROJECT_ICONS,
     PROJECT_STATUS_ALL,
+    PROJECT_STATUS_CHOICES,
     REPO_STATUS_CHOICES,
 )
 
@@ -1162,6 +1163,11 @@ def complete_project_icon(incomplete: str) -> List[str]:
 def complete_project_color(incomplete: str) -> List[str]:
     """Complete a project colour, from the set Phorge fixes in its code."""
     return _complete_fixed(incomplete, PROJECT_COLORS)
+
+
+def complete_project_status(incomplete: str) -> List[str]:
+    """Complete the project status filter for project search --status."""
+    return _complete_fixed(incomplete, PROJECT_STATUS_CHOICES)
 
 
 def forget_projects(icons=False) -> None:
