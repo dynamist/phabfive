@@ -619,9 +619,11 @@ class TestEditUriComposition:
         diffusion.phab.diffusion.uri.edit.assert_not_called()
 
     def test_apply_wraps_api_errors(self, diffusion):
-        from phabricator import APIError
+        from phabfive.exceptions import PhabfiveAPIException
 
-        diffusion.phab.diffusion.uri.edit.side_effect = APIError("ERR", "nope")
+        diffusion.phab.diffusion.uri.edit.side_effect = PhabfiveAPIException(
+            "ERR", "nope"
+        )
 
         with pytest.raises(PhabfiveDataException):
             diffusion.apply_uri_edit(10, [{"type": "display", "value": "always"}])
@@ -667,6 +669,33 @@ class TestUriEditCli:
         assert result.exit_code == 0
         assert "Display: never → always" in result.output
         diffusion.apply_uri_edit.assert_called_once()
+
+    def test_a_rejected_edit_is_one_line_not_a_traceback(self):
+        """#394: the one apply path in the file that did not catch it."""
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        mock_diffusion = MagicMock()
+        mock_diffusion.get_uri_and_repo.return_value = (_repo("myrepo"), _uri())
+        mock_diffusion.build_uri_edit.return_value = (
+            [{"type": "io", "value": "read"}],
+            [{"field": "I/O", "old": "observe", "new": "read"}],
+        )
+        mock_diffusion.apply_uri_edit.side_effect = PhabfiveDataException(
+            "ERR-CONDUIT-CORE: Validation errors: not a valid IO setting"
+        )
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            result = CliRunner().invoke(
+                diffusion_app, ["uri", "edit", "myrepo", self.URI, "--io=read", "--yes"]
+            )
+
+        assert result.exit_code == 1
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+        assert "ERROR: ERR-CONDUIT-CORE: Validation errors" in result.output
 
     def test_no_change_says_so_and_applies_nothing(self):
         result, diffusion = self._invoke(
@@ -1423,9 +1452,9 @@ class TestBuildPolicyEdit:
     def test_a_self_lockout_is_reported_as_a_sentence(self, diffusion):
         """Phorge refuses the edit; the stack trace around it says nothing
         the sentence does not."""
-        from phabricator import APIError
+        from phabfive.exceptions import PhabfiveAPIException
 
-        diffusion.phab.diffusion.repository.edit.side_effect = APIError(
+        diffusion.phab.diffusion.repository.edit.side_effect = PhabfiveAPIException(
             "ERR-CONDUIT-CORE",
             "Validation errors:\n  - The view policy of this object would no "
             "longer allow you to view the object.",
@@ -2166,9 +2195,9 @@ class TestApiErrorsAreNotSwallowed:
     """The generic message hid a validation error that named the fix."""
 
     def test_uri_edit_surfaces_what_the_api_said(self, diffusion):
-        from phabricator import APIError
+        from phabfive.exceptions import PhabfiveAPIException
 
-        diffusion.phab.diffusion.uri.edit.side_effect = APIError(
+        diffusion.phab.diffusion.uri.edit.side_effect = PhabfiveAPIException(
             "ERR-CONDUIT-CORE", 'Value "read" is not a valid IO setting'
         )
 
@@ -2176,9 +2205,9 @@ class TestApiErrorsAreNotSwallowed:
             diffusion.apply_uri_edit(1, [{"type": "io", "value": "read"}])
 
     def test_repo_edit_surfaces_what_the_api_said(self, diffusion):
-        from phabricator import APIError
+        from phabfive.exceptions import PhabfiveAPIException
 
-        diffusion.phab.diffusion.repository.edit.side_effect = APIError(
+        diffusion.phab.diffusion.repository.edit.side_effect = PhabfiveAPIException(
             "ERR-CONDUIT-CORE", "Some specific validation detail"
         )
 
@@ -2913,10 +2942,10 @@ class TestRepoShowRecord:
         assert record["Space"] == "PHID-SPCE-1"
 
     def test_an_unreachable_repository_raises_rather_than_tracebacks(self):
-        from phabricator import APIError
+        from phabfive.exceptions import PhabfiveAPIException
 
         diffusion = _showable([_show_repo()])
-        diffusion.phab.diffusion.branchquery.side_effect = APIError(
+        diffusion.phab.diffusion.branchquery.side_effect = PhabfiveAPIException(
             "ERR", "data is unavailable"
         )
 

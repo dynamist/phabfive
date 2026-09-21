@@ -25,13 +25,12 @@ from phabfive.constants import (
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
-    PhabfiveRemoteException,
 )
 
 # 3rd party imports
 import anyconfig
 import appdirs
-from phabricator import Phabricator, APIError
+from phabricator import Phabricator
 
 
 log = logging.getLogger(__name__)
@@ -387,11 +386,15 @@ class Phabfive:
         return build
 
     def verify_connection(self):
-        """ """
-        try:
-            self.phab.user.whoami()
-        except APIError as e:
-            raise PhabfiveRemoteException(e)
+        """Check the configured host answers, and accepts the token.
+
+        Raises
+        ------
+        PhabfiveRemoteException
+            PhabfiveAPIException for a token the host refuses,
+            PhabfiveConnectionException for a host that cannot be reached.
+        """
+        self.phab.user.whoami()
 
     @classmethod
     def _check_secure_permissions(cls, file_path):

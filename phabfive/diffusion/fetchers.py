@@ -2,10 +2,8 @@
 
 """API data fetching functions for Diffusion module."""
 
-from phabricator import APIError
-
 from phabfive.diffusion.validators import validate_repo_identifier
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import PhabfiveAPIException, PhabfiveDataException
 from phabfive.pagination import search_all_pages
 
 
@@ -153,10 +151,10 @@ def fetch_branches(phab, repo_id=None, repo_callsign=None, repo_shortname=None):
     if repo_id:
         try:
             return phab.diffusion.branchquery(repository=repo_id)
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(e)
     elif repo_callsign:
-        # TODO: probably catch APIError here as well
+        # TODO: probably catch PhabfiveAPIException here as well
         return phab.diffusion.branchquery(callsign=repo_callsign)
     else:
         resolved = find_repository(phab, repo_shortname)
@@ -203,5 +201,5 @@ def fetch_refs(phab, repo_id, ref_type="branch"):
 
     try:
         return query(repository=repo_id)
-    except APIError as e:
+    except PhabfiveAPIException as e:
         raise PhabfiveDataException(e)

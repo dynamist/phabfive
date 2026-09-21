@@ -10,7 +10,11 @@ from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.apps import new_app
 from phabfive.cli.completers import complete_user_role
 from phabfive.cli.output import _get_output_format, _setup_output_options
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveConnectionException,
+    PhabfiveRemoteException,
+)
 from phabfive.options import split_list_option
 
 user_app = typer.Typer(
@@ -36,8 +40,6 @@ def whoami(
     configured outside ~/.arcrc, every host in ~/.arcrc is reported
     instead; --all forces that for a configured host too.
     """
-    import requests
-
     from phabfive.display import display_users
     from phabfive.user import User
 
@@ -66,7 +68,7 @@ def whoami(
 
         if not offer_setup_on_error(str(e)):
             raise typer.Exit(1)
-    except requests.exceptions.RequestException as e:
+    except PhabfiveConnectionException as e:
         sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
         raise typer.Exit(1)
 
@@ -131,8 +133,6 @@ def search(
         phabfive user search --role=admin
         phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0
     """
-    import requests
-
     from phabfive.record_display import display_records
     from phabfive.user import User
 
@@ -154,11 +154,11 @@ def search(
     except PhabfiveConfigException as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
+    except PhabfiveConnectionException as e:
+        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        raise typer.Exit(1)
     except PhabfiveRemoteException as e:
         typer.echo(f"ERROR: {e}", err=True)
-        raise typer.Exit(1)
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
         raise typer.Exit(1)
 
     if not records:

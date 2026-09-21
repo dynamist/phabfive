@@ -14,6 +14,7 @@ import typer
 
 import phabfive
 from phabfive.cli.log_setup import init_logging
+from phabfive.exceptions import PhabfiveConnectionException, PhabfiveException
 from phabfive.cli.cache import cache_app
 from phabfive.cli.diffusion import diffusion_app
 from phabfive.cli.edit import edit_command
@@ -335,6 +336,10 @@ def cli_entrypoint() -> None:
     """Main entry point for the phabfive CLI (Typer version)."""
     import os
 
+    # Everything here runs outside click's main loop, where nothing turns a
+    # typer.Exit into an exit status - raising one would end in a traceback.
+    # So this function leaves with sys.exit.
+
     # Verify working directory exists
     try:
         os.getcwd()
@@ -343,7 +348,7 @@ def cli_entrypoint() -> None:
             "Error: Current working directory does not exist.",
             err=True,
         )
-        raise typer.Exit(1)
+        sys.exit(1)
 
     # Preprocess argv before Typer sees the args
     sys.argv = preprocess_format_alias(sys.argv)
@@ -352,4 +357,13 @@ def cli_entrypoint() -> None:
     try:
         app()
     except KeyboardInterrupt:
-        raise typer.Exit(130)
+        sys.exit(130)
+    except PhabfiveException as e:
+        # The last resort for an error no command answered: a line saying
+        # so, not a traceback. Commands that can say something more specific
+        # catch it first.
+        if isinstance(e, PhabfiveConnectionException):
+            typer.echo(f"Error: Failed to connect to Phabricator API: {e}", err=True)
+        else:
+            typer.echo(f"Error: {e}", err=True)
+        sys.exit(1)

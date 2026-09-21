@@ -312,7 +312,7 @@ def policy_lockout_message(error):
     """The sentence to report when Phorge refused an edit as a self-lockout.
 
     Phorge will not let you apply a policy that takes the object away from
-    you, and says so as a validation error inside an APIError:
+    you, and says so as a validation error inside a PhabfiveAPIException:
 
         Validation errors:
           - The view policy of this object would no longer allow you to view

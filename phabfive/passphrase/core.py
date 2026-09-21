@@ -5,11 +5,11 @@ import json
 import logging
 import re
 
-from phabricator import APIError
 
 from phabfive.constants import MONOGRAMS
 from phabfive.core import Phabfive
 from phabfive.exceptions import (
+    PhabfiveAPIException,
     PhabfiveConfigException,
     PhabfiveDataException,
     PhabfiveRemoteException,
@@ -71,7 +71,7 @@ class Passphrase(Phabfive):
                 ids=[numeric_id],
                 needSecrets=1,
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveRemoteException(e)
 
         has_data = response.get("data", {})
@@ -167,7 +167,7 @@ class Passphrase(Phabfive):
                 ids=[numeric_id],
                 needSecrets=0,
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveRemoteException(e)
 
         data = response.get("data", {})
@@ -217,7 +217,7 @@ class Passphrase(Phabfive):
             created = min(t.get("dateCreated", 0) for t in transactions)
             modified = max(t.get("dateModified", 0) for t in transactions)
             return (created if created else None, modified if modified else None)
-        except (APIError, Exception):
+        except Exception:
             return (None, None)
 
     def _format_credential(self, data, need_secrets=True, need_public_keys=False):
@@ -378,7 +378,7 @@ class Passphrase(Phabfive):
                         pages.close()
 
                         return credentials
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveRemoteException(e)
 
         return credentials
@@ -421,7 +421,7 @@ class Passphrase(Phabfive):
                 needSecrets=1 if need_secrets else 0,
                 needPublicKeys=1 if need_public_keys else 0,
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveRemoteException(e)
 
         data = response.get("data", {})

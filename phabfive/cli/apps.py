@@ -13,7 +13,7 @@ import sys
 
 import typer
 
-from phabfive.exceptions import PhabfiveConfigException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveConnectionException
 
 
 def prompt_host(hosts):
@@ -61,8 +61,6 @@ def get_app(cls):
     once more when it succeeds. A host that cannot be reached is one line on
     stderr. Both end the command with exit status 1 otherwise.
     """
-    import requests
-
     try:
         return new_app(cls)
     except PhabfiveConfigException as e:
@@ -72,7 +70,7 @@ def get_app(cls):
             raise typer.Exit(1)
         # If setup succeeded, try again
         return new_app(cls)
-    except requests.exceptions.RequestException as e:
+    except PhabfiveConnectionException as e:
         sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
         raise typer.Exit(1)
 

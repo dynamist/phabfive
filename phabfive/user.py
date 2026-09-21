@@ -9,12 +9,17 @@ import unicodedata
 from urllib.parse import urlparse
 
 # 3rd party imports
-from phabricator import APIError, Phabricator
+from phabricator import Phabricator
 
 # phabfive imports
 from phabfive.constants import USER_ROLE_CONSTRAINTS, USER_ROLES
+from phabfive.conduit import Conduit
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
+from phabfive.exceptions import (
+    PhabfiveAPIException,
+    PhabfiveConfigException,
+    PhabfiveRemoteException,
+)
 from phabfive.maniphest.utils import format_timestamp
 from phabfive.pagination import iter_pages
 
@@ -40,10 +45,7 @@ def _contains(field, text):
 class User(Phabfive):
     def whoami(self):
         """Return filtered user info dict with userName, realName, primaryEmail, uri."""
-        try:
-            response = self.phab.user.whoami()
-        except APIError as e:
-            raise PhabfiveRemoteException(e)
+        response = self.phab.user.whoami()
 
         return {
             key: value
@@ -101,8 +103,7 @@ class User(Phabfive):
 
         try:
             if phab is None:
-                phab = Phabricator(host=normalized_url, token=token)
-                phab.update_interfaces()
+                phab = Conduit(lambda: Phabricator(host=normalized_url, token=token))
             response = phab.user.whoami()
 
             user_name = response.get("userName", "")
@@ -117,9 +118,9 @@ class User(Phabfive):
             result["_link"] = self.format_link(
                 f"{base_url}/p/{user_name}/", user_name, show_url=False
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             result["Error"] = str(e).replace("ERR-CONDUIT-CORE: ", "")
-        except Exception as e:
+        except PhabfiveRemoteException as e:
             result["Error"] = str(e)
 
         return result
@@ -296,22 +297,19 @@ class User(Phabfive):
 
         users = []
 
-        try:
-            # A limit can only be forwarded when every match the server sends
-            # counts; filtering here means counting matches ourselves, and
-            # stopping as soon as there are enough.
-            for page in iter_pages(
-                self.phab.user.search,
-                limit=None if filtering_here else limit,
-                constraints=constraints,
-            ):
-                users.extend(user for user in page if matches(user))
+        # A limit can only be forwarded when every match the server sends
+        # counts; filtering here means counting matches ourselves, and
+        # stopping as soon as there are enough.
+        for page in iter_pages(
+            self.phab.user.search,
+            limit=None if filtering_here else limit,
+            constraints=constraints,
+        ):
+            users.extend(user for user in page if matches(user))
 
-                if limit is not None and len(users) >= limit:
-                    users = users[:limit]
-                    break
-        except APIError as e:
-            raise PhabfiveRemoteException(e)
+            if limit is not None and len(users) >= limit:
+                users = users[:limit]
+                break
 
         users.sort(key=lambda user: user["fields"]["username"].casefold())
 

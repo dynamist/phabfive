@@ -35,8 +35,9 @@ dependencies = [
   "jinja2>=3.0.0",
   "phabricator>=0.7.0",
   "pyyaml>=6.0",
-  # Imported directly by the CLI modules to catch connection errors. It
-  # arrives through phabricator today, which is not a promise it keeps.
+  # Imported directly by phabfive.conduit, to translate connection errors
+  # into PhabfiveConnectionException. It arrives through phabricator today,
+  # which is not a promise it keeps.
   "requests>=2.26",
   "rich>=13.0.0",
   "ruamel-yaml>=0.18.0",

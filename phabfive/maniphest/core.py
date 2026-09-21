@@ -9,7 +9,6 @@ import functools
 from pathlib import Path
 
 from jinja2 import Template
-from phabricator import APIError
 from ruamel.yaml import YAML
 
 from phabfive.constants import (
@@ -23,6 +22,7 @@ from phabfive.constants import (
 )
 from phabfive.core import Phabfive
 from phabfive.exceptions import (
+    PhabfiveAPIException,
     PhabfiveConfigException,
     PhabfiveDataException,
     PhabfiveException,
@@ -2672,13 +2672,13 @@ class Maniphest(Phabfive):
             If the API rejects the edit. A policy that would take the task
             away from whoever is applying it is rejected this way, and is
             reported as the sentence Phorge answered with rather than as the
-            APIError around it.
+            PhabfiveAPIException around it.
         """
         try:
             self.phab.maniphest.edit(
                 objectIdentifier=f"T{task_id}", transactions=transactions
             )
-        except APIError as e:
+        except PhabfiveAPIException as e:
             raise PhabfiveDataException(policy_lockout_message(e) or str(e))
 
     def _format_description_preview(self, text):
