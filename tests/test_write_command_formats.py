@@ -374,7 +374,7 @@ class TestEditBatch:
         ]
 
     def test_emits_a_record_per_edited_task(self, capsys):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest(("101", "102"))
 
@@ -392,7 +392,7 @@ class TestEditBatch:
         maniphest.task_show.assert_called_once_with([101, 102])
 
     def test_prose_moves_to_stderr(self, capsys):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         edit_tasks_batch(
             self._tasks(["101"]),
@@ -409,7 +409,7 @@ class TestEditBatch:
         json.loads(captured.out)
 
     def test_no_format_asked_for_prints_as_it_always_did(self, capsys):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         edit_tasks_batch(
             self._tasks(["101"]), self._maniphest(), status="resolved", force=True
@@ -426,7 +426,7 @@ class TestEditBatch:
         as "it was already right" - that is indistinguishable from a command
         that did nothing at all.
         """
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest(transactions=False)
 
@@ -445,7 +445,7 @@ class TestEditBatch:
         maniphest.apply_task_edit.assert_not_called()
 
     def test_dry_run_leaves_stdout_empty(self, capsys):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 

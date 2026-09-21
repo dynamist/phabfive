@@ -166,11 +166,14 @@ class TestSpaceCountsAsAnEditOption:
     """`--space` on its own is an edit, not an invitation to open $EDITOR."""
 
     def test_it_does_not_open_the_editor(self, mock_config):
+        from phabfive.cli.edit_flow import run_edit
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        with mock.patch.object(Edit, "_edit_task_single", return_value=0) as single:
-            edit_app.edit_objects(object_id="T123", space="S3")
+        with mock.patch(
+            "phabfive.cli.edit_flow._edit_task_single", return_value=0
+        ) as single:
+            run_edit(edit_app, object_id="T123", space="S3")
 
         assert single.call_args.kwargs["space"] == "S3"
         assert single.call_args.kwargs["edit_description_in_editor"] is False
@@ -178,10 +181,13 @@ class TestSpaceCountsAsAnEditOption:
     def test_it_reaches_the_batch_path(self, mock_config):
         # Several tasks go through edit_tasks_batch, which has a signature of
         # its own: a flag missing from it is dropped without a word.
+        from phabfive.cli.edit_flow import run_edit
         from phabfive.edit import Edit
 
         edit_app = Edit()
-        with mock.patch("phabfive.edit.core.edit_tasks_batch", return_value=0) as batch:
-            edit_app.edit_objects(object_id="T123,T124", space="S3")
+        with mock.patch(
+            "phabfive.cli.edit_flow.edit_tasks_batch", return_value=0
+        ) as batch:
+            run_edit(edit_app, object_id="T123,T124", space="S3")
 
         assert batch.call_args.kwargs["space"] == "S3"

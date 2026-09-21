@@ -32,7 +32,7 @@ from phabfive.cli.output import (
     is_machine_format,
 )
 from phabfive.constants import MONOGRAMS
-from phabfive.editor import resolve_assume_yes
+from phabfive.cli.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.policy import POLICY_GRAMMAR
 
@@ -345,7 +345,7 @@ def create(
             final_description = sys.stdin.read().rstrip()
         elif description is None and sys.stdin.isatty() and not dry_run:
             # Open $EDITOR for description (only in interactive mode)
-            from phabfive.editor import edit_text
+            from phabfive.cli.editor import edit_text
 
             final_description = edit_text("", prefix="description-")
             if final_description and not force:
@@ -981,7 +981,12 @@ def edit(
     _setup_output_options(ctx)
     edit_handler = _get_edit_app()
 
-    retcode = edit_handler.edit_objects(
+    # Imported here: it pulls in the edit planning, which a command that is
+    # only completing or printing help should not pay for
+    from phabfive.cli import edit_flow
+
+    retcode = edit_flow.run_edit(
+        edit_handler,
         object_id=task_ids,
         output_format=_get_output_format(ctx),
         title=final_title,

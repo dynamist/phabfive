@@ -74,7 +74,7 @@ def test_library_code_raises_typed_exceptions():
 
     Each says nothing about what went wrong, so a program cannot tell a bad
     argument from a missing object, and no command handler catches either.
-    phabfive/cli/ and phabfive/editor.py are the command's own and exempt.
+    phabfive/cli/ is the command's own and exempt.
     """
     import ast
     from pathlib import Path
@@ -85,7 +85,7 @@ def test_library_code_raises_typed_exceptions():
     offenders = []
     for path in sorted(root.rglob("*.py")):
         relative = path.relative_to(root)
-        if relative.parts[0] == "cli" or relative.name == "editor.py":
+        if relative.parts[0] == "cli":
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call)):

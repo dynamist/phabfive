@@ -497,23 +497,23 @@ class TestTheBatchConfirmationGuard:
         ]
 
     def test_nothing_is_asked_when_no_policy_is_asked_for(self, maniphest):
-        from phabfive.edit.batch import _needs_policy_confirmation
+        from phabfive.edit.plan import _needs_policy_confirmation
 
         assert not _needs_policy_confirmation(self._tasks({}), maniphest, None, None)
 
     def test_a_policy_that_would_change_asks(self, maniphest):
-        from phabfive.edit.batch import _needs_policy_confirmation
+        from phabfive.edit.plan import _needs_policy_confirmation
 
         assert _needs_policy_confirmation(self._tasks({}), maniphest, "public", None)
 
     def test_a_policy_already_in_place_does_not_ask(self, maniphest):
         """The same rule the text guard follows: a no-op is not a change."""
-        from phabfive.edit.batch import _needs_policy_confirmation
+        from phabfive.edit.plan import _needs_policy_confirmation
 
         assert not _needs_policy_confirmation(self._tasks({}), maniphest, "users", None)
 
     def test_one_task_out_of_several_is_enough(self, maniphest):
-        from phabfive.edit.batch import _needs_policy_confirmation
+        from phabfive.edit.plan import _needs_policy_confirmation
 
         tasks = self._tasks({}, {"view": "public"})
 
@@ -522,7 +522,7 @@ class TestTheBatchConfirmationGuard:
     def test_a_project_is_resolved_once_for_the_whole_batch(self, maniphest):
         """Unlike the text guard, this one needs the instance: `#infra` has to
         become a PHID before it can be compared with the policy in place."""
-        from phabfive.edit.batch import _needs_policy_confirmation
+        from phabfive.edit.plan import _needs_policy_confirmation
 
         maniphest.phab.project.search.return_value = {
             "data": [{"phid": "PHID-PROJ-infra"}]
@@ -557,7 +557,7 @@ class TestTheBatchPathEndToEnd:
     def test_no_terminal_refuses_a_policy_change(self, capsys):
         """The decision this PR took: a policy change joins title and
         description behind the --yes guard rather than applying unreviewed."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -573,7 +573,7 @@ class TestTheBatchPathEndToEnd:
         assert "No tasks were modified." in err
 
     def test_no_terminal_applies_a_policy_change_with_yes(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -586,7 +586,7 @@ class TestTheBatchPathEndToEnd:
         assert maniphest.apply_task_edit.call_count == 2
 
     def test_the_policy_options_reach_build_task_edit(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -646,15 +646,15 @@ class TestTheCliThreadsThePolicyOptions:
         from typer.testing import CliRunner
 
         handler = MagicMock()
-        handler.edit_objects.return_value = 0
 
         with (
             patch("phabfive.cli.maniphest._get_edit_app", return_value=handler),
             patch("phabfive.cli.edit._get_edit_app", return_value=handler),
+            patch("phabfive.cli.edit_flow.run_edit", return_value=0) as run_edit,
         ):
             result = CliRunner().invoke(app, args)
 
-        return result, handler
+        return result, run_edit
 
     def test_maniphest_edit(self):
         from phabfive.cli.maniphest import maniphest_app
@@ -664,7 +664,7 @@ class TestTheCliThreadsThePolicyOptions:
         )
 
         assert result.exit_code == 0
-        _, kwargs = handler.edit_objects.call_args
+        _, kwargs = handler.call_args
         assert (kwargs["visible_to"], kwargs["editable_by"]) == ("public", "admin")
 
     def test_the_generic_edit(self):
@@ -675,7 +675,7 @@ class TestTheCliThreadsThePolicyOptions:
         )
 
         assert result.exit_code == 0
-        _, kwargs = handler.edit_objects.call_args
+        _, kwargs = handler.call_args
         assert (kwargs["visible_to"], kwargs["editable_by"]) == ("public", "admin")
 
     def test_maniphest_create(self):

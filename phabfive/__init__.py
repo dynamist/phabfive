@@ -102,7 +102,6 @@ _LAZY = {
 #   display, record_display, table, json_output
 #            print, and sys.exit on a closed pipe
 #   cache    exists for shell completion
-#   editor   opens $EDITOR and prompts
 # `from phabfive import cache` still works: the import system falls back to
 # importing the submodule when __getattr__ raises AttributeError.
 _SUBMODULES = (

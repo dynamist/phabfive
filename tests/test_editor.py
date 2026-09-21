@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Tests for the confirmation helpers in phabfive.editor."""
+"""Tests for the confirmation helpers in phabfive.cli.editor."""
 
 import io
 from unittest.mock import patch
@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 import typer
 
-from phabfive.editor import (
+from phabfive.cli.editor import (
     confirm_apply,
     confirm_text_change,
     open_tty,

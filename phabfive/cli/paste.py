@@ -27,7 +27,7 @@ from phabfive.cli.output import (
     is_machine_format,
 )
 from phabfive.constants import MONOGRAMS
-from phabfive.editor import resolve_assume_yes
+from phabfive.cli.editor import resolve_assume_yes
 from phabfive.display import render_records
 from phabfive.json_output import emit_records
 from phabfive.table import display_records_table
@@ -298,7 +298,7 @@ def create(
 
     elif sys.stdin.isatty() and not dry_run:
         # Open $EDITOR
-        from phabfive.editor import edit_text
+        from phabfive.cli.editor import edit_text
 
         suffix = f".{language}" if language else ".txt"
         final_content = edit_text("", prefix="paste-", suffix=suffix)
@@ -351,7 +351,7 @@ def create(
         raise typer.Exit(0)
 
     if interactive:
-        from phabfive.editor import confirm_apply
+        from phabfive.cli.editor import confirm_apply
 
         show_preview("Would create paste:")
         confirmed, return_code = confirm_apply(assume_yes)
@@ -629,7 +629,7 @@ def edit(
         phabfive paste edit P1 --subscribe=@me --tag=project
         phabfive paste edit P1 "Test" --dry-run
     """
-    from phabfive.editor import confirm_text_change, edit_text
+    from phabfive.cli.editor import confirm_text_change, edit_text
 
     try:
         force = resolve_assume_yes(yes, force, interactive)
@@ -729,7 +729,7 @@ def edit(
 
     # Output result
     if dry_run:
-        from phabfive.editor import show_diff
+        from phabfive.cli.editor import show_diff
 
         print(f"[DRY RUN] Would edit {paste_id}:", file=preview)
         for change in result.get("changes", []):
@@ -780,7 +780,7 @@ def comment(
         echo "comment" | phabfive paste comment P1 -
         phabfive P1 "Quick comment"  # monogram shortcut
     """
-    from phabfive.editor import edit_text
+    from phabfive.cli.editor import edit_text
 
     _setup_output_options(ctx)
     paste = _get_paste_app()

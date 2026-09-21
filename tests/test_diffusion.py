@@ -715,7 +715,7 @@ class TestUriEditCli:
         diffusion.apply_uri_edit.assert_not_called()
 
     def test_interactive_declined_changes_nothing(self):
-        with patch("phabfive.editor.confirm_apply", return_value=(False, 0)):
+        with patch("phabfive.cli.editor.confirm_apply", return_value=(False, 0)):
             result, diffusion = self._invoke(
                 ["myrepo", self.URI, "--display=always", "--interactive"]
             )
@@ -724,7 +724,7 @@ class TestUriEditCli:
         diffusion.apply_uri_edit.assert_not_called()
 
     def test_interactive_accepted_applies(self):
-        with patch("phabfive.editor.confirm_apply", return_value=(True, None)):
+        with patch("phabfive.cli.editor.confirm_apply", return_value=(True, None)):
             result, diffusion = self._invoke(
                 ["myrepo", self.URI, "--display=always", "--interactive"]
             )
@@ -734,7 +734,7 @@ class TestUriEditCli:
 
     def test_interactive_owns_the_i_short_flag(self):
         """-i used to mean --io; it means --interactive now, like everywhere else."""
-        with patch("phabfive.editor.confirm_apply", return_value=(True, None)):
+        with patch("phabfive.cli.editor.confirm_apply", return_value=(True, None)):
             result, diffusion = self._invoke(
                 ["myrepo", self.URI, "--display=always", "-i"]
             )

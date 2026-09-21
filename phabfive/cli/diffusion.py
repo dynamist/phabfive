@@ -102,7 +102,7 @@ def _resolve_show_uris(show_uris: bool, url: bool) -> bool:
     ``--url`` printed a comma-separated line of URI strings and nothing
     else, which is not a format anything could parse. It survives as a
     hidden alias that warns, the way ``--force`` survives as an alias for
-    ``--yes`` (``phabfive.editor.resolve_assume_yes``).
+    ``--yes`` (``phabfive.cli.editor.resolve_assume_yes``).
 
     Parameters
     ----------
@@ -306,7 +306,7 @@ def repo_create(
     once created - Phorge offers no delete through Conduit or the web UI.
     `--allow-similar` creates it anyway. An exact clash is always refused.
     """
-    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
+    from phabfive.cli.editor import confirm_apply, render_changes, resolve_assume_yes
 
     try:
         assume_yes = resolve_assume_yes(yes, False, interactive)
@@ -422,7 +422,7 @@ def repo_edit(
     that differs from another repository only in case or in `.` `-` `_`
     punctuation is refused unless `--allow-similar` is given.
     """
-    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
+    from phabfive.cli.editor import confirm_apply, render_changes, resolve_assume_yes
 
     options = [
         name,
@@ -694,7 +694,7 @@ def uri_create(
     ),
 ) -> None:
     """Create a new URI for a repository."""
-    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
+    from phabfive.cli.editor import confirm_apply, render_changes, resolve_assume_yes
 
     if not observe and not mirror:
         typer.echo("ERROR: Must specify either --observe or --mirror", err=True)
@@ -791,7 +791,7 @@ def edit(
     ),
 ) -> None:
     """Edit a URI for a repository."""
-    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
+    from phabfive.cli.editor import confirm_apply, render_changes, resolve_assume_yes
 
     if enable and disable:
         typer.echo("ERROR: Cannot specify both --enable and --disable", err=True)
