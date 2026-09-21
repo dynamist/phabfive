@@ -852,6 +852,8 @@ class Maniphest(Phabfive):
         created_before=None,
         updated_after=None,
         updated_before=None,
+        visible_to=None,
+        editable_by=None,
         column_patterns=None,
         priority_patterns=None,
         status_patterns=None,
@@ -894,6 +896,14 @@ class Maniphest(Phabfive):
                       Supports units: h (hours), d (days), w (weeks), m (months), y (years).
         updated_before (str|int, optional): Tasks updated more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
                       Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        visible_to    (str, optional): Only tasks whose view policy is exactly this, in the
+                      grammar phabfive.policy accepts (public, users, admin, no-one,
+                      #project, @user or a PHID). Compared with the stored value, so
+                      "users" finds tasks set to All Users - not every task a user can
+                      see. maniphest.search has no policy constraint, so this runs on
+                      the client, before --limit.
+        editable_by   (str, optional): Only tasks whose edit policy is exactly this; as
+                      visible_to.
         column_patterns (list, optional): List of ColumnPattern objects to filter by.
                       Filters tasks based on column transitions (from, to, in, been, never, forward, backward).
         priority_patterns (list, optional): List of PriorityPattern objects to filter by.
@@ -932,6 +942,8 @@ class Maniphest(Phabfive):
                 created_before,
                 updated_after,
                 updated_before,
+                visible_to,
+                editable_by,
                 column_patterns,
                 priority_patterns,
                 status_patterns,
@@ -961,6 +973,19 @@ class Maniphest(Phabfive):
         status_scope, status_patterns = resolve_status_scope(
             status_patterns, default_scope
         )
+
+        # Resolved once, before anything is fetched, so a typo or a project
+        # that does not exist fails fast rather than after the whole search.
+        policy_filter = {
+            TASK_POLICY_FIELDS[key]: resolve_policy_value(
+                self.phab, value, option=option
+            )
+            for key, value, option in (
+                ("view", visible_to, "--visible-to"),
+                ("edit", editable_by, "--editable-by"),
+            )
+            if value is not None
+        }
 
         # Resolved before anything is fetched so a bad --order fails fast, and
         # so library callers get the same validation the CLI does.
@@ -1168,6 +1193,22 @@ class Maniphest(Phabfive):
         # truncation keeps the top N of the requested order rather than an
         # arbitrary slice of a project-grouped merge.
         result_data = sort_tasks(result_data, order_field, order_direction)
+
+        # Policy filters are exact matches on the stored value. Applied here,
+        # before the transition filters fetch any history and before --limit
+        # truncates, so the limit keeps the top N of the tasks that match.
+        if policy_filter:
+            matched = [
+                task
+                for task in result_data
+                if all(
+                    ((task.get("fields") or {}).get("policy") or {}).get(field)
+                    == wanted
+                    for field, wanted in policy_filter.items()
+                )
+            ]
+            log.info(f"Policy filter kept {len(matched)} of {len(result_data)} tasks")
+            result_data = matched
 
         # Initialize task_transitions_map for storing transitions (used by both filtering and display)
         task_transitions_map = {}
@@ -1388,6 +1429,10 @@ class Maniphest(Phabfive):
                 search_params["author"] = author
             if space:
                 search_params["space"] = space
+            if visible_to:
+                search_params["visible_to"] = visible_to
+            if editable_by:
+                search_params["editable_by"] = editable_by
             if updated_after_original:
                 search_params["updated_after"] = updated_after_original
             if updated_before_original:

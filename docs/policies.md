@@ -13,7 +13,7 @@ the same reason: no one application owns it.
 | Application | Read with | Write with |
 | --- | --- | --- |
 | Diffusion | `diffusion repo show --show-policy`, `diffusion repo list --show-policy` | `diffusion repo edit --visible-to`, `--editable-by`, `--can-push` |
-| Maniphest | `maniphest show --show-policy`, `maniphest search --show-policy` | `maniphest edit` and `maniphest create`, `--visible-to` and `--editable-by` |
+| Maniphest | `maniphest show --show-policy`, `maniphest search --show-policy`; filter with `maniphest search --visible-to` and `--editable-by` | `maniphest edit` and `maniphest create`, `--visible-to` and `--editable-by` |
 | Projects | `project show --show-policy`, `project search --show-policy` | `project edit` and `project create`, `--visible-to`, `--editable-by` and `--joinable-by` |
 
 Each object reports three policies. Two of them are the same on all three:
@@ -191,6 +191,21 @@ GUNNAR Firmware     All Users                   Administrators   All Users
 docs-policy-probe   Public (No Login Required)  #infrastructure  Administrators
 uridoc377           Public (No Login Required)  Administrators   Not a Hosted Repository
 ```
+
+### Filtering tasks by policy
+
+`maniphest search` takes the same two options as a filter. They keep the tasks
+whose stored policy is exactly that value, so the pair of commands below finds
+every task still editable by All Users and then moves it:
+
+```bash
+phabfive --format=jsonl maniphest search --status=any --space='*' --editable-by=users -l 0
+phabfive maniphest edit T12,T13 --editable-by='#humans' --dry-run
+```
+
+The match is on the stored value: `--visible-to=users` finds tasks set to "All
+Users", not every task a logged-in user could open. See
+[Filtering by Policy](maniphest-cli.md#filtering-by-policy).
 
 ## Writing a policy
 

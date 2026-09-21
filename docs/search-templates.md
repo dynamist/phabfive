@@ -104,6 +104,9 @@ search:
 - `tag`: Project/workboard filtering with wildcards and logic
 - `include`: Task ID(s) to force-include in results even if other filters don't match them, as a comma-separated string (`"T123,T456"`) or a YAML list (`["T123", "T456"]`)
 - `exclude`: Task ID(s) to remove from results even if the filters match them, as a comma-separated string (`"T123"`) or a YAML list (`["T123"]`)
+- `space`: Space name or monogram, with wildcards (`"*"` for every Space)
+- `visible-to`, `editable-by`: Only tasks whose view or edit policy is exactly this,
+  in the [policy grammar](policies.md#the-value-grammar), e.g. `editable-by: users`
 - `created-after`: Tasks created within TIME (e.g., `"1w"`, `"2m"`, or `7` for days)
 - `created-before`: Tasks created more than TIME ago (e.g., `"1w"`, `"2m"`, or `7` for days)
 - `updated-after`: Tasks updated within TIME (e.g., `"1w"`, `"2m"`, or `7` for days)
@@ -111,6 +114,7 @@ search:
 - `order`: Result ordering as `<field>[:asc|:desc]`, e.g. `"priority"`,
   `"updated:asc"`, `"title"`. Defaults to `"priority"`. See
   [Result Ordering](maniphest-cli.md#result-ordering)
+- `limit`: Maximum results, `0` for all (default `100`)
 - `column`: Column transition patterns
 - `priority`: Priority transition patterns
 - `status`: Status scope (`open`, `closed`, `any`) and transition patterns, e.g.

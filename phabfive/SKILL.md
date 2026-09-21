@@ -251,6 +251,9 @@ phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
 - `--assigned` and `--author` accept a username or `@me`.
 - `--status=open|closed|any` sets which statuses a search reaches; it is `open` by default,
   so closed tasks are excluded unless asked for. `--all` is a deprecated `--status=any`.
+- `--visible-to` and `--editable-by` keep tasks whose view or edit policy is exactly that
+  value (`users`, `admin`, `#project`, `@user`, a PHID). It is the stored value: `users`
+  means "set to All Users". Applied on the client, before `--limit`.
 - `--include T123` pins a task into the results whatever the filters say; `--exclude T123`
   removes one. Include bypasses the limit, exclude is applied before it.
 - Dates are **relative only**: `h`, `d`, `w`, `m` (30 days), `y` (365 days); a bare number
