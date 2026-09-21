@@ -22,13 +22,13 @@ runner = CliRunner()
 URL = "http://phorge.localhost"
 
 
-def _user(uid, username, roles):
+def _user(uid, username, roles, real_name=None):
     return {
         "id": uid,
         "phid": f"PHID-USER-{username}",
         "fields": {
             "username": username,
-            "realName": username.title(),
+            "realName": real_name or username.title(),
             "roles": list(roles),
             "dateCreated": 1789875812,
             "dateModified": 1789875812,
@@ -211,6 +211,84 @@ class TestSearch:
         assert _search(user).calls[0]["constraints"] == {"nameLike": "ploy"}
         assert _names(records) == ["deploybot"]
 
+    def test_a_query_is_the_only_text_sent_to_the_server(self):
+        user = _app()
+
+        user.search(query="vio", username="x", realname="y")
+
+        assert _search(user).calls[0]["constraints"] == {"nameLike": "vio"}
+
+
+class TestNameFields:
+    """--username and --realname each match one field, as nameLike matches."""
+
+    PEOPLE = [
+        _user(1, "rholm", HUMAN, real_name="Rolf Holm"),
+        _user(2, "hholm", HUMAN, real_name="Henrik Holmboe"),
+        _user(3, "sonja", HUMAN, real_name="Sonja Bergström"),
+        _user(4, "holmes", HUMAN, real_name="Sherlock Doyle"),
+    ]
+
+    def _app(self):
+        user = _app()
+        user.phab.user.search.side_effect = FakeUserSearch(self.PEOPLE)
+        return user
+
+    def test_username_alone(self):
+        assert _names(self._app().search(username="holm")) == [
+            "hholm",
+            "holmes",
+            "rholm",
+        ]
+
+    def test_name_alone(self):
+        """holmes has "holm" in the username only, so --realname leaves it out."""
+        assert _names(self._app().search(realname="holm")) == ["hholm", "rholm"]
+
+    def test_both_must_match(self):
+        assert _names(self._app().search(realname="holm", username="r")) == ["rholm"]
+
+    def test_case_and_accents_are_ignored(self):
+        """The server matched "strom" to Bergström, so the local check must."""
+        user = self._app()
+        user.phab.user.search.side_effect = lambda **_: {
+            "data": self.PEOPLE,
+            "cursor": {"after": None},
+        }
+
+        assert _names(user.search(realname="BERGSTROM")) == ["sonja"]
+
+    def test_the_field_text_narrows_on_the_server(self):
+        user = self._app()
+
+        user.search(realname="holm")
+
+        assert _search(user).calls[0]["constraints"] == {"nameLike": "holm"}
+
+    def test_a_limit_counts_matches_on_the_field(self):
+        user = self._app()
+
+        records = user.search(realname="holm", limit=1)
+
+        assert len(records) == 1
+        assert _search(user).calls[0]["limit"] == 100
+
+    def test_the_cli_passes_both(self, restore_output_format):
+        user = self._app()
+
+        with patch("phabfive.user.User", return_value=user):
+            result = runner.invoke(
+                app,
+                ["--format=jsonl", "user", "search", "--realname=holm", "--username=h"],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert [
+            json.loads(line)["User"]["Username"] for line in result.stdout.splitlines()
+        ] == ["hholm", "rholm"]
+
+
+class TestRoleErrors:
     def test_an_unknown_role_is_refused(self):
         user = _app()
 

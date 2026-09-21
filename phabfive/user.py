@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import stat
+import unicodedata
 from urllib.parse import urlparse
 
 # 3rd party imports
@@ -18,6 +19,22 @@ from phabfive.maniphest.utils import format_timestamp
 from phabfive.pagination import iter_pages
 
 log = logging.getLogger(__name__)
+
+
+def _fold(text):
+    """Text as nameLike compares it: without case, and without accents.
+
+    The server matched "strom" and "STRÖM" alike against Bergström, so a
+    field checked here has to fold the same way, or --realname would drop a user
+    the server had just found.
+    """
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+
+def _contains(field, text):
+    """Whether the text is anywhere in the field, compared as nameLike does."""
+    return _fold(text) in _fold(field)
 
 
 class User(Phabfive):
@@ -182,18 +199,24 @@ class User(Phabfive):
     def search(
         self,
         query=None,
+        username=None,
+        realname=None,
         roles=None,
         not_roles=None,
         show_metadata=False,
         limit=None,
     ):
-        """Search users, filtered by the roles Phorge reports on them.
+        """Search users, filtered by name and by the roles Phorge reports.
 
         Parameters
         ----------
         query : str, optional
             Text to find anywhere in a username or real name, ignoring case:
             "holm" finds rholm and hholm
+        username : str, optional
+            Text to find anywhere in the username alone
+        realname : str, optional
+            Text to find anywhere in the real name alone
         roles : list, optional
             Roles a user must have, every one of them
         not_roles : list, optional
@@ -237,8 +260,14 @@ class User(Phabfive):
         # nameLike, not query. query is the full-text index, which matches
         # whole words only - "holm" found neither rholm nor hholm - while
         # nameLike matches any part of the username or the real name.
-        if query:
-            constraints["nameLike"] = query
+        #
+        # There is no constraint for one of the two fields alone, and only one
+        # nameLike, so --username and --realname are matched here. When nothing
+        # else took nameLike, one of them is sent as it too: every user it
+        # finds is a candidate, and it spares reading the whole instance.
+        server_text = query or username or realname
+        if server_text:
+            constraints["nameLike"] = server_text
 
         # A role the server can filter on is sent as a constraint, so the
         # pages carry only matching users. The rest are matched here.
@@ -254,12 +283,19 @@ class User(Phabfive):
         ]
 
         def matches(user):
-            held = set(user.get("fields", {}).get("roles") or [])
+            fields = user.get("fields", {})
+            held = set(fields.get("roles") or [])
+
+            if username and not _contains(fields.get("username"), username):
+                return False
+            if realname and not _contains(fields.get("realName"), realname):
+                return False
+
             return all(role in held for role in local_roles) and not any(
                 role in held for role in local_not_roles
             )
 
-        filtering_here = bool(local_roles or local_not_roles)
+        filtering_here = bool(local_roles or local_not_roles or username or realname)
 
         users = []
 

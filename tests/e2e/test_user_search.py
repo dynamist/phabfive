@@ -58,6 +58,18 @@ def test_a_query_matches_any_part_of_a_name(phabfive):
     assert _usernames(phabfive, "istrator") == ["admin"]
 
 
+def test_username_and_realname_each_search_one_field(phabfive):
+    """The admin is "admin" by username and "Administrator" by real name."""
+    assert _usernames(phabfive, "--realname=istrator") == ["admin"]
+    assert _usernames(phabfive, "--username=istrator") == []
+    assert "admin" in _usernames(phabfive, "--username=admin")
+
+
+def test_realname_ignores_accents(phabfive):
+    """The seed's Sonja Bergström has a username without the accent."""
+    assert _usernames(phabfive, "--realname=bergstrom") == ["sonja.bergstrom"]
+
+
 def test_an_unknown_role_exits_non_zero(phabfive_raw):
     result = phabfive_raw("user", "search", "--role=admn")
 

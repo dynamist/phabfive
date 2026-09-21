@@ -76,6 +76,16 @@ def search(
     query: Optional[str] = typer.Argument(
         None, help="Free text to match against usernames and real names"
     ),
+    username: Optional[str] = typer.Option(
+        None,
+        "--username",
+        help="Only users with this text anywhere in their username",
+    ),
+    realname: Optional[str] = typer.Option(
+        None,
+        "--realname",
+        help="Only users with this text anywhere in their real name",
+    ),
     role: Optional[List[str]] = typer.Option(
         None,
         "--role",
@@ -102,6 +112,11 @@ def search(
     record is the one `project show --show-members` gives for each member,
     so the two can be compared directly.
 
+    QUERY is found in the username or the real name, --username only in the
+    username and --realname only in the real name. Each matches any part of
+    the field, ignoring case and accents, and they combine: --realname=holm
+    --username=r finds the Holms whose username has an r in it.
+
     --role keeps users with every role named, --not-role drops users with
     any of them. So every active person, with bots, mailing lists and
     disabled accounts left out, is --not-role=bot,list,disabled.
@@ -110,6 +125,8 @@ def search(
     Examples:
         phabfive user search
         phabfive user search viola
+        phabfive user search --username=holm
+        phabfive user search --realname="Larsson"
         phabfive user search --role=admin
         phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0
     """
@@ -124,6 +141,8 @@ def search(
         user = User()
         records = user.search(
             query=query,
+            username=username,
+            realname=realname,
             roles=split_list_option(role),
             not_roles=split_list_option(not_role),
             show_metadata=show_metadata,

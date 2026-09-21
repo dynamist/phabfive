@@ -168,7 +168,8 @@
   of them; `--not-role=bot,list,disabled` is every person who can use the instance.
   `bot`, `disabled`, `list` and `admin` are filtered by `user.search` itself, the
   rest on the records it returns. The text argument finds any part of a username
-  or real name, ignoring case, so `user search holm` finds rholm and hholm
+  or real name, ignoring case, so `user search holm` finds rholm and hholm.
+  `--username` and `--realname` each search one of the two fields alone
 * The local Phorge seed has a bot, deploy.bot, and a disabled account,
   former.employee
 

@@ -631,6 +631,8 @@ transaction for it - so do that in the web UI.
 ```bash
 phabfive --format=table user search
 phabfive --format=json user search viola
+phabfive --format=json user search --username=holm
+phabfive --format=json user search --realname=larsson
 phabfive --format=json user search --role=admin
 phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0
 ```
@@ -639,7 +641,9 @@ phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0
 `Name` and `Roles` - the same record `project show --show-members` gives for each
 member, so the two compare directly. `Metadata` is added with `--show-metadata` /
 `-M`. The roles are Phorge's own: `disabled`, `bot`, `list` (a mailing list),
-`admin`, `verified`, `approved` and `activated`. `--role` keeps users with every
+`admin`, `verified`, `approved` and `activated`. The text argument finds any part of
+the username or the real name; `--username` searches the username alone and
+`--realname` the real name alone, both ignoring case and accents. `--role` keeps users with every
 role named and `--not-role` drops users with any of them, both repeatable and
 comma-separated; an unknown role is refused. So every person who can use the
 instance is `--not-role=bot,list,disabled`, and the members of a project who are
