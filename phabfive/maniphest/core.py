@@ -17,6 +17,7 @@ from phabfive.constants import (
     MANIPHEST_ORDER_DIRECTIONS,
     MANIPHEST_ORDER_FIELDS,
     PRIORITY_DEFAULT,
+    SEARCH_TEMPLATE_KEYS,
     TASK_POLICY_FIELDS,
     TASK_POLICY_TRANSACTIONS,
 )
@@ -627,22 +628,7 @@ class Maniphest(Phabfive):
             raise PhabfiveException("Template file contains no documents")
 
         search_configs = []
-        supported_params = {
-            "text_query",
-            "tag",
-            "include",
-            "exclude",
-            "assigned",
-            "author",
-            "created-after",
-            "updated-after",
-            "column",
-            "priority",
-            "status",
-            "show-history",
-            "show-metadata",
-            "order",
-        }
+        supported_params = SEARCH_TEMPLATE_KEYS
 
         for i, data in enumerate(documents):
             if not isinstance(data, dict):
