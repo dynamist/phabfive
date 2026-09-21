@@ -12,6 +12,7 @@ import sys
 from urllib.parse import urlparse
 
 # phabfive imports
+from phabfive.conduit import Conduit
 from phabfive.constants import (
     FORMAT_ALIASES,
     REQUIRED,
@@ -274,18 +275,28 @@ class Phabfive:
         fallback = self.conf.get("PHAB_FALLBACK", "yaml")
         Phabfive._fallback_format = FORMAT_ALIASES.get(fallback, fallback)
 
-        self.phab = Phabricator(
-            host=self._normalize_url(self.conf.get("PHAB_URL")),
-            token=self.conf.get("PHAB_TOKEN"),
-        )
+        self.phab = Conduit(self._client_factory())
 
         url = urlparse(self.conf["PHAB_URL"])
 
         self.url = f"{url.scheme}://{url.netloc}"
-        # This enables extra endpoints that normally is unaccessible
-        self.phab.update_interfaces()
 
         self.verify_connection()
+
+    def _client_factory(self):
+        """Return the recipe for this instance's Conduit client.
+
+        `Phabricator` is looked up in this module when the client is built,
+        not when the recipe is made, so a test that patches
+        `phabfive.core.Phabricator` still reaches every instance.
+        """
+        host = self._normalize_url(self.conf.get("PHAB_URL"))
+        token = self.conf.get("PHAB_TOKEN")
+
+        def build():
+            return Phabricator(host=host, token=token)
+
+        return build
 
     def verify_connection(self):
         """ """
