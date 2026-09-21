@@ -297,6 +297,30 @@ PROJECT_COLORS = [
     "checkered",
 ]
 
+# The roles user.search reports on a user, in the order Phorge lists them.
+# PhabricatorUser::getFieldValuesForConduit derives each from a flag on the
+# account, so a role is a fact about the account rather than a group it was
+# put in.
+USER_ROLES = [
+    "disabled",
+    "bot",
+    "list",
+    "admin",
+    "verified",
+    "approved",
+    "activated",
+]
+
+# The roles user.search can filter on itself, and the constraint for each.
+# The rest - verified, approved, activated - have none, so they are matched
+# on the records the search returns.
+USER_ROLE_CONSTRAINTS = {
+    "disabled": "isDisabled",
+    "bot": "isBot",
+    "list": "isMailingList",
+    "admin": "isAdmin",
+}
+
 CONFIGURABLES = [
     "PHAB_TOKEN",
     "PHAB_URL",

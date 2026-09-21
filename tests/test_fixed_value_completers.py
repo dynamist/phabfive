@@ -9,7 +9,7 @@ from click.shell_completion import ShellComplete
 
 # phabfive imports
 from phabfive.cli import app, completers
-from phabfive.constants import PROJECT_COLORS, PROJECT_ICONS
+from phabfive.constants import PROJECT_COLORS, PROJECT_ICONS, USER_ROLES
 
 
 def _complete(args, incomplete):
@@ -238,3 +238,15 @@ class TestForgetProjects:
     def test_a_cache_that_cannot_be_cleared_is_not_an_error(self):
         with patch.object(completers.cache, "clear", side_effect=OSError("denied")):
             completers.forget_projects()
+
+
+class TestUserRoleCompletion:
+    @pytest.mark.parametrize("flag", ["--role", "--not-role"])
+    def test_offers_every_role(self, flag):
+        assert _complete(["user", "search", flag], "") == USER_ROLES
+
+    def test_completes_after_the_last_comma(self):
+        assert _complete(["user", "search", "--not-role"], "bot,d") == ["bot,disabled"]
+
+    def test_a_role_already_listed_is_not_offered_again(self):
+        assert "bot,bot" not in _complete(["user", "search", "--not-role"], "bot,")

@@ -15,6 +15,7 @@ from phabfive.constants import (
     PROJECT_STATUS_ALL,
     PROJECT_STATUS_CHOICES,
     REPO_STATUS_CHOICES,
+    USER_ROLES,
 )
 
 # Pattern prefixes for transition filters
@@ -1168,6 +1169,22 @@ def complete_project_color(incomplete: str) -> List[str]:
 def complete_project_status(incomplete: str) -> List[str]:
     """Complete the project status filter for project search --status."""
     return _complete_fixed(incomplete, PROJECT_STATUS_CHOICES)
+
+
+def complete_user_role(incomplete: str) -> List[str]:
+    """Complete a comma-separated list of the roles user.search reports.
+
+    Only the role after the last comma is completed; the ones before it are
+    kept as typed.
+    """
+    typed, comma, last = incomplete.rpartition(",")
+    already = set(typed.split(",")) if typed else set()
+
+    return [
+        f"{typed}{comma}{role}"
+        for role in USER_ROLES
+        if role.startswith(last) and role not in already
+    ]
 
 
 def forget_projects(icons=False) -> None:
