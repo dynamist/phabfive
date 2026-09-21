@@ -308,7 +308,7 @@ class Edit(Phabfive):
         Returns:
             int: Return code (0 for success, 1 for failure)
         """
-        from phabfive.cli.output import is_machine_format
+        from phabfive.constants import is_machine_format
         from phabfive.display import display_tasks
 
         machine = is_machine_format(output_format)
