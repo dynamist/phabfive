@@ -37,10 +37,11 @@ class TestGetApp:
         assert get_app(cls) is cls.return_value
 
     def test_a_configuration_problem_offers_setup_then_retries(self):
-        cls = mock.MagicMock(side_effect=[PhabfiveConfigException("nope"), "app"])
+        app = mock.MagicMock()
+        cls = mock.MagicMock(side_effect=[PhabfiveConfigException("nope"), app])
 
         with mock.patch("phabfive.setup.offer_setup_on_error", return_value=True):
-            assert get_app(cls) == "app"
+            assert get_app(cls) is app
 
         assert cls.call_count == 2
 

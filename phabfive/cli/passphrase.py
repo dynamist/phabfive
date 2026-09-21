@@ -6,7 +6,7 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
-from phabfive.cli.output import _get_output_format
+from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.cli.completers import complete_passphrase_type
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -51,6 +51,7 @@ def show(
     """
     from phabfive.passphrase.display import display_passphrases
 
+    _setup_output_options(ctx)
     passphrase = _get_passphrase_app()
 
     # Support both space-separated (K1 K2) and comma-separated (K1,K2,K3)
@@ -130,6 +131,7 @@ def search(
         typer.echo("    phabfive passphrase search [<text_query>] [options]", err=True)
         return
 
+    _setup_output_options(ctx)
     passphrase = _get_passphrase_app()
 
     try:

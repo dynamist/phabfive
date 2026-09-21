@@ -3,6 +3,7 @@
 """Tests for .arcrc file support and secure file permissions (issue #123)."""
 
 import json
+import logging
 import os
 import re
 from unittest import mock
@@ -620,7 +621,7 @@ class TestDeprecationWarning:
     def setup_method(self):
         self.phabfive = object.__new__(Phabfive)
 
-    def test_deprecation_warning_phab_url_in_yaml(self, tmp_path, capsys):
+    def test_deprecation_warning_phab_url_in_yaml(self, tmp_path, caplog):
         """Test that PHAB_URL in user yaml config prints warning to stderr."""
         user_conf = tmp_path / "phabfive.yaml"
         user_conf.write_text("PHAB_URL: https://phorge.example.com/api/\n")
@@ -640,14 +641,14 @@ class TestDeprecationWarning:
             ),
             mock.patch.dict(os.environ, {}, clear=True),
         ):
-            self.phabfive.load_config()
+            with caplog.at_level(logging.WARNING, logger="phabfive.core"):
+                self.phabfive.load_config()
 
-        captured = capsys.readouterr()
-        assert "PHAB_URL" in captured.err
-        assert "deprecated" in captured.err
-        assert "phabfive user setup" in captured.err
+        assert "PHAB_URL" in caplog.text
+        assert "deprecated" in caplog.text
+        assert "phabfive user setup" in caplog.text
 
-    def test_deprecation_warning_phab_token_in_yaml(self, tmp_path, capsys):
+    def test_deprecation_warning_phab_token_in_yaml(self, tmp_path, caplog):
         """Test that PHAB_TOKEN in user yaml config prints warning to stderr."""
         user_conf = tmp_path / "phabfive.yaml"
         user_conf.write_text("PHAB_TOKEN: cli-abcdefghijklmnopqrstuvwxyz12\n")
@@ -667,13 +668,13 @@ class TestDeprecationWarning:
             ),
             mock.patch.dict(os.environ, {}, clear=True),
         ):
-            self.phabfive.load_config()
+            with caplog.at_level(logging.WARNING, logger="phabfive.core"):
+                self.phabfive.load_config()
 
-        captured = capsys.readouterr()
-        assert "PHAB_TOKEN" in captured.err
-        assert "deprecated" in captured.err
+        assert "PHAB_TOKEN" in caplog.text
+        assert "deprecated" in caplog.text
 
-    def test_no_deprecation_warning_without_credentials(self, tmp_path, capsys):
+    def test_no_deprecation_warning_without_credentials(self, tmp_path, caplog):
         """Test no warning when yaml has only non-credential keys."""
         user_conf = tmp_path / "phabfive.yaml"
         user_conf.write_text("PHAB_SPACE: S42\n")
@@ -693,7 +694,7 @@ class TestDeprecationWarning:
             ),
             mock.patch.dict(os.environ, {}, clear=True),
         ):
-            self.phabfive.load_config()
+            with caplog.at_level(logging.WARNING, logger="phabfive.core"):
+                self.phabfive.load_config()
 
-        captured = capsys.readouterr()
-        assert "deprecated" not in captured.err
+        assert "deprecated" not in caplog.text

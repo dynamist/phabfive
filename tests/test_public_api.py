@@ -243,6 +243,11 @@ class TestLaziness:
         code = "import phabfive; [getattr(phabfive, n) for n in phabfive.__all__]"
         assert _loaded_after(code, CLI_ONLY) == "[]"
 
+    def test_every_public_name_stays_off_rich(self):
+        """Records hold plain strings, so the library has no use for rich."""
+        code = "import phabfive; [getattr(phabfive, n) for n in phabfive.__all__]"
+        assert _loaded_after(code, ["rich"]) == "[]"
+
     def test_touching_names_leaves_the_environment_alone(self):
         out = _run(
             "import os; before = dict(os.environ); import phabfive; "

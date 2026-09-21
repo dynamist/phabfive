@@ -32,19 +32,18 @@ from phabfive.exceptions import (
 import anyconfig
 import appdirs
 from phabricator import Phabricator, APIError
-from rich.console import Console
-from rich.text import Text
 
 
 log = logging.getLogger(__name__)
-logging.getLogger("anyconfig").setLevel(logging.ERROR)
 
 
 class Phabfive:
-    # Output formatting options (set by CLI)
+    # Output formatting options. The defaults suit a program: plain strings
+    # rather than rich hyperlinks in returned records, and no rich-only line
+    # width limit. The command sets its own through set_output_options.
     _ascii_when = "auto"
-    _hyperlink_when = "auto"
-    _output_format = "rich"
+    _hyperlink_when = "never"
+    _output_format = None
     _fallback_format = "yaml"  # Format used when stdout is not a TTY
     # Maximum line width for rich format (to prevent YAML breaking)
     MAX_LINE_WIDTH = 4096
@@ -62,6 +61,15 @@ class Phabfive:
         cls._ascii_when = ascii_when
         cls._hyperlink_when = hyperlink_when
         cls._output_format = output_format
+
+    @classmethod
+    def set_fallback_format(cls, fallback):
+        """Set the format used when stdout is not a terminal (PHAB_FALLBACK).
+
+        Aliases are resolved here, so the rest of the program only ever sees
+        a real OutputFormat value, exactly as --format=ndjson is resolved.
+        """
+        cls._fallback_format = FORMAT_ALIASES.get(fallback, fallback)
 
     @staticmethod
     def _should_use_ascii():
@@ -194,6 +202,8 @@ class Phabfive:
             Rich Text object with link styling, or plain string if disabled
         """
         if self._is_hyperlink_enabled():
+            from rich.text import Text
+
             t = Text(text)
             t.stylize(f"link {url}")
             return t
@@ -201,6 +211,8 @@ class Phabfive:
 
     def get_console(self):
         """Get a Rich Console instance for output."""
+        from rich.console import Console
+
         # Use our hyperlink detection to force terminal mode
         # This ensures Rich outputs hyperlinks when our detection says the terminal supports them
         force_terminal = self._is_hyperlink_enabled()
@@ -308,12 +320,6 @@ class Phabfive:
                     error += ", " + example
 
                 raise PhabfiveConfigException(error)
-
-        # Set fallback format from config (used when stdout is not a TTY).
-        # Resolve aliases here so the rest of the program only ever sees a
-        # real OutputFormat value, exactly as --format=ndjson is resolved.
-        fallback = self.conf.get("PHAB_FALLBACK", "yaml")
-        Phabfive._fallback_format = FORMAT_ALIASES.get(fallback, fallback)
 
         self.phab = Conduit(self._client_factory())
 
@@ -744,10 +750,9 @@ class Phabfive:
             deprecated_keys.append("PHAB_TOKEN")
         if deprecated_keys:
             keys_str = "/".join(deprecated_keys)
-            print(
-                f"WARNING: ~/.config/phabfive.yaml contains {keys_str} which is deprecated. "
-                "Migrate credentials to ~/.arcrc using: phabfive user setup",
-                file=sys.stderr,
+            log.warning(
+                f"~/.config/phabfive.yaml contains {keys_str} which is deprecated. "
+                "Migrate credentials to ~/.arcrc using: phabfive user setup"
             )
 
         # Load from .arcconfig in git repository root
