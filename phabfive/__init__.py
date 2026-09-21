@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from phabfive.core import Phabfive
     from phabfive.diffusion import Diffusion
+    from phabfive.edit import Edit, EditFailure, EditPlan, TaskEdit
     from phabfive.exceptions import (
         PhabfiveAPIException,
         PhabfiveConfigException,
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
         PhabfiveNameCollisionException,
         PhabfiveNotFoundException,
         PhabfiveRemoteException,
+        PhabfiveValidationException,
     )
     from phabfive.maniphest import Maniphest
     from phabfive.passphrase import Passphrase
@@ -48,6 +50,9 @@ if TYPE_CHECKING:
 # cannot see a computed __all__, and would flag every import above as unused.
 __all__ = [
     "Diffusion",
+    "Edit",
+    "EditFailure",
+    "EditPlan",
     "Maniphest",
     "Passphrase",
     "Paste",
@@ -61,7 +66,9 @@ __all__ = [
     "PhabfiveNameCollisionException",
     "PhabfiveNotFoundException",
     "PhabfiveRemoteException",
+    "PhabfiveValidationException",
     "Project",
+    "TaskEdit",
     "User",
     "__version__",
 ]
@@ -72,6 +79,9 @@ __all__ = [
 # re-exported from.
 _LAZY = {
     "Diffusion": "phabfive.diffusion",
+    "Edit": "phabfive.edit",
+    "EditFailure": "phabfive.edit",
+    "EditPlan": "phabfive.edit",
     "Maniphest": "phabfive.maniphest",
     "Passphrase": "phabfive.passphrase",
     "Paste": "phabfive.paste",
@@ -85,7 +95,9 @@ _LAZY = {
     "PhabfiveNameCollisionException": "phabfive.exceptions",
     "PhabfiveNotFoundException": "phabfive.exceptions",
     "PhabfiveRemoteException": "phabfive.exceptions",
+    "PhabfiveValidationException": "phabfive.exceptions",
     "Project": "phabfive.project",
+    "TaskEdit": "phabfive.edit",
     "User": "phabfive.user",
 }
 
