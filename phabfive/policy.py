@@ -35,6 +35,9 @@ log = logging.getLogger(__name__)
 
 PHID_PREFIX = "PHID-"
 
+# How many PHIDs one phid.query is asked to name at a time
+PHID_QUERY_CHUNK = 100
+
 # What a policy option takes, said once so every error message and every
 # --help string says it the same way
 POLICY_GRAMMAR = f"{', '.join(POLICY_KEYWORDS)}, #project, @user, or a PHID"
@@ -111,17 +114,36 @@ def resolve_policy_value(phab, value, option=None):
         return value
 
     if value.startswith("#"):
-        return _resolve_project(phab, value[1:])
+        return resolve_project_hashtag(phab, value[1:])
 
-    return _resolve_user(phab, value[1:])
+    return resolve_username(phab, value[1:])
 
 
-def _resolve_project(phab, slug):
+def resolve_project_hashtag(phab, slug):
     """The PHID of the project a hashtag names.
 
     Matched on slugs rather than names, because a hashtag is unique and a
     name is not: several milestones can be called "Sprint 1", and a policy
-    takes exactly one project.
+    takes exactly one project. Public because the project commands take a
+    hashtag where a policy does not - ``--parent``, ``--milestone-of`` - and
+    must not read one differently.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    slug : str
+        The hashtag, without its ``#``
+
+    Returns
+    -------
+    str
+        The project's PHID
+
+    Raises
+    ------
+    PhabfiveDataException
+        If the lookup fails or no project has that hashtag
     """
     try:
         result = phab.project.search(constraints={"slugs": [slug]})
@@ -136,8 +158,26 @@ def _resolve_project(phab, slug):
     return data[0]["phid"]
 
 
-def _resolve_user(phab, username):
-    """The PHID of the user a name names."""
+def resolve_username(phab, username):
+    """The PHID of the user a name names.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    username : str
+        The username, without its ``@``
+
+    Returns
+    -------
+    str
+        The user's PHID
+
+    Raises
+    ------
+    PhabfiveDataException
+        If the lookup fails or no user has that name
+    """
     try:
         result = phab.user.search(constraints={"usernames": [username]})
     except Exception as e:
@@ -187,17 +227,30 @@ def resolve_policy_names(phab, values):
     # rather than by isinstance, which would quietly name nothing at all.
     # That read is inside the try for the same reason the call is: naming a
     # policy is a convenience, and nothing here may fail a read.
-    try:
-        found = phab.phid.query(phids=phids)
+    #
+    # Asked in chunks, because an audit of every project on an instance can
+    # carry hundreds of distinct policy PHIDs and one request would carry
+    # them all. Almost every listing fits in one chunk, so it stays one
+    # round trip; a chunk that fails leaves its PHIDs unnamed and no more.
+    names = {}
 
-        return {
-            phid: _handle_name(phid, data)
-            for phid, data in found.items()
-            if hasattr(data, "get")
-        }
-    except Exception as e:
-        log.warning(f"Failed to resolve policy PHIDs: {e}")
-        return {}
+    for start in range(0, len(phids), PHID_QUERY_CHUNK):
+        chunk = phids[start : start + PHID_QUERY_CHUNK]
+
+        try:
+            found = phab.phid.query(phids=chunk)
+
+            names.update(
+                {
+                    phid: _handle_name(phid, data)
+                    for phid, data in found.items()
+                    if hasattr(data, "get")
+                }
+            )
+        except Exception as e:
+            log.warning(f"Failed to resolve policy PHIDs: {e}")
+
+    return names
 
 
 def _handle_name(phid, data):
@@ -303,5 +356,7 @@ __all__ = [
     "policy_lockout_message",
     "resolve_policy_names",
     "resolve_policy_value",
+    "resolve_project_hashtag",
+    "resolve_username",
     "validate_policy_value",
 ]

@@ -66,6 +66,7 @@ from phabfive.maniphest.utils import (
 )
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
+from phabfive.options import split_list_option
 from phabfive.policy import (
     policy_label,
     policy_lockout_message,
@@ -2395,11 +2396,7 @@ class Maniphest(Phabfive):
 
             subscriber_phids = []
             subscriber_names = []
-            # Flatten comma-separated values (e.g., ["user1,user2", "user3"] -> ["user1", "user2", "user3"])
-            usernames = []
-            for item in subscribe:
-                usernames.extend(u.strip() for u in item.split(",") if u.strip())
-            for username in usernames:
+            for username in split_list_option(subscribe):
                 if username == "@me":
                     whoami = self.phab.user.whoami()
                     user_phid = whoami.get("phid")
