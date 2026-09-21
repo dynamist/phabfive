@@ -60,7 +60,7 @@ def test_interactive_without_a_terminal_refuses(mock_get_app):
     mock_p.create_paste_from_content.assert_not_called()
 
 
-@patch("phabfive.editor.confirm_apply", return_value=(False, 0))
+@patch("phabfive.cli.editor.confirm_apply", return_value=(False, 0))
 @patch("phabfive.cli.paste._get_paste_app")
 def test_interactive_declined_creates_nothing(mock_get_app, mock_confirm):
     mock_p = _mock_paste_app(mock_get_app)
@@ -72,7 +72,7 @@ def test_interactive_declined_creates_nothing(mock_get_app, mock_confirm):
     mock_p.create_paste_from_content.assert_not_called()
 
 
-@patch("phabfive.editor.confirm_apply", return_value=(True, None))
+@patch("phabfive.cli.editor.confirm_apply", return_value=(True, None))
 @patch("phabfive.cli.paste._get_paste_app")
 def test_interactive_accepted_creates(mock_get_app, mock_confirm):
     mock_p = _mock_paste_app(mock_get_app)
@@ -105,7 +105,7 @@ def test_yes_and_interactive_are_mutually_exclusive(mock_get_app):
     mock_p.create_paste_from_content.assert_not_called()
 
 
-@patch("phabfive.editor.confirm_apply", return_value=(False, 0))
+@patch("phabfive.cli.editor.confirm_apply", return_value=(False, 0))
 @patch("phabfive.cli.paste._get_paste_app")
 def test_the_preview_is_the_same_either_way(mock_get_app, mock_confirm):
     """--dry-run and -i show one preview, differing only in the header."""

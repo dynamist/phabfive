@@ -483,14 +483,14 @@ class TestBatchReview:
         with (
             mock.patch("sys.stdin.isatty", return_value=True),
             mock.patch(
-                "phabfive.edit.batch.prompt_each", side_effect=list(answers)
+                "phabfive.cli.edit_flow.prompt_each", side_effect=list(answers)
             ) as prompt,
         ):
             yield prompt
 
     def test_single_task_applies_without_prompt(self):
         """One task is not reviewed - that is the whole rule."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -502,7 +502,7 @@ class TestBatchReview:
         assert maniphest.apply_task_edit.call_count == 1
 
     def test_batch_reviews_each_task(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -514,7 +514,7 @@ class TestBatchReview:
         assert maniphest.apply_task_edit.call_count == 2
 
     def test_n_skips_only_that_task(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -526,7 +526,7 @@ class TestBatchReview:
         assert maniphest.apply_task_edit.call_args[0][0] == "101"
 
     def test_a_applies_the_rest_without_prompting(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -538,7 +538,7 @@ class TestBatchReview:
         assert maniphest.apply_task_edit.call_count == 3
 
     def test_q_stops_and_is_not_a_failure(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -550,7 +550,7 @@ class TestBatchReview:
         maniphest.apply_task_edit.assert_not_called()
 
     def test_yes_skips_the_review(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -564,7 +564,7 @@ class TestBatchReview:
         assert maniphest.apply_task_edit.call_count == 3
 
     def test_interactive_reviews_a_single_task(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -578,13 +578,13 @@ class TestBatchReview:
 
     def test_no_terminal_applies_structured_fields(self):
         """Agents editing status/column keep working, unprompted."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
         with (
             mock.patch("sys.stdin.isatty", return_value=False),
-            mock.patch("phabfive.edit.batch.prompt_each") as prompt,
+            mock.patch("phabfive.cli.edit_flow.prompt_each") as prompt,
         ):
             retcode = edit_tasks_batch(self._tasks(2), maniphest, status="resolved")
 
@@ -594,7 +594,7 @@ class TestBatchReview:
 
     def test_no_terminal_refuses_text_changes(self, capsys):
         """No terminal to show N diffs on, so make the caller say --yes."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -608,7 +608,7 @@ class TestBatchReview:
         assert "No tasks were modified." in err
 
     def test_no_terminal_text_changes_with_yes(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -622,7 +622,7 @@ class TestBatchReview:
 
     def test_dry_run_never_prompts_and_never_writes(self):
         """--dry-run decides whether a write happens; the review only answers a prompt."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -637,14 +637,14 @@ class TestBatchReview:
 
     def test_piped_input_is_not_reviewed_without_interactive(self):
         """Prompting on a pipe would hang an agent that cannot answer."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
         with (
             mock.patch("sys.stdin.isatty", return_value=False),
-            mock.patch("phabfive.edit.batch.open_tty") as open_tty,
-            mock.patch("phabfive.edit.batch.prompt_each") as prompt,
+            mock.patch("phabfive.cli.edit_flow.open_tty") as open_tty,
+            mock.patch("phabfive.cli.edit_flow.prompt_each") as prompt,
         ):
             retcode = edit_tasks_batch(self._tasks(2), maniphest, status="resolved")
 
@@ -653,15 +653,17 @@ class TestBatchReview:
         prompt.assert_not_called()
 
     def test_interactive_reaches_past_a_pipe_to_the_terminal(self):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
         tty = mock.MagicMock()
 
         with (
             mock.patch("sys.stdin.isatty", return_value=False),
-            mock.patch("phabfive.edit.batch.open_tty", return_value=tty),
-            mock.patch("phabfive.edit.batch.prompt_each", return_value="y") as prompt,
+            mock.patch("phabfive.cli.edit_flow.open_tty", return_value=tty),
+            mock.patch(
+                "phabfive.cli.edit_flow.prompt_each", return_value="y"
+            ) as prompt,
         ):
             retcode = edit_tasks_batch(
                 self._tasks(2), maniphest, status="resolved", interactive=True
@@ -675,14 +677,14 @@ class TestBatchReview:
 
     def test_interactive_without_any_terminal_refuses(self, capsys):
         """Applying unreviewed is the opposite of what --interactive asked for."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
         with (
             mock.patch("sys.stdin.isatty", return_value=False),
-            mock.patch("phabfive.edit.batch.open_tty", return_value=None),
-            mock.patch("phabfive.edit.batch.prompt_each") as prompt,
+            mock.patch("phabfive.cli.edit_flow.open_tty", return_value=None),
+            mock.patch("phabfive.cli.edit_flow.prompt_each") as prompt,
         ):
             retcode = edit_tasks_batch(
                 self._tasks(2), maniphest, status="resolved", interactive=True
@@ -697,14 +699,14 @@ class TestBatchReview:
 
     def test_interactive_with_dry_run_still_previews(self):
         """--dry-run shows every change anyway, so it needs no terminal."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
         with (
             mock.patch("sys.stdin.isatty", return_value=False),
-            mock.patch("phabfive.edit.batch.open_tty", return_value=None),
-            mock.patch("phabfive.edit.batch.prompt_each") as prompt,
+            mock.patch("phabfive.cli.edit_flow.open_tty", return_value=None),
+            mock.patch("phabfive.cli.edit_flow.prompt_each") as prompt,
         ):
             retcode = edit_tasks_batch(
                 self._tasks(2),
@@ -719,7 +721,7 @@ class TestBatchReview:
         maniphest.apply_task_edit.assert_not_called()
 
     def test_task_with_no_changes_is_not_reviewed(self, capsys):
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
         maniphest.build_task_edit.return_value = ([], [])
@@ -734,7 +736,7 @@ class TestBatchReview:
 
     def test_build_reuses_the_task_data_already_fetched(self):
         """Phase 1 fetched each task; the build must not fetch it again."""
-        from phabfive.edit.batch import edit_tasks_batch
+        from phabfive.cli.edit_flow import edit_tasks_batch
 
         maniphest = self._maniphest()
 
@@ -931,7 +933,7 @@ class TestBuildTaskEditColumn:
 
     def test_a_column_only_no_op_reports_no_changes(self, mock_init, capsys):
         """The observable half of #404: the short-circuit now fires."""
-        from phabfive.edit.formatters import display_changes
+        from phabfive.cli.edit_flow import display_changes
 
         with self._maniphest() as maniphest:
             result = maniphest.edit_task_by_id(
@@ -1017,6 +1019,7 @@ class TestStdinAutoDetection:
 
     def test_stdin_piped_detected(self):
         """Test piped stdin is auto-detected."""
+        from phabfive.cli.edit_flow import run_edit
         from phabfive.edit import Edit
 
         edit_app = Edit()
@@ -1025,22 +1028,23 @@ class TestStdinAutoDetection:
         with mock.patch("sys.stdin.isatty", return_value=False):
             with mock.patch("sys.stdin", mock.MagicMock()):
                 with mock.patch(
-                    "phabfive.edit.core.parse_yaml_from_stdin", return_value=[]
+                    "phabfive.cli.edit_flow.parse_yaml_from_stdin", return_value=[]
                 ):
                     # Should try to read from stdin
-                    result = edit_app.edit_objects()
+                    result = run_edit(edit_app)
                     # Returns error code 1 because no objects found
                     assert result == 1
 
     def test_no_stdin_no_object_id_errors(self):
         """Test error when no stdin and no object_id."""
+        from phabfive.cli.edit_flow import run_edit
         from phabfive.edit import Edit
 
         edit_app = Edit()
 
         # Mock stdin as TTY (not piped)
         with mock.patch("sys.stdin.isatty", return_value=True):
-            result = edit_app.edit_objects()
+            result = run_edit(edit_app)
             assert result == 1
 
 

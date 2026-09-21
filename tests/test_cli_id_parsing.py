@@ -171,17 +171,19 @@ class TestPassphraseShowIdParsing:
 
 class TestManiphestEditIdParsing:
     def _invoke(self, args):
-        mock_edit = MagicMock()
-        mock_edit.edit_objects.return_value = 0
-        with patch("phabfive.cli.maniphest._get_edit_app", return_value=mock_edit):
+        """Run the command, and hand back the edit it would have run."""
+        with (
+            patch("phabfive.cli.maniphest._get_edit_app", return_value=MagicMock()),
+            patch("phabfive.cli.edit_flow.run_edit", return_value=0) as run_edit,
+        ):
             result = runner.invoke(maniphest_app, ["edit", *args])
-        return result, mock_edit
+        return result, run_edit
 
     def test_space_separated_ids(self):
         result, mock_edit = self._invoke(["T123", "T124", "--status=resolved"])
 
         assert result.exit_code == 0
-        kwargs = mock_edit.edit_objects.call_args[1]
+        kwargs = mock_edit.call_args[1]
         assert kwargs["object_id"] == "T123,T124"
         assert kwargs["title"] is None
 
@@ -189,7 +191,7 @@ class TestManiphestEditIdParsing:
         result, mock_edit = self._invoke(["T123,T124", "--status=resolved"])
 
         assert result.exit_code == 0
-        kwargs = mock_edit.edit_objects.call_args[1]
+        kwargs = mock_edit.call_args[1]
         assert kwargs["object_id"] == "T123,T124"
         assert kwargs["title"] is None
 
@@ -197,7 +199,7 @@ class TestManiphestEditIdParsing:
         result, mock_edit = self._invoke(["T123", "T124", "New Title"])
 
         assert result.exit_code == 0
-        kwargs = mock_edit.edit_objects.call_args[1]
+        kwargs = mock_edit.call_args[1]
         assert kwargs["object_id"] == "T123,T124"
         assert kwargs["title"] == "New Title"
 
@@ -205,7 +207,7 @@ class TestManiphestEditIdParsing:
         result, mock_edit = self._invoke(["T123,T124", "T125", "New Title"])
 
         assert result.exit_code == 0
-        kwargs = mock_edit.edit_objects.call_args[1]
+        kwargs = mock_edit.call_args[1]
         assert kwargs["object_id"] == "T123,T124,T125"
         assert kwargs["title"] == "New Title"
 
@@ -213,7 +215,7 @@ class TestManiphestEditIdParsing:
         result, mock_edit = self._invoke(["T123", "New Title"])
 
         assert result.exit_code == 0
-        kwargs = mock_edit.edit_objects.call_args[1]
+        kwargs = mock_edit.call_args[1]
         assert kwargs["object_id"] == "T123"
         assert kwargs["title"] == "New Title"
 
@@ -222,27 +224,27 @@ class TestManiphestEditIdParsing:
 
         assert result.exit_code == 1
         assert "Unexpected argument 'extra'" in _output(result)
-        mock_edit.edit_objects.assert_not_called()
+        mock_edit.assert_not_called()
 
     def test_monogram_after_title_errors(self):
         result, mock_edit = self._invoke(["T123", "a title", "T124"])
 
         assert result.exit_code == 1
         assert "Unexpected argument 'T124'" in _output(result)
-        mock_edit.edit_objects.assert_not_called()
+        mock_edit.assert_not_called()
 
     def test_invalid_monogram_errors(self):
         result, mock_edit = self._invoke(["BAD", "--status=resolved"])
 
         assert result.exit_code == 1
         assert "Invalid task monogram 'BAD'" in _output(result)
-        mock_edit.edit_objects.assert_not_called()
+        mock_edit.assert_not_called()
 
     def test_title_option_still_works(self):
         result, mock_edit = self._invoke(["T123", "--title", "New Title"])
 
         assert result.exit_code == 0
-        kwargs = mock_edit.edit_objects.call_args[1]
+        kwargs = mock_edit.call_args[1]
         assert kwargs["object_id"] == "T123"
         assert kwargs["title"] == "New Title"
 
@@ -250,26 +252,26 @@ class TestManiphestEditIdParsing:
         result, mock_edit = self._invoke(["T123", "--status=resolved"])
 
         assert result.exit_code == 0
-        assert mock_edit.edit_objects.call_args[1]["force"] is False
+        assert mock_edit.call_args[1]["force"] is False
 
     def test_yes_flag(self):
         result, mock_edit = self._invoke(["T123", "--status=resolved", "--yes"])
 
         assert result.exit_code == 0
-        assert mock_edit.edit_objects.call_args[1]["force"] is True
+        assert mock_edit.call_args[1]["force"] is True
         assert "deprecated" not in _output(result)
 
     def test_yes_short_flag(self):
         result, mock_edit = self._invoke(["T123", "--status=resolved", "-y"])
 
         assert result.exit_code == 0
-        assert mock_edit.edit_objects.call_args[1]["force"] is True
+        assert mock_edit.call_args[1]["force"] is True
 
     def test_force_still_works_but_warns(self):
         result, mock_edit = self._invoke(["T123", "--status=resolved", "--force"])
 
         assert result.exit_code == 0
-        assert mock_edit.edit_objects.call_args[1]["force"] is True
+        assert mock_edit.call_args[1]["force"] is True
         assert "--force is deprecated, use --yes instead." in _output(result)
 
     def test_force_is_hidden_from_help(self):
@@ -287,7 +289,7 @@ class TestManiphestEditIdParsing:
         result, mock_edit = self._invoke(["T123", "--status=resolved", "-i"])
 
         assert result.exit_code == 0
-        kwargs = mock_edit.edit_objects.call_args[1]
+        kwargs = mock_edit.call_args[1]
         assert kwargs["interactive"] is True
         assert kwargs["force"] is False
 
@@ -295,18 +297,18 @@ class TestManiphestEditIdParsing:
         result, mock_edit = self._invoke(["T123", "--status=resolved"])
 
         assert result.exit_code == 0
-        assert mock_edit.edit_objects.call_args[1]["interactive"] is False
+        assert mock_edit.call_args[1]["interactive"] is False
 
     def test_yes_and_interactive_are_rejected(self):
         result, mock_edit = self._invoke(["T123", "--status=resolved", "-y", "-i"])
 
         assert result.exit_code == 1
         assert "mutually exclusive" in _output(result)
-        mock_edit.edit_objects.assert_not_called()
+        mock_edit.assert_not_called()
 
     def test_force_and_interactive_are_rejected(self):
         result, mock_edit = self._invoke(["T123", "--status=resolved", "--force", "-i"])
 
         assert result.exit_code == 1
         assert "mutually exclusive" in _output(result)
-        mock_edit.edit_objects.assert_not_called()
+        mock_edit.assert_not_called()

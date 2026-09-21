@@ -394,7 +394,7 @@ def project_create(
         phabfive project create "Sprint 2" --milestone-of='#platform'
         phabfive project create "Humans" --editable-by='#humans' --joinable-by=admin --dry-run
     """
-    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
+    from phabfive.cli.editor import confirm_apply, render_changes, resolve_assume_yes
 
     _validate_policies(
         visible_to=visible_to, editable_by=editable_by, joinable_by=joinable_by
@@ -532,7 +532,7 @@ def project_edit(
         phabfive project edit '#platform' --add-slug=plat --color=green
         phabfive project edit '#humans' --editable-by='#humans' --dry-run
     """
-    from phabfive.editor import confirm_apply, render_changes, resolve_assume_yes
+    from phabfive.cli.editor import confirm_apply, render_changes, resolve_assume_yes
 
     options = [
         name,

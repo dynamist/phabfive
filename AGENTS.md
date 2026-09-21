@@ -100,8 +100,8 @@ on a pull request that skips the deployment.
   it imports, so that is file I/O, not just time. And `phabfive/cli/__init__.py` sets
   `os.environ["TYPER_USE_RICH"]` as it imports, so `cli` must stay out of `_SUBMODULES`:
   touching an attribute on `phabfive` must never mutate the process environment.
-  `repl`, `setup`, `display`, `record_display`, `table`, `json_output`, `cache` and
-  `editor` stay out too: none of them is library code. `tests/test_public_api.py`
+  `repl`, `setup`, `display`, `record_display`, `table`, `json_output` and `cache` stay
+  out too: none of them is library code. `tests/test_public_api.py`
   asserts all of this out of process, because by the time the rest of the suite runs
   everything is already in `sys.modules`
 - `__version__` is lazy too, and falls back to `0.0.0+unknown` rather than raising, so a

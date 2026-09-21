@@ -2646,7 +2646,7 @@ class Maniphest(Phabfive):
             return {"task_id": task_id, "changes": []}
 
         if dry_run:
-            from phabfive.editor import render_changes
+            from phabfive.cli.editor import render_changes
 
             render_changes(
                 f"T{task_id}",
