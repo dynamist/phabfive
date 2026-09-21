@@ -41,6 +41,40 @@ class PhabfiveNameCollisionException(PhabfiveDataException):
     pass
 
 
+class PhabfiveValidationException(PhabfiveDataException):
+    """
+    Raised when some of several objects fail validation, so none is changed.
+
+    `problems` holds one entry per object that failed, each with a
+    `monogram`, a `message` and the `boards` it is on when that is the
+    problem - for phabfive.edit, a phabfive.edit.plan.ValidationProblem.
+    """
+
+    def __init__(self, problems):
+        super().__init__(problems)
+        self.problems = list(problems)
+
+    @property
+    def errors_by_boards(self):
+        """Board names -> the task IDs on exactly those boards.
+
+        Only the tasks that failed for being on several boards, grouped so a
+        caller can suggest one edit per group.
+        """
+        grouped = {}
+        for problem in self.problems:
+            if problem.boards:
+                grouped.setdefault(frozenset(problem.boards), []).append(
+                    problem.task_id
+                )
+        return grouped
+
+    def __str__(self):
+        lines = [f"Validation failed for {len(self.problems)} task(s):"]
+        lines += [f"  - {p.monogram}: {p.message}" for p in self.problems]
+        return "\n".join(lines)
+
+
 class PhabfiveConfigException(PhabfiveException):
     """
     Raised when there are problems with configuration or command invocation.
@@ -123,4 +157,5 @@ __all__ = [
     "PhabfiveNameCollisionException",
     "PhabfiveNotFoundException",
     "PhabfiveRemoteException",
+    "PhabfiveValidationException",
 ]

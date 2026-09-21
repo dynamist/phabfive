@@ -12,11 +12,9 @@ import sys
 from phabfive.core import Phabfive
 from phabfive.edit.batch import edit_tasks_batch
 from phabfive.edit.formatters import display_changes
-from phabfive.edit.validators import (
-    get_board_names,
-    get_task_boards,
-    validate_board_column_context,
-)
+from phabfive.edit.plan import EditFailure, plan_task_edits
+from phabfive.editor import render_changes
+from phabfive.exceptions import PhabfiveInputException, PhabfiveValidationException
 from phabfive.maniphest import Maniphest
 from phabfive.policy import validate_policy_value
 from phabfive.yaml_utils import group_objects_by_type, parse_yaml_from_stdin
@@ -31,6 +29,106 @@ class Edit(Phabfive):
     def maniphest(self):
         """A Maniphest sharing this instance's configuration and client."""
         return Maniphest._from_parent(self)
+
+    def plan(
+        self,
+        object_ids,
+        *,
+        title=None,
+        priority=None,
+        status=None,
+        tag=None,
+        column=None,
+        assign=None,
+        description=None,
+        subscribe=None,
+        comment=None,
+        space=None,
+        visible_to=None,
+        editable_by=None,
+    ):
+        """Work out what an edit would change on each task, and change nothing.
+
+        Parameters
+        ----------
+        object_ids : str or iterable
+            Tasks, as "T1,T2", or an iterable of monograms ("T1") and
+            numeric IDs (1 or "1").
+
+        The changes are keyword arguments, as `maniphest edit` takes them:
+        `priority` also takes "raise"/"lower", `column` also takes
+        "forward"/"backward", and `tag` names the board `column` is on.
+
+        Returns
+        -------
+        EditPlan
+            A TaskEdit or an EditFailure per task, in the order given.
+
+        Raises
+        ------
+        PhabfiveInputException
+            When an ID is not a task's.
+        PhabfiveValidationException
+            When any task cannot be fetched, or its board is ambiguous. No
+            edit is planned for any of them.
+        """
+        return plan_task_edits(
+            self.maniphest,
+            self._task_ids(object_ids),
+            title=title,
+            priority=priority,
+            status=status,
+            tag=tag,
+            column=column,
+            assign=assign,
+            description=description,
+            subscribe=subscribe,
+            comment=comment,
+            space=space,
+            visible_to=visible_to,
+            editable_by=editable_by,
+        )
+
+    def apply(self, task_edit):
+        """Make one planned edit.
+
+        A no-op sends nothing. Returns {"task_id", "changes"}.
+
+        Raises
+        ------
+        PhabfiveDataException
+            When the server refuses the edit.
+        """
+        if not task_edit.noop:
+            self.maniphest.apply_task_edit(task_edit.task_id, task_edit.transactions)
+        return {"task_id": task_edit.task_id, "changes": task_edit.changes}
+
+    def apply_all(self, plan):
+        """Make every planned edit, in order, stopping at the first refused.
+
+        A task in `plan.failures` was never planned and is not attempted.
+        To carry on past a refusal, call `apply` for each edit instead.
+        """
+        return [self.apply(task_edit) for task_edit in plan.edits]
+
+    def _task_ids(self, object_ids):
+        """Numeric task IDs from "T1,T2", or from monograms and numbers."""
+        if isinstance(object_ids, str):
+            parsed = self.parse_object_ids(object_ids)
+        else:
+            parsed = [
+                ("task", str(oid))
+                if isinstance(oid, int) or str(oid).isdigit()
+                else self.parse_monogram(str(oid))
+                for oid in object_ids
+            ]
+
+        for object_type, oid in parsed:
+            if object_type != "task":
+                raise PhabfiveInputException(
+                    f"Only tasks can be edited, not a {object_type}: {oid}"
+                )
+        return [oid for _type, oid in parsed]
 
     def edit_objects(
         self,
@@ -370,45 +468,55 @@ class Edit(Phabfive):
                     output_format=output_format,
                 )
 
-            # Validate board/column context
-            board_phid, error = validate_board_column_context(
-                task_id, task_data, column, tag, self.maniphest
-            )
-            if error:
-                sys.stderr.write(f"Error: {error}\n")
+            try:
+                plan = plan_task_edits(
+                    self.maniphest,
+                    [task_id],
+                    title=title,
+                    priority=priority,
+                    status=status,
+                    tag=tag,
+                    column=column,
+                    assign=assign,
+                    description=final_description,
+                    subscribe=subscribe,
+                    comment=comment,
+                    space=space,
+                    visible_to=visible_to,
+                    editable_by=editable_by,
+                    task_data={task_id: task_data},
+                )
+            except PhabfiveValidationException as e:
+                [problem] = e.problems
+                sys.stderr.write(f"Error: {problem.message}\n")
 
                 # For multiple boards error, show copy-paste ready commands (up to 5 boards)
-                if "multiple boards" in error and column:
-                    boards = get_task_boards(task_data)
-                    board_names = get_board_names(boards, self.phab)
-                    if len(board_names) <= 5:
-                        sys.stderr.write("\nSuggested commands:\n\n")
-                        for board_name in sorted(board_names):
-                            sys.stderr.write(f"# Move on {board_name}:\n")
-                            sys.stderr.write(
-                                f'phabfive edit T{task_id} --tag="{board_name}" --column={column}\n\n'
-                            )
+                if problem.boards and len(problem.boards) <= 5:
+                    sys.stderr.write("\nSuggested commands:\n\n")
+                    for board_name in sorted(problem.boards):
+                        sys.stderr.write(f"# Move on {board_name}:\n")
+                        sys.stderr.write(
+                            f'phabfive edit T{task_id} --tag="{board_name}" --column={column}\n\n'
+                        )
 
                 return 1
 
-            # Delegate to maniphest module
-            result = self.maniphest.edit_task_by_id(
-                task_id=task_id,
-                title=title,
-                priority=priority,
-                status=status,
-                board_phid=board_phid,
-                column=column,
-                assign=assign,
-                description=final_description,
-                subscribe=subscribe,
-                comment=comment,
-                space=space,
-                visible_to=visible_to,
-                editable_by=editable_by,
-                dry_run=dry_run,
-                preview=preview,
-            )
+            [entry] = plan.entries
+            if isinstance(entry, EditFailure):
+                raise entry.error
+
+            if entry.noop:
+                result = {"task_id": task_id, "changes": []}
+            elif dry_run:
+                render_changes(
+                    entry.monogram,
+                    entry.changes,
+                    header=f"[DRY RUN] Would apply to {entry.monogram}:",
+                    file=preview,
+                )
+                result = {"task_id": task_id, "changes": entry.changes, "dry_run": True}
+            else:
+                result = self.apply(entry)
 
             # Display the changes
             display_changes(f"T{task_id}", result, file=preview)
