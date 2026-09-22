@@ -2,6 +2,7 @@
 
 """Main Maniphest class that orchestrates all submodules."""
 
+import copy
 import itertools
 import json
 import logging
@@ -1627,9 +1628,18 @@ class Maniphest(Phabfive):
                 f"Config file '{create_config}' does not exist"
             )
 
-        with open(create_config) as stream:
-            yaml_loader = YAML()
-            root_data = yaml_loader.load(stream)
+        # A file that is not one YAML document - a second `---` document, a
+        # tab where a space belongs - used to hand ruamel's own error to the
+        # user as a traceback: the command answers only the phabfive
+        # exceptions, so nothing caught it (#466)
+        try:
+            with open(create_config) as stream:
+                yaml_loader = YAML()
+                root_data = yaml_loader.load(stream)
+        except Exception as e:
+            raise PhabfiveDataException(
+                f"Failed to parse template file {create_config}: {e}"
+            )
 
         return self.create_tasks_from_config(root_data, dry_run=dry_run)
 
@@ -1638,7 +1648,9 @@ class Maniphest(Phabfive):
 
         For a program that holds the template as data rather than as a file:
         `config` is what the template file would parse to, with its
-        `variables` and `tasks` (see docs/create-templates.md).
+        `variables` and `tasks` (see docs/create-templates.md). It is read,
+        never written: the copy this works on is what loses its `variables`
+        and carries the normalized priorities.
 
         Returns
         -------
@@ -1646,10 +1658,46 @@ class Maniphest(Phabfive):
             With "dry_run": True and the "tasks" that would be created, or
             the "task_ids" that were.
         """
-        root_data = config
+        if not isinstance(config, dict):
+            raise PhabfiveDataException(
+                "A creation template is a mapping at the root level, not "
+                f"{type(config).__name__}"
+            )
+
+        # A program holding the template as data may hand the same dict to
+        # this twice, so neither the `variables` pop below nor the priority
+        # normalization may reach into what the caller still holds
+        root_data = copy.deepcopy(config)
 
         if dry_run:
             log.warning("DRY RUN: Tasks will not be created in Phabricator")
+
+        def validate_priorities(task_config):
+            """Validate and normalize the priority of every task in the tree.
+
+            The same check --priority gets, and before anything is fetched or
+            created: an unvalidated priority reaches the server verbatim, and
+            a typo comes back as an opaque Conduit error instead of naming
+            the valid priorities (#465).
+            """
+            priority = task_config.get("priority")
+
+            if priority is not None:
+                # A `-` in YAML is null, and 2 is a number; neither names a
+                # priority, and neither survives validate_priority's .lower()
+                if not isinstance(priority, str):
+                    raise PhabfiveConfigException(
+                        f"priority takes a priority name, not {priority!r}"
+                    )
+
+                # Normalized in place, so the transaction built later carries
+                # the API's spelling of it rather than the template's
+                task_config["priority"] = self._validate_priority(priority)
+
+            for child_task in task_config.get("tasks") or []:
+                validate_priorities(child_task)
+
+        validate_priorities(root_data)
 
         # Fetch all projects in phabricator, used to map ticket -> projects later.
         # The map keys lowercased primary names AND slugs/hashtags so that
@@ -1661,9 +1709,17 @@ class Maniphest(Phabfive):
 
         log.debug(project_name_to_id_map)
 
-        # Gather and remove variables to avoid using it or polluting the data later on
-        variables = root_data["variables"]
-        del root_data["variables"]
+        # Gather and remove variables to avoid using it or polluting the data
+        # later on. The key is optional, and an empty or null one is a template
+        # that defines no variables rather than an error
+        variables = root_data.pop("variables", None) or {}
+
+        # A list or a scalar has no names to render with, and asking it for
+        # .items() is the traceback the command has no handler for
+        if not isinstance(variables, dict):
+            raise PhabfiveConfigException(
+                f"variables takes a mapping of name to value, not {variables!r}"
+            )
 
         # Render variables that reference other variables using dependency resolution
         variables = render_variables_with_dependency_resolution(variables)
@@ -1772,7 +1828,27 @@ class Maniphest(Phabfive):
             # Validate and translate project names to internal project PHID:s
             project_phids = []
 
-            for project_name in output.get("projects", []):
+            project_names = output.get("projects") or []
+
+            # Iterating a string would ask for a project per letter, and a
+            # mapping for each of its keys, the way subscribers refuses
+            if not isinstance(project_names, list):
+                raise PhabfiveConfigException(
+                    f"projects takes a list of project names, not {project_names!r}"
+                )
+
+            for project_name in project_names:
+                # A `-` in YAML is a null item, and 1234 is a number; neither
+                # renders, and neither names a project
+                if not isinstance(project_name, str):
+                    raise PhabfiveConfigException(
+                        f"projects takes project names, not {project_name!r}"
+                    )
+
+                # Rendered like every other string field, and before the name
+                # is looked up: a template names a project by variable too
+                project_name = render(project_name)
+
                 ambiguous_phids = ambiguous_project_names.get(project_name.lower())
                 if ambiguous_phids:
                     raise PhabfiveConfigException(
@@ -1844,10 +1920,12 @@ class Maniphest(Phabfive):
             if "title" in task_config and "description" in task_config:
                 add_transaction(transactions, "title", task_config["title"])
                 add_transaction(transactions, "description", task_config["description"])
+                # Validated and normalized by validate_priorities above; a
+                # `priority:` with nothing after it is no priority at all
                 add_transaction(
                     transactions,
                     "priority",
-                    task_config.get("priority", PRIORITY_DEFAULT),
+                    task_config.get("priority") or PRIORITY_DEFAULT,
                 )
 
                 assignment = task_config.get("assignment")
@@ -2029,11 +2107,6 @@ class Maniphest(Phabfive):
             return {"dry_run": True, "tasks": dry_run_tasks}
 
         return {"task_ids": created_ids}
-
-        return {
-            "dry_run": False,
-            "created_count": len(dry_run_tasks) if dry_run_tasks else 0,
-        }
 
     def create_task(
         self,
