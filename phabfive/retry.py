@@ -34,6 +34,7 @@ import math
 import random
 import time
 from collections.abc import Mapping
+from typing import cast
 
 from phabfive.constants import DEFAULTS
 from phabfive.exceptions import PhabfiveConfigException
@@ -44,8 +45,9 @@ log = logging.getLogger(__name__)
 #: seconds. Small, because a person is usually waiting: a bulk job that
 #: should ride out a restart raises both, e.g. PHAB_RETRY=8
 #: PHAB_BACKOFF_MAX=60.
-DEFAULT_RETRIES = DEFAULTS["PHAB_RETRY"]
-DEFAULT_BACKOFF_MAX = float(DEFAULTS["PHAB_BACKOFF_MAX"])
+# DEFAULTS mixes value types, so mypy sees each entry as `object`.
+DEFAULT_RETRIES = cast(int, DEFAULTS["PHAB_RETRY"])
+DEFAULT_BACKOFF_MAX = float(cast(int, DEFAULTS["PHAB_BACKOFF_MAX"]))
 
 #: The first wait before jitter; each retry doubles it.
 BACKOFF_BASE = 0.25
