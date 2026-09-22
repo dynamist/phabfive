@@ -51,16 +51,26 @@ class CommandLookups:
         directory, ttl = cache.context(namespace, conf=self._conf)
         cache.set(namespace, VALUES_CACHE_KEY, value, ttl=ttl, directory=directory)
 
+    def remembers(self, namespace):
+        """Whether what is set for namespace would be kept, i.e. caching is on."""
+        directory, _ = cache.context(namespace, conf=self._conf)
+        return directory is not None
+
 
 def _known_project_icons(app):
     """Every icon phabfive can tell is valid on the instance, or None.
 
     The stock icons plus the ones projects carry, from the cache completion
     fills, or asked for and cached on a miss. None when the lookup failed,
-    which is not a list to judge an icon by.
+    which is not a list to judge an icon by, and None without asking when
+    caching is off: the answer is every project on the instance, which a
+    command that is itself one request should not fetch on every run.
     """
     store = app.lookup_store
-    icons = store.get(PROJECT_ICON_CACHE_NAMESPACE) if store is not None else None
+    if store is None or not store.remembers(PROJECT_ICON_CACHE_NAMESPACE):
+        return None
+
+    icons = store.get(PROJECT_ICON_CACHE_NAMESPACE)
     if isinstance(icons, list) and icons:
         return icons
 
@@ -69,8 +79,7 @@ def _known_project_icons(app):
     except Exception:
         return None
 
-    if store is not None:
-        store.set(PROJECT_ICON_CACHE_NAMESPACE, icons)
+    store.set(PROJECT_ICON_CACHE_NAMESPACE, icons)
     return icons
 
 
@@ -82,7 +91,8 @@ def warn_unknown_project_icons(app, icons, allowed=()):
     that is configured but that no project carries yet cannot be told from
     a typo. A search for one answers with nothing, and a dry run does not
     reach the server, which is why those two are where this is asked; a
-    real write is checked by the server.
+    real write is checked by the server. Nothing is said with caching off,
+    see _known_project_icons.
 
     Parameters
     ----------

@@ -187,7 +187,8 @@ No projects found
 
 The search still runs, because a configured icon that no project uses yet looks
 exactly the same. The icons in use are cached for a week, with the ones tab
-completion offers.
+completion offers. Finding them means fetching every project, so with caching
+off (`PHAB_CACHE=0`) the icon is not checked and nothing is warned about.
 
 `project search` looks in `PHAB_SPACE` unless `--space` says otherwise, the same
 as `maniphest search`. A project that has no Space of its own belongs to the

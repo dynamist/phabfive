@@ -147,16 +147,26 @@ class Maniphest(Phabfive):
         A status the remembered map does not know may have been configured
         since it was remembered, so the server is asked once more before the
         status is refused - otherwise a new status could not be set until
-        the entry expired.
+        the entry expired. Only a real answer replaces the remembered map: a
+        failed refetch keeps it and refuses the status, rather than judging
+        this and every later status by the standard ones.
         """
         try:
             return validate_status(status, self._get_api_status_map())
-        except PhabfiveConfigException:
+        except PhabfiveConfigException as e:
             if not self.__dict__.pop("_status_map_remembered", False):
                 raise
+            refused = e
 
-        self.__dict__["_once__get_api_status_map"] = self._fetch_status_map()
-        return validate_status(status, self._get_api_status_map())
+        try:
+            status_map = fetch_api_status_map(self.phab)
+        except Exception as e:
+            log.warning(f"Failed to refetch statuses from API: {e}")
+            raise refused from None
+
+        self._remember_status_map(status_map)
+        self.__dict__["_once__get_api_status_map"] = status_map
+        return validate_status(status, status_map)
 
     def _resolve_user_phid(self, username):
         """Resolve a single username to PHID."""
@@ -215,10 +225,13 @@ class Maniphest(Phabfive):
             )
             return fallback_status_map()
 
+        self._remember_status_map(status_map)
+        return status_map
+
+    def _remember_status_map(self, status_map):
+        """Write a status map the server gave to the lookup store, if any."""
         if self.lookup_store is not None and status_map.get("statusMap"):
             self.lookup_store.set(STATUS_MAP_CACHE_NAMESPACE, status_map)
-
-        return status_map
 
     @_once_per_instance
     def _get_all_spaces(self):
