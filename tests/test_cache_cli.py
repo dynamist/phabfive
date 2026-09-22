@@ -182,3 +182,16 @@ class TestInfo:
             result = runner.invoke(app, ["cache", "info"])
 
         assert result.exit_code == 0
+
+
+class TestHumanSize:
+    def test_units(self):
+        from phabfive.cli.cache import _human_size
+
+        assert _human_size(0) == "0 B"
+        assert _human_size(1023) == "1023 B"
+        assert _human_size(1024) == "1.0 KB"
+        assert _human_size(1536) == "1.5 KB"
+        assert _human_size(1024 * 1024) == "1.0 MB"
+        # MB is the largest unit, however large the size
+        assert _human_size(5 * 1024**3) == "5120.0 MB"

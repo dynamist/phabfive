@@ -21,9 +21,10 @@ uv run pytest tests/test_foo.py      # run single test file
 uv run pytest -k test_name           # run specific test
 uv run tox                           # test all Python versions (3.10-3.14)
 
-# Lint and format
+# Lint, format and type check
 uv run ruff check phabfive/ tests/
 uv run ruff format phabfive/ tests/
+uv run mypy                          # [tool.mypy] in pyproject.toml, checks phabfive/
 
 # Local Phorge instance for testing, in the shared k3d cluster (see docs/phorge-setup.md)
 make up                              # create/reuse the cluster, build and deploy Phorge
@@ -47,9 +48,15 @@ gh pr merge --rebase --delete-branch
 ```bash
 uv run ruff check phabfive/ tests/
 uv run ruff format phabfive/ tests/
+uv run mypy
 ```
 
-CI will fail if files are not properly formatted. Run these commands before every commit to avoid CI failures.
+CI will fail if files are not properly formatted or do not type check. Run these commands before every commit to avoid CI failures.
+
+mypy runs with `no_implicit_reexport`, as a consumer's mypy does, so a module re-exporting a name
+says so with `__all__` or `import x as x`. Untyped third-party modules are allowed by name in
+`[[tool.mypy.overrides]]` (only `phabricator` and `ptpython`); anything else gets a stub package
+in the `test` group or a narrow `# type: ignore[code]`, never `ignore_errors`.
 
 ## The Kubernetes Check Is Gated
 

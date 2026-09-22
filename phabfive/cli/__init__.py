@@ -181,6 +181,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
 
     monogram = argv[monogram_idx]
     match = _MONOGRAM_PATTERN.match(monogram)
+    assert match is not None  # the loop above only stops on a match
     prefix = match.group(1)
     expansion = MONOGRAM_SHORTCUT[prefix]
 

@@ -402,6 +402,14 @@
 
 ## Other Notes
 
+* mypy now type checks `phabfive/`, in the `Tests` lint step and in the pre-commit hook.
+  The hook matched `^(app/|cli/|lib/)`, which is no path in this repository, so it had
+  never checked a file and the `py.typed` marker promised types nothing verified. It now
+  runs `uv run mypy` against `[tool.mypy]` in `pyproject.toml`, with
+  `no_implicit_reexport` - what a consumer's mypy applies to `from phabfive import X` - so
+  the public API's `TYPE_CHECKING` block is checked too. The 30 errors it found were
+  missing annotations, two internal re-exports that did not say so, and code mypy
+  could not follow; fixing them changed no behaviour
 * `--format=rich` now quotes the values YAML would quote. Diffusion's rich output is
   YAML-shaped and is read back as YAML, and it printed every scalar bare - so a value
   like `#security` read back as an empty field followed by a comment, and one like

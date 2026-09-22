@@ -159,7 +159,7 @@ def show(
     maniphest = _get_maniphest_app()
 
     # Support both space-separated (T123 T456) and comma-separated (T123,T456)
-    all_ids = []
+    all_ids: list[str] = []
     for id_arg in ticket_ids:
         all_ids.extend(part.strip() for part in id_arg.split(",") if part.strip())
 

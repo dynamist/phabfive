@@ -94,8 +94,9 @@ This repo uses `pytest` as the test runner and `tox` to orchestrate tests for va
 # Run tests with current Python version
 uv run pytest
 
-# Run linting
-uv run flake8 phabfive/ tests/
+# Run linting and type checking
+uv run ruff check phabfive/ tests/
+uv run mypy
 ```
 
 **Testing across all Python versions:**
@@ -112,6 +113,9 @@ uv run tox -e py310
 
 # Run linting
 uv run tox -e flake8
+
+# Run type checking
+uv run tox -e mypy
 
 # Run coverage report
 uv run tox -e coverage
@@ -161,14 +165,19 @@ The documentation is built using [mkdocs](https://www.mkdocs.org/).
 
 This project uses:
 
-- **flake8** for linting
+- **ruff** for linting and formatting
+- **mypy** for type checking `phabfive/`, configured under `[tool.mypy]` in `pyproject.toml`
 - **pytest** for testing
 
 Before submitting changes:
 
 ```bash
-# Run linting
-uv run flake8 phabfive/ tests/
+# Lint and format
+uv run ruff check phabfive/ tests/
+uv run ruff format phabfive/ tests/
+
+# Type check
+uv run mypy
 
 # Run tests
 uv run pytest
@@ -177,4 +186,13 @@ uv run pytest
 uv run tox
 ```
 
-The CI will run these checks automatically, but running locally first saves time!
+`Tests` runs ruff and mypy on Python 3.13, so a type error fails a pull request. The pre-commit
+hook runs the same `uv run mypy`, over the whole package whenever a file under `phabfive/`
+changes: the version comes from `uv.lock`, so the hook and CI cannot disagree about it.
+
+mypy checks `phabfive` with `no_implicit_reexport`, which is what a consumer's mypy applies to
+`from phabfive import Maniphest`. A module that re-exports a name has to say so, with `__all__`
+or a redundant alias (`from phabfive.constants import is_machine_format as is_machine_format`),
+and the `TYPE_CHECKING` block in `phabfive/__init__.py` is checked along with everything else.
+The only modules allowed to lack types are `phabricator` and the optional `ptpython`, listed by
+name; add a narrow `# type: ignore[code]` rather than widening that list or ignoring a module.

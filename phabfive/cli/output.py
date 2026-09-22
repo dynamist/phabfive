@@ -12,8 +12,10 @@ it instead of writing a sixth copy.
 
 import typer
 
-# Re-exported: every CLI module imports them from here.
-from phabfive.constants import MACHINE_FORMATS, is_machine_format  # noqa: F401
+# Re-exported: every CLI module imports them from here. The redundant aliases
+# are what mark them as re-exports, for mypy's no_implicit_reexport and ruff.
+from phabfive.constants import MACHINE_FORMATS as MACHINE_FORMATS
+from phabfive.constants import is_machine_format as is_machine_format
 
 
 def _get_output_format(ctx: typer.Context) -> str:

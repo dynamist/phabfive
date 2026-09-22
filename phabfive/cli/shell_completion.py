@@ -3,6 +3,7 @@
 
 import os
 import re
+from typing import Any
 
 from click.shell_completion import CompletionItem
 
@@ -40,7 +41,9 @@ def install_bash_escaping() -> None:
     try:
         import typer._completion_classes as typer_completion
 
-        base = typer_completion.BashComplete
+        # Any, because a class held in a variable cannot be a base class to
+        # mypy, and this one is private to Typer anyway
+        base: Any = typer_completion.BashComplete
     except (ImportError, AttributeError):
         return
 
@@ -65,7 +68,7 @@ def install_bash_escaping() -> None:
                 return item.value
             return escape_for_bash(item.value)
 
-    typer_completion.BashComplete = BashComplete
+    typer_completion.BashComplete = BashComplete  # type: ignore[misc]
 
 
 def _monogram_help(monogram: str) -> str:

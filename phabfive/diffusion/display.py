@@ -6,11 +6,11 @@ rendered by the generic renderers in ``phabfive.record_display``. What is left
 here is picking the records out of what ``Diffusion`` answers with.
 """
 
-from phabfive.record_display import (  # noqa: F401 - re-exported for callers
-    _yaml_scalar,
-    display_records,
-    display_records_rich,
-)
+# Re-exported for callers. The redundant aliases are what mark them as
+# re-exports, for mypy's no_implicit_reexport and ruff.
+from phabfive.display import _yaml_scalar as _yaml_scalar
+from phabfive.record_display import display_records as display_records
+from phabfive.record_display import display_records_rich as display_records_rich
 
 
 def display_repositories(result, output_format, phabfive_instance, tabular=False):

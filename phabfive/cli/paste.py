@@ -95,7 +95,7 @@ def search(
     paste = _get_paste_app()
 
     # Build constraints
-    constraints = {}
+    constraints: dict[str, object] = {}
 
     # Handle free-text query
     if text_query:
@@ -367,7 +367,7 @@ def show(
     paste = _get_paste_app()
 
     # Support both space-separated (P1 P2) and comma-separated (P1,P2)
-    all_ids = []
+    all_ids: list[str] = []
     for id_arg in paste_ids:
         all_ids.extend(part.strip() for part in id_arg.split(",") if part.strip())
 

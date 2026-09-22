@@ -116,7 +116,7 @@ def _complete_with_prefixes(incomplete: str, values: List[str]) -> List[str]:
             return [f"{prefix}{v}" for v in values if v.startswith(remainder)]
 
     # Complete bare values
-    completions = []
+    completions: list[str] = []
     completions.extend(v for v in values if v.startswith(incomplete))
 
     # For prefixes, offer full prefix:value combinations instead of bare prefix
@@ -487,7 +487,7 @@ def _fetch_projects_named(phab, incomplete: str) -> list:
     server, and follows the result cursor up to TAG_COMPLETION_LIMIT.
     """
     constraints = {"name": incomplete} if incomplete.strip() else {}
-    projects = []
+    projects: list = []
     after = None
 
     while len(projects) < TAG_COMPLETION_LIMIT:
@@ -627,11 +627,11 @@ def _project_completions(incomplete: str) -> list:
     # No default values for tags - they are instance-specific
     records = _cached_project_records(incomplete)
 
-    by_name = {}
+    by_name: dict[str, list] = {}
     for record in _matching_projects(records, incomplete.lower()):
         by_name.setdefault(record["name"].lower(), []).append(record)
 
-    pairs = []
+    pairs: list[tuple[str, str | None]] = []
     for _, matches in sorted(by_name.items()):
         value = _in_typed_case(incomplete, matches[0]["name"])
 
@@ -722,13 +722,13 @@ def _fetch_users_named(phab, incomplete: str, include_disabled: bool) -> list:
     nameLike is a substring match over both the username and the real name,
     so it returns a superset of the usernames that start with the text.
     """
-    constraints = {}
+    constraints: dict[str, str | bool] = {}
     if incomplete.strip():
         constraints["nameLike"] = incomplete
     if not include_disabled:
         constraints["isDisabled"] = False
 
-    users = []
+    users: list = []
     after = None
 
     while len(users) < USER_COMPLETION_LIMIT:
@@ -878,7 +878,9 @@ def _user_completions(incomplete: str, include_disabled: bool) -> list:
 
     # @me is only offered before a username is typed, since it can never be
     # a prefix of one
-    pairs = [(ME_SHORTCUT, "yourself")] if not incomplete else []
+    pairs: list[tuple[str, str | None]] = (
+        [(ME_SHORTCUT, "yourself")] if not incomplete else []
+    )
 
     incomplete_lower = incomplete.lower()
     for record in sorted(records, key=lambda r: r["username"].lower()):
@@ -1045,7 +1047,7 @@ def complete_cache_namespace(incomplete: str) -> list[str | tuple[str, str]]:
     except (OSError, KeyError):
         described = {}
 
-    completions = []
+    completions: list[str | tuple[str, str]] = []
     for namespace in cache.known_namespaces():
         if not namespace.startswith(incomplete):
             continue
@@ -1197,11 +1199,13 @@ def _fetch_project_icons(phab) -> List[str]:
         phab.project.search, constraints={"status": PROJECT_STATUS_ALL}
     )
     in_use = {
-        (project.get("fields", {}).get("icon") or {}).get("key") for project in projects
+        icon
+        for project in projects
+        if (icon := (project.get("fields", {}).get("icon") or {}).get("key"))
     }
 
     # "milestone" is Phorge's to give to a milestone, not a value to choose
-    in_use -= {None, "milestone"}
+    in_use.discard("milestone")
 
     return PROJECT_ICONS + sorted(in_use - set(PROJECT_ICONS))
 

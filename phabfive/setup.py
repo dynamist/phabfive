@@ -148,10 +148,12 @@ class SetupWizard:
         self.console.print('  2. Click "Generate API Token"')
         self.console.print("  3. Copy the token (starts with 'cli-')\n")
 
-        from InquirerPy import inquirer as inq
+        # The class inquirer.secret aliases, from its own module: InquirerPy's
+        # inquirer module does not mark its aliases as exported
+        from InquirerPy.prompts.secret import SecretPrompt
 
         while True:
-            token = inq.secret(message="Enter your API token:").execute()
+            token = SecretPrompt(message="Enter your API token:").execute()
 
             if not token:
                 self.console.print("[red]Token cannot be empty[/red]")
