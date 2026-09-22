@@ -4,14 +4,16 @@
 An option that takes a list of values is both repeatable and comma-separated:
 ``--member @a,@b --member @c`` names three members. That is the rule the
 positional IDs of every ``show`` command already follow (``T1,T2`` or ``T1
-T2``), and the one ``maniphest edit --subscribe`` followed on its own. It
-lives here so that each new list option reads a value the same way, rather
+T2``). It lives here so that every list option that adds values - the
+``project`` options, ``--tag`` and ``--subscribe`` on ``maniphest
+create/edit`` and ``paste create/edit`` - reads a value the same way, rather
 than each command splitting it by hand.
 
 A comma is safe to split on in every value it is used for: Phorge allows none
 in a username, and normalises one out of a hashtag. ``+`` is not a separator
 here - in a search filter it means AND, which a list of values to add has no
-use for.
+use for. ``maniphest create`` still accepts it, with a warning, because it
+once split on nothing else.
 """
 
 

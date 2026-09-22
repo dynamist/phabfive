@@ -35,6 +35,7 @@ from phabfive.cli.output import (
 from phabfive.constants import MONOGRAMS
 from phabfive.cli.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.options import split_list_option
 from phabfive.policy import POLICY_GRAMMAR
 
 maniphest_app = typer.Typer(
@@ -48,6 +49,35 @@ def _get_maniphest_app():
     from phabfive.maniphest import Maniphest
 
     return get_app(Maniphest)
+
+
+def _split_values_to_add(values, option):
+    """Split a list option of ``maniphest create``, still accepting ``+``.
+
+    ``create --tag`` and ``--subscribe`` once split on ``+`` alone, which is
+    the AND of the search-filter grammar and means nothing in a list of
+    values to add. They take commas now, like every other list option, and
+    ``+`` keeps working with a warning so that no script breaks on upgrade.
+
+    Parameters
+    ----------
+    values : list or None
+        What the option collected, one string per occurrence
+    option : str
+        The option's name, for the warning
+
+    Returns
+    -------
+    list
+        The values, as ``split_list_option`` returns them
+    """
+    if values and any("+" in value for value in values):
+        sys.stderr.write(
+            f"WARNING: '+' between {option} values is deprecated, use ',' instead.\n"
+        )
+        values = [value.replace("+", ",") for value in values]
+
+    return split_list_option(values)
 
 
 def _display_tasks(
@@ -213,7 +243,8 @@ def create(
     tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Add to project/workboard by name, hashtag, ID, or PHID (repeatable)",
+        help="Add to project/workboard by name, hashtag, ID, or PHID "
+        "(repeatable, comma-separated)",
         autocompletion=complete_tag,
     ),
     column: Optional[str] = typer.Option(
@@ -243,7 +274,7 @@ def create(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable)",
+        help="Add subscriber (username or @me, repeatable, comma-separated)",
         autocompletion=complete_user,
     ),
     space: Optional[str] = typer.Option(
@@ -293,6 +324,7 @@ def create(
         phabfive maniphest create "Fix bug"
         phabfive maniphest create "New feature" --assign=@me
         phabfive maniphest create "Task" --priority=high --tag=Sprint
+        phabfive maniphest create "Task" --tag=Sprint,QA --subscribe=@me,alice
         phabfive maniphest create "Task" --tag=Board --column=Backlog
         phabfive maniphest create "Task" --space=S3
         phabfive maniphest create "Task" --visible-to='#infra' --editable-by=admin
@@ -359,8 +391,11 @@ def create(
                     print("Cancelled", file=preview)
                     raise typer.Exit(0)
 
+        tags = _split_values_to_add(tag, "--tag")
+        subscribers = _split_values_to_add(subscribe, "--subscribe")
+
         # Validate --column requires --tag
-        if column and not tag:
+        if column and not tags:
             sys.stderr.write(
                 "Error: --column requires --tag to specify board context\n"
             )
@@ -368,24 +403,24 @@ def create(
 
         # Resolve board PHID if column is specified
         board_phid = None
-        if column and tag:
+        if column and tags:
             # Use the first tag as the board context
-            board_phids = maniphest._resolve_project_phids(tag[0])
+            board_phids = maniphest._resolve_project_phids(tags[0])
             if board_phids:
                 board_phid = board_phids[0]
             else:
-                sys.stderr.write(f"Error: Board not found: {tag[0]}\n")
+                sys.stderr.write(f"Error: Board not found: {tags[0]}\n")
                 raise typer.Exit(1)
 
         try:
             result = maniphest.create_task(
                 title=final_title,
                 description=final_description,
-                tags=tag,
+                tags=tags,
                 assignee=assign,
                 status=status,
                 priority=priority,
-                subscribers=subscribe,
+                subscribers=subscribers,
                 column=column,
                 board_phid=board_phid,
                 space=space,
@@ -872,7 +907,7 @@ def edit(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable)",
+        help="Add subscriber (username or @me, repeatable, comma-separated)",
         autocompletion=complete_user,
     ),
     comment_text: Optional[str] = typer.Option(

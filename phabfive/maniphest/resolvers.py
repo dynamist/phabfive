@@ -28,51 +28,6 @@ SPACE_PROBE_MAX = 100
 _MONOGRAM = re.compile(r"^S\d+$", re.IGNORECASE)
 
 
-def parse_plus_separated(values):
-    """
-    Parse plus-separated values from CLI options.
-
-    Handles both string (single option) and list (multiple options) inputs,
-    and splits values on '+' to support syntax like 'ProjectA+ProjectB'.
-
-    Parameters
-    ----------
-    values : str, list, or None
-        Value(s) from docopt - either a single string or a list of strings.
-        May contain plus-separated values.
-
-    Returns
-    -------
-    list
-        Flattened list of individual values
-
-    Examples
-    --------
-    >>> parse_plus_separated("ProjectA+ProjectB")
-    ["ProjectA", "ProjectB"]
-    >>> parse_plus_separated(["ProjectA+ProjectB", "ProjectC"])
-    ["ProjectA", "ProjectB", "ProjectC"]
-    >>> parse_plus_separated(["ProjectA", "ProjectB"])
-    ["ProjectA", "ProjectB"]
-    """
-    if not values:
-        return []
-
-    # Convert single string to list for uniform processing
-    if isinstance(values, str):
-        values = [values]
-
-    result = []
-    for value in values:
-        if "+" in value:
-            # Split on + and add each part
-            result.extend(part.strip() for part in value.split("+") if part.strip())
-        else:
-            result.append(value.strip())
-
-    return result
-
-
 PROJECT_PHID_PREFIX = "PHID-PROJ-"
 
 
