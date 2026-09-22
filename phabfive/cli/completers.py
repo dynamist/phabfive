@@ -15,6 +15,7 @@ from phabfive.constants import (
     PROJECT_STATUS_ALL,
     PROJECT_STATUS_CHOICES,
     REPO_STATUS_CHOICES,
+    USER_ROLE_ANY,
     USER_ROLES,
 )
 
@@ -1185,6 +1186,18 @@ def complete_user_role(incomplete: str) -> List[str]:
         for role in USER_ROLES
         if role.startswith(last) and role not in already
     ]
+
+
+def complete_user_role_or_any(incomplete: str) -> List[str]:
+    """Complete ``user search --role``, which also takes ``any``.
+
+    ``any`` is offered only as the first value, since it asks for every user
+    and combining it with a role would mean just that role.
+    """
+    completions = complete_user_role(incomplete)
+    if "," not in incomplete and USER_ROLE_ANY.startswith(incomplete):
+        completions.append(USER_ROLE_ANY)
+    return completions
 
 
 def forget_projects(icons=False) -> None:

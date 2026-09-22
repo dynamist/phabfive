@@ -17,9 +17,18 @@ def _usernames(phabfive, *args):
 def test_every_user_is_listed(phabfive, conduit):
     everyone = conduit("user.search", limit=100)["data"]
 
-    assert sorted(_usernames(phabfive)) == sorted(
+    assert sorted(_usernames(phabfive, "--role=any")) == sorted(
         user["fields"]["username"] for user in everyone
     )
+
+
+def test_a_bare_search_prints_help(phabfive_raw):
+    """It would otherwise read every user on the instance."""
+    result = phabfive_raw("user", "search")
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "--role" in result.stderr
 
 
 def test_a_role_the_server_filters_on(phabfive):

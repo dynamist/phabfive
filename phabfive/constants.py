@@ -331,6 +331,10 @@ USER_ROLES = [
     "activated",
 ]
 
+# `user search --role=any` requires no role at all. It is how to list every
+# user on purpose, since a bare `user search` prints help instead.
+USER_ROLE_ANY = "any"
+
 # The roles user.search can filter on itself, and the constraint for each.
 # The rest - verified, approved, activated - have none, so they are matched
 # on the records the search returns.

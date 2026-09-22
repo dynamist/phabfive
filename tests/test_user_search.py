@@ -339,3 +339,56 @@ class TestCli:
 
         assert result.exit_code == 1
         assert "Unknown role" in result.stderr
+
+
+class TestBareSearch:
+    """A bare `user search` prints help rather than reading every user."""
+
+    def _invoke(self, args):
+        user = _app()
+        with patch("phabfive.user.User", return_value=user) as user_class:
+            result = runner.invoke(app, args)
+        return result, user_class
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["user", "search"],
+            ["user", "search", "-l", "0"],
+            ["user", "search", "--show-metadata"],
+            ["--format=json", "user", "search"],
+        ],
+    )
+    def test_prints_help_and_exits_2(self, args, restore_output_format):
+        result, user_class = self._invoke(args)
+
+        # The help is where typer puts it for a bare group: stderr when rich
+        # is off, the rich panel on stdout when it is on
+        assert result.exit_code == 2
+        assert "Usage:" in result.output
+        assert "--role" in result.output
+        user_class.assert_not_called()
+
+    def test_role_any_lists_everyone(self, restore_output_format):
+        result, _ = self._invoke(["--format=jsonl", "user", "search", "--role=any"])
+
+        assert result.exit_code == 0, result.output
+        assert [
+            json.loads(line)["User"]["Username"] for line in result.stdout.splitlines()
+        ] == ["admin", "deploybot", "gone", "ops-list", "pending", "viola"]
+
+    def test_role_any_with_a_role_is_that_role(self, restore_output_format):
+        result, _ = self._invoke(
+            ["--format=jsonl", "user", "search", "--role=any,admin"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert [
+            json.loads(line)["User"]["Username"] for line in result.stdout.splitlines()
+        ] == ["admin"]
+
+    def test_not_role_any_is_refused(self):
+        result, _ = self._invoke(["user", "search", "--not-role=any"])
+
+        assert result.exit_code == 1
+        assert "Unknown role 'any'" in result.stderr

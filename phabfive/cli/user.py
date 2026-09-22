@@ -8,8 +8,13 @@ import typer
 
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.apps import new_app
-from phabfive.cli.completers import complete_user_role
-from phabfive.cli.output import _get_output_format, _setup_output_options
+from phabfive.cli.completers import complete_user_role, complete_user_role_or_any
+from phabfive.cli.output import (
+    _exit_with_help,
+    _get_output_format,
+    _setup_output_options,
+)
+from phabfive.constants import USER_ROLE_ANY
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveConnectionException,
@@ -92,8 +97,11 @@ def search(
     role: Optional[List[str]] = typer.Option(
         None,
         "--role",
-        help="Only users with every one of these roles (repeatable, or comma-separated)",
-        autocompletion=complete_user_role,
+        help=(
+            "Only users with every one of these roles (repeatable, or "
+            "comma-separated); any lists every user"
+        ),
+        autocompletion=complete_user_role_or_any,
     ),
     not_role: Optional[List[str]] = typer.Option(
         None,
@@ -124,17 +132,31 @@ def search(
     any of them. So every active person, with bots, mailing lists and
     disabled accounts left out, is --not-role=bot,list,disabled.
 
+    A bare search prints this help rather than reading every user on the
+    instance. --role=any is how to ask for all of them on purpose.
+
     \b
     Examples:
-        phabfive user search
         phabfive user search viola
         phabfive user search --username=holm
         phabfive user search --realname="Larsson"
         phabfive user search --role=admin
+        phabfive user search --role=any -l 0
         phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0
     """
     from phabfive.record_display import display_records
     from phabfive.user import User
+
+    roles = split_list_option(role)
+    not_roles = split_list_option(not_role)
+
+    # A bare search prints help rather than reading every user on the
+    # instance, as `maniphest search` does. --role=any is the explicit way to
+    # ask for everyone; it requires no role, so it is dropped before the
+    # search and only counts as having asked for something.
+    if not any([query, username, realname, roles, not_roles]):
+        _exit_with_help(ctx)
+    roles = [r for r in roles if r != USER_ROLE_ANY]
 
     _setup_output_options(ctx)
 
@@ -144,8 +166,8 @@ def search(
             query=query,
             username=username,
             realname=realname,
-            roles=split_list_option(role),
-            not_roles=split_list_option(not_role),
+            roles=roles,
+            not_roles=not_roles,
             show_metadata=show_metadata,
             # A limit is how many users to return, not the page size to ask
             # for, and 0 - like every other search - means every match

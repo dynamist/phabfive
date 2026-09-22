@@ -241,9 +241,14 @@ class TestForgetProjects:
 
 
 class TestUserRoleCompletion:
-    @pytest.mark.parametrize("flag", ["--role", "--not-role"])
-    def test_offers_every_role(self, flag):
-        assert _complete(["user", "search", flag], "") == USER_ROLES
+    def test_role_offers_every_role_and_any(self):
+        assert _complete(["user", "search", "--role"], "") == [*USER_ROLES, "any"]
+
+    def test_not_role_offers_every_role_but_not_any(self):
+        assert _complete(["user", "search", "--not-role"], "") == USER_ROLES
+
+    def test_any_is_not_offered_after_a_role(self):
+        assert "admin,any" not in _complete(["user", "search", "--role"], "admin,a")
 
     def test_completes_after_the_last_comma(self):
         assert _complete(["user", "search", "--not-role"], "bot,d") == ["bot,disabled"]
