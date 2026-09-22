@@ -225,7 +225,9 @@
   `bot`, `disabled`, `list` and `admin` are filtered by `user.search` itself, the
   rest on the records it returns. The text argument finds any part of a username
   or real name, ignoring case, so `user search holm` finds rholm and hholm.
-  `--username` and `--realname` each search one of the two fields alone
+  `--username` and `--realname` each search one of the two fields alone. A bare
+  `user search` prints its help and exits 2 rather than reading every user on the
+  instance; `--role=any` lists them all on purpose
 * The local Phorge seed has a bot, deploy.bot, and a disabled account,
   former.employee
 

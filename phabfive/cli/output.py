@@ -57,3 +57,15 @@ def _echo_no_match_hint(query) -> None:
     hint = no_match_hint(query)
     if hint:
         typer.echo(hint, err=True)
+
+
+def _exit_with_help(ctx: typer.Context) -> None:
+    """Answer a search given nothing to search for with the command's help.
+
+    A bare search would otherwise read the whole instance. This is what
+    ``no_args_is_help`` does for a group: the help on stderr and exit code 2,
+    so a script can tell that nothing ran.
+    """
+    import click
+
+    raise click.exceptions.NoArgsIsHelpError(ctx)

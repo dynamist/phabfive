@@ -629,7 +629,7 @@ A project cannot be archived, unarchived or deleted through Conduit - there is n
 transaction for it - so do that in the web UI.
 
 ```bash
-phabfive --format=table user search
+phabfive --format=table user search --role=any
 phabfive --format=json user search viola
 phabfive --format=json user search --username=holm
 phabfive --format=json user search --realname=larsson
@@ -646,8 +646,9 @@ the username or the real name; `--username` searches the username alone and
 `--realname` the real name alone, both ignoring case and accents. `--role` keeps users with every
 role named and `--not-role` drops users with any of them, both repeatable and
 comma-separated; an unknown role is refused. So every person who can use the
-instance is `--not-role=bot,list,disabled`, and the members of a project who are
-missing from it are a diff away:
+instance is `--not-role=bot,list,disabled`. A bare `user search` prints its help and
+exits 2 rather than reading every user on the instance; `--role=any` asks for all of
+them on purpose. The members of a project who are missing from it are a diff away:
 
 ```bash
 comm -23 \
