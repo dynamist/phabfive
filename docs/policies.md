@@ -73,8 +73,7 @@ phabfive maniphest edit T239 --visible-to='PHID-PROJ-4t24wbtrxbhiohw4aira' --dry
 
 The four keywords, and the `#` and `@` prefixes, are offered by tab completion;
 past a `#` it completes project names and past an `@` it completes usernames.
-`@me` is deliberately not offered — a policy names an account, not whoever
-happens to be running the command.
+`@me` is offered alongside the usernames.
 
 ## How a policy is displayed
 
