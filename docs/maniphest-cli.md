@@ -301,7 +301,7 @@ A bare `phabfive maniphest search` still queries nothing: it prints its help and
 
 `--visible-to` and `--editable-by` keep the tasks whose view or edit policy is
 exactly the value given, in the same grammar `maniphest edit` takes: `public`,
-`users`, `admin`, `no-one`, a `#project`, an `@user` or a PHID. See
+`users`, `admin`, `no-one`, a `#project`, an `@user`, `@me` or a PHID. See
 [Policies](policies.md).
 
 ```bash

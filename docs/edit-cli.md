@@ -255,7 +255,7 @@ phabfive edit T123 --assign=@me
 ### Policy Management
 
 `--visible-to` and `--editable-by` set who can see and who can change a task.
-Each takes `public`, `users`, `admin`, `no-one`, a `#project`, an `@user` or a
+Each takes `public`, `users`, `admin`, `no-one`, a `#project`, an `@user`, `@me` or a
 PHID, and `--dry-run` names both ends of the change rather than showing a PHID:
 
 ```bash

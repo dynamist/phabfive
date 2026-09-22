@@ -17,6 +17,7 @@ from phabfive.constants import POLICY_KEYWORDS
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.policy import (
     PHID_QUERY_CHUNK,
+    POLICY_GRAMMAR,
     policy_label,
     policy_lockout_message,
     resolve_policy_names,
@@ -138,6 +139,59 @@ class TestGrammar:
 
         with pytest.raises(PhabfiveDataException):
             resolve_policy_value(phab, "#infrastructure")
+
+
+class TestMe:
+    """@me is the caller, in every policy option, as it is in --assigned."""
+
+    def _phab(self, users=None):
+        phab = _phab(users=users)
+        phab.user.whoami.return_value = {
+            "phid": "PHID-USER-caller",
+            "userName": "caller",
+        }
+        return phab
+
+    def test_me_resolves_to_the_caller(self):
+        """Not to a user called "me", which is what it was looked up as."""
+        phab = self._phab()
+
+        assert resolve_policy_value(phab, "@me") == "PHID-USER-caller"
+        phab.user.whoami.assert_called_once_with()
+
+    def test_me_is_in_the_grammar(self):
+        assert "@me" in POLICY_GRAMMAR
+        assert validate_policy_value("@me") == "@me"
+
+    def test_me_is_read_regardless_of_case(self):
+        """Phorge usernames are case-insensitive, so @Me is not somebody."""
+        assert resolve_policy_value(self._phab(), "@Me") == "PHID-USER-caller"
+
+    def test_a_user_called_me_makes_it_an_error(self):
+        """Either reading would hand an object to the wrong person."""
+        phab = self._phab(users=[{"phid": "PHID-USER-me"}])
+
+        with pytest.raises(PhabfiveDataException) as excinfo:
+            resolve_policy_value(phab, "@me", option="--visible-to")
+
+        message = str(excinfo.value)
+        assert "--visible-to" in message
+        assert "ambiguous" in message
+        assert "PHID-USER-me" in message
+        phab.user.whoami.assert_not_called()
+
+    def test_a_failing_whoami_is_not_a_traceback(self):
+        phab = self._phab()
+        phab.user.whoami.side_effect = RuntimeError("boom")
+
+        with pytest.raises(PhabfiveDataException):
+            resolve_policy_value(phab, "@me")
+
+    def test_a_username_that_merely_starts_with_me_is_a_user(self):
+        phab = self._phab(users=[{"phid": "PHID-USER-meg"}])
+
+        assert resolve_policy_value(phab, "@meg") == "PHID-USER-meg"
+        phab.user.whoami.assert_not_called()
 
 
 class TestNaming:

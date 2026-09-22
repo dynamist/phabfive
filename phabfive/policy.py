@@ -11,6 +11,7 @@ something a person can read:
 ``users``           ``admin`` and ``no-one``
 ``#projectslug``    ``project.search`` -> ``PHID-PROJ-...``
 ``@username``       ``user.search`` -> ``PHID-USER-...``
+``@me``             ``user.whoami`` -> the caller's ``PHID-USER-...``
 ``PHID-...``        passed through
 ==================  ====================================================
 
@@ -40,7 +41,11 @@ PHID_QUERY_CHUNK = 100
 
 # What a policy option takes, said once so every error message and every
 # --help string says it the same way
-POLICY_GRAMMAR = f"{', '.join(POLICY_KEYWORDS)}, #project, @user, or a PHID"
+POLICY_GRAMMAR = f"{', '.join(POLICY_KEYWORDS)}, #project, @user, @me, or a PHID"
+
+# The spelling that means whoever is running the command, as it does in
+# maniphest search --assigned
+ME = "@me"
 
 
 def validate_policy_value(value, option=None):
@@ -92,7 +97,8 @@ def resolve_policy_value(phab, value, option=None):
     phab : Phabricator
         Phabricator API client
     value : str or None
-        A keyword, #projectslug, @username or PHID. None is passed through.
+        A keyword, #projectslug, @username, @me or PHID. None is passed
+        through.
     option : str, optional
         The option it came from, named in any error message
 
@@ -106,7 +112,8 @@ def resolve_policy_value(phab, value, option=None):
     PhabfiveConfigException
         If the value is outside the grammar
     PhabfiveDataException
-        If the project or user it names does not exist
+        If the project or user it names does not exist, or if @me is asked
+        for on an instance that has a user called "me"
     """
     value = validate_policy_value(value, option=option)
 
@@ -115,6 +122,9 @@ def resolve_policy_value(phab, value, option=None):
 
     if value.startswith("#"):
         return resolve_project_hashtag(phab, value[1:])
+
+    if value.casefold() == ME:
+        return resolve_me(phab, option=option)
 
     return resolve_username(phab, value[1:])
 
@@ -189,6 +199,59 @@ def resolve_username(phab, username):
         raise PhabfiveDataException(f"User '@{username}' does not exist")
 
     return data[0]["phid"]
+
+
+def resolve_me(phab, option=None):
+    """The PHID of whoever is running the command.
+
+    Refused outright on an instance that has a user called ``me``, because
+    ``@me`` then names two people and the policy is the wrong place to guess
+    which: picking the caller hands a stranger's object to you, picking the
+    user hands yours to a stranger. That user is still reachable by PHID.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    option : str, optional
+        The option it came from, named in any error message
+
+    Returns
+    -------
+    str
+        The caller's PHID
+
+    Raises
+    ------
+    PhabfiveDataException
+        If either lookup fails, or a user called "me" exists
+    """
+    where = f"{option}: " if option else ""
+
+    try:
+        result = phab.user.search(constraints={"usernames": ["me"]})
+    except Exception as e:
+        raise PhabfiveDataException(f"Failed to resolve {ME}: {e}")
+
+    data = (result or {}).get("data") or []
+
+    if data:
+        raise PhabfiveDataException(
+            f"{where}{ME} is ambiguous: this instance has a user called 'me' "
+            f"({data[0]['phid']}). Give that user's PHID, or your own, instead"
+        )
+
+    try:
+        whoami = phab.user.whoami()
+    except Exception as e:
+        raise PhabfiveDataException(f"Failed to resolve {ME}: {e}")
+
+    phid = (whoami or {}).get("phid")
+
+    if not phid:
+        raise PhabfiveDataException(f"Failed to resolve {ME}: no PHID for you")
+
+    return phid
 
 
 def resolve_policy_names(phab, values):
@@ -354,6 +417,7 @@ __all__ = [
     "POLICY_GRAMMAR",
     "policy_label",
     "policy_lockout_message",
+    "resolve_me",
     "resolve_policy_names",
     "resolve_policy_value",
     "resolve_project_hashtag",

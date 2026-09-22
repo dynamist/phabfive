@@ -43,6 +43,7 @@ Every policy option — `--visible-to`, `--editable-by`, `--can-push` and
 | `no-one` | Nobody |
 | `#projectslug` | Members of that project |
 | `@username` | That one user |
+| `@me` | You — whoever the API token belongs to, as in `maniphest search --assigned=@me` |
 | `PHID-...` | Whatever object the PHID names — this is how a **custom policy rule** is set, since it has no other name |
 
 A project may be named by its hashtag or by its display name. Phorge's
@@ -439,7 +440,7 @@ phabfive maniphest edit T239 --visible-to=nonsense --dry-run
 ```
 
 ```
-Error: --visible-to must be one of: public, users, admin, no-one, #project, @user, or a PHID (got 'nonsense')
+Error: --visible-to must be one of: public, users, admin, no-one, #project, @user, @me, or a PHID (got 'nonsense')
 ```
 
 Whether the project or user named actually exists needs the API, so that error
