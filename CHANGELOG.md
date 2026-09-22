@@ -372,6 +372,16 @@
 
 ## Bug Fixes
 
+* **`maniphest create --with` ignored `assignment`, and took subscribers only as exact
+  usernames among the first 100 users.** A template's `assignment` now sets the task's
+  owner; it was documented but never sent. `assignment` and `subscribers` take a
+  username, `@username`, `@me` or a user PHID, case-insensitively, as every option that
+  takes a user does, and `@me` is refused on an instance with a user called `me`, naming
+  the field. Only the users the template names are looked up - it used to fetch one
+  unpaged page of every user - and all of them before any task is created, so an unknown
+  user in the last task leaves nothing half made. Both are rendered with the template's
+  variables, as the documented examples assumed, and `--dry-run` shows each task's
+  assignee and subscribers. Fixes #461
 * **A bare search exited 1 with a traceback on typer 0.27.** `maniphest search`, `paste search`,
   `passphrase search` and `user search` with nothing to search for raised click's
   `NoArgsIsHelpError`, which typer 0.27 no longer catches because its `Context` is its own

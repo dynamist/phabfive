@@ -58,8 +58,8 @@ tasks:
 | `projects` | list | Project names or PHIDs | `["Backend Team", "Sprint 42"]` |
 | `space` | string | Space to create the task in, by monogram, name, or a pattern matching one | `"S3"`, `"Archive"` |
 | `priority` | string | Task priority | `"high"`, `"normal"`, `"low"`, etc. |
-| `assignment` | string | Assignee username | `"alice"` |
-| `subscribers` | list | Subscriber usernames | `["bob", "carol"]` |
+| `assignment` | string | Assignee: a username, `@username`, `@me` or a user PHID (supports Jinja2 variables) | `"alice"`, `"@me"` |
+| `subscribers` | list | Subscribers, each spelled as for `assignment` (supports Jinja2 variables) | `["bob", "@carol", "PHID-USER-..."]` |
 | `parents` | list | Parent task IDs | `["T123", "T456"]` |
 | `subtasks` | list | Subtask IDs to attach | `["T789"]` |
 | `tasks` | list | Nested subtasks (see [Subtasks](#subtasks)) | Array of task objects |
@@ -88,6 +88,27 @@ tasks:
 Without a `space` field a task lands wherever the server puts it, which is the
 instance's default Space; `PHAB_SPACE` narrows searches and is not consulted
 here. Every Space named is resolved once, however many tasks name it.
+
+### Users
+
+`assignment` and `subscribers` take users the way every phabfive option that
+takes a user does: a username, with or without a leading `@`, `@me` for whoever
+runs the command, or a user PHID. Usernames match in any case.
+
+```yaml
+variables:
+  lead: "alice"
+
+tasks:
+  - title: "Plan the release"
+    description: "Owned by the lead, watched by the rest"
+    assignment: "{{ lead }}"
+    subscribers: ["@bob", "@me", "PHID-USER-abcdefghijklmnopqrst"]
+```
+
+Every user the template names is looked up before any task is created, so an
+unknown one - named in the error, with any others - leaves nothing created.
+`--dry-run` shows each task's assignee and subscribers under its title.
 
 ### Jinja2 Variable Support
 
@@ -358,7 +379,8 @@ Common errors and solutions:
 | Error | Cause | Solution |
 |-------|-------|----------|
 | "Project 'X' not found" | Project doesn't exist | Create project in Phabricator first |
-| "User 'X' not found" | Invalid username | Verify username exists |
+| "No such user: 'X'" | A username or PHID in `assignment` or `subscribers` that is not a user | Verify the user exists; every unknown one is named, and no task is created |
+| "assignment: @me is ambiguous ..." | The instance has a user called `me` | Give your own username, or that user's PHID, instead of `@me` |
 | "Task 'T123' not found" | Invalid task reference | Check task ID exists |
 | "Permission denied" | Insufficient API permissions | Update API token permissions |
 

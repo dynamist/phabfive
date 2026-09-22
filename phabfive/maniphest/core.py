@@ -1651,14 +1651,6 @@ class Maniphest(Phabfive):
         if dry_run:
             log.warning("DRY RUN: Tasks will not be created in Phabricator")
 
-        # Fetch all users in phabricator, used by subscribers mapping later
-        users_query = self.phab.user.search()
-        username_to_id_mapping = {
-            user["fields"]["username"]: user["phid"] for user in users_query["data"]
-        }
-
-        log.debug(username_to_id_mapping)
-
         # Fetch all projects in phabricator, used to map ticket -> projects later.
         # The map keys lowercased primary names AND slugs/hashtags so that
         # project references in YAML match case-insensitively,
@@ -1675,6 +1667,60 @@ class Maniphest(Phabfive):
 
         # Render variables that reference other variables using dependency resolution
         variables = render_variables_with_dependency_resolution(variables)
+
+        # Main task recursion logic
+        if "tasks" not in root_data:
+            raise PhabfiveDataException(
+                "Config file must contain keyword tasks in the root"
+            )
+
+        def render(value):
+            return Template(value).render(variables) if value else value
+
+        def template_users(task_config):
+            """What every task in the tree names for assignment and subscribers."""
+            assignment = task_config.get("assignment")
+
+            if assignment is not None and not isinstance(assignment, str):
+                raise PhabfiveConfigException(
+                    f"assignment takes one user, not {assignment!r}"
+                )
+
+            subscribers = task_config.get("subscribers") or []
+
+            if isinstance(subscribers, str):
+                raise PhabfiveConfigException(
+                    f"subscribers takes a list of users, not {subscribers!r}"
+                )
+
+            assignments = [render(assignment)] if assignment else []
+            subscribed = [render(name) for name in subscribers]
+
+            for child_task in task_config.get("tasks") or []:
+                child_assignments, child_subscribed = template_users(child_task)
+                assignments += child_assignments
+                subscribed += child_subscribed
+
+            return assignments, subscribed
+
+        # Every user the template names, looked up once for the whole tree
+        # and before any task is created, so that a typo in the tenth task
+        # does not leave nine behind. Only those users are asked about: a
+        # single unpaged user.search saw the first 100 users and no more.
+        assignments, subscribed = template_users(root_data)
+        users = {}
+
+        for values, option in (
+            (assignments, "assignment"),
+            (subscribed, "subscribers"),
+        ):
+            if values:
+                users.update(
+                    self._resolve_users(list(dict.fromkeys(values)), option=option)
+                )
+
+        # The username each PHID was resolved to, for the dry-run preview
+        user_names = {phid: username or phid for phid, username in users.values()}
 
         # A template can put every task in the same Space, so each one named
         # is resolved once rather than once per task naming it
@@ -1697,7 +1743,7 @@ class Maniphest(Phabfive):
             data = data_block.get(variable_name, None)
 
             if data:
-                data_block[variable_name] = Template(data).render(variables)
+                data_block[variable_name] = render(data)
 
         def pre_process_tasks(task_config):
             """
@@ -1738,21 +1784,17 @@ class Maniphest(Phabfive):
 
             output["projects"] = project_phids
 
-            # Validate and translate all subscriber users to PHID:s
-            user_phids = []
+            # Translate the assignee and subscribers to the PHIDs resolved above
+            assignment = output.get("assignment")
 
-            for subscriber_name in output.get("subscribers", []):
-                log.debug(f"processing user {subscriber_name}")
-                user_phid = username_to_id_mapping.get(subscriber_name, None)
+            if assignment:
+                output["assignment"] = users[render(assignment)][0]
 
-                if not user_phid:
-                    raise PhabfiveRemoteException(
-                        f"Subscriber '{subscriber_name}' not found as a user on the phabricator server"
-                    )
-
-                user_phids.append(user_phid)
-
-            output["subscribers"] = user_phids
+            output["subscribers"] = list(
+                dict.fromkeys(
+                    users[render(name)][0] for name in output.get("subscribers") or []
+                )
+            )
 
             # Translate the Space to its PHID, refusing a pattern that names
             # more than one the way --space does
@@ -1797,6 +1839,11 @@ class Maniphest(Phabfive):
                     "priority",
                     task_config.get("priority", PRIORITY_DEFAULT),
                 )
+
+                assignment = task_config.get("assignment")
+
+                if assignment:
+                    add_transaction(transactions, "owner", assignment)
 
                 projects = task_config.get("projects", [])
 
@@ -1920,7 +1967,19 @@ class Maniphest(Phabfive):
                         ),
                         "<no title>",
                     )
-                    dry_run_tasks.append({"depth": depth, "title": title})
+                    values = {t["type"]: t["value"] for t in transactions_to_commit}
+                    owner = values.get("owner")
+                    dry_run_tasks.append(
+                        {
+                            "depth": depth,
+                            "title": title,
+                            "assignee": user_names[owner] if owner else None,
+                            "subscribers": [
+                                user_names[phid]
+                                for phid in values.get("subscribers.set", [])
+                            ],
+                        }
+                    )
                 else:
                     result = self.phab.maniphest.edit(
                         transactions=transactions_to_commit,
@@ -1939,12 +1998,6 @@ class Maniphest(Phabfive):
             if child_tasks:
                 for child_task in child_tasks:
                     recurse_commit_transactions(child_task, task_config, depth + 1)
-
-        # Main task recursion logic
-        if "tasks" not in root_data:
-            raise PhabfiveDataException(
-                "Config file must contain keyword tasks in the root"
-            )
 
         pre_process_output = pre_process_tasks(root_data)
         log.debug("Final pre_process_output")
