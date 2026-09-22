@@ -2,7 +2,7 @@ variables:
   foo: 123
   bar: 456
   asd: 789
-tickets:
+tasks:
   - title: Ticket numero uno {{ foo }}
     description: |
       This is the description of my ticket...
