@@ -109,7 +109,7 @@ Create multiple related tasks in bulk using YAML configuration files. Task creat
 
 - **Hierarchical structures**: Create epics with subtasks automatically linked
 - **Variable substitution**: Use Jinja2 templating for dynamic content
-- **Task relationships**: Define dependencies and parent-child relationships
+- **Task relationships**: Attach tasks to existing parents and subtasks by monogram
 - **Team assignments**: Assign tasks to users and add subscribers
 - **Project association**: Automatically tag tasks with relevant projects
 
