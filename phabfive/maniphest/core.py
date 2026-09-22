@@ -917,7 +917,7 @@ class Maniphest(Phabfive):
                       Supports units: h (hours), d (days), w (weeks), m (months), y (years).
         visible_to    (str, optional): Only tasks whose view policy is exactly this, in the
                       grammar phabfive.policy accepts (public, users, admin, no-one,
-                      #project, @user or a PHID). Compared with the stored value, so
+                      #project, @user, @me or a PHID). Compared with the stored value, so
                       "users" finds tasks set to All Users - not every task a user can
                       see. maniphest.search has no policy constraint, so this runs on
                       the client, before --limit.

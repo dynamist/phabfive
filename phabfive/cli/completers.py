@@ -1061,9 +1061,9 @@ def complete_policy(incomplete: str) -> list[str | tuple[str, str]]:
     the project.search "slugs" constraint normalises what it is given, so
     "#Human Resources" resolves the same project "#human_resources" does.
 
-    @me is deliberately not offered. A policy names an account, and the
-    shortcut would have to be resolved against whoever is running the command
-    - a different thing from the placeholder the search filters accept.
+    @me is offered too, since a policy resolves it to whoever is running the
+    command. _user_completions spells it with its "@", so it is added here
+    rather than passed through, which would prefix it twice.
 
     Parameters
     ----------
@@ -1080,7 +1080,12 @@ def complete_policy(incomplete: str) -> list[str | tuple[str, str]]:
         return _as_completions(_project_completions(incomplete[1:]), prefix="#")
 
     if incomplete.startswith("@"):
-        pairs = [
+        pairs = (
+            [(ME_SHORTCUT[1:], "yourself")]
+            if ME_SHORTCUT.startswith(incomplete)
+            else []
+        )
+        pairs += [
             (username, description)
             for username, description in _user_completions(
                 incomplete[1:], include_disabled=False

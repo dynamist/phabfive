@@ -80,10 +80,9 @@ class TestPolicyCompletion:
         assert offered == ["@admin"]
         users.assert_called_once_with("adm", include_disabled=False)
 
-    def test_me_is_not_offered(self):
-        """A policy names an account. The shortcut would have to be resolved
-        against whoever is running the command, which is a different thing
-        from the placeholder the search filters accept."""
+    def test_an_at_offers_me(self):
+        """A policy resolves @me to whoever is running the command, so it is
+        offered alongside the usernames - once, with one "@"."""
         with patch.object(
             completers,
             "_user_completions",
@@ -93,7 +92,15 @@ class TestPolicyCompletion:
                 ["diffusion", "repo", "edit", "R5", "--visible-to"], "@"
             )
 
-        assert offered == ["@admin"]
+        assert offered == ["@me", "@admin"]
+
+    def test_me_matches_prefix(self):
+        with patch.object(completers, "_user_completions", return_value=[]):
+            offered = _complete(
+                ["diffusion", "repo", "edit", "R5", "--editable-by"], "@m"
+            )
+
+        assert offered == ["@me"]
 
 
 class TestPassphraseTypeCompletion:

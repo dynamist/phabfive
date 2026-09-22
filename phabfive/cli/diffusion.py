@@ -407,7 +407,7 @@ def repo_edit(
 ) -> None:
     """Edit a repository.
 
-    The policy options take a keyword, a #project, an @user or a PHID, and
+    The policy options take a keyword, a #project, an @user, @me or a PHID, and
     `--dry-run` names both ends of the change rather than showing a PHID.
     They are `--visible-to`, `--editable-by` and `--can-push`, spelled the way
     Phorge names the capability each one sets.

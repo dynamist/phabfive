@@ -332,9 +332,9 @@
   `--editable-by`, `--can-push` and `--joinable-by` - on `maniphest search`, on the
   create and edit commands of tasks, repositories and projects, and on `edit` - answered
   `@me` with `User '@me' does not exist`. It now resolves to you, through `user.whoami`,
-  as `--assigned=@me` does, and the help text lists it. On an instance that has a user
-  called `me`, `@me` is an error and exits 1 rather than guessing which of you is meant;
-  give a PHID instead. Fixes #435
+  as `--assigned=@me` does, and the help text lists it and tab completion offers it. On
+  an instance that has a user called `me`, `@me` is an error and exits 1 rather than
+  guessing which of you is meant; give a PHID instead. Fixes #435
 
 ## Other Notes
 
