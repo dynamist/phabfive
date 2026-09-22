@@ -60,9 +60,14 @@ def _task():
 
 
 def _assert_ambiguous(excinfo, option):
+    """The error names the option, and both PHIDs on lines of their own."""
     message = str(excinfo.value)
     assert message.startswith(f"{option}: @me is ambiguous")
-    assert "PHID-USER-me" in message
+    lines = [line.split() for line in message.splitlines()[1:]]
+    assert lines == [
+        ["PHID-USER-me", "me"],
+        ["PHID-USER-caller", "caller", "(you)"],
+    ]
 
 
 class TestIsMe:
@@ -88,7 +93,6 @@ class TestWhoamiMe:
             whoami_me(phab, option="--assigned")
 
         _assert_ambiguous(excinfo, "--assigned")
-        phab.user.whoami.assert_not_called()
 
     def test_whoami_without_a_phid_is_an_error(self):
         phab = _phab()

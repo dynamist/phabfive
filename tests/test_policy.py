@@ -178,7 +178,7 @@ class TestMe:
         assert "--visible-to" in message
         assert "ambiguous" in message
         assert "PHID-USER-me" in message
-        phab.user.whoami.assert_not_called()
+        assert "PHID-USER-caller" in message
 
     def test_a_failing_whoami_is_not_a_traceback(self):
         phab = self._phab()
