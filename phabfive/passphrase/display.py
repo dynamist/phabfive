@@ -142,6 +142,79 @@ def display_passphrase_tree(console, passphrase_dict, phabfive_instance):
     console.print(tree)
 
 
+def build_passphrase_record(cred, show_secrets=True, always_secret=False):
+    """Build the machine-readable record for one credential.
+
+    The one builder behind yaml, json and jsonl, so the three cannot drift
+    apart. Shaped like every other app's record: the Link, then a section
+    named after the object - Passphrase is the app, a Credential is what it
+    holds, the way maniphest's section is Task.
+
+    Parameters
+    ----------
+    cred : dict
+        Passphrase data dictionary with url, type, name, username, secret
+    show_secrets : bool
+        Whether to include the secret, when the credential carries one
+    always_secret : bool
+        Always include a Secret key, empty when the credential carries none.
+        What a single ``passphrase show`` has always printed for yaml and json.
+
+    Returns
+    -------
+    dict
+        {"Link": ..., "Credential": {...}}, ready for JSON serialization.
+    """
+    credential = {
+        "Name": cred.get("name", ""),
+        "Type": cred.get("type", "Unknown"),
+    }
+
+    # Include Username only if present
+    username = cred.get("username")
+    if username:
+        credential["Username"] = username
+
+    if always_secret:
+        credential["Secret"] = cred.get("secret", "")
+    elif show_secrets and "secret" in cred:
+        credential["Secret"] = cred.get("secret", "")
+
+    # Include PublicKey for SSH credentials
+    if cred.get("public_key"):
+        credential["PublicKey"] = cred["public_key"]
+
+    # Include dates
+    created = _format_timestamp(cred.get("dateCreated"))
+    if created:
+        credential["Created"] = created
+    modified = _format_timestamp(cred.get("dateModified"))
+    if modified:
+        credential["Modified"] = modified
+
+    return {"Link": cred.get("url", ""), "Credential": credential}
+
+
+def _yaml_record(record):
+    """Write a record's multi-line key material as YAML block scalars."""
+    credential = dict(record["Credential"])
+    for key in ("Secret", "PublicKey"):
+        if "\n" in credential.get(key, ""):
+            credential[key] = PreservedScalarString(credential[key])
+
+    return {**record, "Credential": credential}
+
+
+def _dump_yaml(records):
+    """Print records as strict YAML via ruamel.yaml."""
+    yaml = YAML()
+    yaml.default_flow_style = False
+
+    stream = StringIO()
+    yaml.dump([_yaml_record(record) for record in records], stream)
+    print(stream.getvalue(), end="")
+
+
 def display_passphrase_yaml(passphrase_dict):
     """Display passphrase as strict YAML via ruamel.yaml.
 
@@ -153,89 +226,7 @@ def display_passphrase_yaml(passphrase_dict):
     passphrase_dict : dict
         Passphrase data dictionary with url, type, name, username, secret
     """
-    yaml = YAML()
-    yaml.default_flow_style = False
-
-    # Build clean dict - use url for the Link (plain URL string)
-    output = {
-        "Link": passphrase_dict.get("url", ""),
-        "Type": passphrase_dict.get("type", "Unknown"),
-        "Name": passphrase_dict.get("name", ""),
-    }
-
-    # Include Username only if present
-    username = passphrase_dict.get("username")
-    if username:
-        output["Username"] = username
-
-    # Handle multi-line secrets with block scalar
-    secret = passphrase_dict.get("secret", "")
-    if "\n" in secret:
-        output["Secret"] = PreservedScalarString(secret)
-    else:
-        output["Secret"] = secret
-
-    # Include PublicKey for SSH credentials
-    public_key = passphrase_dict.get("public_key", "")
-    if public_key:
-        if "\n" in public_key:
-            output["PublicKey"] = PreservedScalarString(public_key)
-        else:
-            output["PublicKey"] = public_key
-
-    # Include dates
-    created = _format_timestamp(passphrase_dict.get("dateCreated"))
-    if created:
-        output["Created"] = created
-    modified = _format_timestamp(passphrase_dict.get("dateModified"))
-    if modified:
-        output["Modified"] = modified
-
-    stream = StringIO()
-    yaml.dump([output], stream)
-    print(stream.getvalue(), end="")
-
-
-def _build_passphrase_json_output(passphrase_dict):
-    """Build a clean JSON-serializable dict for a single passphrase.
-
-    Parameters
-    ----------
-    passphrase_dict : dict
-        Passphrase data dictionary with url, type, name, username, secret
-
-    Returns
-    -------
-    dict
-        Clean dictionary ready for JSON serialization.
-    """
-    output = {
-        "Link": passphrase_dict.get("url", ""),
-        "Type": passphrase_dict.get("type", "Unknown"),
-        "Name": passphrase_dict.get("name", ""),
-    }
-
-    # Include Username only if present
-    username = passphrase_dict.get("username")
-    if username:
-        output["Username"] = username
-
-    output["Secret"] = passphrase_dict.get("secret", "")
-
-    # Include PublicKey for SSH credentials
-    public_key = passphrase_dict.get("public_key")
-    if public_key:
-        output["PublicKey"] = public_key
-
-    # Include dates
-    created = _format_timestamp(passphrase_dict.get("dateCreated"))
-    if created:
-        output["Created"] = created
-    modified = _format_timestamp(passphrase_dict.get("dateModified"))
-    if modified:
-        output["Modified"] = modified
-
-    return output
+    _dump_yaml([build_passphrase_record(passphrase_dict, always_secret=True)])
 
 
 def display_passphrase_json(passphrase_dict):
@@ -249,7 +240,7 @@ def display_passphrase_json(passphrase_dict):
     passphrase_dict : dict
         Passphrase data dictionary with url, type, name, username, secret
     """
-    output = _build_passphrase_json_output(passphrase_dict)
+    output = build_passphrase_record(passphrase_dict, always_secret=True)
     # Intentional: a top-level object, not an array, for a single credential.
     # The print stays in this module rather than in phabfive/json_output.py so
     # the clear-text-logging suppression covers only the code that is meant to
@@ -355,97 +346,7 @@ def display_passphrases_yaml(credentials, show_secrets=True):
     show_secrets : bool
         Whether to include secret values
     """
-    yaml = YAML()
-    yaml.default_flow_style = False
-
-    output = []
-    for cred in credentials:
-        item = {
-            "Link": cred.get("url", ""),
-            "Type": cred.get("type", "Unknown"),
-            "Name": cred.get("name", ""),
-        }
-
-        username = cred.get("username")
-        if username:
-            item["Username"] = username
-
-        if show_secrets and "secret" in cred:
-            secret = cred.get("secret", "")
-            if "\n" in secret:
-                item["Secret"] = PreservedScalarString(secret)
-            else:
-                item["Secret"] = secret
-
-        if "public_key" in cred:
-            public_key = cred.get("public_key", "")
-            if "\n" in public_key:
-                item["PublicKey"] = PreservedScalarString(public_key)
-            else:
-                item["PublicKey"] = public_key
-
-        # Include dates
-        created = _format_timestamp(cred.get("dateCreated"))
-        if created:
-            item["Created"] = created
-        modified = _format_timestamp(cred.get("dateModified"))
-        if modified:
-            item["Modified"] = modified
-
-        output.append(item)
-
-    stream = StringIO()
-    yaml.dump(output, stream)
-    print(stream.getvalue(), end="")
-
-
-def _build_passphrases_json_output(credentials, show_secrets=True):
-    """Build clean JSON-serializable dicts for a list of passphrases.
-
-    Kept separate from the single-credential builder above: that one always
-    carries a Secret key, this one only when secrets were asked for.
-
-    Parameters
-    ----------
-    credentials : list
-        List of passphrase data dictionaries
-    show_secrets : bool
-        Whether to include secret values
-
-    Returns
-    -------
-    list[dict]
-        Clean dictionaries ready for JSON serialization.
-    """
-    output = []
-    for cred in credentials:
-        item = {
-            "Link": cred.get("url", ""),
-            "Type": cred.get("type", "Unknown"),
-            "Name": cred.get("name", ""),
-        }
-
-        username = cred.get("username")
-        if username:
-            item["Username"] = username
-
-        if show_secrets and "secret" in cred:
-            item["Secret"] = cred.get("secret", "")
-
-        if "public_key" in cred:
-            item["PublicKey"] = cred.get("public_key", "")
-
-        # Include dates
-        created = _format_timestamp(cred.get("dateCreated"))
-        if created:
-            item["Created"] = created
-        modified = _format_timestamp(cred.get("dateModified"))
-        if modified:
-            item["Modified"] = modified
-
-        output.append(item)
-
-    return output
+    _dump_yaml([build_passphrase_record(cred, show_secrets) for cred in credentials])
 
 
 def display_passphrases_json(credentials, show_secrets=True, output_format="json"):
@@ -460,7 +361,7 @@ def display_passphrases_json(credentials, show_secrets=True, output_format="json
     output_format : str
         Either 'json' or 'jsonl'.
     """
-    records = _build_passphrases_json_output(credentials, show_secrets)
+    records = [build_passphrase_record(cred, show_secrets) for cred in credentials]
     # Intentional: output secrets for piping. Serialisation is shared with
     # every other app, the printing is not - see display_passphrase_json above
     for chunk in iter_records(records, output_format):

@@ -487,7 +487,7 @@ class TestPassphrases:
 
         assert as_lines == as_array
         # search hides secrets by default, and that must hold for jsonl too
-        assert all("Secret" not in record for record in as_lines)
+        assert all("Secret" not in record["Credential"] for record in as_lines)
 
     def test_multiline_secret_stays_on_one_line(self, capsys):
         from phabfive.passphrase.display import display_passphrases
@@ -496,7 +496,10 @@ class TestPassphrases:
         output = capsys.readouterr().out
 
         assert len(output.splitlines()) == 2
-        assert parse_jsonl(output)[1]["Secret"] == "-----BEGIN-----\nkey\n-----END-----"
+        assert (
+            parse_jsonl(output)[1]["Credential"]["Secret"]
+            == "-----BEGIN-----\nkey\n-----END-----"
+        )
 
     def test_a_closed_pipe_is_still_quiet(self):
         """Passphrase prints its own lines, so it needs its own handler.

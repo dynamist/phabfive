@@ -51,6 +51,9 @@ phabfive passphrase search --type=password
 # Show multiple secrets at once
 phabfive passphrase show K1 K2 K3
 
+# Pull one secret out of a structured record
+phabfive --format=json passphrase show K4 | jq -r '.Credential.Secret'
+
 # Search pastes
 phabfive paste search "deploy"
 
