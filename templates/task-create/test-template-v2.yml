@@ -48,7 +48,7 @@ tasks:
         priority: "low"
       - title: "Second subtask"
         description: |
-          Second subtask with implicit project inheritance
+          Second subtask, with no projects of its own
           Expanding variables here too {{ asd }}
         priority: "wish"
   - title: "Ticket numero three {{ asd }}"

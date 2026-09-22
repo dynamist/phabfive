@@ -26,6 +26,11 @@ phabfive maniphest create --with templates/task-create/template.yaml
 phabfive -vv maniphest create --with templates/task-create/template.yaml --dry-run
 ```
 
+A creation template is a single YAML document: a `---` separator starting a second
+one is an error, unlike a [search template](search-templates.md), which may hold
+several. The template alone says what to create - `maniphest create` refuses the
+options it cannot honour alongside `--with` rather than quietly dropping them.
+
 ## Template Structure
 
 ### Basic Template Format
@@ -55,7 +60,7 @@ tasks:
 |-------|------|-------------|---------|
 | `title` | string | Task title (supports Jinja2 variables) | `"Fix bug in {{ component }}"` |
 | `description` | string | Task description (supports Jinja2 variables) | Multi-line YAML string |
-| `projects` | list | Project names or PHIDs | `["Backend Team", "Sprint 42"]` |
+| `projects` | list | Project names or hashtags, written without the `#` | `["Backend Team", "sprint_42"]` |
 | `space` | string | Space to create the task in, by monogram, name, or a pattern matching one | `"S3"`, `"Archive"` |
 | `priority` | string | Task priority | `"high"`, `"normal"`, `"low"`, etc. |
 | `assignment` | string | Assignee: a username, `@username`, `@me` or a user PHID (supports Jinja2 variables) | `"alice"`, `"@me"` |
@@ -146,25 +151,28 @@ tasks:
     tasks:  # Nested subtasks
       - title: "Design authentication API"
         description: "Design the API endpoints for authentication"
-        projects: ["Backend Team"]  # Can override or inherit parent project
+        projects: ["Backend Team"]  # Named again, since nothing is inherited
         priority: "normal"
         assignment: "api-designer"
 
       - title: "Implement JWT tokens"
         description: "Implement JWT token generation and validation"
         priority: "normal"
-        # Projects inherited from parent if not specified
+        # No projects: of its own, so this subtask lands in no project
 ```
 
 **Subtask Behavior:**
-- Subtasks automatically inherit the parent's projects if not explicitly specified
-- Each subtask can override any field (projects, priority, assignment, etc.)
+- A subtask names its own projects. Nothing is inherited from the parent, so a
+  subtask without a `projects:` of its own is created in no project at all
+- Every other field is the subtask's own too, and defaults the same way a
+  top-level task's does
 - Subtasks are created after their parent and automatically linked
 - Nesting can be multiple levels deep
 
 ### Task Relationships
 
-Define dependencies and relationships between tasks:
+`parents` and `subtasks` link a task to tasks that already exist on the
+instance, each named by its monogram:
 
 ```yaml
 tasks:
@@ -175,14 +183,18 @@ tasks:
   - title: "Implement user model"
     description: "Create user model and validation"
     projects: ["Backend"]
-    parents: ["T123"]  # This task depends on T123 (existing task)
+    parents: ["T123"]  # T123 already exists; this task becomes its subtask
 
   - title: "Add user authentication"
     description: "Implement login/logout functionality"
     projects: ["Backend"]
-    # This will depend on the "Implement user model" task created above
-    # Dependencies between tasks in the same template are resolved automatically
+    # Nothing links this to the task above it: tasks listed side by side in a
+    # template are unrelated. Nest them under `tasks:` to link them
 ```
+
+Only nesting links tasks the same template creates - see
+[Subtasks](#subtasks). A monogram in `parents` or `subtasks` that no task
+answers to is an error, and nothing is created.
 
 ### YAML Anchors and References
 

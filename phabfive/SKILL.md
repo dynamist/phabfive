@@ -681,8 +681,11 @@ phabfive --format=json maniphest search --with templates/task-search/blocked-tas
 phabfive maniphest create --with templates/task-create/sprint.yaml --dry-run
 ```
 
-Templates may hold several documents separated by `---`. Command line options override
-template values. See `docs/search-templates.md` and `docs/create-templates.md`.
+The two differ. A search template may hold several documents separated by `---`, and a
+command line option overrides what the template sets. A create template is a single
+document, and `maniphest create --with` takes no option it would have to merge: one it
+cannot honour is refused rather than quietly dropped. See `docs/search-templates.md` and
+`docs/create-templates.md`.
 
 ## Caching
 
