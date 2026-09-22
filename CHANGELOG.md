@@ -48,8 +48,9 @@
   `yaml` and the records `paste create/edit/comment` answer with (#450). The human
   formats follow: `paste search` prints the record for `rich` and `tree` rather than
   `P1 title` lines, and its `table` has the Paste fields as columns. `--format=value`
-  still prints a paste's content, and prints its Link when it has no content to give -
-  every `paste search` result, and `paste show --no-content`
+  still prints a paste's content, and prints its monogram when it has no content to
+  give - every `paste search` result, and `paste show --no-content` - one per line as
+  `passphrase search` does, so `paste search | xargs paste show` works
 
 ## New Features
 
@@ -199,7 +200,7 @@
   name a syntax
 * **Which value is the command's choice** - `passphrase show` prints the secret,
   `passphrase search` one monogram per line, and `paste show` the content - or, for a
-  paste without content, as from `paste search`, its Link. No other app
+  paste without content, as from `paste search`, its monogram. No other app
   has a bare value to offer, so `value` falls back to `rich` there, which `--help` says.
   Like `table` it is a human format and is not accepted for `PHAB_FALLBACK`
 * **`--format=simple`** - Kept as a spelling of `value`, alongside `strict` for `yaml` and

@@ -74,7 +74,7 @@ Global options must come **before** the subcommand. `phabfive maniphest show T12
 - `value` prints bare values - no keys, no header, no decoration - for piping. Which
   value is each command's own choice: `passphrase show` prints the secret, `passphrase
   search` one monogram per line, `paste show` the content, and `paste search` (or
-  `paste show --no-content`) each paste's Link. No other app has one to
+  `paste show --no-content`) one monogram per line. No other app has one to
   print, so for maniphest and diffusion it silently falls back to `rich`.
 - `strict` is accepted as an alias for `yaml`, `ndjson` as an alias for `jsonl`, and
   `simple` as an alias for `value`, which it used to be called.

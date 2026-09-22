@@ -90,7 +90,7 @@ class TestPassphraseValue:
 
 
 class TestPasteValue:
-    """A paste's bare value is its content, or its Link when it has none."""
+    """A paste's bare value is its content, or its monogram when it has none."""
 
     def _paste(self, content, show_content=True):
         from phabfive.paste.formatters import build_paste_display_data
@@ -124,13 +124,14 @@ class TestPasteValue:
 
         assert capsys.readouterr().out == ""
 
-    def test_a_record_without_content_prints_its_link(self, capsys):
+    def test_a_record_without_content_prints_its_monogram(self, capsys):
         """What `paste search` and `paste show --no-content` print."""
         from phabfive.paste.display import display_pastes
 
         display_pastes(self._paste("unused", show_content=False), "value", MagicMock())
 
-        assert capsys.readouterr().out == "https://phorge.example.com/P1\n"
+        # A monogram, not the Link, so it can be fed back into paste show.
+        assert capsys.readouterr().out == "P1\n"
 
 
 class TestSimpleStillWorks:

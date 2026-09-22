@@ -135,3 +135,39 @@ class TestEveryFormatPublishesTheSameRecord:
         display_pastes(self._result(), "yaml", MagicMock())
 
         assert "Content: |-\n" in capsys.readouterr().out
+
+
+class TestTreeShowsTheContent:
+    """A block scalar's first line is only `|`, which is all tree showed."""
+
+    def _tree(self, content, capsys):
+        from rich.console import Console
+
+        instance = MagicMock()
+        instance.get_console.return_value = Console(
+            force_terminal=False, no_color=True, width=400
+        )
+        result = _paste_app([_item(1, content)]).paste_show([1])
+
+        display_pastes(result, "tree", instance)
+
+        return capsys.readouterr().out
+
+    def test_multiline_content_prints_its_lines(self, capsys):
+        out = self._tree("line1\nline2 [bold]x[/bold]\n  indented\n", capsys)
+
+        assert "Content: |" not in out
+        assert "line1" in out
+        # Markup in a paste is the paste's, not rich's to interpret.
+        assert "line2 [bold]x[/bold]" in out
+        assert "  indented" in out
+
+    def test_long_content_is_cut_after_five_lines(self, capsys):
+        out = self._tree("\n".join(f"line{n}" for n in range(1, 8)), capsys)
+
+        assert "line5" in out
+        assert "line6" not in out
+        assert "..." in out
+
+    def test_single_line_content_stays_on_its_node(self, capsys):
+        assert "Content: hello" in self._tree("hello", capsys)
