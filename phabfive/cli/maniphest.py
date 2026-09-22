@@ -363,6 +363,11 @@ def create(
             for task in result["tasks"]:
                 indent = "  " * task["depth"]
                 print(f"{indent}- {task['title']}", file=preview)
+                if task.get("assignee"):
+                    print(f"{indent}  Assignee: {task['assignee']}", file=preview)
+                if task.get("subscribers"):
+                    subscribers = ", ".join(task["subscribers"])
+                    print(f"{indent}  Subscribers: {subscribers}", file=preview)
         elif machine and result and result.get("task_ids"):
             # One query for the whole template, and the same records
             # `maniphest show` gives - a tree of tasks is still just tasks.
