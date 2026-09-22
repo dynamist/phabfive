@@ -85,16 +85,26 @@ def a_maniphest(task_id=123, **record):
 
 def a_paste_record(paste_id=42, title="notes", language="text", content="hello"):
     """One entry of what paste_show() hands the renderers."""
-    return {
-        "id": f"P{paste_id}",
-        "url": f"https://phorge.example.com/P{paste_id}",
-        "_link": f"https://phorge.example.com/P{paste_id}",
-        "title": title,
-        "author": "admin",
-        "language": language,
-        "status": "active",
-        "content": content,
-    }
+    from phabfive.paste.formatters import build_paste_display_data
+
+    [record] = build_paste_display_data(
+        "https://phorge.example.com",
+        lambda url, text: url,
+        [
+            {
+                "id": paste_id,
+                "fields": {
+                    "title": title,
+                    "authorPHID": "PHID-USER-admin",
+                    "language": language,
+                    "status": "active",
+                },
+                "attachments": {"content": {"content": content}},
+            }
+        ],
+        author_names={"PHID-USER-admin": "admin"},
+    )
+    return record
 
 
 def a_paste(paste_id=42, **record):
@@ -508,8 +518,8 @@ class TestPasteCreate:
 
         [record] = json.loads(result.stdout)
         assert record["Link"] == "https://phorge.example.com/P7"
-        assert record["Name"] == "notes 344"
-        assert record["Content"] == "hello"
+        assert record["Paste"]["Name"] == "notes 344"
+        assert record["Paste"]["Content"] == "hello"
 
     @pytest.mark.parametrize("output_format", HUMAN)
     def test_a_human_format_still_prints_the_url_alone(self, output_format):
@@ -566,7 +576,7 @@ class TestPasteEdit:
             )
 
         [record] = json.loads(result.stdout)
-        assert record["Language"] == "python"
+        assert record["Paste"]["Language"] == "python"
         assert "Updated P7" in result.stderr
         paste.paste_show.assert_called_once_with([7])
 
@@ -638,7 +648,7 @@ class TestPasteComment:
             )
 
         [record] = json.loads(result.stdout)
-        assert record["Name"] == "notes 344"
+        assert record["Paste"]["Name"] == "notes 344"
         paste.add_paste_comment.assert_called_once_with(7, "hello")
 
     def test_a_human_format_still_prints_the_url(self):
@@ -1028,7 +1038,7 @@ class TestStatusTextOnStderr:
 
     def test_no_pastes_found_is_on_stderr(self):
         paste = MagicMock()
-        paste.get_pastes.return_value = []
+        paste.paste_search.return_value = {"pastes": []}
 
         with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
             result = runner.invoke(

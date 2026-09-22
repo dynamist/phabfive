@@ -72,7 +72,7 @@ class TestEmptySearches:
 
     def test_paste(self):
         paste = MagicMock()
-        paste.get_pastes.return_value = []
+        paste.paste_search.return_value = {"pastes": []}
 
         with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
             result = runner.invoke(app, ["paste", "search", "inal"])

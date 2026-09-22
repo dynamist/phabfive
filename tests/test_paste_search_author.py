@@ -24,13 +24,13 @@ def _mock_paste_app(mock_get_app):
     mock_p = MagicMock()
     mock_p.phab.user.whoami.return_value = {"phid": ADMIN_PHID}
     mock_p.phab.user.search.return_value = {"data": [{"phid": ADMIN_PHID}]}
-    mock_p.get_pastes.return_value = []
+    mock_p.paste_search.return_value = {"pastes": []}
     mock_get_app.return_value = mock_p
     return mock_p
 
 
 def _constraints(mock_p):
-    return mock_p.get_pastes.call_args.kwargs["constraints"]
+    return mock_p.paste_search.call_args.kwargs["constraints"]
 
 
 class TestPasteSearchAuthorConstraint:
@@ -74,4 +74,4 @@ class TestPasteSearchAuthorConstraint:
         result = runner.invoke(paste_app, ["search", "--author", "nosuchuser"])
 
         assert result.exit_code == 1
-        mock_p.get_pastes.assert_not_called()
+        mock_p.paste_search.assert_not_called()

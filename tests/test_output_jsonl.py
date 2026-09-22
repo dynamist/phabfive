@@ -354,61 +354,74 @@ class TestUsers:
 class TestPastes:
     """paste show and paste search."""
 
-    def _pastes(self):
-        return {
-            "pastes": [
-                {
-                    "url": "https://phorge.example.com/P1",
+    def _pastes(self, show_content=True):
+        from phabfive.paste.formatters import build_paste_display_data
+
+        items = [
+            {
+                "id": 1,
+                "fields": {
                     "title": "nginx config",
-                    "author": "alice",
+                    "authorPHID": "PHID-USER-alice",
                     "language": "nginx",
                     "status": "active",
                     "dateCreated": 1234567890,
                     "dateModified": 1234567900,
-                    "content": "server {\n  listen 80;\n}",
                 },
-                {
-                    "url": "https://phorge.example.com/P2",
+                "attachments": {"content": {"content": "server {\n  listen 80;\n}"}},
+            },
+            {
+                "id": 2,
+                "fields": {
                     "title": "notes",
-                    "author": "bob",
+                    "authorPHID": "PHID-USER-bob",
                     "language": "text",
                     "status": "active",
                     "dateCreated": 1234567800,
                     "dateModified": 1234567850,
                 },
-            ]
+                "attachments": {"content": {"content": "plain"}},
+            },
+        ]
+
+        return {
+            "pastes": build_paste_display_data(
+                "https://phorge.example.com",
+                lambda url, text: url,
+                items,
+                author_names={"PHID-USER-alice": "alice", "PHID-USER-bob": "bob"},
+                show_content=show_content,
+            )
         }
 
     def test_show_jsonl_matches_json(self, capsys):
-        from phabfive.cli.paste import _display_pastes
+        from phabfive.paste.display import display_pastes
 
         instance = MagicMock()
 
-        _display_pastes(self._pastes(), "json", instance)
+        display_pastes(self._pastes(), "json", instance)
         as_array = json.loads(capsys.readouterr().out)
 
-        _display_pastes(self._pastes(), "jsonl", instance)
+        display_pastes(self._pastes(), "jsonl", instance)
         as_lines = parse_jsonl(capsys.readouterr().out)
 
         assert as_lines == as_array
         assert len(as_lines) == 2
 
     def test_show_multiline_content_stays_on_one_line(self, capsys):
-        from phabfive.cli.paste import _display_pastes
+        from phabfive.paste.display import display_pastes
 
-        _display_pastes(self._pastes(), "jsonl", MagicMock())
+        display_pastes(self._pastes(), "jsonl", MagicMock())
         output = capsys.readouterr().out
 
         assert len(output.splitlines()) == 2
-        assert parse_jsonl(output)[0]["Content"] == "server {\n  listen 80;\n}"
+        assert parse_jsonl(output)[0]["Paste"]["Content"] == (
+            "server {\n  listen 80;\n}"
+        )
 
     def test_search_jsonl_matches_json(self):
-        pastes = [
-            {"id": 1, "fields": {"title": "nginx config"}},
-            {"id": 2, "fields": {"title": "notes"}},
-        ]
         instance = MagicMock()
-        instance.get_pastes.return_value = pastes
+        instance.paste_search.return_value = self._pastes(show_content=False)
 
         with patch("phabfive.cli.paste._get_paste_app", return_value=instance):
             as_array = json.loads(
