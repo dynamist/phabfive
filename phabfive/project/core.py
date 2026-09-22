@@ -285,7 +285,10 @@ class Project(Phabfive):
 
         if members:
             constraints["members"] = [
-                phid for phid, _ in resolve_user_phids(self.phab, members).values()
+                phid
+                for phid, _ in resolve_user_phids(
+                    self.phab, members, option="--member"
+                ).values()
             ]
 
         if parents:
@@ -657,7 +660,7 @@ class Project(Phabfive):
             add("slugs", slugs, "Hashtags", ", ".join(f"#{slug}" for slug in slugs))
 
         if members:
-            users = resolve_user_phids(self.phab, members)
+            users = resolve_user_phids(self.phab, members, option="--member")
             phids = list(dict.fromkeys(phid for phid, _ in users.values()))
             add(
                 "members.add",
@@ -827,14 +830,14 @@ class Project(Phabfive):
 
         current_members = set(project_member_phids(project))
 
-        for values, kind, verb, wanted in (
-            (add_members, "members.add", "Added", False),
-            (remove_members, "members.remove", "Removed", True),
+        for values, kind, verb, wanted, option in (
+            (add_members, "members.add", "Added", False, "--add-member"),
+            (remove_members, "members.remove", "Removed", True, "--remove-member"),
         ):
             if not values:
                 continue
 
-            users = resolve_user_phids(self.phab, values)
+            users = resolve_user_phids(self.phab, values, option=option)
             picked = {
                 phid: username
                 for phid, username in users.values()

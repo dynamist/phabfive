@@ -69,6 +69,7 @@ from phabfive.maniphest.utils import (
 )
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
+from phabfive.me import is_me, whoami_me
 from phabfive.options import split_list_option
 from phabfive.policy import (
     policy_label,
@@ -743,7 +744,7 @@ class Maniphest(Phabfive):
 
         return search_configs
 
-    def _resolve_user_filter_phids(self, value, label):
+    def _resolve_user_filter_phids(self, value, label, option=None):
         """
         Resolve a user search filter into PHIDs.
 
@@ -756,6 +757,8 @@ class Maniphest(Phabfive):
             The raw filter value. Falsy values mean "no filter".
         label : str
             Used in the log line, e.g. "assigned to" or "authored by".
+        option : str, optional
+            The option the value came from, named in any error about @me
 
         Returns
         -------
@@ -775,18 +778,9 @@ class Maniphest(Phabfive):
         resolved_names = []
 
         for name in [n.strip() for n in value.split(",")]:
-            if name == "@me":
-                # user.whoami() is called directly because User.whoami()
-                # drops the phid from the response
-                try:
-                    whoami = self.phab.user.whoami()
-                except Exception as e:
-                    raise PhabfiveConfigException(
-                        f"Failed to get current user information: {e}"
-                    )
-                phid = whoami.get("phid")
-                if not phid:
-                    raise PhabfiveConfigException("Failed to get current user's PHID")
+            if is_me(name):
+                whoami = whoami_me(self.phab, option=option)
+                phid = whoami["phid"]
                 resolved_names.append(f"@me ({whoami.get('userName', 'unknown')})")
             else:
                 phid = self._resolve_user_phid(name)
@@ -1093,8 +1087,12 @@ class Maniphest(Phabfive):
             updated_before = days_ago_to_timestamp(updated_before_days)
 
         # Resolve the user filters - convert @me or username(s) to PHID(s)
-        assigned_phids = self._resolve_user_filter_phids(assigned, "assigned to")
-        author_phids = self._resolve_user_filter_phids(author, "authored by")
+        assigned_phids = self._resolve_user_filter_phids(
+            assigned, "assigned to", option="--assigned"
+        )
+        author_phids = self._resolve_user_filter_phids(
+            author, "authored by", option="--author"
+        )
 
         # Resolve space filter - convert space name/monogram(s) to PHID(s)
         # Supports: glob patterns (*, S*, *Public*), comma-separated list (S9,S10)
@@ -2089,12 +2087,10 @@ class Maniphest(Phabfive):
         # Resolve assignee username to PHID (supports @me shortcut)
         assignee_display = assignee
         if assignee:
-            if assignee == "@me":
-                whoami = self.phab.user.whoami()
-                assignee_phid = whoami.get("phid")
+            if is_me(assignee):
+                whoami = whoami_me(self.phab, option="--assign")
+                assignee_phid = whoami["phid"]
                 assignee_display = whoami.get("userName", "@me")
-                if not assignee_phid:
-                    raise PhabfiveConfigException("Failed to get current user's PHID")
             else:
                 assignee_phid = self._resolve_user_phid(assignee)
                 if not assignee_phid:
@@ -2118,15 +2114,10 @@ class Maniphest(Phabfive):
         if parsed_subscribers:
             subscriber_phids = []
             for sub in parsed_subscribers:
-                if sub == "@me":
-                    whoami = self.phab.user.whoami()
-                    phid = whoami.get("phid")
+                if is_me(sub):
+                    whoami = whoami_me(self.phab, option="--subscribe")
                     display_name = whoami.get("userName", "@me")
-                    if not phid:
-                        raise PhabfiveConfigException(
-                            "Failed to get current user's PHID"
-                        )
-                    subscriber_phids.append(phid)
+                    subscriber_phids.append(whoami["phid"])
                     subscriber_display.append(display_name)
                 else:
                     phid = self._resolve_user_phid(sub)
@@ -2472,12 +2463,10 @@ class Maniphest(Phabfive):
         # Handle assignee
         if assign:
             # Handle @me shortcut
-            if assign == "@me":
-                whoami = self.phab.user.whoami()
-                user_phid = whoami.get("phid")
+            if is_me(assign):
+                whoami = whoami_me(self.phab, option="--assign")
+                user_phid = whoami["phid"]
                 new_username = whoami.get("userName", assign)
-                if not user_phid:
-                    raise PhabfiveRemoteException("Failed to get current user's PHID")
             else:
                 user_phid = self._resolve_user_phid(assign)
                 new_username = assign
@@ -2537,14 +2526,10 @@ class Maniphest(Phabfive):
             subscriber_phids = []
             subscriber_names = []
             for username in split_list_option(subscribe):
-                if username == "@me":
-                    whoami = self.phab.user.whoami()
-                    user_phid = whoami.get("phid")
+                if is_me(username):
+                    whoami = whoami_me(self.phab, option="--subscribe")
+                    user_phid = whoami["phid"]
                     display_name = whoami.get("userName", username)
-                    if not user_phid:
-                        raise PhabfiveRemoteException(
-                            "Failed to get current user's PHID"
-                        )
                 else:
                     user_phid = self._resolve_user_phid(username)
                     display_name = username

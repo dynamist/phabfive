@@ -5,6 +5,7 @@
 import logging
 
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.me import is_me, whoami_me
 from phabfive.maniphest.resolvers import (
     PROJECT_PHID_PREFIX,
     ambiguous_project_message,
@@ -117,7 +118,7 @@ def resolve_project(phab, ident, attachments=None):
     return found[0]
 
 
-def resolve_user_phids(phab, values):
+def resolve_user_phids(phab, values, option=None):
     """Resolve usernames to PHIDs, in one lookup however many there are.
 
     Parameters
@@ -127,6 +128,8 @@ def resolve_user_phids(phab, values):
     values : list
         Usernames, with or without a leading ``@``, ``@me`` for whoever is
         running the command, or user PHIDs
+    option : str, optional
+        The option the values came from, named in any error about ``@me``
 
     Returns
     -------
@@ -138,7 +141,8 @@ def resolve_user_phids(phab, values):
     PhabfiveDataException
         If any of them is not a user, naming every one that is not - so a
         typo in the third of five members is reported, not the first two
-        added and the rest silently dropped
+        added and the rest silently dropped. Also if ``@me`` is asked for on
+        an instance that has a user called "me"
     """
     resolved = {}
     wanted = {}
@@ -146,11 +150,8 @@ def resolve_user_phids(phab, values):
     for value in values:
         name = value[1:] if value.startswith("@") else value
 
-        if value == "@me":
-            try:
-                whoami = phab.user.whoami()
-            except Exception as e:
-                raise PhabfiveDataException(f"Failed to look up @me: {e}")
+        if is_me(value):
+            whoami = whoami_me(phab, option=option)
             resolved[value] = (whoami["phid"], whoami.get("userName") or "me")
         elif value.startswith(USER_PHID_PREFIX):
             resolved[value] = (value, None)
