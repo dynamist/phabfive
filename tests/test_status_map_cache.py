@@ -168,6 +168,29 @@ class TestNewStatus:
         # Asked once to be sure, not once per refusal
         phab.maniphest.querystatuses.assert_called_once()
 
+    def test_a_failed_refetch_keeps_the_remembered_map(self, enabled_cache):
+        """A broken endpoint must not swap the server's own statuses for the
+        standard ones, or a status this server lacks would be accepted."""
+        custom = {
+            "defaultStatus": "open",
+            "openStatuses": ["open", "blocked"],
+            "closedStatuses": {"1": "done"},
+            "allStatuses": ["open", "blocked", "done"],
+            "statusMap": {"open": "Open", "blocked": "Blocked", "done": "Done"},
+        }
+        _maniphest(_phab(custom))._get_api_status_map()
+
+        phab = _phab(broken=True)
+        app = _maniphest(phab)
+
+        with pytest.raises(PhabfiveConfigException, match="Invalid status"):
+            app._validate_status("wontfix")
+
+        phab.maniphest.querystatuses.assert_called_once()
+        assert app._get_api_status_map() == custom
+        assert app._get_closed_statuses() == ["done"]
+        assert _remembered() == custom
+
     def test_a_freshly_fetched_map_is_not_asked_twice(self, enabled_cache):
         phab = _phab(STATUSES)
 

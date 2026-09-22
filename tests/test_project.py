@@ -1009,27 +1009,42 @@ class TestUnknownIconWarning:
 
     WARNING = "No project uses the icon"
 
+    @pytest.fixture(autouse=True)
+    def _cache_on(self, enabled_cache):
+        """The warning needs the icons remembered, see test_off_without_cache."""
+
+    @staticmethod
+    def _invoke(phab, args):
+        """Run the CLI with the lookup store the command gives its apps."""
+        from phabfive.cli.lookups import CommandLookups
+        from tests.conftest import CONF
+
+        project_app = _app(phab)
+        project_app.lookup_store = CommandLookups(dict(CONF))
+        with patch("phabfive.cli.project._get_project_app", return_value=project_app):
+            return runner.invoke(app, args)
+
     def test_search_warns_about_a_misspelled_icon(self, phab):
-        result = _invoke(phab, ["project", "search", "--icon=grop"])
+        result = self._invoke(phab, ["project", "search", "--icon=grop"])
 
         assert f"{self.WARNING} 'grop'" in result.stderr
 
     def test_search_takes_a_stock_icon_without_asking_the_server(self, phab):
-        result = _invoke(phab, ["project", "search", "--icon=group"])
+        result = self._invoke(phab, ["project", "search", "--icon=group"])
 
         assert self.WARNING not in result.stderr
         # Only the search itself: no sweep of every project for its icon
         assert phab.project.search.call_count == 1
 
     def test_search_takes_the_milestone_icon(self, phab):
-        result = _invoke(phab, ["project", "search", "--icon=milestone"])
+        result = self._invoke(phab, ["project", "search", "--icon=milestone"])
 
         assert self.WARNING not in result.stderr
 
     def test_an_icon_a_project_uses_is_known(self, phab):
         phab.projects[0]["fields"]["icon"]["key"] = "rocket"
 
-        result = _invoke(phab, ["project", "search", "--icon=rocket"])
+        result = self._invoke(phab, ["project", "search", "--icon=rocket"])
 
         assert self.WARNING not in result.stderr
 
@@ -1038,18 +1053,20 @@ class TestUnknownIconWarning:
             "phabfive.cli.lookups._fetch_project_icons",
             side_effect=RuntimeError("down"),
         ):
-            result = _invoke(phab, ["project", "search", "--icon=grop"])
+            result = self._invoke(phab, ["project", "search", "--icon=grop"])
 
         assert self.WARNING not in result.stderr
 
     def test_a_create_dry_run_warns(self, phab):
-        result = _invoke(phab, ["project", "create", "New", "--icon=grop", "--dry-run"])
+        result = self._invoke(
+            phab, ["project", "create", "New", "--icon=grop", "--dry-run"]
+        )
 
         assert f"{self.WARNING} 'grop'" in result.stderr
         phab.project.edit.assert_not_called()
 
     def test_an_edit_dry_run_warns(self, phab):
-        result = _invoke(
+        result = self._invoke(
             phab, ["project", "edit", "#humans", "--icon=grop", "--dry-run"]
         )
 
@@ -1057,7 +1074,7 @@ class TestUnknownIconWarning:
 
     def test_a_real_write_is_left_to_the_server(self, phab):
         with patch("phabfive.cli.project.forget_projects"):
-            result = _invoke(phab, ["project", "edit", "#humans", "--icon=grop"])
+            result = self._invoke(phab, ["project", "edit", "#humans", "--icon=grop"])
 
         assert self.WARNING not in result.stderr
         phab.project.edit.assert_called_once()
@@ -1078,3 +1095,19 @@ class TestUnknownIconWarning:
 
         # One sweep for the icons, then one search per run
         assert phab.project.search.call_count == 3
+
+    def test_off_without_cache(self, phab, monkeypatch):
+        """With caching off the sweep of every project would be paid on
+        every run, so the icon is not looked up at all."""
+        monkeypatch.setenv("PHAB_CACHE", "0")
+
+        result = self._invoke(phab, ["project", "search", "--icon=grop"])
+
+        assert self.WARNING not in result.stderr
+        assert phab.project.search.call_count == 1
+
+    def test_off_for_a_program_without_a_store(self, phab):
+        result = _invoke(phab, ["project", "search", "--icon=grop"])
+
+        assert self.WARNING not in result.stderr
+        assert phab.project.search.call_count == 1

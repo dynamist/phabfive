@@ -295,8 +295,9 @@
   or `edit --dry-run` warn about an icon that Phorge does not ship and no project on
   the instance carries, since a search answers it with nothing and a dry run never
   reaches the server. A warning, not an error: a configured icon no project uses yet
-  looks the same. The icons come from the `project-icons` cache completion fills
-  (#421)
+  looks the same. The icons come from the `project-icons` cache completion fills,
+  and with caching off nothing is checked, rather than fetching every project on
+  every run (#421)
 * A project cannot be archived, unarchived or deleted through Conduit, so none of
   these commands can
 

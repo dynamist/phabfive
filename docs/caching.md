@@ -114,7 +114,9 @@ phabfive cache clear
 The status map is the one entry a command acts on, so it is the one that heals
 itself: a status the remembered map does not know is asked of the server once
 more before `maniphest edit --status` refuses it, so a newly configured status
-can be set straight away. What a stale map can still do for up to a week is show
+can be set straight away. If that second request fails, the remembered map is
+kept and the status refused, rather than judged by the standard statuses the
+server may not have. What a stale map can still do for up to a week is show
 a renamed status under its old name, or leave a status newly made open out of
 the open statuses a search reaches by default — `cache clear status-map` fixes
 both.
@@ -123,7 +125,9 @@ An `--icon` that no project uses and Phorge does not ship is warned about on
 `project search` and on a `project create` or `edit` dry run, since a search
 answers a misspelled icon with nothing and a dry run never reaches the server.
 It is a warning, not an error: an icon configured in `projects.icons` that no
-project uses yet cannot be told from a typo.
+project uses yet cannot be told from a typo. Knowing which icons are in use
+means fetching every project, so with caching off the icon is not checked at
+all rather than costing that sweep on every run.
 
 ## Commands
 
