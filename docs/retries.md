@@ -30,6 +30,10 @@ two tasks. So it is not repeated, and the error says so:
 Error: Failed to connect to Phabricator API: maniphest.edit was sent but no answer came back, so it may have been applied. It was not sent again, since doing so is not safe: check before trying again
 ```
 
+A write answered with a 5xx is not repeated either, and says the same. A 502 or
+504 from a proxy in front of Phorge usually means the server behind it carried on
+working, so the comment may well have been posted.
+
 An **idempotent edit** is the exception: one that only sets fields of an existing
 object, so that arriving twice leaves it exactly as arriving once did. Setting a
 status, a priority or a policy is idempotent; posting a comment is not.
@@ -65,6 +69,9 @@ WARNING - maniphest.search: HTTP 503, retry 1 of 3 in 0.2s
 | `PHAB_PACE` | `0` | Seconds to keep between the writes of a batch edit |
 
 Like every setting they can go in the environment or in `~/.config/phabfive.yaml`.
+Each must be a finite number of at least 0, and all three are checked as soon as
+phabfive starts, so a typo fails before any work rather than halfway through a
+batch.
 The defaults suit a person waiting at a terminal. A bulk job that should ride out
 a server restart can afford more patience:
 

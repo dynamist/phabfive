@@ -233,7 +233,8 @@ nothing is discovered.
 ### Retries (`retry.py`)
 
 - One policy for every Conduit call: `phabfive/conduit.py` mounts an adapter built from the
-  instance's `RetryPolicy` on each call, replacing the `phabricator` library's own retry
+  instance's `RetryPolicy` on each Resource - kept across a read's calls, so the pages of a
+  search share a pooled connection, and fresh for every unsafe write - replacing the `phabricator` library's own retry
   (immediate, and willing to repeat a POST after a read timeout). `PHAB_RETRY` and
   `PHAB_BACKOFF_MAX` configure it; docs/retries.md is the user-facing description
 - The policy is a `urllib3.Retry` subclass. urllib3 already retries a connect error for any
@@ -249,7 +250,8 @@ nothing is discovered.
   safe, just not retried on a timeout
 - Every wait goes through `phabfive.retry._sleep`, which tests replace. `tests/test_retry.py`
   fakes the transport at `urllib3.connectionpool.HTTPConnectionPool._make_request`, so the
-  real adapter, Retry and client run and no socket is opened
+  real adapter, Retry and client run and no socket is opened. It must pass on urllib3 1.26
+  as well as 2.x, since `urllib3>=1.26` is the declared floor
 - `Pacer` (`PHAB_PACE`) spaces out the writes of a batch edit, in `edit_tasks_batch` and
   `Edit.apply_all`
 

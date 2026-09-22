@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 # phabfive imports
 from phabfive.conduit import Conduit
-from phabfive.retry import RetryPolicy
+from phabfive.retry import Pacer, RetryPolicy
 from phabfive.constants import (
     FORMAT_ALIASES,
     REQUIRED,
@@ -328,6 +328,10 @@ class Phabfive:
 
                 raise PhabfiveConfigException(error)
 
+        # PHAB_PACE is only read by a batch of writes, but checked here with
+        # the retry settings, so that a bad value fails before any work
+        # rather than after a batch edit has been planned and confirmed.
+        Pacer.from_conf(self.conf)
         self.phab = Conduit(self._client_factory(), RetryPolicy.from_conf(self.conf))
 
         url = urlparse(self.conf["PHAB_URL"])

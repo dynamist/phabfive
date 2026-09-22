@@ -30,6 +30,7 @@ pause between the writes of a batch, PHAB_PACE seconds.
 import contextlib
 import contextvars
 import logging
+import math
 import random
 import time
 from collections.abc import Mapping
@@ -131,9 +132,10 @@ def _sleep(seconds):
 
 
 def _number(conf, key, default, kind):
-    """A non-negative number from the configuration, or `default`.
+    """A finite, non-negative number from the configuration, or `default`.
 
-    Anything that is not a mapping - no configuration at all, or a test's
+    "nan" and "inf" parse as floats but are refused: a nan wait never waits,
+    and an infinite cap is no cap. Anything that is not a mapping - no configuration at all, or a test's
     stand-in for an app - reads as every key unset.
     """
     value = conf.get(key) if isinstance(conf, Mapping) else None
@@ -143,7 +145,7 @@ def _number(conf, key, default, kind):
         number = kind(str(value).strip())
     except ValueError:
         number = -1
-    if number < 0:
+    if not math.isfinite(number) or number < 0:
         raise PhabfiveConfigException(
             f"{key} must be a number of {'retries' if kind is int else 'seconds'}"
             f" of at least 0, not {value!r}"
