@@ -73,7 +73,8 @@ Global options must come **before** the subcommand. `phabfive maniphest show T12
   in every row is dropped - so never parse it, ask for `json` instead.
 - `value` prints bare values - no keys, no header, no decoration - for piping. Which
   value is each command's own choice: `passphrase show` prints the secret, `passphrase
-  search` one monogram per line, `paste show` the content. No other app has one to
+  search` one monogram per line, `paste show` the content, and `paste search` (or
+  `paste show --no-content`) each paste's Link. No other app has one to
   print, so for maniphest and diffusion it silently falls back to `rich`.
 - `strict` is accepted as an alias for `yaml`, `ndjson` as an alias for `jsonl`, and
   `simple` as an alias for `value`, which it used to be called.
@@ -413,8 +414,8 @@ Everything else applies unprompted, so dry-run the batch first.
 ## Other apps
 
 ```bash
-phabfive --format=json paste search "nginx" --author=@me
-phabfive --format=json paste show P42
+phabfive --format=json paste search "nginx" --author=@me | jq -r '.[].Paste.Name'
+phabfive --format=json paste show P42 | jq -r '.[0].Paste.Content'
 phabfive paste create "deploy notes" notes.md --dry-run
 
 phabfive --format=json passphrase search "deploy" --type=password

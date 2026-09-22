@@ -3,6 +3,7 @@
 
 # python std lib
 import json
+import uuid
 from urllib.parse import urlparse
 
 # 3rd party imports
@@ -492,3 +493,22 @@ def test_repo_show_fails_on_a_partial_result(phabfive_raw):
     assert result.returncode == 1
     assert len(result.stdout.splitlines()) == 1
     assert json.loads(result.stdout)["Repository"]["Callsign"] == "GUNNAR"
+
+
+def test_paste_search_and_show_emit_the_same_record(phabfive):
+    """Two shapes before #450 - {"id", "title"} and a flat record - one now."""
+    title = f"e2e paste {uuid.uuid4().hex[:8]}"
+    [created] = phabfive(
+        "paste", "create", title, "--content=line one", "--yes", json_output=True
+    )
+    link = created["Link"]
+    monogram = urlparse(link).path.strip("/")
+
+    [shown] = phabfive("paste", "show", monogram, json_output=True)
+    found = phabfive("paste", "search", "--author=@me", "--limit=20", json_output=True)
+
+    [listed] = [record for record in found if record["Link"] == link]
+    assert shown["Paste"].pop("Content") == "line one"
+    assert listed == shown
+    assert shown["Paste"]["Name"] == title
+    assert list(shown) == ["Link", "Paste", "Space"]

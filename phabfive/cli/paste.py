@@ -3,15 +3,9 @@
 
 import re
 import sys
-from datetime import datetime
 from typing import List, Optional
 
 import typer
-from io import StringIO
-
-from rich.text import Text
-from ruamel.yaml import YAML
-from ruamel.yaml.scalarstring import PreservedScalarString
 
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import (
@@ -29,9 +23,7 @@ from phabfive.cli.output import (
 )
 from phabfive.constants import MONOGRAMS
 from phabfive.cli.editor import resolve_assume_yes
-from phabfive.display import render_records
-from phabfive.json_output import emit_records
-from phabfive.table import display_records_table
+from phabfive.paste.display import display_pastes
 
 paste_app = typer.Typer(
     cls=AgentFooterGroup, help="The paste app", no_args_is_help=True
@@ -64,7 +56,7 @@ def _show_pastes_after_write(ctx, paste_instance, paste_ids):
         Paste IDs, numeric and without the P prefix
     """
     result = paste_instance.paste_show([int(paste_id) for paste_id in paste_ids])
-    _display_pastes(result, _get_output_format(ctx), paste_instance)
+    display_pastes(result, _get_output_format(ctx), paste_instance)
 
 
 @paste_app.command()
@@ -128,43 +120,19 @@ def search(
     # Get pastes with constraints
     # A limit is how many pastes to return, not the page size to ask for, and
     # 0 - like maniphest search - means every match
-    pastes = paste.get_pastes(
+    result = paste.paste_search(
         constraints=constraints if constraints else None,
         limit=limit if limit > 0 else None,
     )
 
-    if not pastes:
+    if not result["pastes"]:
         typer.echo("No pastes found", err=True)
         _echo_no_match_hint(text_query)
         return
 
-    # Format output
-    output_format = _get_output_format(ctx)
-    records = [{"id": f"P{p['id']}", "title": p["fields"]["title"]} for p in pastes]
-
-    def _yaml():
-        yaml = YAML()
-        yaml.default_flow_style = False
-        stream = StringIO()
-        yaml.dump(records, stream)
-        print(stream.getvalue(), end="")
-
-    def _lines():
-        for record in records:
-            typer.echo(f"{record['id']} {record['title']}")
-
-    # The switch every other app already shares, rather than a sixth copy
-    # of it - which is also what gives search a table and the ndjson alias.
-    render_records(
-        output_format,
-        {
-            "json": lambda: emit_records(records, "json"),
-            "jsonl": lambda: emit_records(records, "jsonl"),
-            "yaml": _yaml,
-            "table": lambda: display_records_table(paste.get_console(), records),
-            "rich": _lines,
-        },
-    )
+    # The record `paste show` answers with, less the content, so a filter
+    # written against one command works on the other
+    display_pastes(result, _get_output_format(ctx), paste, tabular=True)
 
 
 @paste_app.command()
@@ -415,155 +383,11 @@ def show(
 
     result = paste.paste_show(ids, show_content=show_content)
 
-    output_format = _get_output_format(ctx)
-    _display_pastes(result, output_format, paste)
+    display_pastes(result, _get_output_format(ctx), paste)
 
     # A paste that does not exist is a failed lookup, not an empty result
     if result is None or result.get("missing_ids"):
         raise typer.Exit(1)
-
-
-def _format_timestamp(ts):
-    """Convert Unix timestamp to ISO format string."""
-    if ts:
-        return datetime.fromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%S")
-    return None
-
-
-def _build_paste_json_output(paste_data):
-    """Build a clean JSON-serializable dict for a single paste.
-
-    Uses capitalized keys like passphrase/maniphest.
-    """
-    item = {
-        "Link": paste_data.get("url", ""),
-        "Name": paste_data.get("title", ""),
-        "Author": paste_data.get("author", ""),
-        "Language": paste_data.get("language", "text"),
-        "Status": paste_data.get("status", ""),
-        "Created": _format_timestamp(paste_data.get("dateCreated")),
-        "Modified": _format_timestamp(paste_data.get("dateModified")),
-    }
-    if "content" in paste_data:
-        item["Content"] = paste_data.get("content", "")
-    return item
-
-
-def _display_pastes(result, output_format, paste_instance):
-    """Display paste results in the specified format."""
-    if not result or not result.get("pastes"):
-        return
-
-    pastes = result["pastes"]
-
-    if output_format in ("json", "jsonl"):
-        emit_records([_build_paste_json_output(p) for p in pastes], output_format)
-    elif output_format in ("yaml", "strict"):
-        yaml = YAML()
-        yaml.default_flow_style = False
-        # Use capitalized keys like passphrase/maniphest
-        output = []
-        for p in pastes:
-            item = {
-                "Link": p.get("url", ""),
-                "Name": p.get("title", ""),
-                "Author": p.get("author", ""),
-                "Language": p.get("language", "text"),
-                "Status": p.get("status", ""),
-                "Created": _format_timestamp(p.get("dateCreated")),
-                "Modified": _format_timestamp(p.get("dateModified")),
-            }
-            if "content" in p:
-                content = p.get("content", "")
-                if "\n" in content:
-                    item["Content"] = PreservedScalarString(content)
-                else:
-                    item["Content"] = content
-            output.append(item)
-        stream = StringIO()
-        yaml.dump(output, stream)
-        print(stream.getvalue(), end="")
-    elif output_format == "tree":
-        from rich.tree import Tree
-
-        console = paste_instance.get_console()
-        for paste_data in pastes:
-            # Use URL as tree root (like passphrase/maniphest)
-            tree = Tree(paste_data.get("url", paste_data["id"]))
-            tree.add(f"Name: {paste_data.get('title', '')}")
-            if paste_data.get("author"):
-                tree.add(f"Author: {paste_data['author']}")
-            if paste_data.get("language"):
-                tree.add(f"Language: {paste_data['language']}")
-            if paste_data.get("status"):
-                tree.add(f"Status: {paste_data['status']}")
-            created = _format_timestamp(paste_data.get("dateCreated"))
-            if created:
-                tree.add(f"Created: {created}")
-            modified = _format_timestamp(paste_data.get("dateModified"))
-            if modified:
-                tree.add(f"Modified: {modified}")
-            if paste_data.get("content"):
-                # Show content preview for tree view
-                content = paste_data["content"]
-                if "\n" in content:
-                    content_branch = tree.add("Content:")
-                    for line in content.splitlines()[:5]:
-                        content_branch.add(line)
-                    if len(content.splitlines()) > 5:
-                        content_branch.add("...")
-                else:
-                    tree.add(
-                        f"Content: {content[:100]}{'...' if len(content) > 100 else ''}"
-                    )
-            console.print(tree)
-    elif output_format == "value":
-        # Just output content for piping (like passphrase outputs the secret)
-        for paste_data in pastes:
-            if paste_data.get("content"):
-                print(paste_data["content"])
-    else:
-        # Rich format - YAML-like output with hyperlinks
-        console = paste_instance.get_console()
-
-        for paste_data in pastes:
-            link = paste_data.get("_link")
-
-            # Print link
-            console.print(Text.assemble("- Link: ", link))
-
-            # Print Name (matches Phorge web UI)
-            console.print(f"  Name: {paste_data.get('title', '')}")
-
-            # Print Author (only when present)
-            if paste_data.get("author"):
-                console.print(f"  Author: {paste_data['author']}")
-
-            # Print Language
-            if paste_data.get("language"):
-                console.print(f"  Language: {paste_data['language']}")
-
-            # Print Status
-            if paste_data.get("status"):
-                console.print(f"  Status: {paste_data['status']}")
-
-            # Print dates
-            created = _format_timestamp(paste_data.get("dateCreated"))
-            if created:
-                console.print(f"  Created: {created}")
-            modified = _format_timestamp(paste_data.get("dateModified"))
-            if modified:
-                console.print(f"  Modified: {modified}")
-
-            # Print Content (only when present and non-empty)
-            content = paste_data.get("content", "")
-            if content:
-                if "\n" in content:
-                    console.print("  Content: |-")
-                    for line in content.splitlines():
-                        console.print(f"    {line}")
-                else:
-                    console.print(f"  Content: {content}")
 
 
 @paste_app.command()

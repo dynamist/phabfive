@@ -169,19 +169,19 @@ class TestGetPastesPaging:
 
 
 class TestPasteSearchLimitOption:
-    """The CLI hands get_pastes a total, and 0 means every match."""
+    """The CLI hands paste_search a total, and 0 means every match."""
 
     def _run(self, mock_get_app, args):
         mock_p = MagicMock()
         mock_p.phab.user.whoami.return_value = {"phid": ADMIN_PHID}
-        mock_p.get_pastes.return_value = [_paste(1)]
+        mock_p.paste_search.return_value = {"pastes": []}
         mock_get_app.return_value = mock_p
 
         result = runner.invoke(paste_app, args)
 
         assert result.exit_code == 0
 
-        return mock_p.get_pastes.call_args.kwargs["limit"]
+        return mock_p.paste_search.call_args.kwargs["limit"]
 
     @patch("phabfive.cli.paste._get_paste_app")
     def test_the_default_is_a_hundred(self, mock_get_app):

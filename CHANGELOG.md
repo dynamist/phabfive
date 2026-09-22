@@ -39,6 +39,17 @@
   `passphrase search` given nothing to search for printed a two-line usage stub and exited
   0, which a script could not tell from an empty result. They now print the command's full
   help on stderr and exit 2, as a bare command group does. Still nothing is searched
+* **Breaking change to machine-readable output: `paste search` and `paste show` emit one
+  record, shaped like a task's.** `paste search` emitted `{"id": "P1", "title": ...}` and
+  `paste show` a flat `{"Link", "Name", "Author", ...}`. Both now emit
+  `{"Link": ..., "Paste": {"Name", "Author", "Language", "Status", "Created",
+  "Modified"}, "Space": ...}`, `show` adding `Content` inside the `Paste` section, so
+  `jq '.title'` and `jq '.Name'` become `jq '.Paste.Name'`. This covers `json`, `jsonl`,
+  `yaml` and the records `paste create/edit/comment` answer with (#450). The human
+  formats follow: `paste search` prints the record for `rich` and `tree` rather than
+  `P1 title` lines, and its `table` has the Paste fields as columns. `--format=value`
+  still prints a paste's content, and prints its Link when it has no content to give -
+  every `paste search` result, and `paste show --no-content`
 
 ## New Features
 
@@ -187,7 +198,8 @@
   nothing, while `rich`, `tree` and `table` name a shape and `yaml`, `json` and `jsonl`
   name a syntax
 * **Which value is the command's choice** - `passphrase show` prints the secret,
-  `passphrase search` one monogram per line, and `paste show` the content. No other app
+  `passphrase search` one monogram per line, and `paste show` the content - or, for a
+  paste without content, as from `paste search`, its Link. No other app
   has a bare value to offer, so `value` falls back to `rich` there, which `--help` says.
   Like `table` it is a human format and is not accepted for `PHAB_FALLBACK`
 * **`--format=simple`** - Kept as a spelling of `value`, alongside `strict` for `yaml` and

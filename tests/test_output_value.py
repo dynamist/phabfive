@@ -90,24 +90,47 @@ class TestPassphraseValue:
 
 
 class TestPasteValue:
-    """A paste's bare value is its content."""
+    """A paste's bare value is its content, or its Link when it has none."""
 
-    def _paste(self, content):
-        return {"pastes": [{"id": "P1", "title": "notes", "content": content}]}
+    def _paste(self, content, show_content=True):
+        from phabfive.paste.formatters import build_paste_display_data
+
+        return {
+            "pastes": build_paste_display_data(
+                "https://phorge.example.com",
+                lambda url, text: url,
+                [
+                    {
+                        "id": 1,
+                        "fields": {"title": "notes"},
+                        "attachments": {"content": {"content": content}},
+                    }
+                ],
+                show_content=show_content,
+            )
+        }
 
     def test_show_prints_the_content_and_nothing_else(self, capsys):
-        from phabfive.cli.paste import _display_pastes
+        from phabfive.paste.display import display_pastes
 
-        _display_pastes(self._paste("#!/bin/sh\necho hi"), "value", MagicMock())
+        display_pastes(self._paste("#!/bin/sh\necho hi"), "value", MagicMock())
 
         assert capsys.readouterr().out == "#!/bin/sh\necho hi\n"
 
-    def test_show_prints_nothing_without_content(self, capsys):
-        from phabfive.cli.paste import _display_pastes
+    def test_an_empty_paste_prints_nothing(self, capsys):
+        from phabfive.paste.display import display_pastes
 
-        _display_pastes(self._paste(""), "value", MagicMock())
+        display_pastes(self._paste(""), "value", MagicMock())
 
         assert capsys.readouterr().out == ""
+
+    def test_a_record_without_content_prints_its_link(self, capsys):
+        """What `paste search` and `paste show --no-content` print."""
+        from phabfive.paste.display import display_pastes
+
+        display_pastes(self._paste("unused", show_content=False), "value", MagicMock())
+
+        assert capsys.readouterr().out == "https://phorge.example.com/P1\n"
 
 
 class TestSimpleStillWorks:

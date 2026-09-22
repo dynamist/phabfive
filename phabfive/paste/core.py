@@ -10,6 +10,7 @@ from phabfive.constants import MONOGRAMS
 from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveAPIException, PhabfiveDataException
 from phabfive.pagination import search_all_pages
+from phabfive.paste.formatters import build_paste_display_data
 
 # 3rd party imports
 
@@ -153,14 +154,15 @@ class Paste(Phabfive):
         ]
 
     def paste_show(self, paste_ids, show_content=True):
-        """Get detailed paste information for display.
+        """Show one or more pastes, as display records.
 
         Args:
             paste_ids: List of paste IDs (integers, without P prefix)
             show_content: Whether to include paste content
 
         Returns:
-            dict with 'pastes' key containing list of paste data
+            dict with 'pastes', the records build_paste_display_data
+            builds, and 'missing_ids'; None when no paste was found
         """
         attachments = {}
         if show_content:
@@ -182,45 +184,77 @@ class Paste(Phabfive):
         for paste_id in missing_ids:
             log.error(f"Paste P{paste_id} not found")
 
-        result = []
-        for paste in pastes:
-            monogram = f"P{paste['id']}"
-            url = self.get_paste_url(paste["id"])
-            paste_data = {
-                "id": monogram,
-                "url": url,
-                "_link": self.format_link(url, monogram),
-                "title": paste["fields"].get("title", ""),
-                "language": paste["fields"].get("language") or "text",
-                "status": paste["fields"].get("status", "active"),
-                "dateCreated": paste["fields"].get("dateCreated"),
-                "dateModified": paste["fields"].get("dateModified"),
-            }
-
-            # Resolve author name from PHID
-            author_phid = paste["fields"].get("authorPHID")
-            if author_phid:
-                paste_data["author"] = self._resolve_phid_to_name(author_phid)
-
-            # Add content if requested and available
-            if show_content and "attachments" in paste:
-                content_attachment = paste["attachments"].get("content", {})
-                paste_data["content"] = content_attachment.get("content", "")
-
-            result.append(paste_data)
-
         # Let the caller tell a partial result from a complete one
-        return {"pastes": result, "missing_ids": missing_ids}
+        return {
+            "pastes": self._display_data(pastes, show_content=show_content),
+            "missing_ids": missing_ids,
+        }
 
-    def _resolve_phid_to_name(self, phid):
-        """Resolve a PHID to a human-readable name."""
-        try:
-            response = self.phab.phid.query(phids=[phid])
-            if response and phid in response:
-                return response[phid].get("name", phid)
-        except Exception:
-            pass
-        return phid
+    def paste_search(self, constraints=None, limit=None):
+        """Search pastes, as the records `paste_show` answers with.
+
+        The same record as `paste_show` gives, less the content, which a
+        search does not fetch.
+
+        Parameters
+        ----------
+        constraints : dict, optional
+            paste.search constraints
+        limit : int, optional
+            How many pastes to return in total; None for all of them
+
+        Returns
+        -------
+        dict
+            {"pastes": [...]}, in the order paste.search returns them
+        """
+        pastes = self.get_pastes(constraints=constraints, limit=limit)
+
+        return {"pastes": self._display_data(pastes, show_content=False)}
+
+    def _display_data(self, pastes, show_content=True):
+        """The display records for a set of pastes, in one PHID lookup.
+
+        Authors and Spaces are named by the same phid.query, however many
+        pastes the set holds, rather than by one query per paste.
+        """
+        phids = sorted(
+            {
+                phid
+                for paste in pastes
+                for phid in (
+                    paste.get("fields", {}).get("authorPHID"),
+                    paste.get("fields", {}).get("spacePHID"),
+                )
+                if phid
+            }
+        )
+
+        names = {}
+        if phids:
+            try:
+                found = self.phab.phid.query(phids=phids) or {}
+                names = {
+                    phid: data for phid, data in found.items() if hasattr(data, "get")
+                }
+            except Exception as e:
+                # Naming an author is a convenience, and a read must not
+                # fail over it: the PHID stands in for the name instead.
+                log.warning(f"Failed to resolve paste author and Space PHIDs: {e}")
+
+        return build_paste_display_data(
+            self.url,
+            self.format_link,
+            pastes,
+            author_names={
+                phid: data.get("name") or phid for phid, data in names.items()
+            },
+            space_map={
+                phid: data.get("fullName") or data.get("name") or phid
+                for phid, data in names.items()
+            },
+            show_content=show_content,
+        )
 
     def get_paste_data(self, paste_id):
         """Get full paste data including content.

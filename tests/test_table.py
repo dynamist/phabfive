@@ -353,15 +353,33 @@ class TestTheAppsThatAdoptedIt:
         from typer.testing import CliRunner
 
         from phabfive.cli import app
+        from phabfive.paste.formatters import build_paste_display_data
 
         paste = MagicMock()
         paste.get_console.return_value = Console(
             force_terminal=False, no_color=True, width=400
         )
-        paste.get_pastes.return_value = [
-            {"id": 1, "fields": {"title": "deploy notes"}},
-            {"id": 2, "fields": {"title": "nginx config"}},
-        ]
+        paste.paste_search.return_value = {
+            "pastes": build_paste_display_data(
+                "http://phorge.localhost",
+                lambda url, text: url,
+                [
+                    {
+                        "id": paste_id,
+                        "fields": {
+                            "title": title,
+                            "authorPHID": "PHID-USER-admin",
+                            "status": "active",
+                            "dateCreated": 1234567890,
+                            "dateModified": 1234567890,
+                        },
+                    }
+                    for paste_id, title in [(1, "deploy notes"), (2, "nginx config")]
+                ],
+                author_names={"PHID-USER-admin": "admin"},
+                show_content=False,
+            )
+        }
 
         with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
             result = CliRunner().invoke(
@@ -375,9 +393,20 @@ class TestTheAppsThatAdoptedIt:
     def test_paste_search_gets_a_grid(self):
         rows = self._paste_search("table")
 
-        assert rows[0].split() == ["id", "title"]
-        assert rows[1].split() == ["P1", "deploy", "notes"]
+        # The Paste section's fields, the same record yaml and json publish
+        assert rows[0].split() == [
+            "Name",
+            "Author",
+            "Language",
+            "Status",
+            "Created",
+            "Modified",
+        ]
+        assert rows[1].split()[:2] == ["deploy", "notes"]
         assert len(rows) == 3
 
-    def test_paste_search_still_prints_bare_lines_for_rich(self):
-        assert self._paste_search("rich") == ["P1 deploy notes", "P2 nginx config"]
+    def test_paste_search_prints_the_record_for_rich(self):
+        rows = self._paste_search("rich")
+
+        assert rows[0] == "- Link: http://phorge.localhost/P1"
+        assert rows[1:3] == ["  Paste:", "    Name: deploy notes"]
