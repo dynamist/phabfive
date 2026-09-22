@@ -51,6 +51,13 @@
   still prints a paste's content, and prints its monogram when it has no content to
   give - every `paste search` result, and `paste show --no-content` - one per line as
   `passphrase search` does, so `paste search | xargs paste show` works
+* **Breaking change: `passphrase show` and `passphrase search` records have a `Credential`
+  section.** With `--format=yaml`, `json` or `jsonl` a record is now `Link` and a
+  `Credential` section holding `Name`, `Type`, `Username`, `Secret`, `PublicKey`, `Created`
+  and `Modified`, the way a task is `Link` and `Task`. `jq '.Secret'` becomes
+  `jq '.Credential.Secret'`, and `.Name` becomes `.Credential.Name`. Which secrets are
+  printed, and when, is unchanged; `--format=value`, `rich` and `tree` are unchanged too.
+  Closes #451
 
 ## New Features
 
