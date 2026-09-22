@@ -165,12 +165,15 @@ class TestSubscribers:
             _transactions(phab)
         )
 
-    def test_a_bare_string_is_refused(self):
-        """Iterating it would ask for each letter as a user."""
+    @pytest.mark.parametrize(
+        "subscribers", ["alice", {"alice": "bob"}], ids=["string", "mapping"]
+    )
+    def test_anything_but_a_list_is_refused(self, subscribers):
+        """Iterating a string asks for each letter as a user, a mapping for its keys."""
         phab = _phab()
 
         with pytest.raises(PhabfiveConfigException, match="subscribers takes a list"):
-            _create(phab, [_task(subscribers="alice")])
+            _create(phab, [_task(subscribers=subscribers)])
 
         phab.maniphest.edit.assert_not_called()
 

@@ -1688,7 +1688,9 @@ class Maniphest(Phabfive):
 
             subscribers = task_config.get("subscribers") or []
 
-            if isinstance(subscribers, str):
+            # Iterating a string would ask for each letter as a user, and a
+            # mapping for each of its keys
+            if not isinstance(subscribers, list):
                 raise PhabfiveConfigException(
                     f"subscribers takes a list of users, not {subscribers!r}"
                 )
