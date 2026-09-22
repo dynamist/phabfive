@@ -66,6 +66,7 @@ def build_paste_display_data(
         record = {
             "_url": link_url,
             "_link": format_link_func(link_url, monogram),
+            "_monogram": monogram,
             "Paste": {
                 "Name": fields.get("title", ""),
                 "Author": author_names.get(author_phid, author_phid),

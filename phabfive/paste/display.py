@@ -12,21 +12,22 @@ from phabfive.record_display import display_records
 
 
 def _paste_value(record):
-    """A paste's bare value: its content, or its Link without one.
+    """A paste's bare value: its content, or its monogram without one.
 
     The content is what a paste is for, so ``paste show`` pipes it
     straight into a file or a shell. A record without Content - every
     ``paste search`` result, and ``paste show --no-content`` - has none to
-    give, and answers with its Link instead, which names the paste and is
-    what a caller would reach for next. An empty paste has Content, just
-    none of it, and prints nothing rather than a Link that reads as content.
+    give, and answers with its monogram instead, as ``passphrase search``
+    does, so ``paste search | xargs paste show`` works. An empty paste has
+    Content, just none of it, and prints nothing rather than a monogram
+    that reads as content.
     """
     paste = record.get("Paste", {})
 
     if "Content" in paste:
         return paste["Content"] or None
 
-    return record.get("_url")
+    return record.get("_monogram")
 
 
 def display_pastes(result, output_format, phabfive_instance, tabular=False):
