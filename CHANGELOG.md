@@ -323,7 +323,9 @@
   `phabfive.options.split_list_option`: `maniphest create --tag/--subscribe` and
   `paste create/edit --tag/--subscribe` join `maniphest edit --subscribe` and the
   `project` options. Search filters keep their own grammar, where `,` is OR and `+` is
-  AND. Fixes #429
+  AND. Tab completion follows: these options complete the value after the last comma,
+  and `maniphest create --tag=Development,QA --column=<TAB>` offers the Development
+  board's columns, where it offered none. Fixes #429
 * **`maniphest create --with` exited 0 when the template file did not exist.** It is an
   error now, and exits 1
 * **Interrupting phabfive printed a traceback of its own.** `cli_entrypoint` raised

@@ -11,6 +11,7 @@ from phabfive.cli.completers import (
     USER_COMPLETION_LIMIT,
     complete_user,
     complete_user_filter,
+    complete_user_list,
     complete_user_list_filter,
 )
 
@@ -203,3 +204,26 @@ class TestUserListFilter:
             _phab(USERS), "@me,sven", completer=complete_user_list_filter
         )
         assert result == [("@me,sven.retired", "Sven Retired")]
+
+
+class TestUserList:
+    """Shared by --subscribe on maniphest create/edit and paste create/edit."""
+
+    def test_keeps_the_names_already_typed(self):
+        result = _complete_with(_phab(USERS), "@me,son", completer=complete_user_list)
+        assert result == [("@me,sonja.bergstrom", "Sonja Bergstrom")]
+
+    def test_completes_after_a_trailing_comma(self):
+        result = _complete_with(_phab(USERS), "@me,", completer=complete_user_list)
+        assert ("@me,@me", "yourself") in result
+        assert ("@me,sonja.bergstrom", "Sonja Bergstrom") in result
+
+    def test_looks_up_only_the_name_after_the_last_comma(self):
+        phab = _phab(USERS)
+        _complete_with(phab, "tommy.svensson,son", completer=complete_user_list)
+        assert phab.user.search.call_args.kwargs["constraints"]["nameLike"] == "son"
+
+    def test_leaves_out_disabled_accounts(self):
+        assert (
+            _complete_with(_phab(USERS), "@me,sven", completer=complete_user_list) == []
+        )

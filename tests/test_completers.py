@@ -111,6 +111,11 @@ class TestColumnCompletion:
         complete_column(_ctx(tag=("Sprint", "Backend")), [], "")
         board_columns.assert_called_once_with("Sprint")
 
+    def test_create_uses_first_comma_separated_tag_as_board(self, board_columns):
+        """--tag=Board,Other names two tags, the first of them the board."""
+        complete_column(_ctx(tag=["Board,Other"]), [], "")
+        board_columns.assert_called_once_with("Board")
+
     def test_create_without_tag_offers_nothing(self, board_columns):
         assert complete_column(_ctx(tag=None), [], "") == []
         assert complete_column(_ctx(tag=()), [], "") == []

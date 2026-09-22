@@ -22,7 +22,9 @@ from phabfive.cli.completers import (
     complete_status,
     complete_status_filter,
     complete_tag,
+    complete_tag_list,
     complete_user,
+    complete_user_list,
     complete_user_list_filter,
 )
 from phabfive.cli.output import (
@@ -245,7 +247,7 @@ def create(
         "--tag",
         help="Add to project/workboard by name, hashtag, ID, or PHID "
         "(repeatable, comma-separated)",
-        autocompletion=complete_tag,
+        autocompletion=complete_tag_list,
     ),
     column: Optional[str] = typer.Option(
         None,
@@ -275,7 +277,7 @@ def create(
         None,
         "--subscribe",
         help="Add subscriber (username or @me, repeatable, comma-separated)",
-        autocompletion=complete_user,
+        autocompletion=complete_user_list,
     ),
     space: Optional[str] = typer.Option(
         None,
@@ -908,7 +910,7 @@ def edit(
         None,
         "--subscribe",
         help="Add subscriber (username or @me, repeatable, comma-separated)",
-        autocompletion=complete_user,
+        autocompletion=complete_user_list,
     ),
     comment_text: Optional[str] = typer.Option(
         None,

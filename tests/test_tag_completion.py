@@ -10,7 +10,11 @@ import pytest
 
 # phabfive imports
 from phabfive.cli import completers
-from phabfive.cli.completers import TAG_COMPLETION_LIMIT, complete_tag
+from phabfive.cli.completers import (
+    TAG_COMPLETION_LIMIT,
+    complete_tag,
+    complete_tag_list,
+)
 
 
 def _project(id_, name, parent=None):
@@ -26,14 +30,14 @@ def _project(id_, name, parent=None):
     }
 
 
-def _complete_with(phab, incomplete):
-    """Run complete_tag against a fake API client."""
+def _complete_with(phab, incomplete, completer=complete_tag):
+    """Run a tag completer against a fake API client."""
     with patch.object(
         completers,
         "_get_values_with_api_fallback",
         side_effect=lambda fetch, default: fetch(phab),
     ):
-        return complete_tag(incomplete)
+        return completer(incomplete)
 
 
 def _tokens(text: str) -> list:
@@ -168,3 +172,25 @@ class TestDuplicateNames:
 
     def test_top_level_project_has_no_description(self):
         assert _complete_with(_phab(PROJECTS), "QA") == ["QA"]
+
+
+class TestTagList:
+    """The value-adding --tag of maniphest create and paste create/edit."""
+
+    def test_completes_a_single_tag(self):
+        assert _complete_with(_phab(PROJECTS), "Kan", completer=complete_tag_list) == [
+            "Kanban Board"
+        ]
+
+    def test_keeps_the_tags_already_typed(self):
+        result = _complete_with(_phab(PROJECTS), "QA,Kan", completer=complete_tag_list)
+        assert result == ["QA,Kanban Board"]
+
+    def test_keeps_the_description(self):
+        result = _complete_with(_phab(PROJECTS), "QA,Rel", completer=complete_tag_list)
+        assert result == [("QA,Release Candidate", "in QA")]
+
+    def test_looks_up_only_the_tag_after_the_last_comma(self):
+        phab = _phab(PROJECTS)
+        _complete_with(phab, "QA,Kanban Board,GUN", completer=complete_tag_list)
+        assert phab.project.search.call_args.kwargs["constraints"] == {"name": "GUN"}
