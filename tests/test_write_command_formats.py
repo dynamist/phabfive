@@ -21,6 +21,8 @@ It puts its preview on stderr and leaves stdout empty, which is what
 
 # python std lib
 import json
+import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 
 # 3rd party imports
@@ -1046,11 +1048,45 @@ class TestStatusTextOnStderr:
                 "phabfive.cli.passphrase._get_passphrase_app",
             ),
             (["maniphest", "search"], "phabfive.cli.maniphest._get_maniphest_app"),
+            (["user", "search"], "phabfive.user.User"),
         ],
     )
-    def test_the_usage_block_is_on_stderr(self, argv, getter):
-        with patch(getter, return_value=MagicMock()):
+    def test_a_bare_search_prints_help_and_searches_nothing(self, argv, getter):
+        """The help itself is checked for stderr out of process, below."""
+        with patch(getter, return_value=MagicMock()) as get_app:
             result = runner.invoke(app, ["--format=json", *argv])
 
-        assert result.stdout.strip() == ""
+        assert result.exit_code == 2
+        assert "Usage:" in result.output
+        if argv[0] == "maniphest":
+            # A --with template can supply the criteria, so maniphest loads
+            # the app before it knows whether it has any
+            get_app.return_value.task_search.assert_not_called()
+        else:
+            get_app.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "argv",
+        [["paste", "search"], ["passphrase", "search"], ["user", "search"]],
+        ids=lambda argv: argv[0],
+    )
+    def test_the_help_of_a_bare_search_is_on_stderr(self, argv):
+        """Run out of process: CliRunner imports typer before phabfive.cli can
+        set TYPER_USE_RICH=0, and typer's rich path writes help to stdout.
+        maniphest is left out because it needs a server before it can tell
+        that it was given nothing to search for."""
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from phabfive.cli import cli_entrypoint; cli_entrypoint()",
+                "--format=json",
+                *argv,
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2
+        assert result.stdout == ""
         assert "Usage:" in result.stderr

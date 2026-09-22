@@ -6,7 +6,11 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
-from phabfive.cli.output import _get_output_format, _setup_output_options
+from phabfive.cli.output import (
+    _exit_with_help,
+    _get_output_format,
+    _setup_output_options,
+)
 from phabfive.cli.completers import complete_passphrase_type
 from phabfive.exceptions import (
     PhabfiveConfigException,
@@ -127,9 +131,7 @@ def search(
 
     # Require at least one search criterion
     if not text_query and not credential_type:
-        typer.echo("Usage:", err=True)
-        typer.echo("    phabfive passphrase search [<text_query>] [options]", err=True)
-        return
+        _exit_with_help(ctx)
 
     _setup_output_options(ctx)
     passphrase = _get_passphrase_app()

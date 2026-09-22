@@ -295,7 +295,7 @@ phabfive --format=jsonl maniphest search --status=any --space='*' --show-policy 
 Leaving out `--space='*'` is the easy mistake in a script that means to touch
 every task: tasks in other Spaces are silently not listed.
 
-A bare `phabfive maniphest search` still prints usage and queries nothing.
+A bare `phabfive maniphest search` still queries nothing: it prints its help and exits 2.
 
 ### Filtering by Policy
 
