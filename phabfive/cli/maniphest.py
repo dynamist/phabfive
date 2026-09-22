@@ -82,6 +82,58 @@ def _split_values_to_add(values, option):
     return split_list_option(values)
 
 
+# Every option of `maniphest create` that the template path cannot honour: the
+# template is applied as it stands, so a value given alongside --with would be
+# dropped without a word. Threading them through is #481; until then they are
+# refused rather than ignored (#465). Keyed by the command's parameter name,
+# valued with the option as it is typed.
+_CREATE_OPTIONS_IGNORED_BY_TEMPLATE = {
+    "title": "TITLE",
+    "title_opt": "--title",
+    "description": "--description",
+    "tag": "--tag",
+    "column": "--column",
+    "assign": "--assign",
+    "status": "--status",
+    "priority": "--priority",
+    "subscribe": "--subscribe",
+    "space": "--space",
+    "visible_to": "--visible-to",
+    "editable_by": "--editable-by",
+    "yes": "--yes",
+    "interactive": "--interactive",
+    "force": "--force",
+}
+
+
+def _options_given(ctx, options):
+    """Which of ``options`` the command line actually carried.
+
+    Typer has no unset sentinel - an option left out and one passed the value
+    it defaults to look exactly alike - so click's record of where each value
+    came from is what answers "was this passed".
+
+    Parameters
+    ----------
+    ctx : typer.Context
+        The command context
+    options : dict
+        Parameter name to the option as it is typed
+
+    Returns
+    -------
+    list
+        The options given, in the order ``options`` lists them
+    """
+    from click.core import ParameterSource
+
+    return [
+        option
+        for name, option in options.items()
+        if ctx.get_parameter_source(name) not in (None, ParameterSource.DEFAULT)
+    ]
+
+
 def _display_tasks(
     result, output_format, maniphest_instance, show_description=True, tabular=False
 ):
@@ -332,6 +384,21 @@ def create(
         phabfive maniphest create "Task" --visible-to='#infra' --editable-by=admin
         echo "Description" | phabfive maniphest create "Task" --description=-
     """
+    # A template is applied as it stands, so every value the template path
+    # cannot honour used to be accepted and then dropped in silence. Refuse it
+    # instead, and before anything is constructed or connected: nothing a
+    # caller asked for should go missing without a word (#465).
+    if with_template:
+        ignored = _options_given(ctx, _CREATE_OPTIONS_IGNORED_BY_TEMPLATE)
+
+        if ignored:
+            sys.stderr.write(
+                f"Error: --with cannot be combined with {', '.join(ignored)}; "
+                "a creation template is applied as it stands. Put the values "
+                "in the template, or create the task without --with.\n"
+            )
+            raise typer.Exit(1)
+
     try:
         force = resolve_assume_yes(yes, force, interactive)
     except ValueError as e:
