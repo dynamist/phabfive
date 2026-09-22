@@ -65,6 +65,13 @@
   printed, and when, is unchanged; `--format=value`, `rich` and `tree` are unchanged too.
   Closes #451
 
+* **A write whose answer is lost is no longer sent again.** The `phabricator` library
+  retried every request after a read timeout, and Conduit is always POST, so a slow
+  `maniphest comment` could post its comment twice. Such a write now fails with an error
+  saying it may have been applied, and is not repeated. An edit that only sets fields -
+  status, priority, policies and the like - is still retried, since arriving twice changes
+  nothing (#422)
+
 ## New Features
 
 ### Using phabfive as a Library
@@ -321,6 +328,26 @@
   is accepted for `yaml`
 * **`PHAB_FALLBACK=jsonl`** - The non-TTY default format now accepts `jsonl` alongside
   `yaml` and `json`
+
+### Retries and Pacing
+* **Failed Conduit calls are retried with backoff** - A connection error, timeout, HTTP 429
+  or 5xx is tried again after an exponential backoff with full jitter, and a `Retry-After`
+  is honoured. Every retry is announced on stderr with the wait it chose, e.g.
+  `WARNING - maniphest.search: HTTP 503, retry 1 of 3 in 0.2s`. A call that succeeds
+  costs nothing extra; with the defaults a failing one waits under two seconds in total
+* **Reads are retried freely, writes only when that is safe** - `*.search`, `*.query`,
+  `phid.lookup`, `user.whoami` and the other reads are retried on any of those failures. A
+  write is retried only when the connection was never made, unless it sets fields of an
+  existing object; `maniphest edit` marks its edits that way whenever they carry no comment
+* **A paged search resumes from the page that failed** - One bad page of a
+  `maniphest search --status=any -l 0` used to fail the whole command; the page is now asked
+  for again with the same cursor, and no page already read is fetched twice
+* **`PHAB_RETRY` and `PHAB_BACKOFF_MAX`** - How often a failed call is retried (default
+  3, `0` turns retrying off) and the longest single wait in seconds (default 5, which caps
+  `Retry-After` too). A bulk job that should ride out a restart can raise both
+* **`PHAB_PACE`** - Seconds to keep between the writes of a batch edit, so a batch does
+  not carry on at full speed against a struggling server. Off by default. See
+  [Retries](docs/retries.md)
 
 ## Bug Fixes
 

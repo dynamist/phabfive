@@ -202,7 +202,7 @@ Config precedence (later overrides earlier):
 1. Hard-coded defaults
 2. `/etc/phabfive.yaml`
 3. `/etc/phabfive.d/*.yaml`
-4. `~/.config/phabfive.yaml` (PHAB_URL/PHAB_TOKEN deprecated here, use for PHAB_SPACE/PHAB_FALLBACK/PHAB_CACHE/PHAB_CACHE_TTL/PHAB_CACHE_DIR)
+4. `~/.config/phabfive.yaml` (PHAB_URL/PHAB_TOKEN deprecated here, use for PHAB_SPACE/PHAB_FALLBACK/PHAB_CACHE/PHAB_CACHE_TTL/PHAB_CACHE_DIR/PHAB_RETRY/PHAB_BACKOFF_MAX/PHAB_PACE)
 5. `~/.config/phabfive.d/*.yaml`
 6. `.arcconfig` in git root (provides PHAB_URL from `phabricator.uri`)
 7. `~/.arcrc` (provides PHAB_TOKEN for matched URL)
@@ -229,6 +229,29 @@ nothing is discovered.
 - `cli_entrypoint` answers any `PhabfiveException` no command caught with one line and exit
   status 1. It runs outside click's main loop, so it leaves with `sys.exit`, never
   `typer.Exit`
+
+### Retries (`retry.py`)
+
+- One policy for every Conduit call: `phabfive/conduit.py` mounts an adapter built from the
+  instance's `RetryPolicy` on each call, replacing the `phabricator` library's own retry
+  (immediate, and willing to repeat a POST after a read timeout). `PHAB_RETRY` and
+  `PHAB_BACKOFF_MAX` configure it; docs/retries.md is the user-facing description
+- The policy is a `urllib3.Retry` subclass. urllib3 already retries a connect error for any
+  method and a read error or retryable status only for an allowed method, so a read allows
+  POST and a write allows nothing - which retries a write only when it never reached the
+  server
+- A write is retried like a read only inside `idempotent_writes()`. Mark a call site only
+  when it sets fields of an existing object; `Maniphest.apply_task_edit` marks an edit
+  whose transaction types are all in `IDEMPOTENT_TRANSACTIONS`. Never mark a create or a
+  comment
+- `is_read()` classifies by method name (`*search`, `*query`, `query*`, `get*`, `whoami`,
+  `info`, `lookup`). A new read-only endpoint outside those shapes is treated as a write:
+  safe, just not retried on a timeout
+- Every wait goes through `phabfive.retry._sleep`, which tests replace. `tests/test_retry.py`
+  fakes the transport at `urllib3.connectionpool.HTTPConnectionPool._make_request`, so the
+  real adapter, Retry and client run and no socket is opened
+- `Pacer` (`PHAB_PACE`) spaces out the writes of a batch edit, in `edit_tasks_batch` and
+  `Edit.apply_all`
 
 ### Editing (`edit/`)
 

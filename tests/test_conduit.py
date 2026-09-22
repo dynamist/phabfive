@@ -101,7 +101,7 @@ class TestErrorTranslation:
     def test_an_api_error_on_a_call(self, conduit):
         from phabricator import APIError
 
-        with patch("phabricator.Phabricator.update_interfaces"):
+        with patch("phabfive.conduit._load_interfaces"):
             conduit.client
         with self._raising(APIError("ERR-CONDUIT-CORE", "No such thing.")):
             with pytest.raises(PhabfiveAPIException) as caught:
@@ -112,7 +112,7 @@ class TestErrorTranslation:
         assert isinstance(caught.value.__cause__, APIError)
 
     def test_an_api_error_loading_interfaces(self, conduit):
-        """The first request of all is update_interfaces; it must translate too."""
+        """The first request of all loads the interfaces; it must translate too."""
         from phabricator import APIError
 
         with self._raising(APIError("ERR-INVALID-AUTH", "API token is not valid.")):
@@ -133,14 +133,14 @@ class TestErrorTranslation:
     def test_nested_endpoints_translate(self, conduit):
         from phabricator import APIError
 
-        with patch("phabricator.Phabricator.update_interfaces"):
+        with patch("phabfive.conduit._load_interfaces"):
             conduit.client
         with self._raising(APIError("ERR-X", "nested")):
             with pytest.raises(PhabfiveAPIException):
                 conduit.project.column.search()
 
     def test_a_result_passes_through(self, conduit):
-        with patch("phabricator.Phabricator.update_interfaces"):
+        with patch("phabfive.conduit._load_interfaces"):
             conduit.client
         with patch("phabricator.Resource._request", return_value={"data": []}):
             assert conduit.maniphest.search() == {"data": []}

@@ -78,6 +78,7 @@ from phabfive.policy import (
     validate_policy_value,
 )
 from phabfive.project_filters import parse_project_patterns
+from phabfive.retry import idempotent_writes, is_idempotent_edit
 
 log = logging.getLogger(__name__)
 
@@ -2760,11 +2761,16 @@ class Maniphest(Phabfive):
             away from whoever is applying it is rejected this way, and is
             reported as the sentence Phorge answered with rather than as the
             PhabfiveAPIException around it.
+
+        An edit that only sets fields is retried on a timeout or a 5xx like
+        a read, since arriving twice changes nothing. One carrying a comment
+        is not, since it would post the comment twice.
         """
         try:
-            self.phab.maniphest.edit(
-                objectIdentifier=f"T{task_id}", transactions=transactions
-            )
+            with idempotent_writes(is_idempotent_edit(transactions)):
+                self.phab.maniphest.edit(
+                    objectIdentifier=f"T{task_id}", transactions=transactions
+                )
         except PhabfiveAPIException as e:
             raise PhabfiveDataException(policy_lockout_message(e) or str(e))
 
