@@ -67,7 +67,11 @@ def _exit_with_help(ctx: typer.Context) -> None:
     A bare search would otherwise read the whole instance. This is what
     ``no_args_is_help`` does for a group: the help on stderr and exit code 2,
     so a script can tell that nothing ran.
-    """
-    import click
 
-    raise click.exceptions.NoArgsIsHelpError(ctx)
+    Written out rather than raising click's ``NoArgsIsHelpError``: from typer
+    0.27 on, ``typer.Context`` is typer's vendored click and no longer a
+    ``click.Context``, so the click exception is not one typer catches, and a
+    bare search exits 1 with a traceback instead of 2.
+    """
+    typer.echo(ctx.get_help(), err=True, color=ctx.color)
+    raise typer.Exit(code=2)
