@@ -58,3 +58,9 @@ def init_logging(log_level):
     # debug output for that. Set here rather than when phabfive.core is
     # imported, because a library does not adjust other libraries' loggers.
     logging.getLogger("anyconfig").setLevel(logging.ERROR)
+
+    # Each retry is announced by phabfive.retry, with the wait it chose.
+    # urllib3 also warns about the connection errors among them, in its own
+    # words and with a Retry repr, so outside debugging it keeps quiet.
+    if log_level != "DEBUG":
+        logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)

@@ -525,6 +525,22 @@ phabfive edit T123 --assign=alice
 
 Batch operations fail atomically with clear error messages and partition suggestions when applicable.
 
+### Timeouts and a Struggling Server
+
+Each task's edit that times out or meets a 5xx is retried after a short backoff,
+as long as it carries no comment - setting a field twice changes nothing, while a
+comment would be posted twice. An edit with `--comment` whose answer is lost is
+reported as possibly applied, and not sent again.
+
+`PHAB_PACE` keeps a pause between the writes of a batch, so it does not carry on at
+full speed against a server that is already struggling:
+
+```bash
+phabfive maniphest search --assigned=@me --format=yaml | PHAB_PACE=1 phabfive edit --status=resolved --yes
+```
+
+See [Retries](retries.md) for the policy and `PHAB_RETRY`/`PHAB_BACKOFF_MAX`.
+
 ## Tips and Best Practices
 
 ### 1. Always Preview Batch Operations
@@ -632,6 +648,7 @@ phabfive edit T123 --priority=high --dry-run
 - [Policies](policies.md) - Who can see, edit and interact with an object
 - [Search Templates](search-templates.md) - Reusable search queries
 - [Create Templates](create-templates.md) - Bulk task creation
+- [Retries](retries.md) - What is retried, how long it waits, and pacing
 
 ## Architecture and Future Support
 

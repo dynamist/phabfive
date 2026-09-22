@@ -12,6 +12,7 @@ from phabfive.core import Phabfive
 from phabfive.edit.plan import plan_task_edits
 from phabfive.exceptions import PhabfiveInputException
 from phabfive.maniphest import Maniphest
+from phabfive.retry import Pacer
 
 log = logging.getLogger(__name__)
 
@@ -102,8 +103,15 @@ class Edit(Phabfive):
 
         A task in `plan.failures` was never planned and is not attempted.
         To carry on past a refusal, call `apply` for each edit instead.
+        PHAB_PACE, when set, is kept between one write and the next.
         """
-        return [self.apply(task_edit) for task_edit in plan.edits]
+        pacer = Pacer.from_conf(self.conf)
+        results = []
+        for task_edit in plan.edits:
+            if not task_edit.noop:
+                pacer.wait()
+            results.append(self.apply(task_edit))
+        return results
 
     def _task_ids(self, object_ids):
         """Numeric task IDs from "T1,T2", or from monograms and numbers."""

@@ -42,6 +42,9 @@ dependencies = [
   "rich>=13.0.0",
   "ruamel-yaml>=0.18.0",
   "typer>=0.12.0",
+  # Imported directly by phabfive.retry, whose policy is a urllib3 Retry.
+  # 1.26 is the first with allowed_methods and a per-kind `other` budget.
+  "urllib3>=1.26",
 ]
 
 [project.optional-dependencies]

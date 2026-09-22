@@ -353,6 +353,9 @@ CONFIGURABLES = [
     "PHAB_CACHE",
     "PHAB_CACHE_TTL",
     "PHAB_CACHE_DIR",
+    "PHAB_RETRY",
+    "PHAB_BACKOFF_MAX",
+    "PHAB_PACE",
 ]
 DEFAULTS = {
     "PHAB_TOKEN": "",
@@ -362,6 +365,9 @@ DEFAULTS = {
     "PHAB_CACHE": True,  # Cache API lookups that shell completion repeats
     "PHAB_CACHE_TTL": 0,  # 0 means use the per-namespace CACHE_TTLS below
     "PHAB_CACHE_DIR": "",  # Empty means appdirs.user_cache_dir("phabfive")
+    "PHAB_RETRY": 3,  # How often a failed Conduit call is tried again
+    "PHAB_BACKOFF_MAX": 5,  # The longest wait before a retry, in seconds
+    "PHAB_PACE": 0,  # Seconds to keep between the writes of a batch edit
 }
 
 # Bumping this orphans every entry written by an older phabfive

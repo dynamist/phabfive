@@ -23,6 +23,7 @@ from phabfive.edit.formatters import generate_partition_suggestions
 from phabfive.edit.plan import EditFailure, plan_task_edits
 from phabfive.exceptions import PhabfiveValidationException
 from phabfive.policy import validate_policy_value
+from phabfive.retry import Pacer
 from phabfive.yaml_utils import group_objects_by_type, parse_yaml_from_stdin
 
 log = logging.getLogger(__name__)
@@ -577,6 +578,9 @@ def edit_tasks_batch(
     # object, not an absence of one - while a dry run, a skip and a failure
     # are not.
     settled_ids = []
+    # PHAB_PACE seconds between writes, so a batch does not keep hammering a
+    # server that is already struggling. Off unless configured.
+    pacer = Pacer.from_conf(maniphest.conf)
 
     for entry in plan.entries:
         task_id = entry.task_id
@@ -624,6 +628,7 @@ def edit_tasks_batch(
             continue
 
         try:
+            pacer.wait()
             maniphest.apply_task_edit(task_id, entry.transactions)
             success_count += 1
             settled_ids.append(task_id)

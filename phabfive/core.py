@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 # phabfive imports
 from phabfive.conduit import Conduit
+from phabfive.retry import RetryPolicy
 from phabfive.constants import (
     FORMAT_ALIASES,
     REQUIRED,
@@ -327,7 +328,7 @@ class Phabfive:
 
                 raise PhabfiveConfigException(error)
 
-        self.phab = Conduit(self._client_factory())
+        self.phab = Conduit(self._client_factory(), RetryPolicy.from_conf(self.conf))
 
         url = urlparse(self.conf["PHAB_URL"])
 

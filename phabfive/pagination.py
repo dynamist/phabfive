@@ -48,6 +48,13 @@ def iter_pages(search, limit=None, **kwargs):
     generator, so a limit costs the pages it takes to fill, not the whole
     instance.
 
+    A page that fails - a timeout, a 429, a 5xx - is asked for again with
+    the same cursor, by the retry policy phabfive.conduit mounts on every
+    read (see phabfive.retry). So a long search resumes from the page that
+    failed rather than starting over, and no page already yielded is
+    fetched twice. Only when the retries run out does the error reach the
+    caller, after the pages before it were yielded.
+
     Parameters
     ----------
     search : callable
