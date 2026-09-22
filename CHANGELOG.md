@@ -26,6 +26,14 @@
   which a list of values to add has no use for. `Maniphest.create_task` no longer splits
   on `+` at all: its `tags` and `subscribers` are split on commas, so a project named
   `C++` reaches it whole
+* **`@me` is an error on an instance that has a user called `me`, in every option.**
+  `--assigned`, `--author`, `--assign`, `--subscribe`, `--member`, `--add-member` and
+  `--remove-member` - on maniphest, paste and project commands, and on `edit` - quietly
+  took `@me` to mean you even when somebody else is called `me`, while the policy options
+  refused it. They now refuse it the same way, naming that user's PHID, and exit 1: an
+  assignment or a subscription handed to the wrong one of you is the same mistake as a
+  policy. Give your own username, or that user's PHID, instead. Nothing changes on an
+  instance without such a user
 * **The `~/.config/phabfive.yaml` credentials deprecation is a log message.** It reads
   `WARNING - ~/.config/phabfive.yaml contains ...` rather than `WARNING: ...`, and `-q`
   now silences it

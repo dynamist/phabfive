@@ -22,6 +22,7 @@ from phabfive.cli.output import (
     is_machine_format,
 )
 from phabfive.constants import MONOGRAMS
+from phabfive.me import is_me, resolve_me, whoami_me
 from phabfive.cli.editor import resolve_assume_yes
 from phabfive.options import split_list_option
 from phabfive.paste.display import display_pastes
@@ -103,9 +104,8 @@ def search(
 
     # Handle @me shortcut for author
     if author:
-        if author == "@me":
-            whoami = paste.phab.user.whoami()
-            author_phid = whoami.get("phid")
+        if is_me(author):
+            author_phid = resolve_me(paste.phab, option="--author")
         else:
             # Look up user by username
             users = paste.phab.user.search(constraints={"usernames": [author]})
@@ -284,8 +284,8 @@ def create(
     subscriber_names = []
     if subscribe:
         for sub in split_list_option(subscribe):
-            if sub == "@me":
-                whoami = paste.phab.user.whoami()
+            if is_me(sub):
+                whoami = whoami_me(paste.phab, option="--subscribe")
                 subscriber_names.append(whoami.get("userName", sub))
             else:
                 subscriber_names.append(sub)
@@ -514,8 +514,8 @@ def edit(
     subscriber_names = []
     if subscribe:
         for sub in split_list_option(subscribe):
-            if sub == "@me":
-                whoami = paste.phab.user.whoami()
+            if is_me(sub):
+                whoami = whoami_me(paste.phab, option="--subscribe")
                 subscriber_names.append(whoami.get("userName", sub))
             else:
                 subscriber_names.append(sub)

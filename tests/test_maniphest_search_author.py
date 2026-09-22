@@ -17,7 +17,7 @@ import pytest
 from typer.testing import CliRunner
 
 from phabfive.cli.maniphest import maniphest_app
-from phabfive.exceptions import PhabfiveConfigException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.maniphest.core import Maniphest
 
 runner = CliRunner()
@@ -48,6 +48,8 @@ def _maniphest():
         "phid": ADMIN_PHID,
         "userName": "admin",
     }
+    # No user is called "me", which would make @me ambiguous
+    maniphest.phab.user.search.return_value = {"data": []}
 
     response = MagicMock()
     response.response = {"data": []}
@@ -167,7 +169,7 @@ class TestUnresolvableUser:
         maniphest = _maniphest()
         maniphest.phab.user.whoami.return_value = {"userName": "admin"}
 
-        with pytest.raises(PhabfiveConfigException, match="current user's PHID"):
+        with pytest.raises(PhabfiveDataException, match="no PHID for you"):
             maniphest.task_search(author="@me")
 
 

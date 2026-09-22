@@ -20,10 +20,19 @@ ADMIN_PHID = "PHID-USER-1234567890abcdefghij"
 
 
 def _mock_paste_app(mock_get_app):
-    """Paste app whose whoami and user.search resolve to ADMIN_PHID."""
+    """Paste app whose whoami and user.search resolve to ADMIN_PHID.
+
+    Except that no user is called "me", which would make @me ambiguous.
+    """
     mock_p = MagicMock()
     mock_p.phab.user.whoami.return_value = {"phid": ADMIN_PHID}
-    mock_p.phab.user.search.return_value = {"data": [{"phid": ADMIN_PHID}]}
+
+    def search(constraints):
+        if constraints.get("usernames") == ["me"]:
+            return {"data": []}
+        return {"data": [{"phid": ADMIN_PHID}]}
+
+    mock_p.phab.user.search.side_effect = search
     mock_p.paste_search.return_value = {"pastes": []}
     mock_get_app.return_value = mock_p
     return mock_p
@@ -69,6 +78,7 @@ class TestPasteSearchAuthorConstraint:
     @patch("phabfive.cli.paste._get_paste_app")
     def test_unknown_user_errors_without_querying(self, mock_get_app):
         mock_p = _mock_paste_app(mock_get_app)
+        mock_p.phab.user.search.side_effect = None
         mock_p.phab.user.search.return_value = {"data": []}
 
         result = runner.invoke(paste_app, ["search", "--author", "nosuchuser"])

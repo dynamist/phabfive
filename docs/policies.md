@@ -46,6 +46,11 @@ Every policy option — `--visible-to`, `--editable-by`, `--can-push` and
 | `@me` | You — whoever the API token belongs to, as in `maniphest search --assigned=@me` |
 | `PHID-...` | Whatever object the PHID names — this is how a **custom policy rule** is set, since it has no other name |
 
+On an instance that has a user called `me`, `@me` names two people, so it is an
+error rather than a guess, in the policy options and in every other option that
+takes a user (`--assigned`, `--author`, `--assign`, `--subscribe`, `--member`).
+Name yourself by username, or that user by PHID.
+
 A project may be named by its hashtag or by its display name. Phorge's
 `project.search` normalises what it is given, so both of these resolve the same
 project, and both are reported back under its canonical slug:

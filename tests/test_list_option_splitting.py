@@ -120,7 +120,11 @@ def _a_paste():
         "language": "text",
     }
     instance.edit_paste.return_value = {"success": True, "changes": []}
-    instance.phab.user.whoami.return_value = {"userName": "me"}
+    instance.phab.user.whoami.return_value = {
+        "phid": "PHID-USER-caller",
+        "userName": "caller",
+    }
+    instance.phab.user.search.return_value = {"data": []}
     return instance
 
 
@@ -143,7 +147,7 @@ class TestPaste:
         assert result.exit_code == 0, result.output
         kwargs = instance.create_paste_from_content.call_args.kwargs
         assert kwargs["tags"] == ["a", "b", "c"]
-        assert kwargs["subscribers"] == ["me", "bob"]
+        assert kwargs["subscribers"] == ["caller", "bob"]
 
     def test_edit_splits_tags_and_subscribers(self):
         instance = _a_paste()
