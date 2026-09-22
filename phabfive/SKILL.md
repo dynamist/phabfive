@@ -261,7 +261,7 @@ phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
 - `--status=open|closed|any` sets which statuses a search reaches; it is `open` by default,
   so closed tasks are excluded unless asked for. `--all` is a deprecated `--status=any`.
 - `--visible-to` and `--editable-by` keep tasks whose view or edit policy is exactly that
-  value (`users`, `admin`, `#project`, `@user`, a PHID). It is the stored value: `users`
+  value (`users`, `admin`, `#project`, `@user`, `@me`, a PHID). It is the stored value: `users`
   means "set to All Users". Applied on the client, before `--limit`.
 - `--include T123` pins a task into the results whatever the filters say; `--exclude T123`
   removes one. Include bypasses the limit, exclude is applied before it.
@@ -330,6 +330,7 @@ the labels Phorge's own form uses. Each takes
 | `public`, `users`, `admin`, `no-one` | the Phorge keyword |
 | `#projectslug` | that project; a display name works too, `#'Human Resources'` |
 | `@username` | that user |
+| `@me` | you, the token's owner |
 | `PHID-...` | that object, including a custom policy rule |
 
 and anything else is refused before a call is made, because Conduit reads a value it
@@ -518,6 +519,7 @@ It also sets the three policies: `--visible-to`, `--editable-by` and
 | `public`, `users`, `admin`, `no-one` | the Phorge keyword |
 | `#projectslug` | that project; a display name works too, `#'Human Resources'` |
 | `@username` | that user |
+| `@me` | you, the token's owner |
 | `PHID-...` | that object, including a custom policy rule |
 
 and anything else is refused before a call is made, because Conduit reads a value
