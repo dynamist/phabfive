@@ -16,7 +16,7 @@ from phabfive.cli.paste import paste_app
 from phabfive.exceptions import PhabfiveDataException
 from phabfive.maniphest.core import Maniphest
 from phabfive.me import is_me, resolve_me, whoami_me
-from phabfive.project.resolvers import resolve_user_phids
+from phabfive.users import resolve_user_phids
 
 runner = CliRunner()
 

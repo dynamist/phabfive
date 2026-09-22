@@ -39,7 +39,8 @@ from phabfive.project.formatters import (
     describe_project,
     project_member_phids,
 )
-from phabfive.project.resolvers import resolve_project, resolve_user_phids
+from phabfive.project.resolvers import resolve_project
+from phabfive.users import resolve_user_phids
 
 log = logging.getLogger(__name__)
 

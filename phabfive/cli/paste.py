@@ -22,7 +22,7 @@ from phabfive.cli.output import (
     is_machine_format,
 )
 from phabfive.constants import MONOGRAMS
-from phabfive.me import is_me, resolve_me, whoami_me
+from phabfive.users import resolve_user_phid, resolve_user_phids
 from phabfive.cli.editor import resolve_assume_yes
 from phabfive.options import split_list_option
 from phabfive.paste.display import display_pastes
@@ -70,7 +70,7 @@ def search(
     author: Optional[str] = typer.Option(
         None,
         "--author",
-        help="Filter by author (username or @me)",
+        help="Filter by author (username, @me or user PHID)",
         autocompletion=complete_user_filter,
     ),
     limit: int = typer.Option(
@@ -102,18 +102,9 @@ def search(
     if text_query:
         constraints["query"] = text_query
 
-    # Handle @me shortcut for author
+    # A username, @username, @me or user PHID
     if author:
-        if is_me(author):
-            author_phid = resolve_me(paste.phab, option="--author")
-        else:
-            # Look up user by username
-            users = paste.phab.user.search(constraints={"usernames": [author]})
-            if users.get("data"):
-                author_phid = users["data"][0]["phid"]
-            else:
-                sys.stderr.write(f"Error: User '{author}' not found\n")
-                raise typer.Exit(1)
+        author_phid, _ = resolve_user_phid(paste.phab, author, option="--author")
         # Phorge's paste.search names this constraint "authors", not
         # "authorPHIDs" as maniphest.search does for its own author filter
         constraints["authors"] = [author_phid]
@@ -169,7 +160,7 @@ def create(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable, comma-separated)",
+        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
         autocompletion=complete_user_list,
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without creating"),
@@ -280,15 +271,16 @@ def create(
         )
         raise typer.Exit(1)
 
-    # Handle @me shortcut for subscribers
+    # Usernames, @usernames, @me or user PHIDs, sent as the usernames they
+    # name - which is also what the preview shows
     subscriber_names = []
     if subscribe:
-        for sub in split_list_option(subscribe):
-            if is_me(sub):
-                whoami = whoami_me(paste.phab, option="--subscribe")
-                subscriber_names.append(whoami.get("userName", sub))
-            else:
-                subscriber_names.append(sub)
+        users = resolve_user_phids(
+            paste.phab, split_list_option(subscribe), option="--subscribe"
+        )
+        subscriber_names = list(
+            dict.fromkeys(username or phid for phid, username in users.values())
+        )
 
     # Handle tags
     tag_list = split_list_option(tag) or None
@@ -422,7 +414,7 @@ def edit(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable, comma-separated)",
+        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
         autocompletion=complete_user_list,
     ),
     dry_run: bool = typer.Option(
@@ -510,15 +502,16 @@ def edit(
     elif content is not None:
         final_content = content
 
-    # Handle @me shortcut for subscribers
+    # Usernames, @usernames, @me or user PHIDs, sent as the usernames they
+    # name - which is also what the preview shows
     subscriber_names = []
     if subscribe:
-        for sub in split_list_option(subscribe):
-            if is_me(sub):
-                whoami = whoami_me(paste.phab, option="--subscribe")
-                subscriber_names.append(whoami.get("userName", sub))
-            else:
-                subscriber_names.append(sub)
+        users = resolve_user_phids(
+            paste.phab, split_list_option(subscribe), option="--subscribe"
+        )
+        subscriber_names = list(
+            dict.fromkeys(username or phid for phid, username in users.values())
+        )
 
     # Handle tags
     tag_list = split_list_option(tag) or None

@@ -94,7 +94,13 @@ class TestCreateTaskLibrary:
                 "_resolve_project_phids_for_create",
                 return_value={"phids": ["PHID-PROJ-1"], "slugs": ["c"]},
             ) as resolve_projects,
-            patch.object(maniphest, "_resolve_user_phid", return_value="PHID-USER-1"),
+            patch.object(
+                maniphest,
+                "_resolve_users",
+                side_effect=lambda values, option=None: {
+                    v: (f"PHID-USER-{v}", v) for v in values
+                },
+            ),
         ):
             result = maniphest.create_task(
                 "A task",
@@ -124,7 +130,14 @@ def _a_paste():
         "phid": "PHID-USER-caller",
         "userName": "caller",
     }
-    instance.phab.user.search.return_value = {"data": []}
+    users = {"caller": "PHID-USER-caller", "alice": "PHID-USER-a", "bob": "PHID-USER-b"}
+    instance.phab.user.search.side_effect = lambda constraints: {
+        "data": [
+            {"phid": phid, "fields": {"username": name}}
+            for name, phid in users.items()
+            if name in constraints.get("usernames", [])
+        ]
+    }
     return instance
 
 

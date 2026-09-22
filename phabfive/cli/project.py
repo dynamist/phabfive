@@ -192,7 +192,7 @@ def project_search(
     member: Optional[List[str]] = typer.Option(
         None,
         "--member",
-        help="Projects any of these users is a member of (@user or @me; repeatable, or comma-separated)",
+        help="Projects any of these users is a member of (@user, @me or user PHID; repeatable, or comma-separated)",
         autocompletion=complete_user_list_filter,
     ),
     parent: Optional[List[str]] = typer.Option(
@@ -351,7 +351,7 @@ def project_create(
     member: Optional[List[str]] = typer.Option(
         None,
         "--member",
-        help="Member (@user or @me; repeatable, or comma-separated)",
+        help="Member (@user, @me or user PHID; repeatable, or comma-separated)",
         autocompletion=complete_user_list_filter,
     ),
     parent: Optional[str] = typer.Option(
@@ -497,13 +497,13 @@ def project_edit(
     add_member: Optional[List[str]] = typer.Option(
         None,
         "--add-member",
-        help="Add a member (@user or @me; repeatable, or comma-separated)",
+        help="Add a member (@user, @me or user PHID; repeatable, or comma-separated)",
         autocompletion=complete_user_list_filter,
     ),
     remove_member: Optional[List[str]] = typer.Option(
         None,
         "--remove-member",
-        help="Remove a member (@user or @me; repeatable, or comma-separated)",
+        help="Remove a member (@user, @me or user PHID; repeatable, or comma-separated)",
         autocompletion=complete_user_list_filter,
     ),
     space: Optional[str] = typer.Option(

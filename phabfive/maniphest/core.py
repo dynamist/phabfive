@@ -57,8 +57,6 @@ from phabfive.maniphest.resolvers import (
     resolve_project_phids_for_create,
     resolve_space,
     resolve_space_phids,
-    resolve_user_phid,
-    resolve_user_phids,
 )
 from phabfive.maniphest.utils import (
     PHORGE_ORDER_KEYS,
@@ -69,7 +67,7 @@ from phabfive.maniphest.utils import (
 )
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
-from phabfive.me import is_me, whoami_me
+from phabfive.me import is_me
 from phabfive.options import split_list_option
 from phabfive.policy import (
     policy_label,
@@ -80,6 +78,7 @@ from phabfive.policy import (
 )
 from phabfive.project_filters import parse_project_patterns
 from phabfive.retry import idempotent_writes, is_idempotent_edit
+from phabfive.users import resolve_user_phids as resolve_users
 
 log = logging.getLogger(__name__)
 
@@ -170,13 +169,9 @@ class Maniphest(Phabfive):
         self.__dict__["_once__get_api_status_map"] = status_map
         return validate_status(status, status_map)
 
-    def _resolve_user_phid(self, username):
-        """Resolve a single username to PHID."""
-        return resolve_user_phid(self.phab, username)
-
-    def _resolve_user_phids(self, usernames):
-        """Resolve multiple usernames to PHIDs."""
-        return resolve_user_phids(self.phab, usernames)
+    def _resolve_users(self, values, option=None):
+        """Resolve usernames, @usernames, @me and user PHIDs to (PHID, username)."""
+        return resolve_users(self.phab, values, option=option)
 
     def _resolve_project_phids_for_create(self, project_names):
         """Resolve project names to PHIDs and slugs for task creation."""
@@ -748,8 +743,8 @@ class Maniphest(Phabfive):
         """
         Resolve a user search filter into PHIDs.
 
-        Accepts "@me", a username, or a comma-separated list of either for
-        OR logic, e.g. "@me,user1,user2".
+        Accepts "@me", a username or @username, a user PHID, or a
+        comma-separated list of them for OR logic, e.g. "@me,user1,@user2".
 
         Parameters
         ----------
@@ -767,28 +762,21 @@ class Maniphest(Phabfive):
 
         Raises
         ------
-        PhabfiveConfigException
+        PhabfiveDataException
             If any name cannot be resolved to a PHID. Filtering on a name
             that does not exist would otherwise look like "no matches".
         """
         if not value:
             return []
 
-        phids = []
-        resolved_names = []
-
-        for name in [n.strip() for n in value.split(",")]:
-            if is_me(name):
-                whoami = whoami_me(self.phab, option=option)
-                phid = whoami["phid"]
-                resolved_names.append(f"@me ({whoami.get('userName', 'unknown')})")
-            else:
-                phid = self._resolve_user_phid(name)
-                if not phid:
-                    raise PhabfiveConfigException(f"User '{name}' not found")
-                resolved_names.append(name)
-
-            phids.append(phid)
+        users = self._resolve_users(
+            [n.strip() for n in value.split(",") if n.strip()], option=option
+        )
+        phids = list(dict.fromkeys(phid for phid, _ in users.values()))
+        resolved_names = [
+            f"@me ({username})" if is_me(name) else (username or name)
+            for name, (_, username) in users.items()
+        ]
 
         if len(resolved_names) > 1:
             log.info(f"Filtering by tasks {label} any of: {', '.join(resolved_names)}")
@@ -2087,16 +2075,10 @@ class Maniphest(Phabfive):
         # Resolve assignee username to PHID (supports @me shortcut)
         assignee_display = assignee
         if assignee:
-            if is_me(assignee):
-                whoami = whoami_me(self.phab, option="--assign")
-                assignee_phid = whoami["phid"]
-                assignee_display = whoami.get("userName", "@me")
-            else:
-                assignee_phid = self._resolve_user_phid(assignee)
-                if not assignee_phid:
-                    raise PhabfiveConfigException(
-                        f"User '{assignee}' not found on Phabricator"
-                    )
+            [(assignee_phid, username)] = self._resolve_users(
+                [assignee], option="--assign"
+            ).values()
+            assignee_display = username or assignee
             transactions.append({"type": "owner", "value": assignee_phid})
 
         # Resolve project tags to PHIDs and slugs
@@ -2109,22 +2091,14 @@ class Maniphest(Phabfive):
                 )
                 project_slugs = project_info["slugs"]
 
-        # Resolve subscriber usernames to PHIDs (supports @me shortcut)
+        # Resolve subscribers to PHIDs (usernames, @me or PHIDs)
         subscriber_display = []
         if parsed_subscribers:
-            subscriber_phids = []
-            for sub in parsed_subscribers:
-                if is_me(sub):
-                    whoami = whoami_me(self.phab, option="--subscribe")
-                    display_name = whoami.get("userName", "@me")
-                    subscriber_phids.append(whoami["phid"])
-                    subscriber_display.append(display_name)
-                else:
-                    phid = self._resolve_user_phid(sub)
-                    if not phid:
-                        raise PhabfiveConfigException(f"User '{sub}' not found")
-                    subscriber_phids.append(phid)
-                    subscriber_display.append(sub)
+            users = self._resolve_users(parsed_subscribers, option="--subscribe")
+            subscriber_phids = list(dict.fromkeys(phid for phid, _ in users.values()))
+            subscriber_display = [
+                username or value for value, (_, username) in users.items()
+            ]
             if subscriber_phids:
                 transactions.append(
                     {"type": "subscribers.set", "value": subscriber_phids}
@@ -2462,16 +2436,10 @@ class Maniphest(Phabfive):
 
         # Handle assignee
         if assign:
-            # Handle @me shortcut
-            if is_me(assign):
-                whoami = whoami_me(self.phab, option="--assign")
-                user_phid = whoami["phid"]
-                new_username = whoami.get("userName", assign)
-            else:
-                user_phid = self._resolve_user_phid(assign)
-                new_username = assign
-                if not user_phid:
-                    raise PhabfiveNotFoundException(f"User not found: {assign}")
+            [(user_phid, username)] = self._resolve_users(
+                [assign], option="--assign"
+            ).values()
+            new_username = username or assign
             current_owner = task_data["fields"]["ownerPHID"]
             if user_phid != current_owner:
                 transactions.append({"type": "owner", "value": user_phid})
@@ -2525,20 +2493,17 @@ class Maniphest(Phabfive):
 
             subscriber_phids = []
             subscriber_names = []
-            for username in split_list_option(subscribe):
-                if is_me(username):
-                    whoami = whoami_me(self.phab, option="--subscribe")
-                    user_phid = whoami["phid"]
-                    display_name = whoami.get("userName", username)
-                else:
-                    user_phid = self._resolve_user_phid(username)
-                    display_name = username
-                    if not user_phid:
-                        raise PhabfiveNotFoundException(f"User not found: {username}")
+            users = self._resolve_users(
+                split_list_option(subscribe), option="--subscribe"
+            )
+            for value, (user_phid, username) in users.items():
                 # Only add if not already subscribed
-                if user_phid not in current_subscribers:
+                if (
+                    user_phid not in current_subscribers
+                    and user_phid not in subscriber_phids
+                ):
                     subscriber_phids.append(user_phid)
-                    subscriber_names.append(display_name)
+                    subscriber_names.append(username or value)
 
             if subscriber_phids:
                 transactions.append(

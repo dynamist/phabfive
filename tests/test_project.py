@@ -19,7 +19,8 @@ from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.project import Project
 from phabfive.project.formatters import build_project_display_data
-from phabfive.project.resolvers import resolve_project, resolve_user_phids
+from phabfive.project.resolvers import resolve_project
+from phabfive.users import resolve_user_phids
 
 runner = CliRunner()
 

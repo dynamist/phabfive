@@ -29,6 +29,26 @@ BOB_PHID = "PHID-USER-bbbbbbbbbbbbbbbbbbbb"
 USER_PHIDS = {"alice": ALICE_PHID, "bob": BOB_PHID}
 
 
+def _user_search(users):
+    """A user.search that knows these usernames, and no user called "me"."""
+    records = [
+        {"phid": phid, "fields": {"username": name}} for name, phid in users.items()
+    ]
+
+    def search(constraints):
+        names = {n.casefold() for n in constraints.get("usernames", [])}
+        phids = set(constraints.get("phids", []))
+        return {
+            "data": [
+                r
+                for r in records
+                if r["fields"]["username"].casefold() in names or r["phid"] in phids
+            ]
+        }
+
+    return search
+
+
 def _maniphest():
     """A Maniphest with a mocked API client, ready for task_search."""
     maniphest = Maniphest()
@@ -48,8 +68,7 @@ def _maniphest():
         "phid": ADMIN_PHID,
         "userName": "admin",
     }
-    # No user is called "me", which would make @me ambiguous
-    maniphest.phab.user.search.return_value = {"data": []}
+    maniphest.phab.user.search.side_effect = _user_search(USER_PHIDS)
 
     response = MagicMock()
     response.response = {"data": []}
@@ -57,7 +76,6 @@ def _maniphest():
     maniphest.phab.maniphest.search.return_value = response
     maniphest.phab.project.query.return_value = {"data": {}}
 
-    maniphest._resolve_user_phid = MagicMock(side_effect=USER_PHIDS.get)
     maniphest._get_open_statuses = MagicMock(return_value=["open"])
 
     return maniphest
@@ -140,9 +158,7 @@ class TestUnresolvableUser:
     def test_unknown_author_raises(self, mock_init):
         maniphest = _maniphest()
 
-        with pytest.raises(
-            PhabfiveConfigException, match="User 'nosuchuser' not found"
-        ):
+        with pytest.raises(PhabfiveDataException, match="No such user: 'nosuchuser'"):
             maniphest.task_search(author="nosuchuser")
 
         maniphest.phab.maniphest.search.assert_not_called()
@@ -150,9 +166,7 @@ class TestUnresolvableUser:
     def test_unknown_assignee_raises(self, mock_init):
         maniphest = _maniphest()
 
-        with pytest.raises(
-            PhabfiveConfigException, match="User 'nosuchuser' not found"
-        ):
+        with pytest.raises(PhabfiveDataException, match="No such user: 'nosuchuser'"):
             maniphest.task_search(assigned="nosuchuser")
 
         maniphest.phab.maniphest.search.assert_not_called()
@@ -160,9 +174,7 @@ class TestUnresolvableUser:
     def test_one_bad_name_in_a_list_raises(self, mock_init):
         maniphest = _maniphest()
 
-        with pytest.raises(
-            PhabfiveConfigException, match="User 'nosuchuser' not found"
-        ):
+        with pytest.raises(PhabfiveDataException, match="No such user: 'nosuchuser'"):
             maniphest.task_search(author="alice,nosuchuser")
 
     def test_whoami_without_phid_raises(self, mock_init):
