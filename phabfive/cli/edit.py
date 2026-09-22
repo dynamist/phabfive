@@ -14,6 +14,7 @@ from phabfive.cli.completers import (
     complete_status,
     complete_tag,
     complete_user,
+    complete_user_list,
 )
 from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.cli.editor import resolve_assume_yes
@@ -73,7 +74,7 @@ def edit_command(
         None,
         "--subscribe",
         help="Add subscriber (username or @me, repeatable, comma-separated)",
-        autocompletion=complete_user,
+        autocompletion=complete_user_list,
     ),
     comment: Optional[str] = typer.Option(
         None,

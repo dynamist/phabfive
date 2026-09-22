@@ -10,8 +10,8 @@ import typer
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import (
     complete_language,
-    complete_tag,
-    complete_user,
+    complete_tag_list,
+    complete_user_list,
     complete_user_filter,
 )
 from phabfive.cli.output import (
@@ -164,13 +164,13 @@ def create(
         None,
         "--tag",
         help="Add to project (repeatable, comma-separated)",
-        autocompletion=complete_tag,
+        autocompletion=complete_tag_list,
     ),
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
         help="Add subscriber (username or @me, repeatable, comma-separated)",
-        autocompletion=complete_user,
+        autocompletion=complete_user_list,
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without creating"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Create without confirming"),
@@ -417,13 +417,13 @@ def edit(
         None,
         "--tag",
         help="Add to project (repeatable, comma-separated)",
-        autocompletion=complete_tag,
+        autocompletion=complete_tag_list,
     ),
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
         help="Add subscriber (username or @me, repeatable, comma-separated)",
-        autocompletion=complete_user,
+        autocompletion=complete_user_list,
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview changes without applying"
