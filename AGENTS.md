@@ -166,9 +166,16 @@ Complex features use a consistent subpackage structure:
 - Server-backed shell completions are cached under `appdirs.user_cache_dir("phabfive")`,
   keyed by instance URL and token, with per-namespace TTLs from `CACHE_TTLS`
 - Caching is **opt-in per call site**: `phabfive/cache.py` is called only from
-  `cli/completers.py` and `cli/cache.py`. Nothing wraps the API client, which is
-  what keeps passphrase values out of the cache by construction. Do not add a
-  transparent wrapper.
+  `cli/completers.py`, `cli/cache.py` and `cli/lookups.py`. Nothing wraps the API
+  client, which is what keeps passphrase values out of the cache by construction.
+  Do not add a transparent wrapper.
+- The commands reach the cache too, but only through `Phabfive.lookup_store`: `None`
+  on the class, so a program never writes to the user's cache directory, and a
+  `cli.lookups.CommandLookups` that `cli/apps.py:new_app` gives every app, keyed by
+  the app's own `conf`. `_from_parent` carries it to sibling apps, which is how
+  `Edit.maniphest` gets it. Library code reads and writes it only at a call site
+  written for it - today `Maniphest._get_api_status_map` (namespace `status-map`)
+  and the `--icon` warning in `cli/lookups.py`
 - `Phabfive.read_config()` is a classmethod so the cache can key entries by
   `PHAB_URL` without constructing `Phabfive()`, which validates a whole
   configuration the key does not need. Constructing makes no request any more -
@@ -179,7 +186,8 @@ Complex features use a consistent subpackage structure:
 - A cached call site must use a fetch that **fails** on error. Helpers that
   answer a failure with invented defaults (`get_api_status_map`) must not be
   cached through, or the defaults get stored as if the server had said them —
-  which is why completion has its own `_fetch_status_keys`
+  which is why completion has its own `_fetch_status_keys`, and the commands'
+  status map goes through `fetch_api_status_map`, which raises
 - `_get_board_columns` is the one API-backed completion that is deliberately
   not cached: it builds its own `Phabfive()` instead of going through
   `_get_values_with_api_fallback`, so it needs that refactor first

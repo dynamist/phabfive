@@ -500,13 +500,14 @@ def get_api_priority_names(phab):
     return priorities
 
 
-def get_api_status_map(phab):
+def fetch_api_status_map(phab):
     """
     Get status information from Phabricator API using maniphest.querystatuses.
 
-    Uses the maniphest.querystatuses API to dynamically fetch all available
-    statuses and their metadata. This allows the tool to work with custom
-    status configurations in Phabricator/Phorge instances.
+    Raises rather than substituting defaults, so that a caller which
+    remembers the answer - the command keeps it between runs - cannot be
+    handed an invented map to write down as though the server had said it.
+    get_api_status_map is the one that falls back.
 
     Parameters
     ----------
@@ -525,44 +526,78 @@ def get_api_status_map(phab):
         - allStatuses: list of all status keys
         - statusMap: dict mapping status keys to display names
     """
+    # A plain dict rather than the client's Result wrapper, which the cache
+    # cannot serialise
+    result = dict(phab.maniphest.querystatuses())
+    log.debug(
+        f"Fetched {len(result.get('allStatuses', []))} statuses from maniphest.querystatuses"
+    )
+    return result
+
+
+def fallback_status_map():
+    """The standard Phabricator statuses, for when the server cannot say.
+
+    Never the server's answer, so never to be remembered as one.
+    """
+    return {
+        "defaultStatus": "open",
+        "defaultClosedStatus": "resolved",
+        "duplicateStatus": "duplicate",
+        "openStatuses": ["open"],
+        "closedStatuses": {
+            "1": "resolved",
+            "2": "wontfix",
+            "3": "invalid",
+            "4": "duplicate",
+            "5": "spite",
+        },
+        "allStatuses": [
+            "open",
+            "resolved",
+            "wontfix",
+            "invalid",
+            "duplicate",
+            "spite",
+        ],
+        "statusMap": {
+            "open": "Open",
+            "resolved": "Resolved",
+            "wontfix": "Wontfix",
+            "invalid": "Invalid",
+            "duplicate": "Duplicate",
+            "spite": "Spite",
+        },
+    }
+
+
+def get_api_status_map(phab):
+    """
+    Get status information from Phabricator API, or the standard statuses.
+
+    Uses the maniphest.querystatuses API to dynamically fetch all available
+    statuses and their metadata. This allows the tool to work with custom
+    status configurations in Phabricator/Phorge instances.
+
+    A failed lookup is answered with fallback_status_map(), because a
+    command has to have a map to validate and display with. That makes what
+    this returns unsafe to cache: use fetch_api_status_map for that.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+
+    Returns
+    -------
+    dict
+        The maniphest.querystatuses response, see fetch_api_status_map
+    """
     try:
-        result = phab.maniphest.querystatuses()
-        log.debug(
-            f"Fetched {len(result.get('allStatuses', []))} statuses from maniphest.querystatuses"
-        )
-        return result
+        return fetch_api_status_map(phab)
     except Exception as e:
         log.warning(f"Failed to fetch statuses from API: {e}. Using fallback statuses.")
-        # Fallback to standard Phabricator statuses if API call fails
-        return {
-            "defaultStatus": "open",
-            "defaultClosedStatus": "resolved",
-            "duplicateStatus": "duplicate",
-            "openStatuses": ["open"],
-            "closedStatuses": {
-                "1": "resolved",
-                "2": "wontfix",
-                "3": "invalid",
-                "4": "duplicate",
-                "5": "spite",
-            },
-            "allStatuses": [
-                "open",
-                "resolved",
-                "wontfix",
-                "invalid",
-                "duplicate",
-                "spite",
-            ],
-            "statusMap": {
-                "open": "Open",
-                "resolved": "Resolved",
-                "wontfix": "Wontfix",
-                "invalid": "Invalid",
-                "duplicate": "Duplicate",
-                "spite": "Spite",
-            },
-        }
+        return fallback_status_map()
 
 
 def get_column_info(phab, board_phid):

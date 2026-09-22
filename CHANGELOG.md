@@ -291,8 +291,25 @@
   the instance, cached for a week in the new `project-icons` namespace, since the
   icon set is instance configuration no Conduit method reports. A project write
   drops the cached project names, so a new or renamed project completes at once
+* **A misspelled `--icon` is warned about** - `project search` and a `project create`
+  or `edit --dry-run` warn about an icon that Phorge does not ship and no project on
+  the instance carries, since a search answers it with nothing and a dry run never
+  reaches the server. A warning, not an error: a configured icon no project uses yet
+  looks the same. The icons come from the `project-icons` cache completion fills
+  (#421)
 * A project cannot be archived, unarchived or deleted through Conduit, so none of
   these commands can
+
+### Remembered Task Statuses
+* **The status map is cached for a week** - `maniphest create`, `edit` and `search`
+  and `phabfive edit` asked `maniphest.querystatuses` on every run, so a script
+  editing in a hundred batches asked a hundred times. The answer is now kept in the
+  new `status-map` cache namespace, and every run after the first saves the round
+  trip. A status the remembered map does not know is asked of the server once more
+  before it is refused, so a newly configured status can be set at once;
+  `phabfive cache clear status-map` refreshes the rest. A failed lookup still falls
+  back to the standard statuses, and those are never written down. Only the command
+  caches: a program using phabfive as a library asks every time (#421)
 
 ### Newline-Delimited JSON Output
 * **`--format=jsonl`** - Emits one JSON object per line with no wrapping array

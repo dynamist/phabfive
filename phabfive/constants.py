@@ -375,11 +375,17 @@ CACHE_TTLS = {
     "spaces": 86400,  # 24 hours
     "priorities": 604800,  # 7 days
     "statuses": 604800,  # 7 days
+    "status-map": 604800,  # 7 days
     "project-icons": 604800,  # 7 days
     "projects": 300,  # 5 minutes
     "columns": 300,  # 5 minutes
 }
 CACHE_TTL_DEFAULT = 300
+
+# The whole maniphest.querystatuses answer, which the commands validate and
+# display statuses with - unlike "statuses", which is the list of keys that
+# completion offers
+STATUS_MAP_CACHE_NAMESPACE = "status-map"
 REQUIRED = ["PHAB_TOKEN", "PHAB_URL"]
 VALIDATORS = {
     "PHAB_URL": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
@@ -482,6 +488,7 @@ __all__ = [
     "CACHE_SCHEMA_VERSION",
     "CACHE_TTL_DEFAULT",
     "CACHE_TTLS",
+    "STATUS_MAP_CACHE_NAMESPACE",
     "CONFIGURABLES",
     "DEFAULTS",
     "DISPLAY_ALIASES",

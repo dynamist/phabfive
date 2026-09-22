@@ -47,6 +47,12 @@ class Phabfive:
     _fallback_format = "yaml"  # Format used when stdout is not a TTY
     # Maximum line width for rich format (to prevent YAML breaking)
     MAX_LINE_WIDTH = 4096
+    # Where instance configuration looked up once - the task statuses - is
+    # remembered between runs: an object with get(namespace) and
+    # set(namespace, value). None suits a program, which asks the server
+    # every time rather than writing to the user's cache directory; the
+    # command gives its apps one, see phabfive.cli.lookups.
+    lookup_store = None
 
     # Monogram patterns for object type detection
     TASK_PATTERN = re.compile(r"[Tt](\d+)")
@@ -366,7 +372,7 @@ class Phabfive:
         build and connect a second client to the same host.
         """
         child = cls.__new__(cls)
-        for name in ("conf", "url", "phab", "_explicit_phab_url"):
+        for name in ("conf", "url", "phab", "_explicit_phab_url", "lookup_store"):
             if hasattr(parent, name):
                 setattr(child, name, getattr(parent, name))
         return child

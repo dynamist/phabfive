@@ -51,6 +51,11 @@ def new_app(cls):
     # PHAB_FALLBACK is configuration, but the format it names is the
     # command's concern, so it is the command that applies it.
     app.set_fallback_format(app.conf.get("PHAB_FALLBACK", "yaml"))
+    # So is remembering instance configuration between runs: a program asks
+    # the server every time, the command keeps the answer in its cache
+    from phabfive.cli.lookups import CommandLookups
+
+    app.lookup_store = CommandLookups(app.conf)
     return app
 
 

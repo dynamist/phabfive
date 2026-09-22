@@ -250,7 +250,7 @@ class TestPerInstanceLookups:
     def test_fetched_once_per_instance(self, phabricator):
         app = Maniphest(url=URL, token=TOKEN)
         with mock.patch(
-            "phabfive.maniphest.core.get_api_status_map", return_value={"a": 1}
+            "phabfive.maniphest.core.fetch_api_status_map", return_value={"a": 1}
         ) as fetch:
             assert app._get_api_status_map() == {"a": 1}
             assert app._get_api_status_map() == {"a": 1}
@@ -261,7 +261,7 @@ class TestPerInstanceLookups:
         one = Maniphest(url=URL, token=TOKEN)
         two = Maniphest(url="https://other.example.com/api/", token=TOKEN)
         with mock.patch(
-            "phabfive.maniphest.core.get_api_status_map",
+            "phabfive.maniphest.core.fetch_api_status_map",
             side_effect=lambda phab: {"phab": phab},
         ) as fetch:
             for _ in range(3):
