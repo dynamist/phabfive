@@ -174,6 +174,16 @@ class TestSubscribers:
 
         phab.maniphest.edit.assert_not_called()
 
+    @pytest.mark.parametrize("item", [None, 1234], ids=["null", "number"])
+    def test_an_item_that_is_not_a_username_is_refused(self, item):
+        """A stray `-` in YAML is a null item, and a bare 1234 is a number."""
+        phab = _phab()
+
+        with pytest.raises(PhabfiveConfigException, match="subscribers takes"):
+            _create(phab, [_task(subscribers=["alice", item])])
+
+        phab.maniphest.edit.assert_not_called()
+
 
 class TestAmbiguousMe:
     def test_an_ambiguous_me_names_the_field(self):
