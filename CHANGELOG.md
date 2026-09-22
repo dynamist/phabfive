@@ -354,6 +354,10 @@
 
 ## Bug Fixes
 
+* **A bare search exited 1 with a traceback on typer 0.27.** `maniphest search`, `paste search`,
+  `passphrase search` and `user search` with nothing to search for raised click's
+  `NoArgsIsHelpError`, which typer 0.27 no longer catches because its `Context` is its own
+  vendored click. They now print the help on stderr and exit 2 on every typer version
 * **Errors past the first request printed a traceback.** A token the server refuses,
   a server that stops answering mid-command and a malformed `--created-after`
   value all ended in Python tracebacks. Each is now one line on stderr and exit
