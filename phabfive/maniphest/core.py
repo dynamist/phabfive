@@ -51,7 +51,6 @@ from phabfive.maniphest.resolvers import (
     fetch_project_lookup_maps,
     fetch_projects_by_phid,
     is_exact_monogram,
-    parse_plus_separated,
     resolve_project_phids,
     resolve_project_phids_for_create,
     resolve_space,
@@ -108,10 +107,6 @@ class Maniphest(Phabfive):
     def _resolve_project_phids(self, project: str) -> list[str]:
         """Resolve project name, hashtag, or wildcard pattern to list of project PHIDs."""
         return resolve_project_phids(self.phab, project)
-
-    def _parse_plus_separated(self, values):
-        """Parse plus-separated values from CLI options."""
-        return parse_plus_separated(values)
 
     def _get_open_statuses(self):
         """
@@ -1956,7 +1951,8 @@ class Maniphest(Phabfive):
         description : str, optional
             Task description
         tags : list, optional
-            List of project names/tags (may contain plus-separated values)
+            Project names, hashtags, IDs or PHIDs. Each item may hold several,
+            separated by commas
         assignee : str, optional
             Username of the assignee (supports @me for current user)
         status : str, optional
@@ -1964,7 +1960,8 @@ class Maniphest(Phabfive):
         priority : str, optional
             Task priority (Unbreak, Triage, High, Normal, Low, Wish)
         subscribers : list, optional
-            List of subscriber usernames (supports @me for current user)
+            Subscriber usernames (supports @me for current user). Each item
+            may hold several, separated by commas
         column : str, optional
             Column name on board for initial placement
         board_phid : str, optional
@@ -2004,11 +2001,9 @@ class Maniphest(Phabfive):
         validate_policy_value(visible_to, option="--visible-to")
         validate_policy_value(editable_by, option="--editable-by")
 
-        # Parse plus-separated values (supports both repeat option and plus syntax)
-        parsed_tags = self._parse_plus_separated(tags) if tags else []
-        parsed_subscribers = (
-            self._parse_plus_separated(subscribers) if subscribers else []
-        )
+        # Repeatable and comma-separated, like every other list of values
+        parsed_tags = split_list_option(tags)
+        parsed_subscribers = split_list_option(subscribers)
 
         # Build transactions list
         transactions = []

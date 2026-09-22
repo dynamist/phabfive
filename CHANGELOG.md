@@ -20,6 +20,12 @@
   `--force required for non-interactive mode` error, are gone. Two or more are reviewed one
   at a time at a terminal. `--dry-run` still previews anything
 * **`--force` is deprecated in favour of `--yes`.** It still works, hidden, and warns
+* **`+` between `maniphest create --tag` or `--subscribe` values is deprecated.** Use a
+  comma, as every other list option does: `--tag=Backend,QA`. `--tag=Backend+QA` still
+  names two projects, and warns on stderr. `+` is the AND of the search-filter grammar,
+  which a list of values to add has no use for. `Maniphest.create_task` no longer splits
+  on `+` at all: its `tags` and `subscribers` are split on commas, so a project named
+  `C++` reaches it whole
 * **The `~/.config/phabfive.yaml` credentials deprecation is a log message.** It reads
   `WARNING - ~/.config/phabfive.yaml contains ...` rather than `WARNING: ...`, and `-q`
   now silences it
@@ -310,6 +316,14 @@
 * **A batch dry run said "Edited N/N tasks".** It now says `Would edit N/N tasks (dry run)`,
   and in any run a task already at the target is counted apart, as `N already at target`.
   Closes #423
+* **`--tag` and `--subscribe` split differently from one command to the next.**
+  `--subscribe=@a,@b` meant two people on `maniphest edit`, a user named `@a,@b` on
+  `maniphest create`, and `paste create --tag=a,b` added one project named `a,b`. Every
+  option that adds values is now repeatable and comma-separated, through
+  `phabfive.options.split_list_option`: `maniphest create --tag/--subscribe` and
+  `paste create/edit --tag/--subscribe` join `maniphest edit --subscribe` and the
+  `project` options. Search filters keep their own grammar, where `,` is OR and `+` is
+  AND. Fixes #429
 * **`maniphest create --with` exited 0 when the template file did not exist.** It is an
   error now, and exits 1
 * **Interrupting phabfive printed a traceback of its own.** `cli_entrypoint` raised

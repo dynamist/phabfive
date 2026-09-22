@@ -78,6 +78,21 @@ The value grammar, why `Can Interact` cannot be set, and what happens to a
 policy change with no terminal to review it on are all in
 [Policies](policies.md).
 
+### Create a Task
+
+`--tag` and `--subscribe` are repeatable and comma-separated, like every option
+that adds values, so these two are the same:
+
+```bash
+phabfive maniphest create "Fix the importer" --tag=Backend,QA --subscribe=@alice,@bob
+phabfive maniphest create "Fix the importer" --tag=Backend --tag=QA --subscribe=@alice --subscribe=@bob
+```
+
+`--column` places the task on the board of the first `--tag`. `+` between
+values (`--tag=Backend+QA`) still works but is deprecated and warns: in a search
+filter `+` means AND, which a list of values to add has no use for. The search
+filters below keep that grammar, where `,` is OR.
+
 ### Add Comments
 
 Add a comment to a task:

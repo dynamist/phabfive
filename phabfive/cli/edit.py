@@ -72,7 +72,7 @@ def edit_command(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable)",
+        help="Add subscriber (username or @me, repeatable, comma-separated)",
         autocompletion=complete_user,
     ),
     comment: Optional[str] = typer.Option(

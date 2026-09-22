@@ -23,6 +23,7 @@ from phabfive.cli.output import (
 )
 from phabfive.constants import MONOGRAMS
 from phabfive.cli.editor import resolve_assume_yes
+from phabfive.options import split_list_option
 from phabfive.paste.display import display_pastes
 
 paste_app = typer.Typer(
@@ -162,13 +163,13 @@ def create(
     tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Add to project (repeatable)",
+        help="Add to project (repeatable, comma-separated)",
         autocompletion=complete_tag,
     ),
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable)",
+        help="Add subscriber (username or @me, repeatable, comma-separated)",
         autocompletion=complete_user,
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without creating"),
@@ -282,7 +283,7 @@ def create(
     # Handle @me shortcut for subscribers
     subscriber_names = []
     if subscribe:
-        for sub in subscribe:
+        for sub in split_list_option(subscribe):
             if sub == "@me":
                 whoami = paste.phab.user.whoami()
                 subscriber_names.append(whoami.get("userName", sub))
@@ -290,7 +291,7 @@ def create(
                 subscriber_names.append(sub)
 
     # Handle tags
-    tag_list = list(tag) if tag else None
+    tag_list = split_list_option(tag) or None
 
     def show_preview(header):
         print(header, file=preview)
@@ -415,13 +416,13 @@ def edit(
     tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Add to project (repeatable)",
+        help="Add to project (repeatable, comma-separated)",
         autocompletion=complete_tag,
     ),
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable)",
+        help="Add subscriber (username or @me, repeatable, comma-separated)",
         autocompletion=complete_user,
     ),
     dry_run: bool = typer.Option(
@@ -512,7 +513,7 @@ def edit(
     # Handle @me shortcut for subscribers
     subscriber_names = []
     if subscribe:
-        for sub in subscribe:
+        for sub in split_list_option(subscribe):
             if sub == "@me":
                 whoami = paste.phab.user.whoami()
                 subscriber_names.append(whoami.get("userName", sub))
@@ -520,7 +521,7 @@ def edit(
                 subscriber_names.append(sub)
 
     # Handle tags
-    tag_list = list(tag) if tag else None
+    tag_list = split_list_option(tag) or None
 
     # A single object applies directly; --interactive asks first.
     if final_content is not None and not dry_run and interactive:

@@ -322,6 +322,11 @@ phabfive maniphest edit T123 --visible-to='#infra' --editable-by=admin --dry-run
 phabfive --format=json maniphest edit T123 --status=resolved --dry-run
 ```
 
+An option that adds several values - `--tag` and `--subscribe` on `maniphest create` and
+`paste create/edit`, the `project` list options - is repeatable and comma-separated:
+`--tag=Backend,QA` is `--tag=Backend --tag=QA`. Use `,`, not `+`, which is deprecated there
+and means AND only in a search filter.
+
 `--visible-to` and `--editable-by` set who can see and who can edit a task, named after
 the labels Phorge's own form uses. Each takes
 
