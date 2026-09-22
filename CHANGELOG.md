@@ -68,7 +68,8 @@
 * **A write whose answer is lost is no longer sent again.** The `phabricator` library
   retried every request after a read timeout, and Conduit is always POST, so a slow
   `maniphest comment` could post its comment twice. Such a write now fails with an error
-  saying it may have been applied, and is not repeated. An edit that only sets fields -
+  saying it may have been applied, and is not repeated. So does one answered with a 5xx,
+  which from a gateway usually means the server carried on working. An edit that only sets fields -
   status, priority, policies and the like - is still retried, since arriving twice changes
   nothing (#422)
 
@@ -344,7 +345,9 @@
   for again with the same cursor, and no page already read is fetched twice
 * **`PHAB_RETRY` and `PHAB_BACKOFF_MAX`** - How often a failed call is retried (default
   3, `0` turns retrying off) and the longest single wait in seconds (default 5, which caps
-  `Retry-After` too). A bulk job that should ride out a restart can raise both
+  `Retry-After` too). A bulk job that should ride out a restart can raise both. They and
+  `PHAB_PACE` are checked when an app is constructed, so a value that is not a finite,
+  non-negative number fails before any work is done
 * **`PHAB_PACE`** - Seconds to keep between the writes of a batch edit, so a batch does
   not carry on at full speed against a struggling server. Off by default. See
   [Retries](docs/retries.md)

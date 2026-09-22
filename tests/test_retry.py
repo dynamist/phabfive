@@ -5,6 +5,12 @@ The transport is faked one level below requests: urllib3's
 the real HTTPAdapter, the real `urllib3.Retry` machinery and the real
 `phabricator` client all run, and no socket is opened. `phabfive.retry._sleep`
 is replaced too, so the waits are recorded rather than slept.
+
+The hook works on urllib3 1.26 and 2.x alike. 1.26 expects `_make_request`
+to return an `http.client` response and rebuilds it with
+`HTTPResponse.from_httplib`, which reads the headers from `.msg`; 2.x uses
+the returned `HTTPResponse` as it is. A response carrying its headers in
+both places satisfies either.
 """
 
 import io
@@ -14,6 +20,7 @@ from urllib.parse import parse_qs
 
 import pytest
 from urllib3 import HTTPResponse
+from urllib3._collections import HTTPHeaderDict
 from urllib3.exceptions import NewConnectionError, ReadTimeoutError
 
 from phabfive.conduit import Conduit
@@ -61,10 +68,12 @@ class Transport:
             raise ReadTimeoutError(pool, url, "Read timed out.")
         if outcome == REFUSED:
             raise NewConnectionError(conn, "Connection refused")
+        headers = HTTPHeaderDict(outcome.get("headers", {}))
         return HTTPResponse(
             body=io.BytesIO(json.dumps(outcome["body"]).encode()),
             status=outcome["status"],
-            headers=outcome.get("headers", {}),
+            headers=headers,
+            msg=headers,
             preload_content=False,
             decode_content=False,
             request_method=method,
@@ -198,9 +207,20 @@ class TestWrites:
     def test_a_5xx_is_not_retried(self, wire, sleeps):
         transport = wire(status(502), ok({}))
 
-        with pytest.raises(PhabfiveConnectionException, match="502"):
+        with pytest.raises(PhabfiveConnectionException) as caught:
             conduit().maniphest.edit(objectIdentifier="T1", transactions=self.COMMENT)
         assert len(transport.requests) == 1
+        # A gateway error usually means the backend carried on working.
+        assert str(caught.value).startswith(
+            "maniphest.edit was sent and the server answered HTTP 502, so it may"
+        )
+
+    def test_a_4xx_is_reported_as_it_is(self, wire, sleeps):
+        wire(status(403))
+
+        with pytest.raises(PhabfiveConnectionException) as caught:
+            conduit().maniphest.edit(objectIdentifier="T1", transactions=self.COMMENT)
+        assert "may have been applied" not in str(caught.value)
 
     def test_a_connection_never_made_is_retried(self, wire, sleeps):
         """Nothing reached the server, so nothing can be applied twice."""
@@ -226,6 +246,37 @@ class TestWrites:
             with pytest.raises(PhabfiveConnectionException):
                 conduit().paste.edit(transactions=self.COMMENT)
         assert len(transport.requests) == 1
+
+
+class TestConnections:
+    """Mounting the policy keeps a read's pooled connection, not a write's."""
+
+    @staticmethod
+    def _adapter(endpoint):
+        resource = object.__getattribute__(endpoint, "_resource")
+        return resource.session.adapters["https://"]
+
+    def test_the_pages_of_a_search_share_an_adapter(self, wire, sleeps):
+        wire(ok({"data": []}), ok({"data": []}))
+        search = conduit().maniphest.search
+
+        search()
+        first = self._adapter(search)
+        search()
+
+        assert self._adapter(search) is first
+
+    def test_a_write_gets_a_fresh_adapter_and_the_old_is_closed(self, wire, sleeps):
+        wire(ok({}), ok({}))
+        edit = conduit().maniphest.edit
+
+        edit(objectIdentifier="T1", transactions=TestWrites.COMMENT)
+        first = self._adapter(edit)
+        with mock.patch.object(first, "close") as close:
+            edit(objectIdentifier="T1", transactions=TestWrites.COMMENT)
+
+        assert self._adapter(edit) is not first
+        close.assert_called_once_with()
 
 
 class TestPaging:
@@ -328,17 +379,33 @@ class TestConfiguration:
 
     @pytest.mark.parametrize(
         "conf",
-        [{"PHAB_RETRY": "lots"}, {"PHAB_RETRY": "-1"}, {"PHAB_BACKOFF_MAX": "x"}],
+        [
+            {"PHAB_RETRY": "lots"},
+            {"PHAB_RETRY": "-1"},
+            {"PHAB_BACKOFF_MAX": "x"},
+            # A nan wait never waits, and an infinite cap is no cap.
+            {"PHAB_BACKOFF_MAX": "nan"},
+            {"PHAB_BACKOFF_MAX": "inf"},
+        ],
     )
     def test_a_bad_value_is_a_config_error(self, conf):
         with pytest.raises(PhabfiveConfigException, match="at least 0"):
             RetryPolicy.from_conf(conf)
 
-    def test_constructing_an_app_checks_it(self):
+    @pytest.mark.parametrize("value", ["abc", "-1", "nan", "inf"])
+    def test_a_bad_pace_is_a_config_error(self, value):
+        with pytest.raises(PhabfiveConfigException, match="PHAB_PACE"):
+            Pacer.from_conf({"PHAB_PACE": value})
+
+    @pytest.mark.parametrize(
+        "config, key",
+        [({"PHAB_RETRY": "often"}, "PHAB_RETRY"), ({"PHAB_PACE": "abc"}, "PHAB_PACE")],
+    )
+    def test_constructing_an_app_checks_it(self, config, key):
         from phabfive import Phabfive
 
-        with pytest.raises(PhabfiveConfigException, match="PHAB_RETRY"):
-            Phabfive(url=HOST, token="t" * 32, config={"PHAB_RETRY": "often"})
+        with pytest.raises(PhabfiveConfigException, match=key):
+            Phabfive(url=HOST, token="t" * 32, config=config)
 
     def test_an_app_uses_its_policy(self):
         from phabfive import Phabfive
@@ -388,6 +455,31 @@ class TestPacer:
 
         assert maniphest.apply_task_edit.call_count == 3
         assert sleeps == [1.5, 1.5]
+
+    def test_apply_all_paces_only_real_writes(self, sleeps, monkeypatch):
+        from phabfive.edit import Edit, EditPlan, TaskEdit
+
+        monkeypatch.setattr("phabfive.retry.time.monotonic", lambda: 0.0)
+        edit = Edit.__new__(Edit)
+        edit.conf = {"PHAB_PACE": "2"}
+        edit.maniphest = mock.MagicMock()
+        change = [{"type": "status", "value": "resolved"}]
+        plan = EditPlan(
+            entries=[
+                TaskEdit(task_id="1", transactions=[], changes=[]),
+                TaskEdit(task_id="2", transactions=change, changes=[]),
+                TaskEdit(task_id="3", transactions=[], changes=[]),
+                TaskEdit(task_id="4", transactions=change, changes=[]),
+                TaskEdit(task_id="5", transactions=change, changes=[]),
+            ]
+        )
+
+        results = edit.apply_all(plan)
+
+        assert [r["task_id"] for r in results] == ["1", "2", "3", "4", "5"]
+        assert edit.maniphest.apply_task_edit.call_count == 3
+        # Nothing before the first real write, one pause before each after it.
+        assert sleeps == [2, 2]
 
 
 class TestAnnouncement:

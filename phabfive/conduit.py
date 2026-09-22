@@ -27,6 +27,7 @@ from the instance's `RetryPolicy` in its place first.
 """
 
 import contextlib
+import re
 
 from phabfive.exceptions import PhabfiveAPIException, PhabfiveConnectionException
 from phabfive.retry import RetryPolicy, is_read, retries_writes
@@ -55,6 +56,15 @@ def translated_errors(write=None):
                 "applied. It was not sent again, since doing so is not safe: "
                 "check before trying again"
             ) from e
+        status = _server_error(e) if write else None
+        if status:
+            # A 502 or 504 from a proxy usually means the backend carried on
+            # working, and a 500 may come after part of the work was done.
+            raise PhabfiveConnectionException(
+                f"{write} was sent and the server answered HTTP {status}, so it "
+                "may have been applied. It was not sent again, since doing so "
+                "is not safe: check before trying again"
+            ) from e
         raise PhabfiveConnectionException(str(e)) from e
 
 
@@ -66,6 +76,22 @@ def _unanswered(error):
     if isinstance(cause, MaxRetryError):
         cause = cause.reason
     return isinstance(cause, (ReadTimeoutError, ProtocolError))
+
+
+#: How the `phabricator` library reports a status other than 2xx. It raises
+#: `requests.HTTPError` with no response attached, so the message is all
+#: there is to go on.
+_BAD_STATUS = re.compile(r"Bad response status: (5\d\d)\b")
+
+
+def _server_error(error):
+    """The 5xx status a request was answered with, or None."""
+    import requests
+
+    if not isinstance(error, requests.exceptions.HTTPError):
+        return None
+    match = _BAD_STATUS.search(str(error))
+    return int(match.group(1)) if match else None
 
 
 def _wrap(value, retry):
@@ -85,15 +111,29 @@ def _mount_retry(resource, method, retry):
     """Send `resource`'s next call with `retry` instead of the library's.
 
     The library gives every Resource a session of its own, so this is done
-    per call. A fresh adapter each time keeps what the library had: no
-    connection outlives its call, so no write is sent on a pooled
-    connection the server has since closed.
+    per Resource. A read keeps the adapter it was given, and with it the
+    pooled keep-alive connection, for as long as the settings match - which
+    is what lets every page of a long search share one connection, as they
+    did under the library's adapter. A write that would not be retried gets
+    a fresh adapter each call, so it is never sent on a pooled connection
+    the server has since closed: that failure would read as a write that
+    may have been applied. A replaced adapter is closed, not left to hold
+    its connections open.
     """
     from requests.adapters import HTTPAdapter
 
+    safe = is_read(method) or retries_writes()
+    key = (retry, safe)
+    if safe and getattr(resource, "_phabfive_retry_key", None) == key:
+        return
+
+    replaced = resource.session.adapters.get("https://")
     adapter = HTTPAdapter(max_retries=retry.urllib3_retry(method))
     resource.session.mount("https://", adapter)
     resource.session.mount("http://", adapter)
+    resource._phabfive_retry_key = key
+    if replaced is not None:
+        replaced.close()
 
 
 class Endpoint:
