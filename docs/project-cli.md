@@ -175,7 +175,19 @@ finds the archived red projects, and their milestones take that color too.
 The colors are fixed in Phorge's code: `projects.colors` can relabel one, but not
 add one. So an unknown color is refused, with the list of valid ones. Icons are
 instance configuration (`projects.icons`), and no Conduit method lists them, so
-an unknown icon cannot be told from a custom one: it simply matches nothing.
+an unknown icon cannot be told from a custom one: it simply matches nothing. What
+phabfive can tell is whether Phorge ships the icon or some project on the instance
+carries it, and it warns when neither is true:
+
+```console
+$ phabfive project search --icon=grop
+WARNING: No project uses the icon 'grop' and it is not one Phorge ships, so it may be misspelled. An icon configured in projects.icons that no project uses yet cannot be checked.
+No projects found
+```
+
+The search still runs, because a configured icon that no project uses yet looks
+exactly the same. The icons in use are cached for a week, with the ones tab
+completion offers.
 
 `project search` looks in `PHAB_SPACE` unless `--space` says otherwise, the same
 as `maniphest search`. A project that has no Space of its own belongs to the
@@ -221,7 +233,7 @@ phabfive project create "Platform" --icon=infrastructure --color=blue \
 | Option | Sets |
 | --- | --- |
 | `--description` | The description |
-| `--icon`, `--color` | The icon and color. Tab completion offers them; an unknown color is refused before anything is sent, and the server checks the icon |
+| `--icon`, `--color` | The icon and color. Tab completion offers them; an unknown color is refused before anything is sent, and the server checks the icon. A `--dry-run` never reaches the server, so it warns about an icon no project uses instead, as `project search` does |
 | `--slug` | Additional hashtags, besides the one Phorge derives from the name |
 | `--member` | Members |
 | `--space` | The Space to create it in |
@@ -335,4 +347,4 @@ renamed project completes straight away. See [Caching](caching.md).
 
 - [Policies](policies.md): the policy grammar and how policies are displayed
 - [Maniphest CLI](maniphest-cli.md): filing tasks under projects with `--tag`
-- [Caching](caching.md): the `projects` and `project-icons` completion caches
+- [Caching](caching.md): the `projects` and `project-icons` caches

@@ -20,9 +20,22 @@ Only the lookups that shell completion makes:
 | Priority names | `--priority` and the priority filters |
 | Status keys | `--status` and the status filters |
 
-Nothing else is cached. Phabfive does not cache API responses in general, and
-the cache is never consulted when a command actually does something — `maniphest
-show` and friends always ask the server.
+Two more lookups are kept for the commands themselves, because they are instance
+configuration a command would otherwise ask for on every run:
+
+| Lookup | Used by |
+|---|---|
+| The task status map (`maniphest.querystatuses`) | `maniphest create`, `edit` and `search`, and `phabfive edit` |
+| Project icons, shared with completion | the `--icon` warning on `project search` and `project create`/`edit --dry-run` |
+
+A script that runs `maniphest edit` in a hundred batches used to ask for the status
+map a hundred times; now it asks once a week. The priorities need no such entry: the
+commands check them against Phorge's fixed keywords and ask the server nothing.
+
+Nothing else is cached. Phabfive does not cache API responses in general — the
+tasks, projects and repositories a command reads or writes always come from the
+server. Only the command caches: a program using phabfive as a library asks the
+server every time and never writes to the cache directory.
 
 **Secrets are never cached.** Caching is opt-in per call site rather than a
 wrapper around the API client, so a response can only be stored by code written
@@ -37,6 +50,8 @@ completion that queries the server.
 ~/.cache/phabfive/v1/<instance>/spaces/*.json
 ~/.cache/phabfive/v1/<instance>/priorities/*.json
 ~/.cache/phabfive/v1/<instance>/statuses/*.json
+~/.cache/phabfive/v1/<instance>/status-map/*.json
+~/.cache/phabfive/v1/<instance>/project-icons/*.json
 ```
 
 Directories are created `0700` and entries `0600`. Each instance gets its own
@@ -46,15 +61,16 @@ token itself is never written out — only a hash of it names the directory.
 
 Entries hold only what completion reads back: a username, a real name and
 whether the account is disabled; a project's id, name and parent name; a
-Space's monogram and name; and the plain lists of priority names, status keys
-and project icon keys. No PHIDs, no policies, no dates.
+Space's monogram and name; the plain lists of priority names, status keys
+and project icon keys; and the status map, which is each status's key and name
+and whether it is open or closed. No PHIDs, no policies, no dates.
 
 ## How long entries live
 
 | Data | Fresh for |
 |---|---|
 | Usernames, Spaces | 24 hours |
-| Priorities, statuses, project icons | 7 days |
+| Priorities, statuses, the status map, project icons | 7 days |
 | Project names | 5 minutes |
 
 User lists change rarely and instance configuration barely changes at all, while
@@ -95,6 +111,20 @@ priorities or statuses are reconfigured:
 phabfive cache clear
 ```
 
+The status map is the one entry a command acts on, so it is the one that heals
+itself: a status the remembered map does not know is asked of the server once
+more before `maniphest edit --status` refuses it, so a newly configured status
+can be set straight away. What a stale map can still do for up to a week is show
+a renamed status under its old name, or leave a status newly made open out of
+the open statuses a search reaches by default — `cache clear status-map` fixes
+both.
+
+An `--icon` that no project uses and Phorge does not ship is warned about on
+`project search` and on a `project create` or `edit` dry run, since a search
+answers a misspelled icon with nothing and a dry run never reaches the server.
+It is a warning, not an error: an icon configured in `projects.icons` that no
+project uses yet cannot be told from a typo.
+
 ## Commands
 
 ```bash
@@ -109,7 +139,7 @@ phabfive cache clear --all   # drop every instance's, works without credentials
 Naming a namespace keeps the rest: after somebody is renamed, `cache clear users`
 costs one slower username completion instead of re-fetching every project too. The
 namespaces are `users`, `projects`, `project-icons`, `columns`, `spaces`,
-`priorities` and `statuses`, and they complete, showing what each currently holds:
+`priorities`, `statuses` and `status-map`, and they complete, showing what each currently holds:
 
 ```console
 $ phabfive cache clear <TAB>
@@ -166,7 +196,8 @@ PHAB_CACHE: false
 ```
 
 There is no `--no-cache` flag, because a flag cannot be typed inside a
-completion — which is the one place the cache is used.
+completion — which is where most of the cache is used. `PHAB_CACHE=0` makes the
+commands ask for the status map every time too.
 
 | Setting | Default | Meaning |
 |---|---|---|

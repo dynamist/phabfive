@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """On-disk cache for the API lookups that shell completion repeats.
 
+Instance configuration a command would otherwise ask for on every run - the
+task status map - is kept here too, through phabfive.cli.lookups.
+
 Every API-backed completion queries the server on each TAB, and the first
 call through a Phabfive() costs a round trip of its own (update_interfaces,
 for the method list) before the lookup even starts. A TAB pressed twice, which
@@ -145,18 +148,24 @@ def ttl_for(namespace):
     return _ttl_from(_read_config(), namespace)
 
 
-def context(namespace):
+def context(namespace, conf=None):
     """Resolve where a namespace's entries live and how long they stay fresh.
 
     One configuration read for a caller about to make several lookups, which
     is what prefix narrowing does - reading it per lookup costs more than the
     round trips the cache is there to save. Returns (None, 0) when nothing
     should be cached.
+
+    A caller holding an app passes the app's configuration, which is then not
+    read again - and which names the instance the app is talking to, even
+    where reading it afresh would not, as after picking one of several
+    ~/.arcrc hosts at a prompt.
     """
     if not enabled():
         return None, 0
 
-    conf = _read_config()
+    if conf is None:
+        conf = _read_config()
     if not conf or not _truthy(conf.get("PHAB_CACHE")):
         return None, 0
 
@@ -511,7 +520,12 @@ def _record_count(path):
     # Narrowable lookups wrap their records alongside the truncated flag
     if isinstance(value, dict):
         records = value.get("records")
-        return len(records) if isinstance(records, list) else None
+        if isinstance(records, list):
+            return len(records)
+
+        # The status map, one record per status
+        statuses = value.get("statusMap")
+        return len(statuses) if isinstance(statuses, dict) else None
 
     # Whole-list namespaces, such as priorities and statuses
     if isinstance(value, list):

@@ -17,6 +17,7 @@ from phabfive.constants import (
     MANIPHEST_ORDER_FIELDS,
     PRIORITY_DEFAULT,
     SEARCH_TEMPLATE_KEYS,
+    STATUS_MAP_CACHE_NAMESPACE,
     TASK_POLICY_FIELDS,
     TASK_POLICY_TRANSACTIONS,
 )
@@ -33,8 +34,9 @@ from phabfive.maniphest.fetchers import (
     fetch_all_transactions,
     fetch_project_names_for_boards,
     fetch_task_relationships,
+    fallback_status_map,
+    fetch_api_status_map,
     get_api_priority_map,
-    get_api_status_map,
 )
 from phabfive.maniphest.filters import (
     task_matches_any_pattern,
@@ -140,7 +142,20 @@ class Maniphest(Phabfive):
         return validate_priority(priority)
 
     def _validate_status(self, status):
-        """Validate and normalize status value."""
+        """Validate and normalize status value.
+
+        A status the remembered map does not know may have been configured
+        since it was remembered, so the server is asked once more before the
+        status is refused - otherwise a new status could not be set until
+        the entry expired.
+        """
+        try:
+            return validate_status(status, self._get_api_status_map())
+        except PhabfiveConfigException:
+            if not self.__dict__.pop("_status_map_remembered", False):
+                raise
+
+        self.__dict__["_once__get_api_status_map"] = self._fetch_status_map()
         return validate_status(status, self._get_api_status_map())
 
     def _resolve_user_phid(self, username):
@@ -170,8 +185,40 @@ class Maniphest(Phabfive):
 
     @_once_per_instance
     def _get_api_status_map(self):
-        """Get status information from Phabricator API."""
-        return get_api_status_map(self.phab)
+        """Get status information from Phabricator API.
+
+        From the lookup store when the command gave the app one and it holds
+        a map, which saves every command after the first the
+        maniphest.querystatuses round trip.
+        """
+        if self.lookup_store is not None:
+            remembered = self.lookup_store.get(STATUS_MAP_CACHE_NAMESPACE)
+            if isinstance(remembered, dict) and remembered.get("statusMap"):
+                self.__dict__["_status_map_remembered"] = True
+                return remembered
+
+        return self._fetch_status_map()
+
+    def _fetch_status_map(self):
+        """Ask the server for the status map, remembering only a real answer.
+
+        A failed lookup is answered with the standard statuses, which a
+        command needs to carry on with, but which are not written down: the
+        store would hand them back for a week as though the server had said
+        them.
+        """
+        try:
+            status_map = fetch_api_status_map(self.phab)
+        except Exception as e:
+            log.warning(
+                f"Failed to fetch statuses from API: {e}. Using fallback statuses."
+            )
+            return fallback_status_map()
+
+        if self.lookup_store is not None and status_map.get("statusMap"):
+            self.lookup_store.set(STATUS_MAP_CACHE_NAMESPACE, status_map)
+
+        return status_map
 
     @_once_per_instance
     def _get_all_spaces(self):

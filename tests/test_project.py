@@ -997,3 +997,84 @@ class TestColourOnWrites:
 
         with pytest.raises(PhabfiveConfigException, match="Unknown project color"):
             app.build_project_edit(app.get_project("#humans"), color="grean")
+
+
+class TestUnknownIconWarning:
+    """An icon no project uses and Phorge does not ship is warned about (#421).
+
+    A warning, not an error: the icon set is instance configuration no
+    Conduit method reports, so an icon configured but not used yet cannot be
+    told from a typo.
+    """
+
+    WARNING = "No project uses the icon"
+
+    def test_search_warns_about_a_misspelled_icon(self, phab):
+        result = _invoke(phab, ["project", "search", "--icon=grop"])
+
+        assert f"{self.WARNING} 'grop'" in result.stderr
+
+    def test_search_takes_a_stock_icon_without_asking_the_server(self, phab):
+        result = _invoke(phab, ["project", "search", "--icon=group"])
+
+        assert self.WARNING not in result.stderr
+        # Only the search itself: no sweep of every project for its icon
+        assert phab.project.search.call_count == 1
+
+    def test_search_takes_the_milestone_icon(self, phab):
+        result = _invoke(phab, ["project", "search", "--icon=milestone"])
+
+        assert self.WARNING not in result.stderr
+
+    def test_an_icon_a_project_uses_is_known(self, phab):
+        phab.projects[0]["fields"]["icon"]["key"] = "rocket"
+
+        result = _invoke(phab, ["project", "search", "--icon=rocket"])
+
+        assert self.WARNING not in result.stderr
+
+    def test_no_warning_when_the_icons_cannot_be_looked_up(self, phab):
+        with patch(
+            "phabfive.cli.lookups._fetch_project_icons",
+            side_effect=RuntimeError("down"),
+        ):
+            result = _invoke(phab, ["project", "search", "--icon=grop"])
+
+        assert self.WARNING not in result.stderr
+
+    def test_a_create_dry_run_warns(self, phab):
+        result = _invoke(phab, ["project", "create", "New", "--icon=grop", "--dry-run"])
+
+        assert f"{self.WARNING} 'grop'" in result.stderr
+        phab.project.edit.assert_not_called()
+
+    def test_an_edit_dry_run_warns(self, phab):
+        result = _invoke(
+            phab, ["project", "edit", "#humans", "--icon=grop", "--dry-run"]
+        )
+
+        assert f"{self.WARNING} 'grop'" in result.stderr
+
+    def test_a_real_write_is_left_to_the_server(self, phab):
+        with patch("phabfive.cli.project.forget_projects"):
+            result = _invoke(phab, ["project", "edit", "#humans", "--icon=grop"])
+
+        assert self.WARNING not in result.stderr
+        phab.project.edit.assert_called_once()
+
+    def test_the_icons_are_cached_with_the_completions(self, phab, enabled_cache):
+        from phabfive.cli.lookups import CommandLookups
+        from tests.conftest import CONF
+
+        store = CommandLookups(dict(CONF))
+        for _ in range(2):
+            project_app = _app(phab)
+            project_app.lookup_store = store
+            with patch(
+                "phabfive.cli.project._get_project_app", return_value=project_app
+            ):
+                result = runner.invoke(app, ["project", "search", "--icon=grop"])
+            assert f"{self.WARNING} 'grop'" in result.stderr
+
+        # One sweep for the icons, then one search per run
+        assert phab.project.search.call_count == 3

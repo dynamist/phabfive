@@ -18,6 +18,7 @@ from phabfive.cli.completers import (
     complete_user_list_filter,
     forget_projects,
 )
+from phabfive.cli.lookups import warn_unknown_project_icons
 from phabfive.cli.output import (
     _echo_no_match_hint,
     _get_output_format,
@@ -25,6 +26,7 @@ from phabfive.cli.output import (
     is_machine_format,
 )
 from phabfive.constants import (
+    PROJECT_MILESTONE_ICON,
     PROJECT_STATUS_ACTIVE,
     PROJECT_STATUS_ANY,
     PROJECT_STATUS_CHOICES,
@@ -295,6 +297,10 @@ def project_search(
     _setup_output_options(ctx)
     project = _get_project_app()
 
+    # A search answers a misspelled icon with nothing, not an error
+    icons = split_list_option(icon)
+    warn_unknown_project_icons(project, icons, allowed=(PROJECT_MILESTONE_ICON,))
+
     try:
         result = project.search(
             query=query,
@@ -303,7 +309,7 @@ def project_search(
             ancestors=split_list_option(ancestor),
             milestones=milestones,
             status=status,
-            icons=split_list_option(icon),
+            icons=icons,
             colors=split_list_option(color),
             spaces=split_list_option(space) or None,
             show_policy=show_policy,
@@ -435,6 +441,8 @@ def project_create(
         raise typer.Exit(1)
 
     if dry_run:
+        # The server checks the icon of a real create; a dry run never asks it
+        warn_unknown_project_icons(project, [icon] if icon else [])
         render_changes(
             name, changes, header=f"[DRY RUN] Would create {name}:", file=preview
         )
@@ -601,6 +609,7 @@ def project_edit(
         return
 
     if dry_run:
+        warn_unknown_project_icons(project, [icon] if icon else [])
         render_changes(
             label, changes, header=f"[DRY RUN] Would apply to {label}:", file=preview
         )
