@@ -59,10 +59,10 @@ def _conditions(mock_m):
 
 
 class TestBareSearch:
-    def test_bare_search_prints_usage_and_queries_nothing(self):
+    def test_bare_search_prints_help_and_queries_nothing(self):
         result, mock_m = _invoke([])
 
-        assert result.exit_code == 0
+        assert result.exit_code == 2
         assert "Usage:" in _output(result)
         mock_m.task_search.assert_not_called()
 

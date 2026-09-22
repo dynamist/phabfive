@@ -27,6 +27,7 @@ from phabfive.cli.completers import (
 )
 from phabfive.cli.output import (
     _echo_no_match_hint,
+    _exit_with_help,
     _get_output_format,
     _setup_output_options,
     is_machine_format,
@@ -742,7 +743,7 @@ def search(
         final_order = get_param(order, yaml_params, "order")
 
         # Check if any search criteria provided. A bare "search" still prints
-        # usage rather than querying the whole instance; --status=any is how a
+        # help rather than querying the whole instance; --status=any is how a
         # script asks for every task on purpose, and the deprecated --all
         # still counts as the same request.
         has_criteria = any(
@@ -766,11 +767,7 @@ def search(
             ]
         )
         if not has_criteria:
-            typer.echo("Usage:", err=True)
-            typer.echo(
-                "    phabfive maniphest search [<text_query>] [options]", err=True
-            )
-            return
+            _exit_with_help(ctx)
 
         try:
             result = maniphest.task_search(

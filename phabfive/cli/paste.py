@@ -22,6 +22,7 @@ from phabfive.cli.completers import (
 )
 from phabfive.cli.output import (
     _echo_no_match_hint,
+    _exit_with_help,
     _get_output_format,
     _setup_output_options,
     is_machine_format,
@@ -95,9 +96,7 @@ def search(
     """
     # Require at least one search criterion
     if not text_query and not author:
-        typer.echo("Usage:", err=True)
-        typer.echo("    phabfive paste search [<text_query>] [options]", err=True)
-        return
+        _exit_with_help(ctx)
 
     _setup_output_options(ctx)
     paste = _get_paste_app()

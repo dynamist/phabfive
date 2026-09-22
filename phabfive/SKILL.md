@@ -82,7 +82,7 @@ When stdout is not a terminal phabfive already defaults to YAML, but pass `--for
 explicitly so the output does not change under you. `PHAB_FALLBACK` changes that default
 to `json` or `jsonl`, and does not accept `table`.
 
-Data goes to stdout; logging, diagnostics, status lines, usage blocks and group help go
+Data goes to stdout; logging, diagnostics, status lines, and the help a bare group or search prints, go
 to stderr. Capturing stdout alone is safe - `phabfive --format=json ... 2>/dev/null | jq .`
 parses for every command, including the ones that write.
 
@@ -272,7 +272,8 @@ phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
 - `--order` is `<field>[:asc|:desc]` over `priority`, `updated`, `created`, `closed`,
   `title`, `relevance`. Default `priority`. `relevance` takes no direction.
 
-A search with no criteria at all prints usage and exits 0 rather than returning every task.
+A search with no criteria at all prints its help and exits 2 rather than returning every task,
+as `paste search`, `passphrase search` and `user search` do.
 `--status=any` on its own is the deliberate way to ask for every task. Like every search it
 is confined to the default Space, so a script that means every task passes
 `--status=any --space='*' -l 0`; without `--space='*'`, tasks in other Spaces are silently

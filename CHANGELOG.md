@@ -35,6 +35,10 @@
 * **`--format=simple` is now `--format=value`.** The old spelling still works - it is
   rewritten in argv the way `strict` and `ndjson` are - so no script has to change. Only
   `value` is offered by `--help` and by shell completion
+* **A bare search exits 2 and prints its help.** `maniphest search`, `paste search` and
+  `passphrase search` given nothing to search for printed a two-line usage stub and exited
+  0, which a script could not tell from an empty result. They now print the command's full
+  help on stderr and exit 2, as a bare command group does. Still nothing is searched
 
 ## New Features
 

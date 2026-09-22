@@ -46,7 +46,7 @@ class TestSearchIncludeExcludeCli:
     def test_exclude_alone_fails_criteria_guard(self):
         result, mock_m = self._invoke(["--exclude", "T1"])
 
-        assert result.exit_code == 0
+        assert result.exit_code == 2
         assert "Usage:" in _output(result)
         mock_m.task_search.assert_not_called()
 
