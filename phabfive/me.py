@@ -63,13 +63,7 @@ def whoami_me(phab, option=None):
     except Exception as e:
         raise PhabfiveDataException(f"Failed to resolve {ME}: {e}")
 
-    data = (result or {}).get("data") or []
-
-    if data:
-        raise PhabfiveDataException(
-            f"{where}{ME} is ambiguous: this instance has a user called 'me' "
-            f"({data[0]['phid']}). Give that user's PHID, or your own, instead"
-        )
+    users_called_me = (result or {}).get("data") or []
 
     try:
         whoami = phab.user.whoami()
@@ -78,6 +72,17 @@ def whoami_me(phab, option=None):
 
     if not (whoami or {}).get("phid"):
         raise PhabfiveDataException(f"Failed to resolve {ME}: no PHID for you")
+
+    if users_called_me:
+        # Both PHIDs, one per line, so either can be copied as it stands
+        other = users_called_me[0]
+        username = (other.get("fields") or {}).get("username") or "me"
+        raise PhabfiveDataException(
+            f"{where}{ME} is ambiguous: this instance has a user called 'me'. "
+            "Give one of these PHIDs instead:\n"
+            f"  {other['phid']}  {username}\n"
+            f"  {whoami['phid']}  {whoami.get('userName') or 'you'} (you)"
+        )
 
     return whoami
 
