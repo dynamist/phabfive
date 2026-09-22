@@ -45,6 +45,10 @@
         "pytest",
         "pytest-cov",
         "coverage",
+        "mypy",
+        "types-appdirs",
+        "types-pyyaml",
+        "types-requests",
         "tox",
         "tox-uv"
       ],

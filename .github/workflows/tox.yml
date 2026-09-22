@@ -46,6 +46,7 @@ jobs:
         run: |
           uv run ruff check phabfive/ tests/
           uv run ruff format --check phabfive/ tests/
+          uv run mypy
 
   fresh-install:
     name: Fresh unlocked install v${{ matrix.python-version }}

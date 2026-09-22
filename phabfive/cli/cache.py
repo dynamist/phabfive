@@ -18,12 +18,14 @@ cache_app = typer.Typer(
 )
 
 
-def _human_size(size: int) -> str:
+def _human_size(size: float) -> str:
     """Render a byte count the way a person reads it."""
-    for unit in ["B", "KB", "MB"]:
-        if size < 1024 or unit == "MB":
-            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
-        size /= 1024
+    if size < 1024:
+        return f"{size:.0f} B"
+    size /= 1024
+    if size < 1024:
+        return f"{size:.1f} KB"
+    return f"{size / 1024:.1f} MB"
 
 
 def _human_age(seconds: int) -> str:

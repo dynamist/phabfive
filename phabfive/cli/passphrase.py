@@ -59,7 +59,7 @@ def show(
     passphrase = _get_passphrase_app()
 
     # Support both space-separated (K1 K2) and comma-separated (K1,K2,K3)
-    all_ids = []
+    all_ids: list[str] = []
     for id_arg in ids:
         all_ids.extend(part.strip() for part in id_arg.split(",") if part.strip())
 

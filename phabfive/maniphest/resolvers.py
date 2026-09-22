@@ -52,6 +52,7 @@ def lookup_project_by_id(phab, project: str):
         ID/PHID or no such project exists.
     """
     value = project.strip()
+    constraints: dict[str, list[str] | list[int]]
     if value.startswith(PROJECT_PHID_PREFIX):
         constraints = {"phids": [value]}
     elif value.isascii() and value.isdigit():

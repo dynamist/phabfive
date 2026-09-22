@@ -91,17 +91,21 @@ repos:
       - id: python-no-eval
       # - id: text-unicode-replacement-char
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.1
+  # Runs the project's own mypy through uv rather than mirrors-mypy: the
+  # version comes from uv.lock, so it is the one CI runs, and the runtime
+  # dependencies are installed, so nothing has to be restated here as
+  # additional_dependencies. The configuration is [tool.mypy] in
+  # pyproject.toml, and it always checks the whole package - a file on its
+  # own misses errors in the modules it is imported by.
+  - repo: local
     hooks:
       - id: mypy
-        stages: [manual]
-        files: ^(app/|cli/|lib/).*\.py$
-        args: []
-        additional_dependencies:
-          - pytest
-          - types-boto3
-          - types-click
+        name: type check (mypy)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        files: ^phabfive/
+        pass_filenames: false
 
   - repo: https://github.com/abravalheri/validate-pyproject
     rev: "0.26"

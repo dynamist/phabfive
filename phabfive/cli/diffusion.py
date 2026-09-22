@@ -226,7 +226,7 @@ def repo_show(
     diffusion = _get_diffusion_app()
 
     # Support both space-separated (R5 R6) and comma-separated (R5,R6)
-    repo_ids = []
+    repo_ids: list[str] = []
     for repo_arg in repos:
         repo_ids.extend(part.strip() for part in repo_arg.split(",") if part.strip())
 
