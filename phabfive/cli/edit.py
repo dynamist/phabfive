@@ -62,7 +62,7 @@ def edit_command(
     assign: Optional[str] = typer.Option(
         None,
         "--assign",
-        help="Set assignee (username or @me for yourself)",
+        help="Set assignee (username, @me for yourself, or a user PHID)",
         autocompletion=complete_user,
     ),
     description: Optional[str] = typer.Option(
@@ -73,7 +73,7 @@ def edit_command(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable, comma-separated)",
+        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
         autocompletion=complete_user_list,
     ),
     comment: Optional[str] = typer.Option(

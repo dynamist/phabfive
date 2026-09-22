@@ -276,6 +276,16 @@
   instance; `--role=any` lists them all on purpose
 * The local Phorge seed has a bot, deploy.bot, and a disabled account,
   former.employee
+* **Every option that takes a user takes a username, `@username`, `@me` or a user
+  PHID.** `maniphest search --assigned/--author`, `maniphest create/edit` and `edit`
+  `--assign/--subscribe`, and `paste search --author` took a bare username or `@me` only:
+  `--assigned=@admin` and `--assigned=PHID-USER-...` both failed with `User ... not
+  found`. They now resolve through one place, as `project --member` already did, so the
+  PHIDs the `@me` ambiguity error lists can be pasted into any of them. A PHID is looked
+  up rather than passed through, so a mistyped one is `No such user` instead of a search
+  that quietly matches nothing, and a preview names the user rather than printing the
+  PHID. `paste create/edit --subscribe` now refuses an unknown user before anything is
+  sent
 
 ### Projects
 * **`project show`, `project search`, `project create` and `project edit`** - phabfive

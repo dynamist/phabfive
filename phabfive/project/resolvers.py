@@ -5,15 +5,12 @@
 import logging
 
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
-from phabfive.me import is_me, whoami_me
 from phabfive.maniphest.resolvers import (
     PROJECT_PHID_PREFIX,
     ambiguous_project_message,
 )
 
 log = logging.getLogger(__name__)
-
-USER_PHID_PREFIX = "PHID-USER-"
 
 
 def _search_one(phab, constraints, attachments=None):
@@ -116,74 +113,3 @@ def resolve_project(phab, ident, attachments=None):
         raise PhabfiveDataException(ambiguous_project_message(value, found))
 
     return found[0]
-
-
-def resolve_user_phids(phab, values, option=None):
-    """Resolve usernames to PHIDs, in one lookup however many there are.
-
-    Parameters
-    ----------
-    phab : Phabricator
-        Phabricator API client
-    values : list
-        Usernames, with or without a leading ``@``, ``@me`` for whoever is
-        running the command, or user PHIDs
-    option : str, optional
-        The option the values came from, named in any error about ``@me``
-
-    Returns
-    -------
-    dict
-        What was typed to (PHID, username), in the order given
-
-    Raises
-    ------
-    PhabfiveDataException
-        If any of them is not a user, naming every one that is not - so a
-        typo in the third of five members is reported, not the first two
-        added and the rest silently dropped. Also if ``@me`` is asked for on
-        an instance that has a user called "me"
-    """
-    resolved = {}
-    wanted = {}
-
-    for value in values:
-        name = value[1:] if value.startswith("@") else value
-
-        if is_me(value):
-            whoami = whoami_me(phab, option=option)
-            resolved[value] = (whoami["phid"], whoami.get("userName") or "me")
-        elif value.startswith(USER_PHID_PREFIX):
-            resolved[value] = (value, None)
-        else:
-            wanted[value] = name
-
-    if wanted:
-        try:
-            found = (
-                phab.user.search(
-                    constraints={"usernames": sorted(set(wanted.values()))}
-                ).get("data")
-                or []
-            )
-        except Exception as e:
-            raise PhabfiveDataException(f"Failed to look up users: {e}")
-
-        by_name = {
-            user["fields"]["username"].casefold(): user
-            for user in found
-            if user.get("fields", {}).get("username")
-        }
-
-        missing = [
-            value for value, name in wanted.items() if name.casefold() not in by_name
-        ]
-        if missing:
-            listed = ", ".join(f"'{value}'" for value in missing)
-            raise PhabfiveDataException(f"No such user: {listed}")
-
-        for value, name in wanted.items():
-            user = by_name[name.casefold()]
-            resolved[value] = (user["phid"], user["fields"]["username"])
-
-    return {value: resolved[value] for value in values}

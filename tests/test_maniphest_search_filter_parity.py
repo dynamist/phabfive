@@ -68,7 +68,9 @@ def _maniphest(project_phids):
     maniphest.phab.project.query.return_value = {"data": {}}
 
     maniphest._resolve_project_phids = MagicMock(return_value=project_phids)
-    maniphest._resolve_user_phid = MagicMock(return_value=USER_PHID)
+    maniphest._resolve_users = MagicMock(
+        side_effect=lambda values, option=None: {v: (USER_PHID, v) for v in values}
+    )
     maniphest._get_open_statuses = MagicMock(return_value=["open"])
 
     return maniphest

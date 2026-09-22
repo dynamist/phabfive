@@ -30,7 +30,7 @@ def _mock_paste_app(mock_get_app):
     def search(constraints):
         if constraints.get("usernames") == ["me"]:
             return {"data": []}
-        return {"data": [{"phid": ADMIN_PHID}]}
+        return {"data": [{"phid": ADMIN_PHID, "fields": {"username": "admin"}}]}
 
     mock_p.phab.user.search.side_effect = search
     mock_p.paste_search.return_value = {"pastes": []}

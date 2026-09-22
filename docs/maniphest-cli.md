@@ -289,6 +289,26 @@ phabfive maniphest search "security" --tag "Backend*,Frontend*"
 phabfive maniphest search "migration" --tag "Database" --column="in:In Progress" --updated-after=2w
 ```
 
+### Naming Users
+
+Every option that takes a user - `--assigned`, `--author`, `--assign` and
+`--subscribe` here, and the same options on `paste` and `project` - takes any of:
+
+| Spelling | Names |
+|---|---|
+| `alice` or `@alice` | the user with that username, in any case |
+| `@me` | you, whoever the API token belongs to |
+| `PHID-USER-...` | the user with that PHID |
+
+```bash
+phabfive maniphest search --assigned=@me,alice
+phabfive maniphest edit T123 --assign=PHID-USER-75k6ju3upxlmi3gmks3m --subscribe=@bob
+```
+
+A name that is not a user is an error rather than a search that matches nothing.
+On an instance that has a user called `me`, `@me` is an error too, and the error
+lists both PHIDs to choose from.
+
 !!! important
     **Validation:** At least one filter is required (text query, --tag, --include, --assigned, --author, --space, --created-after, --created-before, --updated-after, --updated-before, --visible-to, --editable-by, --column, --priority or --status) to prevent accidentally querying all tasks. `--status=any` on its own is the deliberate way to ask for all of them.
 

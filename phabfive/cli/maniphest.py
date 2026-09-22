@@ -258,7 +258,7 @@ def create(
     assign: Optional[str] = typer.Option(
         None,
         "--assign",
-        help="Set assignee (username or @me for yourself)",
+        help="Set assignee (username, @me for yourself, or a user PHID)",
         autocompletion=complete_user,
     ),
     status: Optional[str] = typer.Option(
@@ -276,7 +276,7 @@ def create(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable, comma-separated)",
+        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
         autocompletion=complete_user_list,
     ),
     space: Optional[str] = typer.Option(
@@ -509,13 +509,13 @@ def search(
     assigned: Optional[str] = typer.Option(
         None,
         "--assigned",
-        help="Filter by assignee. Use @me for yourself.",
+        help="Filter by assignee: username, @me for yourself, or user PHID",
         autocompletion=complete_user_list_filter,
     ),
     author: Optional[str] = typer.Option(
         None,
         "--author",
-        help="Filter by task author. Use @me for yourself.",
+        help="Filter by task author: username, @me for yourself, or user PHID",
         autocompletion=complete_user_list_filter,
     ),
     space: Optional[str] = typer.Option(
@@ -898,7 +898,7 @@ def edit(
     assign: Optional[str] = typer.Option(
         None,
         "--assign",
-        help="Set assignee (username or @me for yourself)",
+        help="Set assignee (username, @me for yourself, or a user PHID)",
         autocompletion=complete_user,
     ),
     description: Optional[str] = typer.Option(
@@ -909,7 +909,7 @@ def edit(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username or @me, repeatable, comma-separated)",
+        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
         autocompletion=complete_user_list,
     ),
     comment_text: Optional[str] = typer.Option(
