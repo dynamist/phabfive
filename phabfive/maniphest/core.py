@@ -1693,6 +1693,14 @@ class Maniphest(Phabfive):
                     f"subscribers takes a list of users, not {subscribers!r}"
                 )
 
+            # A stray `-` in YAML is a null item, and 1234 is a number
+            not_names = [name for name in subscribers if not isinstance(name, str)]
+
+            if not_names:
+                raise PhabfiveConfigException(
+                    f"subscribers takes usernames, not {not_names[0]!r}"
+                )
+
             assignments = [render(assignment)] if assignment else []
             subscribed = [render(name) for name in subscribers]
 
