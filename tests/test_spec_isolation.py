@@ -70,8 +70,21 @@ def scrubbed_environment():
     keep = ("PATH", "SYSTEMROOT", "LD_LIBRARY_PATH", "VIRTUAL_ENV")
     environment = {name: os.environ[name] for name in keep if name in os.environ}
 
-    environment["HOME"] = str(Path(os.sep, "nonexistent"))
-    environment["USERPROFILE"] = environment["HOME"]
+    nowhere = str(Path(os.sep, "nonexistent"))
+
+    environment["HOME"] = nowhere
+    # Windows names the places a configuration could come from with its own
+    # variables, and they are pointed at the same nowhere rather than left
+    # out. `phabricator/__init__.py` reads `os.environ['ProgramData']` (:52)
+    # and `os.environ['AppData']` (:60) as it imports, so an *absent* one is
+    # a KeyError before anything is validated, not an empty directory.
+    # Scrubbing them entirely stopped the interpreter starting at all, which
+    # is not the thing under test.
+    environment["USERPROFILE"] = nowhere
+    environment["APPDATA"] = nowhere
+    environment["LOCALAPPDATA"] = nowhere
+    environment["ProgramData"] = nowhere
+    environment["ALLUSERSPROFILE"] = nowhere
     environment["PYTHONPATH"] = str(REPOSITORY)
     environment["TERM"] = "dumb"
 
