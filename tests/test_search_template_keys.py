@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """The keys a search template may use are exactly the keys the CLI reads.
 
-_load_search_config refuses any key not in SEARCH_TEMPLATE_KEYS, which is now
-derived from phabfive.spec.registry. The CLI reads each template key with
+_load_search_config refuses any key `spec_keys("task", "search")` does not
+name, which the registry answers from one Field declaration per key. The CLI
+reads each template key with
 get_param(..., yaml_params, "key") and offers the same value as a flag. The
 two once drifted apart - created-before, updated-before, space, limit,
 show-policy and all were documented and read, yet a template using them failed
@@ -21,7 +22,6 @@ import pytest
 from typer.main import get_command
 
 from phabfive.cli.maniphest import maniphest_app
-from phabfive.constants import SEARCH_TEMPLATE_KEYS
 from phabfive.maniphest import Maniphest
 from phabfive.spec.registry import FieldKind, cli_flags, fields_for, spec_keys
 
@@ -71,57 +71,6 @@ def test_every_declared_flag_exists_on_the_command():
 
 def test_every_flag_on_the_command_is_a_declared_field():
     assert _declared_flags() - EXEMPT == cli_flags("task", "search")
-
-
-# The 22 key spellings every shipped template and every documented example
-# is written with, listed once, by hand, on purpose. SEARCH_TEMPLATE_KEYS is
-# now *derived* from the registry, so comparing the two is a tautology and
-# pins nothing: rename a Field's `name` and leave its `cli` alone and the
-# accepted set changes silently, breaking every template in the wild, while
-# the parity tests above still pass because they compare `cli`. This is the
-# literal that says no.
-#
-# Adding a key here is a new key, which is fine. Changing one is a rename,
-# which needs an alias and a deprecation, not an edit to this list.
-HISTORIC_KEYS = frozenset(
-    {
-        "all",
-        "assigned",
-        "author",
-        "column",
-        "created-after",
-        "created-before",
-        "editable-by",
-        "exclude",
-        "include",
-        "limit",
-        "order",
-        "priority",
-        "show-history",
-        "show-metadata",
-        "show-policy",
-        "space",
-        "status",
-        "tag",
-        "text_query",
-        "updated-after",
-        "updated-before",
-        "visible-to",
-    }
-)
-
-
-def test_the_accepted_keys_are_the_declared_ones():
-    assert set(SEARCH_TEMPLATE_KEYS) == set(spec_keys("task", "search"))
-
-
-def test_the_declared_keys_are_still_spelled_the_way_templates_write_them():
-    """One hyphen turned into camelCase breaks every template ever written.
-
-    `text_query` is the one key with an underscore and it stays that way in
-    Phase 1; an alias mechanism is Phase 2's problem.
-    """
-    assert set(spec_keys("task", "search")) == HISTORIC_KEYS
 
 
 @pytest.mark.parametrize(

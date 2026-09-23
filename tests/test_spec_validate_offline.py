@@ -402,7 +402,7 @@ class TestTheGeneratedGrammarsMatchTheParsers:
 
     @pytest.mark.parametrize("value", ["1h", "7d", "2w", "3m", "1y", "14", "0.5d"])
     def test_the_published_time_pattern_accepts_what_maniphest_parses(self, value):
-        from phabfive.maniphest.utils import parse_time_with_unit
+        from phabfive.spec.times import parse_time_with_unit
 
         parse_time_with_unit(value)
 
@@ -413,7 +413,7 @@ class TestTheGeneratedGrammarsMatchTheParsers:
     )
     def test_the_published_time_pattern_refuses_what_maniphest_refuses(self, value):
         from phabfive.exceptions import PhabfiveException
-        from phabfive.maniphest.utils import parse_time_with_unit
+        from phabfive.spec.times import parse_time_with_unit
 
         with pytest.raises(PhabfiveException):
             parse_time_with_unit(value)
@@ -428,7 +428,7 @@ class TestTheGeneratedGrammarsMatchTheParsers:
 
     @pytest.mark.parametrize("value", FLOAT_ACCIDENTS)
     def test_the_published_time_pattern_is_narrower_than_float(self, value):
-        from phabfive.maniphest.utils import parse_time_with_unit
+        from phabfive.spec.times import parse_time_with_unit
 
         parse_time_with_unit(value)
 
@@ -449,7 +449,7 @@ class TestTheGeneratedGrammarsMatchTheParsers:
 
     @pytest.mark.parametrize("value", ["7d ", " 7d", " 7 d "])
     def test_surrounding_whitespace_is_a_time_to_both_readers(self, value):
-        from phabfive.maniphest.utils import parse_time_with_unit
+        from phabfive.spec.times import parse_time_with_unit
 
         parse_time_with_unit(value)
 

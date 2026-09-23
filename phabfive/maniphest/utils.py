@@ -6,30 +6,6 @@ import datetime
 import logging
 import time
 
-# The Jinja2 variable engine moved to phabfive/spec/variables.py, where every
-# spec kind reaches it instead of only task creation (#471). Re-exported here,
-# spelled `as` so that mypy's no_implicit_reexport allows it, because a
-# consumer may have imported these names from this module. Phase 3 deletes
-# them once `maniphest create --with` goes through the spec loader.
-from phabfive.spec.variables import build_dependency_graph as build_dependency_graph
-from phabfive.spec.variables import (
-    detect_circular_dependencies as detect_circular_dependencies,
-)
-from phabfive.spec.variables import (
-    extract_variable_dependencies as extract_variable_dependencies,
-)
-from phabfive.spec.variables import (
-    render_variables_with_dependency_resolution as render_variables_with_dependency_resolution,
-)
-from phabfive.spec.variables import topological_sort as topological_sort
-
-# `parse_time_with_unit` moved to phabfive/spec/times.py for the same reason:
-# `phabfive spec validate --offline` has to read `created-after: 7d` without
-# importing phabfive.maniphest, and one grammar read by two callers cannot
-# drift. Re-exported here, spelled `as`, so every existing caller and test
-# keeps working untouched.
-from phabfive.spec.times import parse_time_with_unit as parse_time_with_unit
-
 log = logging.getLogger(__name__)
 
 

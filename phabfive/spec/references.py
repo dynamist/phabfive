@@ -26,10 +26,9 @@ object makes. Whether ``@alice`` is a user is the online pass's question, and
 
 Library code: nothing here prints, prompts, exits, reads the environment or
 opens a socket. `phabfive.constants` is imported lazily inside the one
-function that needs it. Not for a cycle any more - `phabfive.constants`
-resolves `SEARCH_TEMPLATE_KEYS` through a module ``__getattr__``, so it no
-longer imports this package at module level - but because the offline pass
-is the no-dependency path, and a module-level import would make every
+function that needs it - not for a cycle, since `phabfive.constants` is a
+leaf of plain literals that imports nothing of ours, but because the offline
+pass is the no-dependency path, and a module-level import would make every
 importer of this file pay for `phabfive.constants` whether it validates
 anything or not.
 """

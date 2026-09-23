@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
 from enum import Enum
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # pragma: no cover - annotation only, never bound
-    # Declared here and resolved by __getattr__ below, so mypy and every
-    # importer see the real type while `import phabfive.constants` stays
-    # free of the spec subpackage.
-    SEARCH_TEMPLATE_KEYS: frozenset[str]
 
 
 class OutputFormat(str, Enum):
@@ -466,37 +459,6 @@ MANIPHEST_ORDER_CHOICES = [
 ]
 
 
-def __getattr__(name: str) -> object:
-    """Resolve `SEARCH_TEMPLATE_KEYS` the first time something asks for it.
-
-    Every key "maniphest search" reads from a template's "search:" section.
-    Derived from `phabfive.spec.registry`, which is the one declaration of
-    what a spec field is: a key the command reads and this set does not list
-    is the drift that #295 was, and deriving it is what makes that drift
-    impossible.
-
-    Derived *lazily*, because importing `phabfive.spec.registry` runs
-    `phabfive/spec/__init__.py`, which imports ruamel, jinja2 and both
-    validation layers - a quarter of a second, on a module every single CLI
-    path imports. Only `Maniphest._load_search_config` actually reads the
-    set, and it has imported the world already. Resolved once and written
-    into this module's globals, so this runs at most one time per process.
-
-    It also puts the import *inside* a function, which ends the cycle the
-    module-level version created: a module reachable from
-    `phabfive/spec/__init__.py` may now import `phabfive.constants` at
-    module level again.
-    """
-    if name == "SEARCH_TEMPLATE_KEYS":
-        from phabfive.spec.registry import spec_keys
-
-        value = spec_keys("task", "search")
-        globals()[name] = value
-        return value
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 __all__ = [
     "AutoOption",
     "MISSING_CONFIG_HINTS",
@@ -531,7 +493,6 @@ __all__ = [
     "REPO_POLICY_TRANSACTIONS",
     "REPO_STATUS_CHOICES",
     "REQUIRED",
-    "SEARCH_TEMPLATE_KEYS",
     "TASK_POLICY_FIELDS",
     "TASK_POLICY_TRANSACTIONS",
     "URI_ROLES",

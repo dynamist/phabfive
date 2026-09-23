@@ -5,13 +5,13 @@ A spec field is declared exactly once, as a :class:`Field` in :data:`FIELDS`.
 The accepted key set per object type, the Conduit constraint a key is sent as,
 whether a key is applied client-side instead, and the CLI flag that carries the
 same value all come from that single declaration - so they cannot drift apart
-the way ``SEARCH_TEMPLATE_KEYS`` and the CLI's ``get_param`` calls once did
-(#295).
+the way ``phabfive.constants``'s hand-written key set and the CLI's
+``get_param`` calls once did (#295).
 
 This module imports the standard library and :mod:`phabfive.exceptions` only.
-``phabfive.constants`` derives ``SEARCH_TEMPLATE_KEYS`` from it, and the
-offline half of spec validation leans on it, so it has to stay cheap and free
-of every import that would make either of those expensive.
+``Maniphest._load_search_config`` asks it which keys a search template may
+use, and the offline half of spec validation leans on it, so it has to stay
+cheap and free of every import that would make either of those expensive.
 """
 
 import enum
@@ -147,7 +147,7 @@ _SEARCH = frozenset({"search"})
 
 
 # Phase 1 declares exactly the keys that exist today - the 22 that
-# SEARCH_TEMPLATE_KEYS listed by hand. A field declared here but not read by
+# phabfive.constants used to list by hand. A field declared here but not read by
 # the command would be accepted by the loader and silently ignored, which is
 # the drift this registry exists to end; the missing constraints arrive with
 # their command in #478 and #479.
