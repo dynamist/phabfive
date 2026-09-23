@@ -41,6 +41,7 @@ GROUPS = [
     ["project"],
     ["user"],
     ["maniphest"],
+    ["spec"],
     ["diffusion", "repo"],
     ["diffusion", "uri"],
 ]

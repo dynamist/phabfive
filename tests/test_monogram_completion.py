@@ -17,6 +17,7 @@ SUBCOMMANDS = [
     "project",
     "user",
     "maniphest",
+    "spec",
 ]
 
 

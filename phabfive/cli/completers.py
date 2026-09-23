@@ -1323,3 +1323,76 @@ def complete_order(incomplete: str) -> List[str]:
         return _complete_fixed(incomplete, [f"{field}:asc", f"{field}:desc"])
 
     return _complete_fixed(incomplete, MANIPHEST_ORDER_FIELDS)
+
+
+# Suffixes `phabfive spec validate` reads, exactly the ones
+# phabfive.spec.loader detects a format from. Completion offers no other, so
+# a TAB never proposes a file the loader would refuse on its name alone.
+SPEC_FILE_EXTENSIONS = ("yaml", "yml", "json", "jsonl", "ndjson", "toml")
+
+
+def complete_spec_file(incomplete: str) -> List[str]:
+    """Complete a path to a spec file, filtered to the formats that load.
+
+    The first file-path completer phabfive has - `--with` never had one - so
+    it is written out here rather than left to the shell: click's own file
+    completion offers every file, and offering a .md or a .png to `spec
+    validate` is offering something the loader will refuse.
+
+    Directories are offered with a trailing separator so completion keeps
+    walking down; a dotfile is offered only once a dot is typed, which is
+    what a shell does.
+
+    Every failure answers with no completions. A directory that cannot be
+    read must not break the shell's TAB.
+
+    Parameters
+    ----------
+    incomplete : str
+        The partial path being typed
+
+    Returns
+    -------
+    list
+        Matching paths, directories first-class and files filtered by suffix
+    """
+    import os
+    from pathlib import Path
+
+    directory, separator, prefix = incomplete.rpartition(os.sep)
+
+    if separator:
+        base = Path(directory or os.sep)
+    else:
+        base = Path(".")
+
+    try:
+        entries = sorted(base.iterdir(), key=lambda entry: entry.name)
+    except OSError:
+        return []
+
+    matches = []
+
+    for entry in entries:
+        name = entry.name
+
+        if not name.startswith(prefix):
+            continue
+
+        # A dotfile is hidden until the user says otherwise, as in a shell
+        if name.startswith(".") and not prefix.startswith("."):
+            continue
+
+        shown = f"{directory}{separator}{name}" if separator else name
+
+        try:
+            is_directory = entry.is_dir()
+        except OSError:
+            continue
+
+        if is_directory:
+            matches.append(shown + os.sep)
+        elif entry.suffix.lower().lstrip(".") in SPEC_FILE_EXTENSIONS:
+            matches.append(shown)
+
+    return matches

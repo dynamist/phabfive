@@ -36,6 +36,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 # A token is format-checked before any request is made, so a smoke token has
 # to look real: exactly 32 characters of [a-zA-Z0-9-] (constants.VALIDATORS).
@@ -45,10 +46,21 @@ SMOKE_TOKEN = "api-smoketest0000000000000000000"
 # an offline connection-error check fast and reliable.
 DEAD_URL = "http://127.0.0.1:9/api/"
 
+# This script lives in scripts/, so the corpus is one directory up.
+REPOSITORY = Path(__file__).resolve().parent.parent
+
 # Every command group phabfive exposes. Reaching each one's help proves its
 # module was actually bundled, which is what the PyInstaller --hidden-import
 # list is guessing at.
-COMMAND_GROUPS = ["maniphest", "diffusion", "passphrase", "paste", "user", "cache"]
+COMMAND_GROUPS = [
+    "maniphest",
+    "diffusion",
+    "passphrase",
+    "paste",
+    "user",
+    "cache",
+    "spec",
+]
 
 # How much of PEP 440 normalization reaches --version depends on how phabfive
 # was installed: a pip install of the wheel reports pyproject's "0.10.0-dev.0"
@@ -388,6 +400,38 @@ def check_completion(executable, home, timeout):
     return f"offers {len(offered)} candidates"
 
 
+def check_spec_validate_offline(executable, home, timeout):
+    """`spec validate --offline` on a shipped template, with no configuration.
+
+    The only check that reaches phabfive/spec/ in a frozen build. Every
+    other command imports its app module, which PyInstaller follows; the
+    spec subpackage is reached through `phabfive/__init__.py`'s `_LAZY`
+    table, which it cannot, so a missing `--hidden-import phabfive.spec`
+    shows up here and nowhere else.
+
+    It also pins the promise the subpackage is built on: no token, no URL,
+    no ~/.arcrc and no network, on a HOME that has nothing in it.
+    """
+    template = REPOSITORY / "templates" / "task-search" / "blocked-tasks.yaml"
+
+    if not template.exists():  # pragma: no cover - a corpus that moved
+        raise Failure(f"no template to validate at {template}")
+
+    code, output = run(executable, ["spec", "validate", str(template), "--offline"],
+                       home, timeout)
+
+    for marker in IMPORT_FAILURES:
+        if marker in output:
+            raise Failure(f"broke on an import\n{indent(output)}")
+
+    if code != 0:
+        raise Failure(f"exit {code} on a shipped template\n{indent(output)}")
+    if "no problems found" not in output:
+        raise Failure(f"no clean report\n{indent(output)}")
+
+    return "shipped template validates clean"
+
+
 def check_offline_command(executable, arguments, home, timeout):
     """Run a real command against an endpoint that is not there.
 
@@ -469,6 +513,10 @@ def main() -> int:
         (
             "shell completion",
             lambda home: check_completion(executable, home, args.timeout),
+        ),
+        (
+            "spec validate --offline",
+            lambda home: check_spec_validate_offline(executable, home, args.timeout),
         ),
         (
             "user whoami (offline)",

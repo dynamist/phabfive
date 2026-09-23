@@ -24,6 +24,7 @@ from phabfive.cli.paste import paste_app
 from phabfive.cli.project import project_app
 from phabfive.cli.repl import repl_app
 from phabfive.cli.shell_completion import MonogramGroup, install_bash_escaping
+from phabfive.cli.spec import spec_app
 from phabfive.cli.user import user_app
 from phabfive.constants import (
     AutoOption,
@@ -323,6 +324,7 @@ app.add_typer(paste_app, name="paste")
 app.add_typer(project_app, name="project")
 app.add_typer(user_app, name="user")
 app.add_typer(maniphest_app, name="maniphest")
+app.add_typer(spec_app, name="spec")
 # Show repl command only if ptpython is installed (phabfive[repl])
 try:
     import ptpython  # noqa: F401
