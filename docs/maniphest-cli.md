@@ -306,8 +306,17 @@ phabfive maniphest edit T123 --assign=PHID-USER-75k6ju3upxlmi3gmks3m --subscribe
 ```
 
 A name that is not a user is an error rather than a search that matches nothing.
-On an instance that has a user called `me`, `@me` is an error too, and the error
-lists both PHIDs to choose from.
+
+`@me` is a **keyword** and always means you, even on an instance that has a user
+whose username is `me`. The `@` is what makes it one, and this is the only place
+in phabfive where the sigil changes what a value means - everywhere else
+`alice` and `@alice` are the same user. To name that account, write it without
+the sigil:
+
+```bash
+phabfive maniphest search --author=@me     # your tasks
+phabfive maniphest search --author=me      # the user whose username is "me"
+```
 
 !!! important
     **Validation:** At least one filter is required, to prevent accidentally

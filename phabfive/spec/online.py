@@ -708,10 +708,10 @@ class ManiphestUserResolver:
     A spec naming the same user in forty tasks costs the same as one naming
     them once.
 
-    `@me` on an instance that also has a user called "me" is a problem, not
-    an error: `@me` then names two people, and `phabfive.me` refuses to
-    guess for exactly the same reason. It is reported as `ambiguous-user` so
-    the rest of the spec is still checked in the same run.
+    `@me` is a keyword and always means the caller, even on an instance that
+    has a user whose username is "me" (#496). A bare `me` in a spec is that
+    account, the ordinary username lookup, which is the one place in phabfive
+    where the sigil decides anything.
     """
 
     kind: FieldKind = FieldKind.USER
@@ -737,11 +737,6 @@ class ManiphestUserResolver:
 
         wanted = {name.casefold() for name in named.values()}
 
-        if me_values:
-            # Asked in the same request rather than a third one: a user
-            # actually called "me" is what makes @me ambiguous
-            wanted.add("me")
-
         found: dict[str, Any] = {}
 
         if wanted:
@@ -752,7 +747,7 @@ class ManiphestUserResolver:
                     found[username.casefold()] = record
 
         if me_values:
-            results.update(self._resolve_me(app, me_values, found.get("me")))
+            results.update(self._resolve_me(app, me_values))
 
         for value, name in named.items():
             record = found.get(name.casefold())
@@ -772,24 +767,14 @@ class ManiphestUserResolver:
         return results
 
     def _resolve_me(
-        self, app: "Phabfive", values: Sequence[str], other: Any
+        self, app: "Phabfive", values: Sequence[str]
     ) -> dict[str, ResolveResult]:
-        """`@me`, and the one instance where it does not have an answer."""
-        if other is not None:
-            username = _username(other) or "me"
-            return {
-                value: ResolveResult(
-                    value=value,
-                    problem="ambiguous-user",
-                    reason=(
-                        f"{value!r} names both you and the user {username!r} on "
-                        f"this instance; use a username or a PHID"
-                    ),
-                    candidates=(username,),
-                )
-                for value in values
-            }
+        """`@me`: the caller, on every instance.
 
+        It used to cost a second lookup, for a user called "me", so that the
+        two could be reported as ambiguous. `@me` is a keyword now, so there
+        is nothing to disambiguate and nothing extra to ask (#496).
+        """
         whoami = app.phab.user.whoami() or {}
         phid = whoami.get("phid") if isinstance(whoami, Mapping) else None
 

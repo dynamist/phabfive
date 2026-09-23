@@ -53,8 +53,8 @@ def resolve_user_phids(phab, values, option=None):
     PhabfiveDataException
         If any of them is not a user, naming every one that is not - so a
         typo in the third of five members is reported, not the first two
-        added and the rest silently dropped. Also if ``@me`` is asked for on
-        an instance that has a user called "me"
+        added and the rest silently dropped. ``@me`` always resolves to the
+        caller; a bare ``me`` is looked up as the username it is (#496)
     """
     resolved = {}
     by_username = {}

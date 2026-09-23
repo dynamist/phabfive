@@ -55,7 +55,6 @@ CODES: tuple[str, ...] = (
     "bad-local-id",
     # The online layer
     "unknown-user",
-    "ambiguous-user",
     "unknown-project",
     "ambiguous-project",
     "unknown-space",

@@ -330,38 +330,43 @@ def test_at_me_resolves_through_whoami():
     phab.user.whoami.assert_called_once()
 
 
-def test_at_me_is_ambiguous_when_a_user_is_called_me():
-    """`@me` then names two people, and guessing is what phabfive.me refuses."""
+def test_at_me_is_the_caller_when_a_user_is_called_me():
+    """A username does not take the keyword from everybody else (#496)."""
     spec = _spec({"assignment": "@me"})
     phab = _phab(users_called_me=["PHID-USER-me"])
 
-    [problem] = _validate(phab, spec)
-
-    assert problem.code == "ambiguous-user"
-    assert problem.value == "@me"
-    assert "me" in problem.reason
+    assert _validate(phab, spec) == []
 
 
-def test_an_ambiguous_at_me_does_not_stop_the_rest_of_the_report():
+def test_a_bare_me_is_the_user_called_me():
+    """The escape hatch: the sigil is what makes `@me` a keyword."""
+    spec = _spec({"assignment": "me"})
+    phab = _phab(users_called_me=["PHID-USER-me"])
+
+    assert _validate(phab, spec) == []
+
+
+def test_a_user_called_me_does_not_hide_a_real_problem():
     spec = _spec({"assignment": "@me", "subscribers": ["nosuch"]})
     phab = _phab(users_called_me=["PHID-USER-me"])
 
-    assert sorted(p.code for p in _validate(phab, spec)) == [
-        "ambiguous-user",
-        "unknown-user",
-    ]
+    assert [p.code for p in _validate(phab, spec)] == ["unknown-user"]
 
 
-def test_at_me_is_asked_in_the_same_search_as_the_other_usernames():
+def test_at_me_costs_whoami_and_nothing_else():
+    """It used to put "me" into the username search, to catch the ambiguity.
+
+    With `@me` a keyword there is nothing to disambiguate, so the search asks
+    only about the names the spec actually wrote (#496).
+    """
     spec = _spec({"assignment": "@me", "subscribers": ["alice"]})
     phab = _phab()
 
     _validate(phab, spec)
 
     assert phab.user.search.call_count == 1
-    assert phab.user.search.call_args.kwargs["constraints"] == {
-        "usernames": ["alice", "me"]
-    }
+    assert phab.user.search.call_args.kwargs["constraints"] == {"usernames": ["alice"]}
+    phab.user.whoami.assert_called_once()
 
 
 def test_at_me_is_a_problem_when_the_instance_gives_no_phid():

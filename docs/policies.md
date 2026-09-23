@@ -46,10 +46,22 @@ Every policy option — `--visible-to`, `--editable-by`, `--can-push` and
 | `@me` | You — whoever the API token belongs to, as in `maniphest search --assigned=@me` |
 | `PHID-...` | Whatever object the PHID names — this is how a **custom policy rule** is set, since it has no other name |
 
-On an instance that has a user called `me`, `@me` names two people, so it is an
-error rather than a guess, in the policy options and in every other option that
-takes a user (`--assigned`, `--author`, `--assign`, `--subscribe`, `--member`).
-Name yourself by username, or that user by PHID.
+`@me` is a keyword and always means you, in the policy options and in every
+other option that takes a user (`--assigned`, `--author`, `--assign`,
+`--subscribe`, `--member`). An instance that has a user whose username is `me`
+does not change that: a username does not take a keyword away from everybody
+else.
+
+Elsewhere that account is named by writing it without the sigil, because
+`alice` and `@alice` are both accepted as usernames. **A policy value is the
+exception.** The grammar above takes a keyword, `#project`, `@user`, `@me` or a
+PHID, so an unprefixed name has never been valid here - which leaves the PHID
+as the way to name a user called `me` in a policy:
+
+```bash
+phabfive maniphest edit T1 --visible-to=@me                       # you
+phabfive maniphest edit T1 --visible-to=PHID-USER-3o36d4hdvtxy    # that account
+```
 
 A project may be named by its hashtag or by its display name. Phorge's
 `project.search` normalises what it is given, so both of these resolve the same

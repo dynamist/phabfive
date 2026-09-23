@@ -436,7 +436,7 @@ Common errors and solutions:
 |-------|-------|----------|
 | "Project 'X' not found" | Project doesn't exist | Create project in Phabricator first |
 | "No such user: 'X'" | A username or PHID in `assignment` or `subscribers` that is not a user | Verify the user exists; every unknown one is named, and no task is created |
-| "assignment: @me is ambiguous ..." | The instance has a user called `me` | Give your own username, or that user's PHID, instead of `@me` |
+| "No such user: 'me'" | `@me` always means you; a bare `me` is the username | Write `@me` for yourself, or `me` for the account of that name |
 | "Task 'T123' not found" | Invalid task reference | Check task ID exists |
 | "Permission denied" | Insufficient API permissions | Update API token permissions |
 | "Undefined variable 'X'" | A `variables:` entry names a variable nothing defines - usually a typo | Define it, or write `{{ X \| default("...") }}` to allow it to be missing |
