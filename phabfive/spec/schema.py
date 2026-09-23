@@ -26,11 +26,10 @@ Two things this module is deliberately not:
 
 Library code: it prints nothing, reads no configuration and opens no socket.
 `phabfive.constants` and `phabfive.transitions` are imported inside the
-functions that need them. Not for a cycle any more - `phabfive.constants`
-resolves `SEARCH_TEMPLATE_KEYS` through a module ``__getattr__`` and no
-longer imports this package at module level - but because generating a
-schema is not something every importer of this file does, and
-`functools.lru_cache` makes the deferred import cost one dict lookup.
+functions that need them. Not for a cycle - `phabfive.constants` is a leaf
+of plain literals - but because generating a schema is not something every
+importer of this file does, and `functools.lru_cache` makes the deferred
+import cost one dict lookup.
 """
 
 from __future__ import annotations

@@ -9,10 +9,10 @@ that parser, moved out of ``phabfive/maniphest/utils.py`` for one reason:
 ``phabfive.maniphest`` would pull in ``phabfive.core`` and the ``phabricator``
 client onto the one code path whose whole claim is that it needs neither.
 
-Standard library only, exactly like ``phabfive.spec.registry``, and
-re-exported from ``phabfive.maniphest.utils`` so every existing caller and
-test keeps working untouched - the same seam the Jinja2 engine moved across
-in #471.
+Standard library only, exactly like ``phabfive.spec.registry``. It moved
+out of ``phabfive.maniphest.utils`` rather than being re-exported from it,
+the same way the Jinja2 engine did in #471: two import paths for one
+function is how a grammar ends up with two readers that disagree.
 
 The grammar, said once::
 

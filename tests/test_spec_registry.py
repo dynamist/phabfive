@@ -8,7 +8,6 @@ import textwrap
 
 import pytest
 
-from phabfive.constants import SEARCH_TEMPLATE_KEYS
 from phabfive.exceptions import PhabfiveInputException
 from phabfive.spec import registry
 from phabfive.spec.registry import (
@@ -146,9 +145,6 @@ class TestAccessors:
 
 
 class TestDerivation:
-    def test_search_template_keys_is_the_derived_set(self):
-        assert SEARCH_TEMPLATE_KEYS == spec_keys("task", "search")
-
     def test_adding_a_field_changes_the_derivation(self, monkeypatch):
         extra = Field(
             name="milestone",
@@ -164,53 +160,34 @@ class TestDerivation:
         assert "--milestone" in cli_flags("task", "search")
         assert field_by_name("milestone", "task", "search") is extra
 
-    def test_a_field_added_to_the_registry_is_accepted_by_the_loader(self, tmp_path):
+    def test_a_field_added_to_the_registry_is_accepted_by_the_loader(
+        self, tmp_path, monkeypatch
+    ):
         """One declaration is all it takes, end to end.
 
-        Out of process, because SEARCH_TEMPLATE_KEYS is derived when
-        phabfive.constants is first imported: by the time this suite runs it
-        is long since computed. The subprocess declares the field before that
-        import happens, which is what a real new field does at edit time.
+        In process, because `_load_search_config` calls `spec_keys()` when it
+        runs rather than reading a set derived once at import. That is the
+        whole point of dropping the derived constant: a new field is a new
+        declaration and nothing else, with no import order to get right.
         """
+        from phabfive.maniphest import Maniphest
+
+        extra = Field(
+            name="milestone",
+            kind=FieldKind.PROJECT,
+            objects=frozenset({"task"}),
+            verbs=frozenset({"search"}),
+            cli="--milestone",
+            constraint="parentIDs",
+        )
+        monkeypatch.setattr(registry, "FIELDS", FIELDS + (extra,))
+
         template = tmp_path / "search.yaml"
         template.write_text("search:\n  milestone: Q3\n")
 
-        code = textwrap.dedent(
-            f"""
-            import phabfive.spec.registry as registry
+        configs = Maniphest.__new__(Maniphest)._load_search_config(str(template))
 
-            registry.FIELDS = registry.FIELDS + (
-                registry.Field(
-                    name="milestone",
-                    kind=registry.FieldKind.PROJECT,
-                    objects=frozenset({{"task"}}),
-                    verbs=frozenset({{"search"}}),
-                    cli="--milestone",
-                    constraint="parentIDs",
-                ),
-            )
-
-            from phabfive.constants import SEARCH_TEMPLATE_KEYS
-            from phabfive.maniphest import Maniphest
-
-            assert "milestone" in SEARCH_TEMPLATE_KEYS, SEARCH_TEMPLATE_KEYS
-            configs = Maniphest.__new__(Maniphest)._load_search_config(
-                {str(template)!r}
-            )
-            assert configs[0]["search"]["milestone"] == "Q3", configs
-            print("ok")
-            """
-        )
-
-        result = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            env=_clean_env(),
-        )
-
-        assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == "ok"
+        assert configs[0]["search"]["milestone"] == "Q3"
 
     def test_an_undeclared_key_is_still_refused_by_the_loader(self, tmp_path):
         from phabfive.exceptions import PhabfiveDataException
@@ -286,7 +263,7 @@ class TestImportHygiene:
         assert result.stdout.strip() == "ok"
 
     def test_importing_constants_does_not_reach_the_cli(self):
-        """The new constants -> spec edge must not drag typer in.
+        """phabfive.constants stays a leaf of plain literals.
 
         phabfive/cli/__init__.py sets os.environ["TYPER_USE_RICH"] as it
         imports, so a library module that reaches it mutates the environment
@@ -299,7 +276,6 @@ class TestImportHygiene:
 
             import phabfive.constants
 
-            assert phabfive.constants.SEARCH_TEMPLATE_KEYS
             forbidden = [
                 name
                 for name in ("phabfive.cli", "typer", "click", "phabricator")
@@ -322,14 +298,14 @@ class TestImportHygiene:
         assert result.stdout.strip() == "ok"
 
     def test_importing_constants_stays_cheap(self):
-        """`SEARCH_TEMPLATE_KEYS` is derived, and deriving it is not free.
+        """phabfive.constants must not reach the spec package at all.
 
-        Reaching phabfive.spec.registry runs phabfive/spec/__init__.py, which
-        imports ruamel, jinja2 and both validation layers - a quarter of a
-        second, on a module every single CLI path imports. phabfive.constants
-        therefore resolves the name through a module __getattr__, so the cost
-        lands on the one caller that reads the set rather than on
-        `phabfive --help`.
+        It briefly did, to derive `SEARCH_TEMPLATE_KEYS`, and that one edge
+        cost a quarter of a second on a module every CLI path imports -
+        reaching phabfive.spec.registry runs phabfive/spec/__init__.py, which
+        pulls in ruamel, jinja2 and both validation layers. The set is gone
+        and `_load_search_config` calls `spec_keys()` itself, so the edge
+        should never come back; this is what says so.
 
         Out of process, because by the time this suite runs everything is in
         sys.modules already.
@@ -348,9 +324,10 @@ class TestImportHygiene:
             )
             assert not eager, eager
 
-            # And touching it does resolve, from the registry
-            assert "text_query" in phabfive.constants.SEARCH_TEMPLATE_KEYS
-            assert "phabfive.spec.registry" in sys.modules
+            # The literals are all still there; it is only the derived set
+            # that left.
+            assert phabfive.constants.MANIPHEST_ORDER_DEFAULT
+            assert not hasattr(phabfive.constants, "SEARCH_TEMPLATE_KEYS")
             print("ok")
             """
         )

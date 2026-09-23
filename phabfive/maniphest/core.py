@@ -16,7 +16,6 @@ from phabfive.constants import (
     MANIPHEST_ORDER_DIRECTIONS,
     MANIPHEST_ORDER_FIELDS,
     PRIORITY_DEFAULT,
-    SEARCH_TEMPLATE_KEYS,
     STATUS_MAP_CACHE_NAMESPACE,
     TASK_POLICY_FIELDS,
     TASK_POLICY_TRANSACTIONS,
@@ -61,9 +60,10 @@ from phabfive.maniphest.resolvers import (
 from phabfive.maniphest.utils import (
     PHORGE_ORDER_KEYS,
     days_ago_to_timestamp,
-    parse_time_with_unit,
     sort_tasks,
 )
+from phabfive.spec.registry import spec_keys
+from phabfive.spec.times import parse_time_with_unit
 from phabfive.spec.variables import render_string, resolve_variables
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
@@ -699,7 +699,9 @@ class Maniphest(Phabfive):
             raise PhabfiveDataException("Template file contains no documents")
 
         search_configs = []
-        supported_params = SEARCH_TEMPLATE_KEYS
+        # Derived from the one Field declaration per key, so a key the
+        # command reads and this refuses cannot happen again (#295).
+        supported_params = spec_keys("task", "search")
 
         for i, data in enumerate(documents):
             if not isinstance(data, dict):

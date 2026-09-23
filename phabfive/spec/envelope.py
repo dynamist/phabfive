@@ -27,10 +27,12 @@ template describe **one search's result banner** (see
 different things, and both survive: the banner keys become fields of a
 `searches:` item.
 
-Every envelope key is optional, so a file that works today keeps working
-untouched. `kind` is inferred from the body - `search`/`searches` means
-search, `tasks`/`projects`/`pastes` means create - and a file that could be
-either is refused rather than guessed. A caller that already knows what it
+Every envelope key is optional, because a spec should not have to say what
+is already obvious from its body. `kind` is inferred - `search`/`searches`
+means search, `tasks`/`projects`/`pastes` means create - and a file that
+could be either is refused rather than guessed. It is what lets the loader
+read the templates written before this format existed, though that is a
+convenience rather than a promise: the format is v1alpha1 and free to churn. A caller that already knows what it
 holds says so with `kind=`, which is what makes the legacy call sites safe: a
 search template may legally carry only `title:` and `description:` with no
 `search:` key at all, which inference cannot tell from a create spec.
