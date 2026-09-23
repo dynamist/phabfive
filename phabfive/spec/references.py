@@ -46,7 +46,9 @@ if TYPE_CHECKING:  # pragma: no cover - annotations only, never imported
     from phabfive.spec.envelope import Spec
 
 __all__ = [
+    "ANCHOR_KEYS",
     "CREATE_OBJECT_KEYS",
+    "CREATION_KEYS",
     "LOCAL_ID_KEY",
     "LOCAL_ID_PATTERN",
     "NESTED_KEY",
@@ -55,6 +57,7 @@ __all__ = [
     "Reference",
     "ReferenceField",
     "SpecObject",
+    "UNCREATABLE_OBJECT_KEYS",
     "classify_reference",
     "declared_local_ids",
     "is_local_id",
@@ -83,8 +86,46 @@ CREATE_OBJECT_KEYS: tuple[tuple[str, str], ...] = (
     ("pastes", "paste"),
 )
 
+#: The body keys a create spec recognises and refuses, and the sentence
+#: saying why. Not an oversight and not a gap: Conduit exposes no endpoint
+#: that creates one of these, so the section is refused **offline** - no
+#: token is needed to know that a method does not exist - and the reason
+#: names the missing endpoint rather than a flag, a version or a permission,
+#: because none of those would change the answer.
+#:
+#: `passphrases:` is the whole list. Phorge exposes `passphrase.query` and
+#: nothing else: there is no `passphrase.edit` or `passphrase.create`, which
+#: is why `phabfive/cli/passphrase.py` has only `show` and `search`. Reading
+#: credentials is supported everywhere phabfive reads anything, so a
+#: passphrase *search* spec is ordinary and stays supported.
+UNCREATABLE_OBJECT_KEYS: tuple[tuple[str, str], ...] = (
+    (
+        "passphrases",
+        "passphrases cannot be created: Phorge exposes no passphrase.edit "
+        "endpoint. Credentials must be created in the web UI. Passphrase "
+        "search specs are supported.",
+    ),
+)
+
 #: The key a task nests its children under.
 NESTED_KEY = "tasks"
+
+#: The key that makes an item of each type an object to create rather than a
+#: grouping that holds them. A task or a paste is named by its ``title:`` and
+#: a project by its ``name:``; an item carrying none of them creates nothing,
+#: which is what a bare ``tasks:`` container and an anchor both are.
+CREATION_KEYS: Mapping[str, tuple[str, ...]] = {
+    "task": ("title",),
+    "project": ("name",),
+    "paste": ("title",),
+}
+
+#: The two spellings of "what this item hangs off". One meaning: on an item
+#: that creates something they are its ``parents.add``, and on one that does
+#: not - an anchor - they are the existing objects its children hang off
+#: instead. Declared here beside the grammar their values are written in, so
+#: the planner and the offline pass read the same pair.
+ANCHOR_KEYS: tuple[str, ...] = ("parent", "parents")
 
 _PHID_PREFIX = "PHID-"
 
@@ -145,6 +186,18 @@ class ReferenceField:
         is what `maniphest search --assigned` has always accepted. ``None``
         means the whole value is one reference, so a comma in it is part of
         a name.
+    creates
+        The object types a ``$local-id`` written in this key may name. A
+        ``$ref`` is a promise that the spec creates the thing, so the key
+        has to agree about *what*: ``parents: ["$p"]`` where ``$p`` is a
+        project is a task whose parent is a project, which Conduit refuses -
+        after the project has been created and with no way to undo it. The
+        offline pass settles it from this, because which key names which
+        kind is a question about the file.
+
+        Empty - the default - means no object a spec creates fits: nothing
+        creates a user or a Space, so a ``$ref`` in ``subscribers:`` or
+        ``space:`` names nothing, whatever else is in the document.
     """
 
     name: str
@@ -152,15 +205,34 @@ class ReferenceField:
     monograms: tuple[str, ...] = ()
     patterns: bool = False
     separator: Optional[str] = None
+    creates: tuple[str, ...] = ()
 
 
 _TASK_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
-    ReferenceField("parents", multiple=True, monograms=("T",)),
-    ReferenceField("subtasks", multiple=True, monograms=("T",)),
-    ReferenceField("projects", multiple=True),
+    # `parent:` and `parents:` are one meaning with two spellings, and both
+    # compile to `parents.add` on the item that writes them. The singular is
+    # what an anchor is written with - a task item carrying nothing but
+    # `parent: T123` and children creates nothing and hangs its children off
+    # T123 - and the plural is the same thing for an item with several, so
+    # `- title: Sub` + `parents: [T123]` is exactly the flat form of it
+    # (#482). One key would have done; two is what people write.
+    ReferenceField("parent", monograms=("T",), creates=("task",)),
+    ReferenceField("parents", multiple=True, monograms=("T",), creates=("task",)),
+    ReferenceField("subtasks", multiple=True, monograms=("T",), creates=("task",)),
+    ReferenceField("projects", multiple=True, creates=("project",)),
+    # No `creates`: nothing in a spec creates a user or a Space, so a
+    # `$ref` in one of these names something that will never exist.
     ReferenceField("subscribers", multiple=True),
     ReferenceField("assignment"),
     ReferenceField("space"),
+    # A task's policies, walked for the same reason a project's are: a
+    # policy value is a keyword, a #project, a @user, a PHID - or, in a
+    # create spec, the $local-id of a project the same spec creates. The
+    # two halves were asymmetric while only the project's were declared,
+    # and `phabfive.spec.create._POLICY_KEYS` turns both into real `view`
+    # and `edit` transactions.
+    ReferenceField("visible-to", creates=("project",)),
+    ReferenceField("editable-by", creates=("project",)),
 )
 
 _PROJECT_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
@@ -171,6 +243,24 @@ _PROJECT_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
     # absent: the colour keys are fixed in Phorge's source, so the offline
     # pass settles a colour from `registry.FIELDS` alone.
     ReferenceField("icon"),
+    # Everything else a `projects:` item names. Undeclared they were not
+    # walked at all, so a spec naming a member nobody has and a parent
+    # nothing is called came back with a clean bill of health from both
+    # layers (#483). `parent:` here is a *project*, named by hashtag or by
+    # name, and shares only its spelling with a task's `parent:` - which is
+    # why the two tables are separate and neither one's monogram rule
+    # reaches the other.
+    ReferenceField("members", multiple=True),
+    ReferenceField("parent", creates=("project",)),
+    ReferenceField("milestone-of", creates=("project",)),
+    ReferenceField("space"),
+    # A policy value is a keyword, a #project, a @user or a PHID - and, in a
+    # create spec, a $local-id of a project the same spec creates. The
+    # offline pass checks the grammar from `registry.FIELDS`; walking them
+    # here is what makes the local half of the grammar reach them.
+    ReferenceField("visible-to", creates=("project",)),
+    ReferenceField("editable-by", creates=("project",)),
+    ReferenceField("joinable-by", creates=("project",)),
 )
 
 _SEARCH_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (

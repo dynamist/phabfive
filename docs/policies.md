@@ -15,6 +15,11 @@ the same reason: no one application owns it.
 | Diffusion | `diffusion repo show --show-policy`, `diffusion repo list --show-policy` | `diffusion repo edit --visible-to`, `--editable-by`, `--can-push` |
 | Maniphest | `maniphest show --show-policy`, `maniphest search --show-policy`; filter with `maniphest search --visible-to` and `--editable-by` | `maniphest edit` and `maniphest create`, `--visible-to` and `--editable-by` |
 | Projects | `project show --show-policy`, `project search --show-policy` | `project edit` and `project create`, `--visible-to`, `--editable-by` and `--joinable-by` |
+| Paste | — | `paste create`, `--visible-to` and `--editable-by` |
+
+A paste has a view policy and an edit policy and no third one — there is
+nothing to join and nothing to push — which is why it is the one row above
+with two flags rather than three.
 
 Each object reports three policies. Two of them are the same on all three:
 

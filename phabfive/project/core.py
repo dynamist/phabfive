@@ -81,6 +81,88 @@ PROJECT_SORT_KEYS = {
 }
 
 
+#: What a project's three policies are called in a preview, which is what the
+#: web UI calls them. `phabfive.constants.PROJECT_POLICY_TRANSACTIONS` says
+#: what each one is *sent* as; this says what a person reads.
+PROJECT_POLICY_LABELS = {
+    "view": "Visible To",
+    "edit": "Editable By",
+    "join": "Joinable By",
+}
+
+
+def _pair(value):
+    """One reference as ``(value, shown)``, however the caller wrote it.
+
+    A bare value is shown as itself, which is right for a policy keyword and
+    wrong-looking but harmless for a PHID - a caller that has a better name
+    for it passes the pair.
+    """
+    if isinstance(value, tuple) and len(value) == 2:
+        return value[0], str(value[1])
+
+    return value, str(value)
+
+
+def _shown(value, label):
+    """``(value, label, shown)``, the three arguments a preview line takes."""
+    resolved, name = _pair(value)
+
+    return resolved, label, name
+
+
+def check_project_create_options(
+    name, parent=None, milestone_of=None, icon=None, color=None, slugs=None
+):
+    """Everything about a new project that is wrong whatever it resolves to.
+
+    Separated from building the transactions so that it can run **before**
+    the first lookup: a create spec asking for a milestone with an icon is
+    wrong however many projects it names, and refusing it costs no request.
+    Both `Project.build_project_create` and
+    `Project.project_create_transactions` call it, which is what keeps the
+    command and a spec refusing the same combinations.
+
+    Returns
+    -------
+    str
+        The name with its surrounding whitespace removed, which is the name
+        the rest of the create uses.
+
+    Raises
+    ------
+    PhabfiveConfigException
+        There is no name, the options contradict each other, or the colour
+        is not one Phorge has.
+    """
+    name = (name or "").strip()
+
+    if not name:
+        raise PhabfiveConfigException("A project needs a name")
+
+    if parent and milestone_of:
+        raise PhabfiveConfigException(
+            "--parent and --milestone-of cannot be combined: a project is "
+            "either a subproject or a milestone"
+        )
+
+    if milestone_of and (icon or color or slugs):
+        # Phorge shows a milestone with the milestone icon and its parent's
+        # colour whatever is stored on it, and stores a hashtag on one that
+        # project.search never reports - none of them does what it was asked
+        # to, so none is sent. A stored colour is worse than ignored:
+        # project.search matches it, so the milestone would turn up under a
+        # colour it is never shown in.
+        raise PhabfiveConfigException(
+            "A milestone takes no --icon, --color or --slug: its icon is "
+            "fixed, its colour is its parent's, and it has no hashtag"
+        )
+
+    check_project_color(color)
+
+    return name
+
+
 def project_id_list(value, option="--ids"):
     """Project ids as the integers ``project.search`` constrains on.
 
@@ -703,6 +785,76 @@ class Project(Phabfive):
 
         return project
 
+    def hashtag_conflicts(self, names, exclude_phid=None):
+        """Which of these names a project already answers to the hashtag of.
+
+        A project cannot be deleted or archived through Conduit, so a name
+        that Phorge would refuse has to be found **before** the first write
+        rather than halfway through a batch - a create spec naming five
+        projects must not create four of them and then stop. This answers
+        for a whole document at once, which is what a validation pass over
+        one asks.
+
+        One request per name and not one for the whole list: `project.search`
+        matches any of the slugs it is given, and its answer says which
+        project was found and not which name found it. Phorge derives a slug
+        from a name by rules phabfive does not restate, so mapping an answer
+        back onto the name that caused it would mean guessing at those rules.
+        A spec names a handful of projects, and a wrong answer here creates
+        an object nobody can remove.
+
+        Parameters
+        ----------
+        names : iterable of str
+            The project names to ask about. A name is asked about once
+            however many times it appears.
+        exclude_phid : str, optional
+            A project that is allowed to hold the hashtag, which is the
+            project being edited when a rename is what is being checked.
+
+        Returns
+        -------
+        dict
+            ``{name: project}`` for the names that clash, where the project
+            is the `project.search` record already holding that hashtag.
+            Empty when every name is free.
+
+        Raises
+        ------
+        PhabfiveDataException
+            The instance could not be asked.
+        """
+        conflicts = {}
+
+        for name in dict.fromkeys(names):
+            try:
+                found = (
+                    self.phab.project.search(constraints={"slugs": [name]}).get("data")
+                    or []
+                )
+            except Exception as e:
+                raise PhabfiveDataException(f"Failed to look up project: {e}")
+
+            taken = [project for project in found if project["phid"] != exclude_phid]
+
+            if taken:
+                conflicts[name] = taken[0]
+
+        return conflicts
+
+    @staticmethod
+    def hashtag_taken_message(name, other):
+        """The sentence a taken hashtag is refused with, wherever it is found.
+
+        One spelling for the command and for a spec's validation pass, so a
+        person who has seen it once recognises it in the other place.
+        """
+        return (
+            f"Project name '{name}' generates the same hashtag as "
+            f"{describe_project(other)} ({other['fields']['name']}). "
+            "Choose a unique name."
+        )
+
     def _hashtag_is_free(self, name, exclude_phid=None):
         """Refuse a name whose hashtag another project already has.
 
@@ -713,22 +865,11 @@ class Project(Phabfive):
         slug it is given the way Phorge derives one, so the name itself is
         what is asked about.
         """
-        try:
-            found = (
-                self.phab.project.search(constraints={"slugs": [name]}).get("data")
-                or []
-            )
-        except Exception as e:
-            raise PhabfiveDataException(f"Failed to look up project: {e}")
+        conflicts = self.hashtag_conflicts([name], exclude_phid=exclude_phid)
 
-        taken = [project for project in found if project["phid"] != exclude_phid]
-
-        if taken:
-            other = taken[0]
+        if name in conflicts:
             raise PhabfiveDataException(
-                f"Project name '{name}' generates the same hashtag as "
-                f"{describe_project(other)} ({other['fields']['name']}). "
-                "Choose a unique name."
+                self.hashtag_taken_message(name, conflicts[name])
             )
 
     def _resolve_space_for_write(self, space):
@@ -793,30 +934,171 @@ class Project(Phabfive):
             If a project, user or Space named does not exist, or the name's
             hashtag is taken
         """
-        name = (name or "").strip()
+        # Before a single name is looked up: a spec that asks for a
+        # milestone with an icon is wrong whatever that icon resolves to,
+        # and refusing it here costs no request.
+        name = check_project_create_options(
+            name,
+            parent=parent,
+            milestone_of=milestone_of,
+            icon=icon,
+            color=color,
+            slugs=slugs,
+        )
 
-        if not name:
-            raise PhabfiveConfigException("A project needs a name")
+        # Here and not in `project_create_transactions`, so that the order
+        # the user sees errors in does not change: this has always been the
+        # first *request* `project create` makes, before the parent, the
+        # members, the Space and the three policies are looked up. Deferring
+        # it would answer a command naming both a bad parent and a taken
+        # hashtag with the other error, after four more round trips. A
+        # milestone is named after its number within its parent, so any
+        # number of them may share a name and none is asked about.
+        if not milestone_of:
+            self._hashtag_is_free(name)
 
-        if parent and milestone_of:
-            raise PhabfiveConfigException(
-                "--parent and --milestone-of cannot be combined: a project is "
-                "either a subproject or a milestone"
+        resolved_parent = None
+        if parent:
+            parent_project = self.get_project(parent)
+            resolved_parent = (
+                parent_project["phid"],
+                describe_project(parent_project),
             )
 
-        if milestone_of and (icon or color or slugs):
-            # Phorge shows a milestone with the milestone icon and its
-            # parent's colour whatever is stored on it, and stores a hashtag
-            # on one that project.search never reports - none of them does
-            # what it was asked to, so none is sent. A stored colour is worse
-            # than ignored: project.search matches it, so the milestone would
-            # turn up under a colour it is never shown in.
-            raise PhabfiveConfigException(
-                "A milestone takes no --icon, --color or --slug: its icon is "
-                "fixed, its colour is its parent's, and it has no hashtag"
+        resolved_milestone_of = None
+        if milestone_of:
+            of_project = self.get_project(milestone_of)
+            resolved_milestone_of = (
+                of_project["phid"],
+                describe_project(of_project),
             )
 
-        check_project_color(color)
+        resolved_members = None
+        if members:
+            users = resolve_user_phids(self.phab, members, option="--member")
+            resolved_members = [
+                (phid, f"@{username or phid}") for phid, username in users.values()
+            ]
+
+        resolved_space = self._resolve_space_for_write(space) if space else None
+
+        policies = self._resolve_create_policies(
+            visible_to=visible_to,
+            editable_by=editable_by,
+            joinable_by=joinable_by,
+        )
+
+        return self.project_create_transactions(
+            name,
+            description=description,
+            icon=icon,
+            color=color,
+            slugs=slugs,
+            members=resolved_members,
+            parent=resolved_parent,
+            milestone_of=resolved_milestone_of,
+            space=resolved_space,
+            policies=policies,
+            # Asked above, before anything was looked up, and asking again
+            # would be a second `project.search` for the same answer.
+            check_hashtag=False,
+        )
+
+    def _resolve_create_policies(
+        self, visible_to=None, editable_by=None, joinable_by=None
+    ):
+        """The three policy keys as ``{key: (value, shown)}``, resolved once.
+
+        `_build_policy_edit` answers the same question for a create, but as
+        transactions rather than as values, which is one step further than a
+        caller building the transactions itself needs.
+        """
+        transactions, changes = self._build_policy_edit(
+            {},
+            visible_to=visible_to,
+            editable_by=editable_by,
+            joinable_by=joinable_by,
+            creating=True,
+        )
+        by_transaction = {
+            transaction: key for key, transaction in PROJECT_POLICY_TRANSACTIONS.items()
+        }
+
+        return {
+            by_transaction[transaction["type"]]: (transaction["value"], change["new"])
+            for transaction, change in zip(transactions, changes)
+        }
+
+    def project_create_transactions(
+        self,
+        name,
+        *,
+        description=None,
+        icon=None,
+        color=None,
+        slugs=None,
+        members=None,
+        parent=None,
+        milestone_of=None,
+        space=None,
+        policies=None,
+        check_hashtag=True,
+    ):
+        """The transactions that create one project, from values already resolved.
+
+        The PHIDs-only half of :meth:`build_project_create`, and the half a
+        create spec calls: a spec resolves every name in the whole document
+        in one pass and then builds each project from what came back, where
+        the command resolves one project's names and builds it once. Both
+        end at these transactions, so neither can grow a field the other
+        does not send.
+
+        At most one request is made here - the hashtag check - and none at
+        all with ``check_hashtag=False``, for a caller that has already
+        asked `hashtag_conflicts` about every name in a document.
+
+        Parameters
+        ----------
+        name : str
+            The project's name.
+        description, icon, color : str, optional
+            Plain values; none of them names anything to look up.
+        slugs : list, optional
+            Additional hashtags, with or without their "#".
+        members : list, optional
+            Either PHIDs, or ``(PHID, shown)`` pairs. The second element is
+            what the preview prints, so a PHID never has to reach a person.
+        parent, milestone_of, space : str or tuple, optional
+            A PHID, or a ``(PHID, shown)`` pair.
+        policies : mapping, optional
+            ``{"view"|"edit"|"join": value}`` or ``{key: (value, shown)}``,
+            already through `phabfive.policy.resolve_policy_value`.
+        check_hashtag : bool, optional
+            Whether to ask the instance for a project already holding this
+            name's hashtag. A milestone is never asked about: it is named
+            after its number within its parent, and any number of them may
+            share a name.
+
+        Returns
+        -------
+        tuple
+            (transactions, changes), exactly as `build_project_create`.
+
+        Raises
+        ------
+        PhabfiveConfigException
+            The options contradict each other, or the colour is not one.
+        PhabfiveDataException
+            The name's hashtag is taken.
+        """
+        name = check_project_create_options(
+            name,
+            parent=parent,
+            milestone_of=milestone_of,
+            icon=icon,
+            color=color,
+            slugs=slugs,
+        )
 
         transactions = []
         changes = []
@@ -833,28 +1115,16 @@ class Project(Phabfive):
 
         # A milestone is named after its number within its parent, and any
         # number of them may share a name, so only the others are checked.
-        if not milestone_of:
+        if check_hashtag and not milestone_of:
             self._hashtag_is_free(name)
 
         add("name", name, "Name")
 
         if parent:
-            parent_project = self.get_project(parent)
-            add(
-                "parent",
-                parent_project["phid"],
-                "Parent",
-                describe_project(parent_project),
-            )
+            add("parent", *_shown(parent, "Parent"))
 
         if milestone_of:
-            of_project = self.get_project(milestone_of)
-            add(
-                "milestone",
-                of_project["phid"],
-                "Milestone Of",
-                describe_project(of_project),
-            )
+            add("milestone", *_shown(milestone_of, "Milestone Of"))
 
         if description:
             add("description", description, "Description")
@@ -867,31 +1137,37 @@ class Project(Phabfive):
 
         slugs = [slug.lstrip("#") for slug in slugs or [] if slug.lstrip("#")]
         if slugs:
+            # The one collection transaction with no `.add` spelling:
+            # `project.edit` replaces the whole list, which is safe only
+            # because this creates the project it is sent for. A create spec
+            # may therefore never write `slugs:` on an object it did not
+            # create - see phabfive/spec/create.py's module docstring.
             add("slugs", slugs, "Hashtags", ", ".join(f"#{slug}" for slug in slugs))
 
         if members:
-            users = resolve_user_phids(self.phab, members, option="--member")
-            phids = list(dict.fromkeys(phid for phid, _ in users.values()))
+            pairs = [_pair(one) for one in members]
+            phids = list(dict.fromkeys(phid for phid, _ in pairs))
+            shown = {phid: label for phid, label in reversed(pairs)}
             add(
                 "members.add",
                 phids,
                 "Members",
-                ", ".join(f"@{username or phid}" for phid, username in users.values()),
+                ", ".join(shown[phid] for phid in phids),
             )
 
         if space:
-            space_phid, space_shown = self._resolve_space_for_write(space)
-            add("space", space_phid, "Space", space_shown)
+            add("space", *_shown(space, "Space"))
 
-        policy_transactions, policy_changes = self._build_policy_edit(
-            {},
-            visible_to=visible_to,
-            editable_by=editable_by,
-            joinable_by=joinable_by,
-            creating=True,
-        )
+        for key, transaction in PROJECT_POLICY_TRANSACTIONS.items():
+            asked = (policies or {}).get(key)
 
-        return transactions + policy_transactions, changes + policy_changes
+            if asked is None:
+                continue
+
+            value, label = _pair(asked)
+            add(transaction, value, PROJECT_POLICY_LABELS[key], label)
+
+        return transactions, changes
 
     def apply_project_create(self, transactions):
         """Send prepared transactions to create a project.
@@ -1183,4 +1459,8 @@ class Project(Phabfive):
         return transactions, changes
 
 
-__all__ = ["Project"]
+__all__ = [
+    "PROJECT_POLICY_LABELS",
+    "Project",
+    "check_project_create_options",
+]

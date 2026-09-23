@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # phabfive imports
-from phabfive.exceptions import PhabfiveConfigException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.maniphest import Maniphest
 from phabfive.maniphest.resolvers import (
     ambiguous_project_message,
@@ -166,6 +166,16 @@ class TestCreateResolution:
 
 
 class TestYamlCreateResolution:
+    """A template names a project; ambiguity is refused before anything is made.
+
+    The template path runs on the spec engine since #480, so the refusal is
+    a `PhabfiveDataException` naming every problem in the document rather
+    than a `PhabfiveConfigException` carrying the first one's sentence
+    alone. The sentence itself is unchanged - it is still
+    `ambiguous_project_message` - and it now says which task and which key
+    wrote the name.
+    """
+
     @patch("phabfive.maniphest.core.Phabfive.__init__", return_value=None)
     def test_ambiguous_name_is_rejected(self, mock_init, tmp_path):
         config = tmp_path / "tasks.yaml"
@@ -180,10 +190,12 @@ class TestYamlCreateResolution:
         maniphest.phab = _mock_phab()
         maniphest.phab.user.search.return_value = {"data": []}
 
-        with pytest.raises(PhabfiveConfigException) as excinfo:
+        with pytest.raises(PhabfiveDataException) as excinfo:
             maniphest.create_tasks_from_yaml(str(config), dry_run=True)
 
-        assert str(excinfo.value) == AMBIGUOUS
+        assert str(excinfo.value) == (
+            f"1 problem(s) in this spec:\n  - tasks[0].projects[0]: {AMBIGUOUS}"
+        )
         maniphest.phab.maniphest.edit.assert_not_called()
 
 

@@ -33,7 +33,9 @@ from phabfive.exceptions import (
     PhabfiveDataException,
 )
 from phabfive.users import resolve_user_phid, resolve_user_phids
+from phabfive.cli.completers import complete_policy
 from phabfive.cli.editor import resolve_assume_yes
+from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
 from phabfive.options import any_list_value, split_list_option
 from phabfive.ordering import complete_order_value
 from phabfive.paste.core import build_paste_search_constraints
@@ -299,6 +301,18 @@ def create(
         help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
         autocompletion=complete_user_list,
     ),
+    visible_to: Optional[str] = typer.Option(
+        None,
+        "--visible-to",
+        help=f"Set who can see it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    editable_by: Optional[str] = typer.Option(
+        None,
+        "--editable-by",
+        help=f"Set who can edit it ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without creating"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Create without confirming"),
     interactive: bool = typer.Option(
@@ -314,7 +328,21 @@ def create(
         echo "content" | phabfive paste create "From stdin" --content=-
         phabfive paste create "Code" --language=python  # opens $EDITOR
         phabfive paste create "Notes" --subscribe=@me --tag=project
+        phabfive paste create "Secret" --content=... --visible-to='#platform'
     """
+    # A policy outside the grammar is refused before the instance is
+    # reached: Conduit reads an unknown value as a policy nobody satisfies,
+    # and so answers a typo with a self-lockout error.
+    try:
+        for option, value in (
+            ("--visible-to", visible_to),
+            ("--editable-by", editable_by),
+        ):
+            validate_policy_value(value, option=option)
+    except PhabfiveConfigException as e:
+        sys.stderr.write(f"ERROR: {e}\n")
+        raise typer.Exit(1)
+
     try:
         assume_yes = resolve_assume_yes(yes, False, interactive)
     except ValueError as e:
@@ -430,6 +458,10 @@ def create(
             print(f"  Tags: {', '.join(tag_list)}", file=preview)
         if subscriber_names:
             print(f"  Subscribers: {', '.join(subscriber_names)}", file=preview)
+        if visible_to:
+            print(f"  Visible To: {visible_to}", file=preview)
+        if editable_by:
+            print(f"  Editable By: {editable_by}", file=preview)
         # Show content preview
         lines = final_content.split("\n")
         if len(lines) <= 5:
@@ -456,13 +488,19 @@ def create(
             raise typer.Exit(return_code or 0)
 
     # Create the paste
-    result = paste.create_paste_from_content(
-        title=final_title,
-        content=final_content,
-        language=language,
-        tags=tag_list,
-        subscribers=subscriber_names,
-    )
+    try:
+        result = paste.create_paste_from_content(
+            title=final_title,
+            content=final_content,
+            language=language,
+            tags=tag_list,
+            subscribers=subscriber_names,
+            visible_to=visible_to,
+            editable_by=editable_by,
+        )
+    except (PhabfiveConfigException, PhabfiveDataException) as e:
+        sys.stderr.write(f"ERROR: {e}\n")
+        raise typer.Exit(1)
 
     if machine:
         _show_pastes_after_write(ctx, paste, [result["id"]])

@@ -57,12 +57,19 @@ if TYPE_CHECKING:
     from phabfive.passphrase import Passphrase
     from phabfive.paste import Paste
     from phabfive.project import Project
-    from phabfive.spec import Problem, SearchPlan, SearchResult, Spec
+    from phabfive.spec import (
+        CreatePlan,
+        Problem,
+        SearchPlan,
+        SearchResult,
+        Spec,
+    )
     from phabfive.user import User
 
 # The promise. Spelled out as literals rather than derived from _LAZY: ruff
 # cannot see a computed __all__, and would flag every import above as unused.
 __all__ = [
+    "CreatePlan",
     "Diffusion",
     "Edit",
     "EditFailure",
@@ -96,6 +103,7 @@ __all__ = [
 # rather than its core module, because the subpackage is where they are
 # re-exported from.
 _LAZY = {
+    "CreatePlan": "phabfive.spec",
     "Diffusion": "phabfive.diffusion",
     "Edit": "phabfive.edit",
     "EditFailure": "phabfive.edit",
@@ -141,6 +149,7 @@ _LAZY = {
 _SUBMODULES = (
     "constants",
     "core",
+    "create",
     "diffusion",
     "edit",
     "exceptions",

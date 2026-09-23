@@ -397,3 +397,82 @@ def test_a_search_spec_runs_with_nothing_of_the_command_loaded(live_env, tmp_pat
     assert answered["typer_use_rich"] is False
     assert answered["environ"] is True
     assert answered["loaded"] == []
+
+
+# --------------------------------------------------------------------------
+# The plan, held and inspected without applying it (#480)
+# --------------------------------------------------------------------------
+
+
+def test_a_create_plan_is_inspectable_without_applying_it(credentials, isolated):
+    """#480's acceptance: a frontend holds the plan and nothing was written.
+
+    `plan_spec` resolves everything - every name is a PHID by the time it
+    answers - and sends nothing. Which is what lets a request body come
+    back as "here is what this would create, confirm it" rather than as a
+    list of objects that already exist.
+    """
+    from phabfive import Maniphest
+    from phabfive.create import plan_spec
+    from phabfive.spec import Spec
+
+    app = Maniphest(url=credentials["url"], token=credentials["token"])
+    plan = plan_spec(app, Spec.from_data(_payload(), kind="create").render())
+
+    assert [item.object_type for item in plan.items] == ["task", "task"]
+    assert plan.counts() == {"task": 2}
+
+    root = plan.by_local_id()["root"]
+
+    # Rendered, so no `{{ release }}` survives into a title
+    assert root.display["title"] == "Bootstrap 1.0"
+
+    # Resolved, so the assignee is a PHID and not the "@admin" it was
+    # written as - the one online pass answered it, not the apply
+    owner = next(one for one in root.transactions if one["type"] == "owner")
+    assert owner["value"].startswith("PHID-USER-")
+
+    # The second task waits for the first, by the *path* that identifies it
+    follow_up = plan.by_path()["tasks[1]"]
+    assert follow_up.depends_on == (root.path,)
+
+
+def test_a_create_plan_survives_json(credentials, isolated):
+    """Serializable, which is the other half of #480's acceptance."""
+    from phabfive import Maniphest
+    from phabfive.create import plan_spec
+    from phabfive.spec import Spec
+
+    app = Maniphest(url=credentials["url"], token=credentials["token"])
+    plan = plan_spec(app, Spec.from_data(_payload(), kind="create").render())
+
+    records = json.loads(json.dumps(plan.as_records()))
+
+    assert [one["type"] for one in records] == ["task", "task"]
+    assert records[0]["id"] == "root"
+    assert records[1]["depends_on"] == ["tasks[0]"]
+
+    # The `$local-id` is still literal in the transaction: it names something
+    # that does not exist yet, so there is no PHID to write down, and
+    # `apply_plan` substitutes it as each object comes into existence
+    parents = next(
+        one for one in records[1]["transactions"] if one["type"] == "parents.add"
+    )
+    assert parents["value"] == ["$root"]
+
+
+def test_nothing_was_created_while_the_plan_was_built(credentials, isolated, conduit):
+    """The count of tasks named in the plan is unchanged on the instance."""
+    from phabfive import Maniphest
+    from phabfive.create import plan_spec
+    from phabfive.spec import Spec
+
+    payload = _payload()
+    title = payload["tasks"][0]["title"].replace("{{ release }}", "1.0")
+
+    app = Maniphest(url=credentials["url"], token=credentials["token"])
+    plan_spec(app, Spec.from_data(payload, kind="create").render())
+
+    found = conduit("maniphest.search", **{"constraints[query]": f'"{title}"'})["data"]
+
+    assert found == []

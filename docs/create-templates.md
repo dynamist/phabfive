@@ -65,9 +65,19 @@ tasks:
 | `priority` | string | Task priority | `"high"`, `"normal"`, `"low"`, etc. |
 | `assignment` | string | Assignee: a username, `@username`, `@me` or a user PHID (supports Jinja2 variables) | `"alice"`, `"@me"` |
 | `subscribers` | list | Subscribers, each spelled as for `assignment` (supports Jinja2 variables) | `["bob", "@carol", "PHID-USER-..."]` |
+| `status` | string | Status key or name, e.g. `open` or `resolved` | `"resolved"` |
+| `column` | string | Workboard column to place it in; needs `projects:` naming the board | `"In Review"` |
+| `visible-to` | string | View policy: a keyword, `#project`, `@user`, a PHID or a `$local-id` | `"#backend"` |
+| `editable-by` | string | Edit policy, spelled as `visible-to` | `"admin"` |
+| `parent` | string | One parent, the singular of `parents` | `"T123"`, `"$epic"` |
 | `parents` | list | Parent task IDs | `["T123", "T456"]` |
 | `subtasks` | list | Subtask IDs to attach | `["T789"]` |
+| `id` | string | A name the rest of this file can refer to this task by; see [Referring to what the same file creates](#referring-to-what-the-same-file-creates) | `"epic"` |
 | `tasks` | list | Nested subtasks (see [Subtasks](#subtasks)) | Array of task objects |
+
+Only `title` is required. A task with a title and no description is created;
+an item with neither a title nor nested `tasks:` nor a `parent:` is an error,
+and the whole file is refused rather than that one item being skipped.
 
 ### Spaces
 
@@ -236,9 +246,131 @@ tasks:
     # template are unrelated. Nest them under `tasks:` to link them
 ```
 
-Only nesting links tasks the same template creates - see
-[Subtasks](#subtasks). A monogram in `parents` or `subtasks` that no task
-answers to is an error, and nothing is created.
+Nesting links tasks the same template creates - see [Subtasks](#subtasks) -
+and `$local-id` links anything to anything; see the next section. A monogram
+in `parents` or `subtasks` that no task answers to is an error, and nothing
+is created.
+
+#### Hanging new subtasks off a task that already exists
+
+An item with a `parent:` (or `parents:`) and **no `title:`** creates nothing.
+It is an *anchor*: it is read for the PHID of what it names, and the tasks
+nested under it are created as children of that task.
+
+```yaml
+tasks:
+  - parent: T123          # already exists; read, never written
+    tasks:
+      - title: "Subtask A"
+      - title: "Subtask B"
+```
+
+T123 itself is never edited. Each new task carries a `parents.add` naming it,
+so **the subtasks T123 already had are kept**. No create ever rewrites a
+collection on an object that already exists: every list field is sent as
+`.add`, never as a replacement, and the whole create path refuses to send a
+`.set` at all.
+
+The flat form is exactly equivalent, and is what to write when the new tasks
+differ from one another:
+
+```yaml
+tasks:
+  - title: "Subtask A"
+    parents: ["T123"]
+  - title: "Subtask B"
+    parents: ["T123"]
+```
+
+### Referring to what the same file creates
+
+`$name` refers to an object **this file creates**, which is how one file can
+create a project and the tasks tagged into it. Give the object an `id:` and
+write `$id` wherever a reference goes:
+
+```yaml
+kind: create
+
+projects:
+  - id: platform
+    name: "Platform"
+    slugs: ["platform"]
+
+tasks:
+  - id: epic
+    title: "Bootstrap the platform"
+    projects: ["$platform"]
+
+  - title: "Write the runbook"
+    projects: ["$platform"]
+    parents: ["$epic"]
+```
+
+The objects are created in the order that makes each `$ref` resolvable -
+the project first, then the epic, then the task that hangs off it - whatever
+order they are written in. Ties are broken by the order in the file.
+
+`$name` is not Jinja. `{{ ... }}` is substituted before anything is created;
+`$name` is substituted **during** the run, as each object comes into
+existence. `$` is used rather than `@` or `#` because those already mean a
+user and a project.
+
+What a `$ref` may name is checked before anything is sent, with no network:
+
+| Reported | Cause |
+|----------|-------|
+| `unknown-local-id` | `$platfrom` - nothing in the file declares that `id:` |
+| `duplicate-local-id` | two objects declare the same `id:` |
+| `local-id-cycle` | `$a` names `$b` and `$b` names `$a`, so neither can be first |
+| `not-creatable` | `$p` names a project and it was written in `parents:`, which names a task - or it names an item that creates nothing |
+
+### Creating projects
+
+A create file may hold a `projects:` section as well as `tasks:`. A project
+is named by `name:` and takes `description`, `icon`, `color`, `slugs`,
+`members`, `parent`, `milestone-of`, `space`, `visible-to`, `editable-by` and
+`joinable-by` - the same keys `phabfive project create` has flags for.
+
+```yaml
+kind: create
+
+projects:
+  - id: platform
+    name: "Platform"
+    slugs: ["platform"]
+    members: ["alice", "@bob"]
+  - name: "Sprint 1"
+    milestone-of: "$platform"
+```
+
+**A project cannot be deleted or archived through Conduit.** A name whose
+hashtag an existing project already holds is therefore refused before the
+first object is created, not by the server halfway through. Preview with
+`--dry-run` first.
+
+`passphrases:` is recognised and always refused: Phorge exposes
+`passphrase.query` and no `passphrase.edit`, so nothing can create a
+credential from a file. Passphrase *search* specs are supported.
+
+### When something fails partway through
+
+Conduit has no transactions, so a file whose fourth object is refused has
+already created the three before it. The command says so per object and
+exits 1:
+
+```
+Error: 3 of 5 objects created. task 'Wire it up' failed: ERR-CONDUIT-CORE: ...
+  created  project $platform 'Platform' #platform
+  created  task T408 'Sprint kickoff'
+  created  task T409 'Bootstrap'
+  failed   task 'Wire it up': ERR-CONDUIT-CORE: ...
+  skipped  task 'Follow-up'
+```
+
+With `--format=json`, `--format=jsonl` or `--format=yaml` the records go to
+stdout and the sentence to stderr, so a reader piping stdout into `jq` sees
+records and nothing else. `skipped` means nothing was sent for it and nothing
+exists - which is a different thing from having been tried and refused.
 
 ### YAML Anchors and References
 
@@ -438,6 +570,10 @@ Common errors and solutions:
 | "No such user: 'X'" | A username or PHID in `assignment` or `subscribers` that is not a user | Verify the user exists; every unknown one is named, and no task is created |
 | "No such user: 'me'" | `@me` always means you; a bare `me` is the username | Write `@me` for yourself, or `me` for the account of that name |
 | "Task 'T123' not found" | Invalid task reference | Check task ID exists |
+| "No object in this spec is called $X" | A `$ref` to an `id:` nothing declares | Declare the `id:`, or fix the spelling |
+| "$p is declared by projects[0], which creates a project, and parents: names a task" | A `$ref` of the wrong kind | Use a key that takes that kind of object |
+| "No workboard column called 'X'" | `column:` names a column none of the task's `projects:` has | Check the board's columns, or drop `column:` |
+| "passphrases cannot be created" | A `passphrases:` section | Credentials must be created in the web UI |
 | "Permission denied" | Insufficient API permissions | Update API token permissions |
 | "Undefined variable 'X'" | A `variables:` entry names a variable nothing defines - usually a typo | Define it, or write `{{ X \| default("...") }}` to allow it to be missing |
 | "Variable 'X' has no value" | `X:` is declared with neither a value nor a `default:` | Give it a value, or declare `X: {default: ...}` |

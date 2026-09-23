@@ -39,6 +39,12 @@ A project **colour** is decided here, and is the one that looks like it
 should not be: the colour keys are fixed in Phorge's own source, where
 `projects.colors` relabels a colour but cannot add one, so a colour needs no
 token and no network. It is a `FieldKind.ENUM` with its choices on the field.
+
+`passphrases:` in a create spec is refused here for the same reason: Phorge
+exposes `passphrase.query` and no `passphrase.edit`, and a method that does
+not exist cannot be made to exist by a token, a flag or a newer server, so
+asking one is pointless. See `UNCREATABLE_OBJECT_KEYS` in
+`phabfive.spec.references`.
 """
 
 from __future__ import annotations
@@ -56,10 +62,15 @@ from phabfive.spec.envelope import (
 )
 from phabfive.spec.problems import Problem, Severity, problem
 from phabfive.spec.references import (
+    ANCHOR_KEYS,
+    CREATION_KEYS,
     LOCAL_ID_KEY,
+    NESTED_KEY,
     REFERENCE_FIELDS,
+    Reference,
     RefKind,
     ReferenceField,
+    SpecObject,
     is_local_id,
     is_monogram,
     iter_objects,
@@ -402,9 +413,59 @@ def _rendered(spec: "Spec", effective: Mapping[str, Any]) -> Optional["Spec"]:
 # --------------------------------------------------------------------------
 
 
+def _check_uncreatable(spec: "Spec") -> list[Problem]:
+    """The create sections Conduit has no endpoint to create.
+
+    Recognised rather than unknown, and therefore refused with the reason
+    instead of "no such key": a person who writes `passphrases:` in a create
+    spec has not misspelled anything, they have asked for something Phorge
+    does not expose. Offline, because a method that does not exist needs no
+    token to be missing, and it is `not-creatable` rather than `unknown-key`
+    so a CI job can tell the two apart.
+
+    The reasons live next to `UNCREATABLE_OBJECT_KEYS`; see there for why
+    none of them offers a way out.
+
+    **The `value` is a count and not the section.** A `Problem`'s `value` is
+    what was written, and `phabfive/cli/spec.py` puts `as_record()` -
+    `value` included - into `--format=json` and `--format=yaml` output. The
+    one section this check refuses is `passphrases:`, whose body is
+    credential material, so echoing it would print secrets into a file
+    somebody pipes to `jq`. How many items were written is what a report
+    needs and all it needs.
+    """
+    from phabfive.spec.references import UNCREATABLE_OBJECT_KEYS
+
+    if spec.kind is not Kind.CREATE:
+        return []
+
+    def written(key: str) -> object:
+        section = spec.body[key]
+
+        if isinstance(section, (list, tuple)):
+            return f"{len(section)} item(s)"
+
+        return _type_name(section)
+
+    return [
+        problem(
+            DOCUMENT,
+            field=key,
+            value=written(key),
+            reason=reason,
+            code="not-creatable",
+        )
+        for key, reason in UNCREATABLE_OBJECT_KEYS
+        if key in spec.body
+    ]
+
+
 def _check_document_keys(spec: "Spec") -> list[Problem]:
     """The body's own top-level keys."""
-    from phabfive.spec.references import CREATE_OBJECT_KEYS
+    from phabfive.spec.references import (
+        CREATE_OBJECT_KEYS,
+        UNCREATABLE_OBJECT_KEYS,
+    )
 
     known: tuple[str, ...] = (
         ("searches",)
@@ -412,10 +473,20 @@ def _check_document_keys(spec: "Spec") -> list[Problem]:
         else tuple(key for key, _ in CREATE_OBJECT_KEYS)
     )
 
+    # A recognised-but-refused section is reported once, by
+    # `_check_uncreatable`, which says why. Reporting it here as well would
+    # answer one mistake with two problems, one of them offering a spelling
+    # correction for a key that is spelled correctly.
+    refused: frozenset[str] = (
+        frozenset(key for key, _ in UNCREATABLE_OBJECT_KEYS)
+        if spec.kind is Kind.CREATE
+        else frozenset()
+    )
+
     problems: list[Problem] = []
 
     for key in spec.body:
-        if key in known:
+        if key in known or key in refused:
             continue
 
         problems.append(
@@ -436,10 +507,15 @@ def _check_document_keys(spec: "Spec") -> list[Problem]:
 
 
 def _check_shape(spec: "Spec") -> list[Problem]:
-    """Every item section holds a list of mappings.
+    """Every item section holds a list of mappings, however deep it nests.
 
     `iter_objects` skips anything that is not a mapping, so this is what
-    reports it - once, under the path it would have had.
+    reports it - once, under the path it would have had. **Including a
+    nested one**: a string written under a task's own ``tasks:`` used to be
+    skipped in silence by every walk there is, so a spec validated clean,
+    planned one item short and exited 0 having created one task fewer than
+    it named. The top-level form of the same mistake was always reported;
+    depth is not what decides whether a mistake is one.
     """
     from phabfive.spec.references import CREATE_OBJECT_KEYS
 
@@ -449,7 +525,7 @@ def _check_shape(spec: "Spec") -> list[Problem]:
 
     problems: list[Problem] = []
 
-    for key, _ in sections:
+    for key, object_type in sections:
         for index, item in enumerate(spec.items(key)):
             if not isinstance(item, Mapping):
                 problems.append(
@@ -464,6 +540,42 @@ def _check_shape(spec: "Spec") -> list[Problem]:
                         code="wrong-type",
                     )
                 )
+                continue
+
+            if object_type == "task":
+                problems += _check_nested_shape(item, f"{key}[{index}]")
+
+    return problems
+
+
+def _check_nested_shape(item: Mapping[str, Any], path: str) -> list[Problem]:
+    """One task's children, and their children, checked the way a section is."""
+    children = item.get(NESTED_KEY)
+
+    if not isinstance(children, (list, tuple)):
+        return []
+
+    problems: list[Problem] = []
+
+    for index, child in enumerate(children):
+        child_path = f"{path}.{NESTED_KEY}[{index}]"
+
+        if not isinstance(child, Mapping):
+            problems.append(
+                problem(
+                    child_path,
+                    field=None,
+                    value=child,
+                    reason=(
+                        f"A {NESTED_KEY}: item is a mapping of keys, not a "
+                        f"{_type_name(child)}"
+                    ),
+                    code="wrong-type",
+                )
+            )
+            continue
+
+        problems += _check_nested_shape(child, child_path)
 
     return problems
 
@@ -497,7 +609,16 @@ def _check_value(
 
     `templated` is the set of ``(object, field)`` pairs whose spec text held
     ``{{``, taken from the spec before it was rendered.
+
+    A key written with nothing after it is a key that is not there. ``priority:``
+    in YAML is None, and every command reads an absent value and takes its
+    default, so reporting "priority takes text, not a nothing" would refuse a
+    spec that behaves exactly as it reads. Only a value that is *there* is
+    checked against its field.
     """
+    if value is None:
+        return []
+
     if _unrendered(value):
         return []
 
@@ -723,8 +844,18 @@ def _check_policy(
     Shape only. Whether that project or user exists needs the server, and
     Conduit reads an unrecognised policy as one nobody satisfies - so a typo
     comes back as a permissions error unless it is caught here first.
+
+    A spec has a sixth spelling the command line does not: ``$platform``,
+    the project this same document creates. `phabfive.policy` is shared with
+    every ``--visible-to`` flag there is and a `$local-id` means nothing
+    there, so the local half of the grammar is admitted here rather than in
+    it. Whether it names an object that will exist, and whether that object
+    is a *project*, is `_check_local_id_targets`'.
     """
     from phabfive.policy import validate_policy_value
+
+    if isinstance(value, str) and local_id(value) is not None:
+        return []
 
     if not isinstance(value, str):
         return [
@@ -926,7 +1057,8 @@ def _check_schema(
     spec: "Spec", templated: frozenset[tuple[str, str]] = frozenset()
 ) -> list[Problem]:
     """Known keys, value types and the genuinely static enums."""
-    problems = _check_document_keys(spec)
+    problems = _check_uncreatable(spec)
+    problems += _check_document_keys(spec)
     problems += _check_shape(spec)
 
     for spec_object in iter_objects(spec):
@@ -1182,10 +1314,17 @@ def _check_references(spec: "Spec", local_ids: Mapping[str, str]) -> list[Proble
             )
             continue
 
-        # A key that names tasks takes a task id or a $local-id, and nothing
-        # else: "Fix the thing" in parents: is a typo, not a task title
+        # A key that names tasks takes a task id, a PHID or a $local-id, and
+        # nothing else: "Fix the thing" in parents: is a typo, not a task
+        # title. A PHID is passed over here rather than settled, because
+        # nothing offline can tell PHID-TASK- from PHID-PROJ- without a
+        # table mapping a monogram letter to a PHID type; layer 2's
+        # `TaskResolver` answers it, and says what a task is named by. One
+        # grammar means every field that names an object takes a PHID (#482).
         if declared is not None and declared.monograms:
-            if not is_monogram(reference.value, prefixes=declared.monograms):
+            if reference.kind is not RefKind.PHID and not is_monogram(
+                reference.value, prefixes=declared.monograms
+            ):
                 expected = ", ".join(f"{prefix}123" for prefix in declared.monograms)
                 problems.append(
                     problem(
@@ -1193,9 +1332,9 @@ def _check_references(spec: "Spec", local_ids: Mapping[str, str]) -> list[Proble
                         field=reference.field,
                         value=reference.value,
                         reason=(
-                            f"{name} takes an existing task ({expected}) or a "
-                            f"$local-id of an object this spec creates (got "
-                            f"{reference.value!r})"
+                            f"{name} takes an existing task ({expected} or a "
+                            f"PHID) or a $local-id of an object this spec "
+                            f"creates (got {reference.value!r})"
                         ),
                         code="bad-monogram",
                     )
@@ -1248,11 +1387,209 @@ def _check_local_id_cycles(spec: "Spec", local_ids: Mapping[str, str]) -> list[P
     ]
 
 
+def _anchored(data: Mapping[str, Any]) -> list[str]:
+    """What a task item hangs off, from both spellings, in file order."""
+    values: list[str] = []
+
+    for key in ANCHOR_KEYS:
+        value = data.get(key) or []
+
+        if not isinstance(value, (list, tuple)):
+            value = [value]
+
+        values += [one for one in value if isinstance(one, str)]
+
+    return list(dict.fromkeys(values))
+
+
+def _unrealisable(spec_object: SpecObject) -> Optional[str]:
+    """Why a `$ref` to this item would name nothing, or None when it names one.
+
+    A local id points at *one object*. An item that creates something is
+    that object. An item that creates nothing can still be one - a task
+    anchored to exactly one existing object, which is what
+    ``- parent: T123`` with children under it is - because its children hang
+    off the object it names. A bare grouping names nothing at all, and an
+    anchor naming two objects names two.
+    """
+    data = spec_object.data
+    creating = CREATION_KEYS.get(spec_object.object_type, ())
+
+    if any(data.get(key) for key in creating):
+        return None
+
+    if spec_object.object_type != "task":
+        # `parent:` on a project is a field of the project being created,
+        # not something its children hang off - nothing nests under a
+        # project in a spec - so only its own name can make it an object.
+        named = ", ".join(creating) or "a name"
+
+        return f"has no {named}, so it creates nothing"
+
+    pointing = _anchored(data)
+
+    if len(pointing) == 1:
+        return None
+
+    if not pointing:
+        return (
+            "creates nothing and names nothing: it has no title:, and no "
+            "parent: for its children to hang off"
+        )
+
+    listed = ", ".join(repr(one) for one in pointing)
+
+    return f"names {len(pointing)} existing objects ({listed}), not one"
+
+
+def _check_local_id_targets(
+    spec: "Spec", local_ids: Mapping[str, str]
+) -> list[Problem]:
+    """Every `$ref` names an object there will be a PHID for.
+
+    The check that keeps a spec from being refused **halfway through**. An
+    `id:` on a bare grouping is a declared local id, so nothing below would
+    report it and the ordering would put it first quite happily - and then
+    the run would create the objects before it, reach the `$ref`, find that
+    the grouping became nothing, and stop with real objects already written.
+    Offline: whether an item creates anything is a question about the file.
+    """
+    if not local_ids:
+        return []
+
+    objects = {one.path: one for one in iter_objects(spec)}
+    problems: list[Problem] = []
+
+    for reference in iter_references(spec):
+        if reference.kind is not RefKind.LOCAL:
+            continue
+
+        target = local_id(reference.value)
+        path = local_ids.get(target) if target is not None else None
+
+        if path is None:
+            # Nothing declares it, which `_check_references` already said
+            continue
+
+        spec_object = objects.get(path)
+
+        if spec_object is None:
+            continue
+
+        reason = _unrealisable(spec_object)
+
+        if reason is None:
+            reason = _wrong_kind(reference, spec_object)
+
+        if reason is None:
+            continue
+
+        problems.append(
+            problem(
+                reference.object,
+                field=reference.field,
+                value=reference.value,
+                reason=(
+                    f"${target} is declared by {path}, which {reason}. A "
+                    f"$local-id names one object the spec creates, or the one "
+                    f"existing object an item anchors to"
+                ),
+                code="not-creatable",
+            )
+        )
+
+    return problems
+
+
+def _wrong_kind(reference: Reference, target: SpecObject) -> Optional[str]:
+    """Why this key cannot name that object type, or None when it can.
+
+    The other half of the check above, and the expensive half: a `$ref`
+    naming an object of the wrong *kind* validates clean, plans, creates the
+    project - and is then refused by the instance when the task that names
+    it is sent, leaving behind a project Conduit can neither delete nor
+    archive. Which key names which kind is a question about the file, so it
+    is settled offline, from `ReferenceField.creates`.
+
+    An anchor is left alone: what it names is an *existing* object, and what
+    kind that is belongs to layer 2, which asks the instance.
+    """
+    if not _creates_something(target):
+        # An anchor: `_unrealisable` already passed it, and it stands for
+        # whatever existing object it points at rather than for its own type
+        return None
+
+    name = reference.field.split("[")[0]
+    declared = next(
+        (
+            one
+            for one in REFERENCE_FIELDS.get(reference.object_type, ())
+            if one.name == name
+        ),
+        None,
+    )
+
+    if declared is None or target.object_type in declared.creates:
+        return None
+
+    if not declared.creates:
+        return (
+            f"creates a {target.object_type}, and {name}: names nothing a spec creates"
+        )
+
+    wanted = " or ".join(f"a {one}" for one in declared.creates)
+
+    return f"creates a {target.object_type}, and {name}: names {wanted}"
+
+
+def _creates_something(spec_object: SpecObject) -> bool:
+    """Whether the item describes an object rather than pointing at one."""
+    return any(
+        spec_object.data.get(key)
+        for key in CREATION_KEYS.get(spec_object.object_type, ())
+    )
+
+
+def _check_column_context(spec: "Spec") -> list[Problem]:
+    """A `column:` names a column *on a board*, so it needs a `projects:`.
+
+    The same rule `phabfive.edit.validators.validate_board_column_context`
+    states for ``--column`` without ``--tag``, and it is offline for the
+    same reason the registry says a colour is: which keys were written
+    together is a question about the file. Without it the planner would go
+    looking for a column on no boards at all and report "no workboard
+    column called 'Doing' on the 0 project(s) this task is tagged into",
+    which describes the symptom rather than the mistake.
+    """
+    if spec.kind is not Kind.CREATE:
+        return []
+
+    return [
+        problem(
+            spec_object.path,
+            field="column",
+            value=spec_object.data.get("column"),
+            reason=(
+                "column: places the task in a column of one of its own "
+                "boards, so the task needs a projects: naming the board. "
+                "Add the project, or drop the column"
+            ),
+            code="missing-required",
+        )
+        for spec_object in iter_objects(spec)
+        if spec_object.object_type == "task"
+        and spec_object.data.get("column")
+        and not spec_object.data.get("projects")
+    ]
+
+
 def _check_semantics(spec: "Spec") -> list[Problem]:
     """What a JSON Schema structurally cannot say about a spec."""
     problems, local_ids = _check_local_ids(spec)
     problems += _check_references(spec, local_ids)
+    problems += _check_local_id_targets(spec, local_ids)
     problems += _check_local_id_cycles(spec, local_ids)
+    problems += _check_column_context(spec)
 
     return problems
 

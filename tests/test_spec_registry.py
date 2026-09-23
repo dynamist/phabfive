@@ -66,23 +66,49 @@ class TestDeclarations:
         are written, so they carry `objects` rather than being copied - which
         is what keeps the per-endpoint constraint quirk (`authorPHIDs` against
         `authors`) in one place.
-        """
-        by_name = {}
-        for field in FIELDS:
-            by_name.setdefault(field.name, []).append(field)
 
-        assert sorted(name for name, fields in by_name.items() if len(fields) > 1) == [
-            "status"
+        Grouped per **verb**, because the rule is about object types and a
+        verb is where one word genuinely means two things: `priority:` is a
+        transition grammar over a task's history when it filters and one
+        priority name when it creates, and `parent:` is a task monogram on
+        the search side and a project on the create side. `status` stays the
+        one exception the rule allows within a verb - a pattern on a task and
+        a plain enum of three on a project.
+        """
+        by_key = {}
+        for field in FIELDS:
+            for verb in field.verbs:
+                by_key.setdefault((field.name, verb), []).append(field)
+
+        assert sorted(key for key, fields in by_key.items() if len(fields) > 1) == [
+            ("status", "search")
         ]
 
         assert {
-            name: sorted(by_name[name][0].objects)
-            for name in ("text_query", "limit", "author", "show-policy")
+            name: sorted(by_key[(name, verb)][0].objects)
+            for name, verb in (
+                ("text_query", "search"),
+                ("limit", "search"),
+                ("author", "search"),
+                ("show-policy", "search"),
+                # The create side carries the same rule: a task and a paste
+                # spell the title, its projects and its subscribers the same
+                # way, and all three policies are one key wherever they are
+                # written.
+                ("title", "create"),
+                ("projects", "create"),
+                ("subscribers", "create"),
+                ("visible-to", "create"),
+            )
         } == {
             "text_query": ["passphrase", "paste", "project", "task"],
             "limit": ["passphrase", "paste", "project", "task"],
             "author": ["paste", "task"],
             "show-policy": ["project", "task"],
+            "title": ["paste", "task"],
+            "projects": ["paste", "task"],
+            "subscribers": ["paste", "task"],
+            "visible-to": ["paste", "project", "task"],
         }
 
     def test_text_query_keeps_its_underscore(self):
@@ -210,10 +236,12 @@ class TestAccessors:
         assert names[0] == "text_query"
 
     def test_an_object_type_with_no_fields_yet_is_empty_not_an_error(self):
-        # Every object type's *search* keys are declared now; the create
-        # verb is where the seam still is.
-        assert fields_for("paste", "create") == ()
-        assert spec_keys("task", "create") == frozenset()
+        # A passphrase is the object type with nothing to declare for a
+        # verb: Phorge exposes no `passphrase.edit`, so a `passphrases:`
+        # section is refused by name rather than described here. Asking for
+        # its create fields is empty, never an error.
+        assert fields_for("passphrase", "create") == ()
+        assert spec_keys("passphrase", "create") == frozenset()
 
     def test_field_by_name_answers_none_for_an_undeclared_key(self):
         assert field_by_name("no-such-key", "task", "search") is None

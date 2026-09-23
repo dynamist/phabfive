@@ -28,6 +28,17 @@ from phabfive.yaml_utils import group_objects_by_type, parse_yaml_from_stdin
 
 log = logging.getLogger(__name__)
 
+#: Why a `K` monogram is refused. Not pending work: Phorge exposes
+#: `passphrase.query` and nothing else - there is no `passphrase.edit` to
+#: call - so the sentence names the missing endpoint and where the change
+#: can be made instead, rather than implying a flag, a token or a newer
+#: server would help. `phabfive.spec.references.UNCREATABLE_OBJECT_KEYS`
+#: says the same thing about a create spec's `passphrases:` section.
+PASSPHRASE_NOT_EDITABLE = (
+    "Error: Passphrases cannot be edited: Phorge exposes no passphrase.edit "
+    "endpoint. Credentials must be edited in the web UI.\n"
+)
+
 
 def run_edit(
     edit,
@@ -143,7 +154,7 @@ def run_edit(
                         output_format=output_format,
                     )
                 elif object_type == "passphrase":
-                    sys.stderr.write("Error: Passphrase editing not yet implemented\n")
+                    sys.stderr.write(PASSPHRASE_NOT_EDITABLE)
                     return 1
                 elif object_type == "paste":
                     sys.stderr.write("Error: Paste editing not yet implemented\n")
@@ -187,7 +198,7 @@ def run_edit(
                         output_format=output_format,
                     )
                 elif object_type == "passphrase":
-                    sys.stderr.write("Error: Passphrase editing not yet implemented\n")
+                    sys.stderr.write(PASSPHRASE_NOT_EDITABLE)
                     return 1
                 elif object_type == "paste":
                     sys.stderr.write("Error: Paste editing not yet implemented\n")
@@ -237,9 +248,9 @@ def run_edit(
                 if retcode != 0:
                     return retcode
 
-            # Passphrases and pastes not yet implemented
+            # A passphrase cannot be edited at all; a paste not yet
             if "passphrase" in grouped:
-                sys.stderr.write("Error: Passphrase editing not yet implemented\n")
+                sys.stderr.write(PASSPHRASE_NOT_EDITABLE)
                 return 1
             if "paste" in grouped:
                 sys.stderr.write("Error: Paste editing not yet implemented\n")

@@ -175,6 +175,61 @@ def _show_tasks_after_write(ctx, maniphest_instance, task_ids):
     _display_tasks(result, _get_output_format(ctx), maniphest_instance)
 
 
+def _report_partial_create(report, output_format):
+    """Say what exists after a create spec failed partway through.
+
+    Creation is one call per object and Conduit has no transactions, so
+    "it failed" is not an answer when the objects before the failure are
+    still there. Every object gets a record - ``created``, ``failed`` or
+    ``skipped`` - so the run can be cleaned up or resumed by name rather
+    than by reading back the log (#485).
+
+    A machine format puts the records on stdout and the sentence about
+    them on stderr, the way every other command that writes does (#344),
+    so a reader piping stdout into ``jq`` sees records and nothing else.
+    A human format writes the lot to stderr: this is what went wrong, and
+    a real run has never printed anything to stdout.
+
+    Parameters
+    ----------
+    report : phabfive.spec.create.CreateReport
+        Every record of the run, in the order the objects were attempted
+    output_format : str
+        The format the caller asked for
+    """
+    if is_machine_format(output_format):
+        records = report.as_records()
+
+        if output_format == "yaml":
+            from io import StringIO
+
+            from ruamel.yaml import YAML
+
+            yaml = YAML()
+            yaml.default_flow_style = False
+            stream = StringIO()
+            yaml.dump(records, stream)
+            print(stream.getvalue(), end="")
+        else:
+            from phabfive.json_output import emit_records
+
+            emit_records(records, output_format)
+
+        sys.stderr.write(f"Error: {report.summary}\n")
+        return
+
+    sys.stderr.write(f"Error: {report.summary}\n")
+
+    for record in report.records:
+        shown = record.monogram or record.phid
+        suffix = f" {shown}" if shown else ""
+
+        if record.reason and record.status == "failed":
+            suffix = f"{suffix}: {record.reason}"
+
+        sys.stderr.write(f"  {record.status:<8} {record.label}{suffix}\n")
+
+
 @maniphest_app.command()
 def show(
     ctx: typer.Context,
@@ -420,13 +475,28 @@ def create(
     final_title = title or title_opt
 
     if with_template:
-        # Template mode
+        # Template mode. Imported here rather than at module level so that
+        # `phabfive T123` does not pay for the spec engine, and statically
+        # enough for PyInstaller to follow - `_LAZY` is what it cannot see.
+        from phabfive.spec.create import CreateFailed
+
         try:
             result = maniphest.create_tasks_from_yaml(with_template, dry_run=dry_run)
+        except CreateFailed as partial:
+            # Conduit has no transactions, so a template that failed on its
+            # fiftieth object left forty-nine behind. Answering with one
+            # sentence would leave the caller to find out which from the
+            # log; the records say it per object (#485).
+            _report_partial_create(partial.report, output_format)
+            raise typer.Exit(1)
         except (PhabfiveConfigException, PhabfiveDataException) as e:
             sys.stderr.write(f"Error: {e}\n")
             raise typer.Exit(1)
         if result and result.get("dry_run"):
+            # The command says so, not the library: `phabfive.spec.create`
+            # builds a plan and never writes, and a log.warning from inside
+            # it was a user message in the wrong place
+            print("[DRY RUN] Would create:", file=preview)
             for task in result["tasks"]:
                 indent = "  " * task["depth"]
                 print(f"{indent}- {task['title']}", file=preview)

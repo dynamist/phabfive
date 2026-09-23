@@ -133,7 +133,7 @@ class TestSubscribers:
         _create(phab, [_task(subscribers=["@alice", "PHID-USER-bob", "@me"])])
 
         assert {
-            "type": "subscribers.set",
+            "type": "subscribers.add",
             "value": ["PHID-USER-alice", "PHID-USER-bob", "PHID-USER-caller"],
         } in _transactions(phab)
 
@@ -143,7 +143,7 @@ class TestSubscribers:
 
         _create(phab, [_task(subscribers=["ALICE"])])
 
-        assert {"type": "subscribers.set", "value": ["PHID-USER-alice"]} in (
+        assert {"type": "subscribers.add", "value": ["PHID-USER-alice"]} in (
             _transactions(phab)
         )
 
@@ -152,7 +152,7 @@ class TestSubscribers:
 
         _create(phab, [_task(subscribers=["alice", "@Alice", "PHID-USER-alice"])])
 
-        assert {"type": "subscribers.set", "value": ["PHID-USER-alice"]} in (
+        assert {"type": "subscribers.add", "value": ["PHID-USER-alice"]} in (
             _transactions(phab)
         )
 
@@ -161,7 +161,7 @@ class TestSubscribers:
 
         _create(phab, [_task(subscribers=["{{ dev }}"])], variables={"dev": "bob"})
 
-        assert {"type": "subscribers.set", "value": ["PHID-USER-bob"]} in (
+        assert {"type": "subscribers.add", "value": ["PHID-USER-bob"]} in (
             _transactions(phab)
         )
 
@@ -204,7 +204,7 @@ class TestMeIsAKeyword:
         _create(phab, [_task(subscribers=["@me"])])
 
         assert {
-            "type": "subscribers.set",
+            "type": "subscribers.add",
             "value": ["PHID-USER-caller"],
         } in _transactions(phab)
 
@@ -222,6 +222,7 @@ class TestResolvedUpFront:
         phab.maniphest.edit.assert_not_called()
 
     def test_every_unknown_user_is_named(self):
+        """And each one is named where it is, which is new since #480."""
         phab = _phab()
 
         with pytest.raises(PhabfiveDataException) as excinfo:
@@ -233,10 +234,21 @@ class TestResolvedUpFront:
                 ],
             )
 
-        assert str(excinfo.value) == "No such user: 'typo1', 'typo2'"
+        assert str(excinfo.value) == (
+            "2 problem(s) in this spec:\n"
+            "  - tasks[0].subscribers[0]: No such user: 'typo1'\n"
+            "  - tasks[1].tasks[0].subscribers[1]: No such user: 'typo2'"
+        )
+        phab.maniphest.edit.assert_not_called()
 
     def test_only_the_named_users_are_asked_about(self):
-        """No unpaged user.search for everybody, which saw only the first 100."""
+        """No unpaged user.search for everybody, which saw only the first 100.
+
+        One request for the whole document since #480, where there used to
+        be one per option: `assignment:` and `subscribers:` are the same
+        question asked of the same endpoint, and the layer-2 resolver asks
+        it once with every distinct name in the spec.
+        """
         phab = _phab()
 
         _create(
@@ -248,7 +260,7 @@ class TestResolvedUpFront:
         )
 
         calls = [c.kwargs.get("constraints") for c in phab.user.search.call_args_list]
-        assert calls == [{"usernames": ["alice"]}, {"usernames": ["bob"]}]
+        assert calls == [{"usernames": ["alice", "bob"]}]
 
     def test_a_template_naming_nobody_asks_about_nobody(self):
         phab = _phab()
@@ -317,7 +329,11 @@ class TestDryRun:
             )
 
         assert result.exit_code == 0, result.output
+        # The banner is the command's since #480: the library builds a plan
+        # and says nothing, where a log.warning inside it used to be the
+        # only thing telling a person nothing would be created
         assert result.stdout.splitlines() == [
+            "[DRY RUN] Would create:",
             "- Parent",
             "  Assignee: alice",
             "  Subscribers: bob, carol",

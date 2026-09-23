@@ -77,10 +77,10 @@ class TestSubtaskProjects:
         created = _transactions_by_title(phab)
 
         assert {
-            "type": "projects.set",
+            "type": "projects.add",
             "value": ["PHID-PROJ-backend"],
         } in created["Epic"]
-        assert all(t["type"] != "projects.set" for t in created["Subtask"])
+        assert all(t["type"] != "projects.add" for t in created["Subtask"])
 
     def test_a_subtask_naming_projects_gets_them(self):
         phab = _phab()
@@ -107,7 +107,7 @@ class TestSubtaskProjects:
         created = _transactions_by_title(phab)
 
         assert {
-            "type": "projects.set",
+            "type": "projects.add",
             "value": ["PHID-PROJ-backend"],
         } in created["Subtask"]
 

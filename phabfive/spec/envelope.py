@@ -104,9 +104,26 @@ class Kind(enum.Enum):
 # The body keys that hold items, per kind. These are what a multi-document
 # file folds into: three YAML documents each holding one search become one
 # `searches:` list of three, which is the shape every format can express.
+# `passphrases` is one of them although nothing creates a passphrase: it is
+# a create key phabfive recognises in order to *refuse* it, because Phorge
+# exposes no `passphrase.edit` (see
+# `phabfive.spec.references.UNCREATABLE_OBJECT_KEYS`). It folds and merges
+# like any other item key so that a two-document file carrying one in each
+# is refused for both rather than quietly keeping the last - a fold that
+# drops a section is silent loss whatever happens to the section next.
 _ITEM_KEYS: dict[Kind, tuple[str, ...]] = {
-    Kind.CREATE: ("tasks", "projects", "pastes"),
+    Kind.CREATE: ("tasks", "projects", "pastes", "passphrases"),
     Kind.SEARCH: ("searches",),
+}
+
+# The item keys a document may be *offered*, which is the item keys minus
+# the ones that exist only to be refused. Recognising `passphrases:` is what
+# lets a file holding nothing else reach the offline pass and be told why,
+# instead of being told by the loader that it does not say what kind it is -
+# but a reader who has written no kind: should not be pointed at it.
+_OFFERED_KEYS: dict[Kind, tuple[str, ...]] = {
+    Kind.CREATE: ("tasks", "projects", "pastes"),
+    Kind.SEARCH: ("search", "searches"),
 }
 
 # Which body keys mean which kind, for inference. "search" (singular) is the
@@ -349,8 +366,8 @@ def infer_kind(
 
     looked_for = ", ".join(
         key
-        for kind in sorted(_KIND_KEYS, key=lambda k: k.value)
-        for key in _KIND_KEYS[kind]
+        for kind in sorted(_OFFERED_KEYS, key=lambda k: k.value)
+        for key in _OFFERED_KEYS[kind]
     )
     raise PhabfiveDataException(
         f"{source} does not say what kind of spec it is, and has none of the "
