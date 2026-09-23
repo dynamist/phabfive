@@ -5,11 +5,25 @@ Every option that takes a user takes ``@me`` - ``--assigned``, ``--author``,
 ``--assign``, ``--subscribe``, ``--member`` and the policy options - and they
 all resolve it here, so that they agree on what it means.
 
-It is refused outright on an instance that has a user called ``me``, because
-``@me`` then names two people and there is no safe way to guess which: picking
-the caller assigns, subscribes or hands over what the other one should have
-had, and picking the user does the same the other way round. That user is
-still reachable by PHID, and the caller by their own username.
+``@me`` is a **keyword**, and the ``@`` is what makes it one. It means the
+caller on every instance, including one that has a user whose username is
+``me``: a username does not get to take a keyword away from everybody else.
+This is the single place in phabfive where the sigil carries meaning -
+everywhere else ``alice`` and ``@alice`` are the same user - so it is
+documented wherever a user value is, and :func:`is_me` is deliberately strict
+about it.
+
+To name the *account* called ``me``, write it without the sigil, which is an
+ordinary username lookup::
+
+    --author=@me     # you
+    --author=me      # the user whose username is "me"
+
+phabfive used to refuse ``@me`` outright on such an instance and demand a PHID
+(#496). That was the safe reading of an ambiguity, but the cost landed on the
+wrong person: every caller on the instance lost ``@me`` because of an account
+they had never heard of, and looking up your own PHID is worse than the thing
+it replaced.
 """
 
 # phabfive imports
@@ -23,6 +37,9 @@ def is_me(value):
     """Whether a value is ``@me``, in any case.
 
     Phorge usernames are case-insensitive, so ``@Me`` is not somebody else.
+
+    The sigil is required: a bare ``me`` is a username, and this returns
+    False for it. That is what makes the account called ``me`` reachable.
 
     Parameters
     ----------
@@ -54,35 +71,17 @@ def whoami_me(phab, option=None):
     Raises
     ------
     PhabfiveDataException
-        If either lookup fails, or a user called "me" exists
+        If the lookup fails, or answers without a PHID
     """
     where = f"{option}: " if option else ""
 
     try:
-        result = phab.user.search(constraints={"usernames": ["me"]})
-    except Exception as e:
-        raise PhabfiveDataException(f"Failed to resolve {ME}: {e}")
-
-    users_called_me = (result or {}).get("data") or []
-
-    try:
         whoami = phab.user.whoami()
     except Exception as e:
-        raise PhabfiveDataException(f"Failed to resolve {ME}: {e}")
+        raise PhabfiveDataException(f"{where}Failed to resolve {ME}: {e}")
 
     if not (whoami or {}).get("phid"):
-        raise PhabfiveDataException(f"Failed to resolve {ME}: no PHID for you")
-
-    if users_called_me:
-        # Both PHIDs, one per line, so either can be copied as it stands
-        other = users_called_me[0]
-        username = (other.get("fields") or {}).get("username") or "me"
-        raise PhabfiveDataException(
-            f"{where}{ME} is ambiguous: this instance has a user called 'me'. "
-            "Give one of these PHIDs instead:\n"
-            f"  {other['phid']}  {username}\n"
-            f"  {whoami['phid']}  {whoami.get('userName') or 'you'} (you)"
-        )
+        raise PhabfiveDataException(f"{where}Failed to resolve {ME}: no PHID for you")
 
     return whoami
 
@@ -105,7 +104,7 @@ def resolve_me(phab, option=None):
     Raises
     ------
     PhabfiveDataException
-        If either lookup fails, or a user called "me" exists
+        If the lookup fails, or answers without a PHID
     """
     return whoami_me(phab, option=option)["phid"]
 

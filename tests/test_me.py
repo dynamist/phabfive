@@ -3,8 +3,17 @@
 """Tests for `@me`, whoever is running the command.
 
 Every option that takes a user resolves `@me` through phabfive.me, so they all
-refuse it the same way on an instance that has a user called "me". The policy
-options have their own tests in test_policy.py.
+agree on what it means: the caller, on every instance, including one that has
+a user whose username is "me". A username does not take a keyword away from
+everybody else (#496).
+
+The `@` is what makes it a keyword, and this is the one place in phabfive
+where the sigil carries meaning - `alice` and `@alice` are the same user
+everywhere. A bare `me` is therefore an ordinary username lookup, which is how
+the account called "me" stays reachable. Both halves of that promise are
+tested here, because either one alone is a trap.
+
+The policy options have their own tests in test_policy.py.
 """
 
 from unittest.mock import MagicMock, patch
@@ -59,15 +68,9 @@ def _task():
     }
 
 
-def _assert_ambiguous(excinfo, option):
-    """The error names the option, and both PHIDs on lines of their own."""
-    message = str(excinfo.value)
-    assert message.startswith(f"{option}: @me is ambiguous")
-    lines = [line.split() for line in message.splitlines()[1:]]
-    assert lines == [
-        ["PHID-USER-me", "me"],
-        ["PHID-USER-caller", "caller", "(you)"],
-    ]
+def _assert_caller(phids):
+    """`@me` resolved to the caller and not to the user called "me"."""
+    assert phids == ["PHID-USER-caller"], phids
 
 
 class TestIsMe:
@@ -86,13 +89,24 @@ class TestWhoamiMe:
         assert whoami_me(_phab()) == CALLER
         assert resolve_me(_phab()) == "PHID-USER-caller"
 
-    def test_a_user_called_me_makes_it_an_error(self):
+    def test_a_user_called_me_does_not_take_the_keyword(self):
+        """The point of #496: the account does not get to own the word."""
         phab = _phab(user_called_me=True)
 
-        with pytest.raises(PhabfiveDataException) as excinfo:
-            whoami_me(phab, option="--assigned")
+        assert whoami_me(phab, option="--assigned") == CALLER
 
-        _assert_ambiguous(excinfo, "--assigned")
+    def test_resolving_it_asks_only_whoami(self):
+        """It used to search for a user called "me" on every resolution.
+
+        That request existed only to raise the ambiguity error, so dropping
+        the error drops a round trip from every command taking a user.
+        """
+        phab = _phab(user_called_me=True)
+
+        resolve_me(phab)
+
+        phab.user.whoami.assert_called_once()
+        phab.user.search.assert_not_called()
 
     def test_whoami_without_a_phid_is_an_error(self):
         phab = _phab()
@@ -103,7 +117,7 @@ class TestWhoamiMe:
 
     def test_a_failing_lookup_is_not_a_traceback(self):
         phab = _phab()
-        phab.user.search.side_effect = RuntimeError("boom")
+        phab.user.whoami.side_effect = RuntimeError("boom")
 
         with pytest.raises(PhabfiveDataException, match="boom"):
             whoami_me(phab)
@@ -111,13 +125,20 @@ class TestWhoamiMe:
 
 class TestManiphestSearch:
     @pytest.mark.parametrize("option", ["--assigned", "--author"])
-    def test_a_user_called_me_makes_it_an_error(self, option):
+    def test_a_user_called_me_does_not_take_the_keyword(self, option):
         maniphest = _maniphest(_phab(user_called_me=True))
 
-        with pytest.raises(PhabfiveDataException) as excinfo:
-            maniphest._resolve_user_filter_phids("alice,@me", "by", option=option)
+        phids = maniphest._resolve_user_filter_phids("@me", "by", option=option)
 
-        _assert_ambiguous(excinfo, option)
+        _assert_caller(phids)
+
+    def test_a_bare_me_is_the_user_called_me(self):
+        """The escape hatch, and the only place the sigil decides anything."""
+        maniphest = _maniphest(_phab(user_called_me=True))
+
+        phids = maniphest._resolve_user_filter_phids("me", "by", option="--author")
+
+        assert phids == ["PHID-USER-me"]
 
     def test_the_caller_otherwise(self):
         maniphest = _maniphest(_phab())
@@ -128,39 +149,41 @@ class TestManiphestSearch:
 
 
 class TestManiphestCreate:
+    """A write is where guessing wrong would have cost the most (#496)."""
+
     def test_assign(self):
         maniphest = _maniphest(_phab(user_called_me=True))
 
-        with pytest.raises(PhabfiveDataException) as excinfo:
-            maniphest.create_task("A task", assignee="@me", dry_run=True)
+        result = maniphest.create_task("A task", assignee="@me", dry_run=True)
 
-        _assert_ambiguous(excinfo, "--assign")
+        # The preview names who it resolved to, which is the caller and not
+        # the account called "me"
+        assert "caller" in result["assignee"]
+        assert result["assignee"] != "me"
 
     def test_subscribe(self):
         maniphest = _maniphest(_phab(user_called_me=True))
 
-        with pytest.raises(PhabfiveDataException) as excinfo:
-            maniphest.create_task("A task", subscribers=["@me"], dry_run=True)
+        result = maniphest.create_task("A task", subscribers=["@me"], dry_run=True)
 
-        _assert_ambiguous(excinfo, "--subscribe")
+        assert [s for s in result["subscribers"] if "caller" in s]
+        assert "me" not in result["subscribers"]
 
 
 class TestManiphestEdit:
     def test_assign(self):
         maniphest = _maniphest(_phab(user_called_me=True))
 
-        with pytest.raises(PhabfiveDataException) as excinfo:
-            maniphest.build_task_edit("42", _task(), assign="@me")
+        transactions, _ = maniphest.build_task_edit("42", _task(), assign="@me")
 
-        _assert_ambiguous(excinfo, "--assign")
+        assert {"type": "owner", "value": "PHID-USER-caller"} in transactions
 
-    def test_subscribe(self):
+    def test_a_bare_me_edits_to_the_user_called_me(self):
         maniphest = _maniphest(_phab(user_called_me=True))
 
-        with pytest.raises(PhabfiveDataException) as excinfo:
-            maniphest.build_task_edit("42", _task(), subscribe="@me")
+        transactions, _ = maniphest.build_task_edit("42", _task(), assign="me")
 
-        _assert_ambiguous(excinfo, "--subscribe")
+        assert {"type": "owner", "value": "PHID-USER-me"} in transactions
 
     def test_the_caller_otherwise(self):
         maniphest = _maniphest(_phab())
@@ -171,13 +194,17 @@ class TestManiphestEdit:
 
 
 class TestProjectMembers:
-    def test_a_user_called_me_makes_it_an_error(self):
-        with pytest.raises(PhabfiveDataException) as excinfo:
-            resolve_user_phids(
-                _phab(user_called_me=True), ["@me"], option="--add-member"
-            )
+    def test_a_user_called_me_does_not_take_the_keyword(self):
+        assert resolve_user_phids(
+            _phab(user_called_me=True), ["@me"], option="--add-member"
+        ) == {"@me": ("PHID-USER-caller", "caller")}
 
-        _assert_ambiguous(excinfo, "--add-member")
+    def test_both_spellings_in_one_call_are_two_people(self):
+        """The sigil is the whole difference, so ask for both at once."""
+        resolved = resolve_user_phids(_phab(user_called_me=True), ["@me", "me"])
+
+        assert resolved["@me"][0] == "PHID-USER-caller"
+        assert resolved["me"][0] == "PHID-USER-me"
 
     def test_the_caller_otherwise(self):
         assert resolve_user_phids(_phab(), ["@me"]) == {
@@ -197,10 +224,10 @@ class TestPaste:
         with patch("phabfive.cli.paste._get_paste_app", return_value=instance):
             result = runner.invoke(paste_app, ["search", "--author=@me"])
 
-        assert result.exit_code != 0
-        assert isinstance(result.exception, PhabfiveDataException)
-        assert "--author: @me is ambiguous" in str(result.exception)
-        instance.paste_search.assert_not_called()
+        assert result.exit_code == 0, result.output
+        instance.paste_search.assert_called_once()
+        constraints = instance.paste_search.call_args.kwargs["constraints"]
+        assert constraints["authors"] == ["PHID-USER-caller"]
 
     def test_create_subscribe(self):
         instance = self._app()
@@ -208,9 +235,8 @@ class TestPaste:
         with patch("phabfive.cli.paste._get_paste_app", return_value=instance):
             result = runner.invoke(
                 paste_app,
-                ["create", "Notes", "--content=hello", "--subscribe=@me"],
+                ["create", "Notes", "--content=hello", "--subscribe=@me", "--yes"],
             )
 
-        assert result.exit_code != 0
-        assert "--subscribe: @me is ambiguous" in str(result.exception)
-        instance.create_paste_from_content.assert_not_called()
+        assert result.exit_code == 0, result.output
+        instance.create_paste_from_content.assert_called_once()

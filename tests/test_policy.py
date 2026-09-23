@@ -167,18 +167,38 @@ class TestMe:
         """Phorge usernames are case-insensitive, so @Me is not somebody."""
         assert resolve_policy_value(self._phab(), "@Me") == "PHID-USER-caller"
 
-    def test_a_user_called_me_makes_it_an_error(self):
-        """Either reading would hand an object to the wrong person."""
+    def test_a_user_called_me_does_not_take_the_keyword(self):
+        """A username does not get to own a keyword everyone else uses (#496).
+
+        A policy is a write, and the old reading refused rather than guess.
+        Refusing turned out to cost more: every caller on the instance lost
+        `@me` because of an account they had never heard of.
+        """
         phab = self._phab(users=[{"phid": "PHID-USER-me"}])
 
-        with pytest.raises(PhabfiveDataException) as excinfo:
+        assert (
             resolve_policy_value(phab, "@me", option="--visible-to")
+            == "PHID-USER-caller"
+        )
 
-        message = str(excinfo.value)
-        assert "--visible-to" in message
-        assert "ambiguous" in message
-        assert "PHID-USER-me" in message
-        assert "PHID-USER-caller" in message
+    def test_a_policy_reaches_the_user_called_me_by_phid_only(self):
+        """The one place the #496 escape hatch is a PHID rather than a name.
+
+        Everywhere else a bare `me` is an ordinary username lookup, because
+        `alice` and `@alice` are both accepted. A policy value is not: the
+        grammar takes a keyword, `#project`, `@user`, `@me` or a PHID, so an
+        unprefixed name has never been valid here. `@me` is now the keyword,
+        which leaves the PHID as the way to name that account in a policy.
+        """
+        phab = self._phab(users=[{"phid": "PHID-USER-me"}])
+
+        with pytest.raises(PhabfiveConfigException, match="must be one of"):
+            resolve_policy_value(phab, "me", option="--visible-to")
+
+        assert (
+            resolve_policy_value(phab, "PHID-USER-me", option="--visible-to")
+            == "PHID-USER-me"
+        )
 
     def test_a_failing_whoami_is_not_a_traceback(self):
         phab = self._phab()

@@ -188,26 +188,25 @@ class TestSubscribers:
         phab.maniphest.edit.assert_not_called()
 
 
-class TestAmbiguousMe:
-    def test_an_ambiguous_me_names_the_field(self):
+class TestMeIsAKeyword:
+    """A user called "me" does not take `@me` from everybody else (#496)."""
+
+    def test_assignment_resolves_to_the_caller(self):
         phab = _phab(users_called_me=["PHID-USER-other"])
 
-        with pytest.raises(PhabfiveDataException) as excinfo:
-            _create(phab, [_task(assignment="@me")])
+        _create(phab, [_task(assignment="@me")])
 
-        message = str(excinfo.value)
-        assert "assignment" in message
-        assert "PHID-USER-other" in message
-        assert "PHID-USER-caller" in message
-        phab.maniphest.edit.assert_not_called()
+        assert {"type": "owner", "value": "PHID-USER-caller"} in _transactions(phab)
 
     def test_in_subscribers_too(self):
         phab = _phab(users_called_me=["PHID-USER-other"])
 
-        with pytest.raises(PhabfiveDataException, match="subscribers"):
-            _create(phab, [_task(subscribers=["@me"])])
+        _create(phab, [_task(subscribers=["@me"])])
 
-        phab.maniphest.edit.assert_not_called()
+        assert {
+            "type": "subscribers.set",
+            "value": ["PHID-USER-caller"],
+        } in _transactions(phab)
 
 
 class TestResolvedUpFront:
