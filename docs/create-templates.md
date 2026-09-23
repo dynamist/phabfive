@@ -136,6 +136,50 @@ tasks:
       - "{{ quarter }}"
 ```
 
+#### Defaults, and undefined variables
+
+A `{{ name }}` that names nothing is an **error**, in the `variables:` section
+and in a task's own fields alike, and the message names the variable:
+
+```yaml
+variables:
+  team: "Backend"
+  board: "{{ tema }} board"   # Undefined variable 'tema'
+```
+
+```yaml
+tasks:
+  - title: "Sprint {{ sprint_numbr }} planning"   # Undefined variable 'sprint_numbr'
+```
+
+Jinja2's own default is to render an undefined name as the empty string, so
+`{{ tema }}` used to disappear silently and the task was created as
+"Sprint  planning" rather than refused. Where a value really is optional, say
+so — either with Jinja2's
+`default` filter at the point of use:
+
+```yaml
+variables:
+  board: "{{ team | default('Backend') }} board"
+```
+
+or by declaring a default for the variable itself, which is a mapping with a
+single `default` key:
+
+```yaml
+variables:
+  sprint: {default: 42}       # a declaration - {{ sprint }} renders "42"
+  owners: {lead: "alice"}     # any other mapping is an ordinary value
+```
+
+A variable declared with nothing after it has no value and no default, so it
+has to be supplied from outside the template and is an error until it is:
+
+```yaml
+variables:
+  sprint:                     # Variable 'sprint' has no value
+```
+
 ## Advanced Features
 
 ### Subtasks
@@ -395,6 +439,8 @@ Common errors and solutions:
 | "assignment: @me is ambiguous ..." | The instance has a user called `me` | Give your own username, or that user's PHID, instead of `@me` |
 | "Task 'T123' not found" | Invalid task reference | Check task ID exists |
 | "Permission denied" | Insufficient API permissions | Update API token permissions |
+| "Undefined variable 'X'" | A `variables:` entry names a variable nothing defines - usually a typo | Define it, or write `{{ X \| default("...") }}` to allow it to be missing |
+| "Variable 'X' has no value" | `X:` is declared with neither a value nor a `default:` | Give it a value, or declare `X: {default: ...}` |
 
 ## Best Practices
 

@@ -104,6 +104,8 @@ search:
 - `tag`: Project/workboard filtering with wildcards and logic
 - `include`: Task ID(s) to force-include in results even if other filters don't match them, as a comma-separated string (`"T123,T456"`) or a YAML list (`["T123", "T456"]`)
 - `exclude`: Task ID(s) to remove from results even if the filters match them, as a comma-separated string (`"T123"`) or a YAML list (`["T123"]`)
+- `assigned`: Assignee: a username, `"@me"`, or a user PHID
+- `author`: Author: a username, `"@me"`, or a user PHID
 - `space`: Space name or monogram, with wildcards (`"*"` for every Space)
 - `visible-to`, `editable-by`: Only tasks whose view or edit policy is exactly this,
   in the [policy grammar](policies.md#the-value-grammar), e.g. `editable-by: users`

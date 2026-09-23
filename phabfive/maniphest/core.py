@@ -9,7 +9,6 @@ import logging
 import functools
 from pathlib import Path
 
-from jinja2 import Template
 from ruamel.yaml import YAML
 
 from phabfive.constants import (
@@ -63,9 +62,9 @@ from phabfive.maniphest.utils import (
     PHORGE_ORDER_KEYS,
     days_ago_to_timestamp,
     parse_time_with_unit,
-    render_variables_with_dependency_resolution,
     sort_tasks,
 )
+from phabfive.spec.variables import render_string, resolve_variables
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
 from phabfive.me import is_me
@@ -1721,8 +1720,12 @@ class Maniphest(Phabfive):
                 f"variables takes a mapping of name to value, not {variables!r}"
             )
 
-        # Render variables that reference other variables using dependency resolution
-        variables = render_variables_with_dependency_resolution(variables)
+        # Resolve declared defaults, then render variables that reference other
+        # variables using dependency resolution. `resolve_variables` is the
+        # library-level shape of `--set`: a second argument of overrides that
+        # beat what the template declares (#471). The command does not pass one
+        # yet, so what it resolves today is the template's own variables.
+        variables = resolve_variables(variables)
 
         # Main task recursion logic
         if "tasks" not in root_data:
@@ -1731,7 +1734,13 @@ class Maniphest(Phabfive):
             )
 
         def render(value):
-            return Template(value).render(variables) if value else value
+            # StrictUndefined, through the one engine in
+            # phabfive.spec.variables (#471): a `{{ sprint_numbr }}` nobody
+            # declares used to render as the empty string and create the
+            # task with the wrong title. It is an error naming the variable
+            # instead, and `{{ x | default("...") }}` is the documented way
+            # to say a name may be missing.
+            return render_string(value, variables) if value else value
 
         def template_users(task_config):
             """What every task in the tree names for assignment and subscribers."""
