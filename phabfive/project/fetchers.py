@@ -10,7 +10,7 @@ from phabfive.pagination import MAX_PAGE_SIZE, search_all_pages
 log = logging.getLogger(__name__)
 
 
-def fetch_projects(phab, constraints=None, attachments=None, limit=None):
+def fetch_projects(phab, constraints=None, attachments=None, limit=None, order=None):
     """Every project a search matches, across as many pages as that takes.
 
     Parameters
@@ -23,6 +23,10 @@ def fetch_projects(phab, constraints=None, attachments=None, limit=None):
         project.search attachments, e.g. {"members": True}
     limit : int, optional
         How many projects to return in total. None means all of them.
+    order : str or list, optional
+        A builtin project.search order name, or a column vector. Cursor
+        paging respects it, so the pages stay in order as they are
+        concatenated - which is what lets a limit be forwarded at all.
 
     Returns
     -------
@@ -39,6 +43,9 @@ def fetch_projects(phab, constraints=None, attachments=None, limit=None):
 
     if attachments:
         kwargs["attachments"] = attachments
+
+    if order:
+        kwargs["order"] = order
 
     try:
         return search_all_pages(phab.project.search, limit=limit, **kwargs)

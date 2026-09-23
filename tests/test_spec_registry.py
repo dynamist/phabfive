@@ -36,12 +36,54 @@ class TestDeclarations:
     def test_phase_one_declares_the_keys_that_exist_today(self):
         # Not one more: a field declared here but not read by the command
         # would be accepted by the loader and silently ignored, which is the
-        # drift the registry exists to end.
-        assert len(fields_for("task", "search")) == 22
+        # drift the registry exists to end. 22 in Phase 1, and the eleven
+        # constraints maniphest.search always answered arrived with the
+        # command that sends them (#478).
+        assert len(fields_for("task", "search")) == 33
 
-    def test_every_field_is_declared_once(self):
-        names = [field.name for field in FIELDS]
-        assert len(names) == len(set(names))
+    def test_every_field_is_declared_once_per_object_and_verb(self):
+        """One declaration per (key, object type, verb), not per key.
+
+        Phase 1 could ask for globally unique names because only task search
+        was declared. Four object types cannot: `status` is a transition
+        pattern over a task's history and a plain enum of three on a
+        project, which is two declarations of one word. What must stay
+        unique is what `field_by_name` looks up.
+        """
+        seen = [
+            (field.name, object_type, verb)
+            for field in FIELDS
+            for object_type in field.objects
+            for verb in field.verbs
+        ]
+
+        assert len(seen) == len(set(seen))
+
+    def test_a_shared_key_is_declared_once_and_not_twice(self):
+        """A key several types spell the same way is one Field, not several.
+
+        `text_query`, `limit` and `author` mean the same thing wherever they
+        are written, so they carry `objects` rather than being copied - which
+        is what keeps the per-endpoint constraint quirk (`authorPHIDs` against
+        `authors`) in one place.
+        """
+        by_name = {}
+        for field in FIELDS:
+            by_name.setdefault(field.name, []).append(field)
+
+        assert sorted(name for name, fields in by_name.items() if len(fields) > 1) == [
+            "status"
+        ]
+
+        assert {
+            name: sorted(by_name[name][0].objects)
+            for name in ("text_query", "limit", "author", "show-policy")
+        } == {
+            "text_query": ["passphrase", "paste", "project", "task"],
+            "limit": ["passphrase", "paste", "project", "task"],
+            "author": ["paste", "task"],
+            "show-policy": ["project", "task"],
+        }
 
     def test_text_query_keeps_its_underscore(self):
         # The one key with an underscore while every other key is hyphenated.
@@ -60,12 +102,38 @@ class TestDeclarations:
         ] == []
 
     def test_client_side_fields_declare_no_constraint(self):
-        # --column, --priority and the policy filters are applied in Python,
-        # in transitions/ and maniphest/core.py, and never sent.
-        for name in ("column", "priority", "visible-to", "editable-by"):
+        # The policy filters are applied in Python, in maniphest/core.py,
+        # and never sent: maniphest.search has no policy constraint.
+        for name in ("visible-to", "editable-by", "include", "exclude", "limit"):
             field = field_by_name(name, "task", "search")
             assert field is not None
             assert constraint_for(field, "task") is None
+
+    def test_a_transition_filter_declares_what_it_can_lift(self):
+        # --column, --priority and --status are transition patterns, decided
+        # in transitions/ over each task's history. Only the conditions that
+        # name the *current* state can also be sent, which narrows what is
+        # fetched without deciding what matches, and the Field is where that
+        # is written down rather than a comment in core.py (#478).
+        lifts = {
+            field.name: (constraint_for(field, "task"), field.lifts)
+            for field in fields_for("task", "search")
+            if field.kind is FieldKind.PATTERN
+        }
+        assert lifts == {
+            "column": ("columnPHIDs", ("in",)),
+            "priority": ("priorities", ("in",)),
+            "status": ("statuses", ("in",)),
+        }
+
+    def test_only_a_pattern_declares_a_lift(self):
+        # A lift is what a transition grammar can say about current state;
+        # every other kind is its value, and lifting it would mean nothing.
+        assert [
+            field.name
+            for field in FIELDS
+            if field.lifts and field.kind is not FieldKind.PATTERN
+        ] == []
 
     def test_server_side_fields_name_their_constraint(self):
         sent = {
@@ -84,6 +152,23 @@ class TestDeclarations:
             "updated-after": "modifiedStart",
             "updated-before": "modifiedEnd",
             "status": "statuses",
+            # #478: the constraints maniphest.search answers and phabfive
+            # used to leave on the table. The three patterns are here too,
+            # since a pattern that names current state is sent as well as
+            # checked - see test_a_transition_filter_declares_what_it_can_lift.
+            "column": "columnPHIDs",
+            "priority": "priorities",
+            "ids": "ids",
+            "phids": "phids",
+            "subscriber": "subscribers",
+            "subtype": "subtypes",
+            "parent": "parentIDs",
+            "subtask": "subtaskIDs",
+            "has-parents": "hasParents",
+            "has-subtasks": "hasSubtasks",
+            "closed-by": "closerPHIDs",
+            "closed-after": "closedStart",
+            "closed-before": "closedEnd",
         }
 
     def test_the_author_constraint_is_named_per_application(self):
@@ -115,12 +200,19 @@ class TestDeclarations:
 
 class TestAccessors:
     def test_fields_for_keeps_declaration_order(self):
-        names = [field.name for field in fields_for("task", "search")]
-        assert names == [field.name for field in FIELDS if field.name in names]
+        declared = fields_for("task", "search")
+        names = [field.name for field in declared]
+
+        # Compared by identity rather than by name: `status` is declared
+        # twice, once for a task and once for a project, so filtering FIELDS
+        # by name would count the project one as well.
+        assert declared == tuple(field for field in FIELDS if field in declared)
         assert names[0] == "text_query"
 
     def test_an_object_type_with_no_fields_yet_is_empty_not_an_error(self):
-        assert fields_for("paste", "search") == ()
+        # Every object type's *search* keys are declared now; the create
+        # verb is where the seam still is.
+        assert fields_for("paste", "create") == ()
         assert spec_keys("task", "create") == frozenset()
 
     def test_field_by_name_answers_none_for_an_undeclared_key(self):

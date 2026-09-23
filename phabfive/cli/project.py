@@ -27,17 +27,31 @@ from phabfive.cli.output import (
 )
 from phabfive.constants import (
     PROJECT_MILESTONE_ICON,
+    PROJECT_ORDER_DEFAULT,
+    PROJECT_ORDER_DIRECTIONS,
+    PROJECT_ORDER_FIELDS,
     PROJECT_STATUS_ACTIVE,
     PROJECT_STATUS_ANY,
     PROJECT_STATUS_CHOICES,
 )
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+)
 from phabfive.options import split_list_option
+from phabfive.ordering import complete_order_value
 from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
 
 project_app = typer.Typer(
     cls=AgentFooterGroup, help="The project app", no_args_is_help=True
 )
+
+
+def complete_project_order(incomplete: str) -> List[str]:
+    """Complete `project search --order`: fields first, directions after ":"."""
+    return complete_order_value(
+        incomplete, PROJECT_ORDER_FIELDS, PROJECT_ORDER_DIRECTIONS
+    )
 
 
 def _get_project_app():
@@ -189,11 +203,43 @@ def project_search(
     query: Optional[str] = typer.Argument(
         None, help="Free text to match, the way the web UI's search box does"
     ),
+    with_template: Optional[str] = typer.Option(
+        None,
+        "--with",
+        help="Load the search from a YAML search spec; every option below "
+        "overrides what the spec says",
+    ),
     member: Optional[List[str]] = typer.Option(
         None,
         "--member",
         help="Projects any of these users is a member of (@user, @me or user PHID; repeatable, or comma-separated)",
         autocompletion=complete_user_list_filter,
+    ),
+    watcher: Optional[List[str]] = typer.Option(
+        None,
+        "--watcher",
+        help="Projects any of these users watches, which is not the same as "
+        "being a member (@user, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list_filter,
+    ),
+    ids: Optional[List[str]] = typer.Option(
+        None,
+        "--ids",
+        help="Only these project IDs, as numbers, with every other filter "
+        "still applied (repeatable, or comma-separated)",
+    ),
+    phids: Optional[List[str]] = typer.Option(
+        None,
+        "--phids",
+        help="Only these project PHIDs, with every other filter still "
+        "applied (repeatable, or comma-separated)",
+    ),
+    slug: Optional[List[str]] = typer.Option(
+        None,
+        "--slug",
+        help="The projects owning these hashtags, with or without the '#' "
+        "(repeatable, or comma-separated)",
+        autocompletion=complete_tag,
     ),
     parent: Optional[List[str]] = typer.Option(
         None,
@@ -251,6 +297,14 @@ def project_search(
     limit: int = typer.Option(
         100, "--limit", "-l", help="Maximum results to return, 0 for all"
     ),
+    order: Optional[str] = typer.Option(
+        None,
+        "--order",
+        "-o",
+        help="Sort results by " + "|".join(PROJECT_ORDER_FIELDS) + ", optionally "
+        f"suffixed with :asc or :desc  [default: {PROJECT_ORDER_DEFAULT}]",
+        autocompletion=complete_project_order,
+    ),
 ) -> None:
     """Search projects.
 
@@ -271,6 +325,9 @@ def project_search(
         phabfive project search --parent='#development' --milestones
         phabfive project search --icon=group --color=red,blue
         phabfive project search --status=archived
+        phabfive project search --slug=web_team
+        phabfive project search --watcher=@me --order=created
+        phabfive project search --with searches.yaml
         phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0
     """
     from phabfive.project.display import display_projects
@@ -292,10 +349,58 @@ def project_search(
             raise typer.Exit(1)
         status = PROJECT_STATUS_ANY
 
+    # What the command line actually carried, before the default is filled
+    # in: a spec's `status:` must not be beaten by a default nobody typed.
+    requested_status = status
     status = status or PROJECT_STATUS_ACTIVE
 
     _setup_output_options(ctx)
+
+    # Refused rather than ignored: none of these is a search spec key yet,
+    # so a spec's searches cannot carry them, and silently dropping a
+    # filter would answer a narrower question than the one asked (#479).
+    from phabfive.cli.search_spec import refuse_unspecced
+
+    refuse_unspecced(
+        with_template,
+        {
+            "--ids": ids,
+            "--phids": phids,
+            "--slug": slug,
+            "--watcher": watcher,
+            "--order": order,
+        },
+    )
+
     project = _get_project_app()
+
+    if with_template:
+        from phabfive.cli.search_spec import load_search_spec, run_search_spec
+
+        run_search_spec(
+            ctx,
+            project,
+            load_search_spec(with_template),
+            # Keyed as a spec spells the key. None means "not given", which
+            # is what keeps a flag nobody typed from clobbering the spec -
+            # so `--limit 100` cannot override a spec's `limit: 5`, the same
+            # quirk `maniphest search --with` has.
+            overrides={
+                "text_query": query,
+                "members": split_list_option(member) or None,
+                "parents": split_list_option(parent) or None,
+                "ancestors": split_list_option(ancestor) or None,
+                "milestones": milestones,
+                "status": requested_status,
+                "icons": split_list_option(icon) or None,
+                "colors": split_list_option(color) or None,
+                "spaces": split_list_option(space) or None,
+                "show-policy": show_policy or None,
+                "show-members": show_members or None,
+                "limit": limit if limit != 100 else None,
+            },
+        )
+        return
 
     # A search answers a misspelled icon with nothing, not an error
     icons = split_list_option(icon)
@@ -304,6 +409,11 @@ def project_search(
     try:
         result = project.search(
             query=query,
+            ids=split_list_option(ids),
+            phids=split_list_option(phids),
+            slugs=split_list_option(slug),
+            watchers=split_list_option(watcher),
+            order=order,
             members=split_list_option(member),
             parents=split_list_option(parent),
             ancestors=split_list_option(ancestor),
@@ -318,6 +428,8 @@ def project_search(
             # ask for, and 0 - like every other search - means every match
             limit=limit if limit > 0 else None,
         )
+    # PhabfiveInputException is a PhabfiveConfigException and needs no row
+    # of its own; see phabfive/exceptions.py.
     except (PhabfiveConfigException, PhabfiveDataException) as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)

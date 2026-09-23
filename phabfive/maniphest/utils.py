@@ -12,9 +12,55 @@ log = logging.getLogger(__name__)
 def days_ago_to_timestamp(days):
     """
     Convert days into a UNIX timestamp.
+
+    The days are a **float**, because `parse_time_with_unit` answers "1h"
+    with 1/24 and "12h" with 0.5. Truncating to whole days here made every
+    sub-day value mean "now": `--created-after=1h` asked for tasks created
+    after this instant and found none, and `--created-before=1h` asked for
+    everything. Rounded to the nearest second instead, so an hour is an
+    hour.
     """
-    seconds = int(days) * 24 * 3600
+    seconds = round(float(days) * 24 * 3600)
     return int(time.time()) - seconds
+
+
+def time_constraint(value, key):
+    """A TIME value as the epoch second a ``*.search`` constraint compares to.
+
+    ``created-after``, ``created-before`` and their kin are written the same
+    way for every application - "1h", "7d", "2w" - and reach three different
+    endpoints as the same UNIX second, so the reading is here rather than
+    copied into each app's constraint builder.
+
+    Parameters
+    ----------
+    value : str, int, float or None
+        The TIME value as written. None and "" mean the filter was not asked
+        for, which is not the same as "0 days ago".
+    key : str
+        The spec key or flag to name in the error, e.g. ``"created-after"``.
+
+    Returns
+    -------
+    int or None
+        The epoch second, or None when there was no value.
+
+    Raises
+    ------
+    PhabfiveInputException
+        The value is not a TIME. The key is prefixed onto the message, so a
+        spec holding two bad times says which one it is talking about.
+    """
+    from phabfive.exceptions import PhabfiveInputException
+    from phabfive.spec.times import parse_time_with_unit
+
+    if value in (None, ""):
+        return None
+
+    try:
+        return days_ago_to_timestamp(parse_time_with_unit(value))
+    except PhabfiveInputException as e:
+        raise PhabfiveInputException(f"{key}: {e}")
 
 
 def format_timestamp(timestamp):

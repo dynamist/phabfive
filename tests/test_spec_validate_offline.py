@@ -110,6 +110,56 @@ class TestTheSchemaIsGeneratedFromTheRegistry:
 
         assert set(properties) == spec_keys("task", "search")
 
+    def test_a_list_valued_enum_publishes_both_its_spellings(self):
+        """`colors: "red,blue"` is as legal as `colors: [red, blue]`.
+
+        A JSON Schema `enum` can describe only one value at a time, so the
+        comma-separated spelling - the one a flag writes, and the one
+        `phabfive.options.value_list` reads - is published as a pattern, the
+        same way a monogram list is. Without it the generated document is
+        *stricter* than phabfive, which is the direction that misleads an
+        editor or a CI job holding only the schema.
+        """
+        import re
+
+        from phabfive.constants import PROJECT_COLORS
+
+        schema = build_schema(Kind.SEARCH, object_type="project")
+        colors = schema["properties"]["search"]["properties"]["colors"]
+
+        scalar, listed = colors["anyOf"]
+
+        assert listed == {"type": "array", "items": {"enum": list(PROJECT_COLORS)}}
+        assert scalar["type"] == "string"
+
+        grammar = re.compile(scalar["pattern"])
+        assert grammar.match("red")
+        assert grammar.match("red,blue")
+        assert grammar.match("red, blue")
+        assert not grammar.match("mauve")
+        assert not grammar.match("red,mauve")
+
+    def test_the_offline_pass_accepts_exactly_what_that_pattern_does(self):
+        """The document and the walk have to agree about the same value."""
+        from phabfive.spec import Spec
+
+        for value, clean in (
+            ("red", True),
+            ("red,blue", True),
+            (["red", "blue"], True),
+            ("mauve", False),
+            (["red", "mauve"], False),
+        ):
+            spec = Spec.from_data(
+                {
+                    "kind": "search",
+                    "searches": [{"type": "project", "search": {"colors": value}}],
+                },
+                source="<test>",
+            )
+
+            assert bool(validate_offline(spec) == []) is clean, value
+
     def test_a_field_added_to_the_registry_appears_in_the_schema(self, monkeypatch):
         """The acceptance criterion: declare it once, and it is everywhere."""
         added = Field(

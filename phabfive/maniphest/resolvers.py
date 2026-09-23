@@ -499,6 +499,13 @@ def fetch_project_lookup_maps(phab):
 
             offset += page_size
 
+    except PhabfiveRemoteException:
+        # Already the right kind, and the exact subclass is information:
+        # `phabfive.spec.online` promises that a `PhabfiveConnectionException`
+        # (the request never landed) reaches its caller as itself rather than
+        # as "Conduit refused it", and re-wrapping here would flatten the two
+        # into one.
+        raise
     except Exception as e:
         raise PhabfiveRemoteException(f"Failed to fetch projects: {e}")
 

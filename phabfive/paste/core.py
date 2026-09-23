@@ -6,15 +6,174 @@ import logging
 import re
 
 # phabfive imports
-from phabfive.constants import MONOGRAMS
+from phabfive.constants import (
+    MONOGRAMS,
+    PASTE_ORDER_DEFAULT,
+    PASTE_ORDER_DIRECTIONS,
+    PASTE_ORDER_FIELDS,
+    PASTE_ORDER_SUGGESTIONS,
+    PASTE_STATUS_CHOICES,
+)
 from phabfive.core import Phabfive
-from phabfive.exceptions import PhabfiveAPIException, PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveAPIException,
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveInputException,
+)
+from phabfive.maniphest.utils import time_constraint
+from phabfive.options import value_list
+from phabfive.ordering import parse_order, sort_records
 from phabfive.pagination import search_all_pages
 from phabfive.paste.formatters import build_paste_display_data
 
 # 3rd party imports
 
 log = logging.getLogger(__name__)
+
+
+#: ``(field, direction)`` to what ``paste.search`` is sent as its order.
+#:
+#: PhabricatorPasteQuery's builtin orders are newest, created, oldest and
+#: relevance, and its order columns are id, rank, fulltext-created and
+#: fulltext-modified - there is no title order, which is why `title` is not
+#: one of the fields `paste search --order` offers.
+PASTE_API_ORDERS = {
+    ("created", "desc"): "newest",
+    ("created", "asc"): "oldest",
+    ("relevance", None): "relevance",
+}
+
+#: The client-side key per order field, which tie-breaks what the server
+#: already ordered. A paste's id and its creation order are the same thing.
+PASTE_SORT_KEYS = {"created": lambda paste: paste.get("id") or 0}
+
+
+def paste_id_list(value, option="--ids"):
+    """Paste monograms as the integers ``paste.search`` constrains on.
+
+    Accepts ``"P12,P13"``, ``["P12", 13]`` and a bare number, which is what
+    a flag and a script between them produce.
+
+    Raises
+    ------
+    PhabfiveInputException
+        For anything that is not a paste monogram. Another application's
+        monogram is not a paste, so ``T45`` is refused by name rather than
+        sent as the id 45.
+    """
+    entries = value_list(value)
+
+    if not entries:
+        return None
+
+    ids = []
+
+    for entry in entries:
+        monogram = entry[1:] if entry[:1] in ("P", "p") else entry
+
+        if not monogram.isdigit():
+            raise PhabfiveInputException(
+                f"Invalid paste ID '{entry}' for {option}. Expected format: P123"
+            )
+
+        ids.append(int(monogram))
+
+    return ids
+
+
+def build_paste_search_constraints(
+    text_query=None,
+    author_phids=None,
+    ids=None,
+    phids=None,
+    languages=None,
+    statuses=None,
+    created_after=None,
+    created_before=None,
+):
+    """The ``paste.search`` constraints one search asks for.
+
+    Library code, so every value is checked here rather than in the
+    command: a status outside the two paste.search knows is answered by
+    Phorge with an empty result rather than an error, which reads exactly
+    like "no pastes are archived" and is how a typo goes unnoticed.
+
+    ``modifiedStart``/``modifiedEnd`` are deliberately absent:
+    PhabricatorPasteQuery has no modified-date constraint, and sending one
+    is ERR-CONDUIT-CORE, "Parameter constraints includes an invalid key".
+
+    Parameters
+    ----------
+    text_query : str, optional
+        Free text, matched the way the web UI's search box matches it
+    author_phids : list, optional
+        Already-resolved user PHIDs. paste.search names this constraint
+        "authors", where maniphest.search names its own "authorPHIDs".
+    ids : str, int or list, optional
+        Paste monograms or numbers, see :func:`paste_id_list`
+    phids : str or list, optional
+        Paste PHIDs
+    languages : str or list, optional
+        Syntax highlighting languages, any of which matches. Instance
+        configuration (pygments.dropdown-choices), so the value is passed
+        through rather than checked against a list phabfive would guess at.
+    statuses : str or list, optional
+        "active", "archived", or both
+    created_after, created_before : str or int, optional
+        TIME values, e.g. "7d", "2w"
+
+    Returns
+    -------
+    dict
+        The constraints, with nothing absent left in
+
+    Raises
+    ------
+    PhabfiveConfigException
+        If a status is not one paste.search knows
+    PhabfiveInputException
+        If an id or a time is not one
+    """
+    constraints = {}
+
+    if text_query:
+        constraints["query"] = str(text_query)
+
+    if author_phids:
+        constraints["authors"] = list(author_phids)
+
+    id_list = paste_id_list(ids)
+    if id_list:
+        constraints["ids"] = id_list
+
+    phid_list = value_list(phids)
+    if phid_list:
+        constraints["phids"] = phid_list
+
+    language_list = value_list(languages)
+    if language_list:
+        constraints["languages"] = language_list
+
+    status_list = value_list(statuses)
+    if status_list:
+        unknown = [s for s in status_list if s not in PASTE_STATUS_CHOICES]
+        if unknown:
+            raise PhabfiveConfigException(
+                f"Unknown paste status {', '.join(repr(s) for s in unknown)}, "
+                f"expected one of: {', '.join(PASTE_STATUS_CHOICES)}"
+            )
+        constraints["statuses"] = status_list
+
+    created_start = time_constraint(created_after, "created-after")
+    if created_start is not None:
+        constraints["createdStart"] = created_start
+
+    created_end = time_constraint(created_before, "created-before")
+    if created_end is not None:
+        constraints["createdEnd"] = created_end
+
+    return constraints
 
 
 class Paste(Phabfive):
@@ -103,7 +262,7 @@ class Paste(Phabfive):
         return id_and_phid["object"]
 
     def get_pastes(
-        self, query_key=None, attachments=None, constraints=None, limit=None
+        self, query_key=None, attachments=None, constraints=None, limit=None, order=None
     ):
         """Wrapper that connects to Phabricator and retrieves information about pastes.
 
@@ -119,19 +278,32 @@ class Paste(Phabfive):
         `--limit 101` fail with ERR-INVALID-PAGE-SIZE. `None` means every
         paste.
 
+        `order` is a builtin paste.search order name, or a column vector.
+        Cursor paging respects it, so the pages stay in order as they are
+        concatenated - which is what makes a limit the top N of the order
+        asked for rather than an arbitrary page of it. Omitted leaves the
+        order to the server, which is what every caller but a search wants.
+
         :type query_key: str
         :type attachments: dict
         :type constraints: dict
         :type limit: int
+        :type order: str or list
 
         :rtype: list
         """
+        kwargs = {}
+
+        if order:
+            kwargs["order"] = order
+
         return search_all_pages(
             self.phab.paste.search,
             limit=limit,
             queryKey=query_key or "all",
             attachments=attachments or {},
             constraints=constraints or {},
+            **kwargs,
         )
 
     def get_pastes_formatted(self, ids=None):
@@ -190,7 +362,7 @@ class Paste(Phabfive):
             "missing_ids": missing_ids,
         }
 
-    def paste_search(self, constraints=None, limit=None):
+    def paste_search(self, constraints=None, limit=None, order=None):
         """Search pastes, as the records `paste_show` answers with.
 
         The same record as `paste_show` gives, less the content, which a
@@ -199,16 +371,45 @@ class Paste(Phabfive):
         Parameters
         ----------
         constraints : dict, optional
-            paste.search constraints
+            paste.search constraints, as
+            :func:`build_paste_search_constraints` builds them
         limit : int, optional
             How many pastes to return in total; None for all of them
+        order : str, optional
+            Result ordering as "<field>[:asc|:desc]", e.g. "created:asc".
+            The server does the ordering, so a limit keeps the first N of
+            it. Defaults to newest first, which is what paste.search
+            answers with when it is given no order at all.
 
         Returns
         -------
         dict
-            {"pastes": [...]}, in the order paste.search returns them
+            {"pastes": [...]}, in the order asked for
+
+        Raises
+        ------
+        PhabfiveConfigException
+            If the order is not one of PASTE_ORDER_FIELDS
         """
-        pastes = self.get_pastes(constraints=constraints, limit=limit)
+        # Resolved before anything is fetched, so a bad --order fails fast
+        order_field, order_direction = parse_order(
+            order,
+            PASTE_ORDER_FIELDS,
+            PASTE_ORDER_DIRECTIONS,
+            PASTE_ORDER_DEFAULT,
+            suggestions=PASTE_ORDER_SUGGESTIONS,
+        )
+        log.info(f"Ordering results by '{order_field}:{order_direction}'")
+
+        pastes = self.get_pastes(
+            constraints=constraints,
+            limit=limit,
+            order=PASTE_API_ORDERS[(order_field, order_direction)],
+        )
+
+        # The server already ordered these; this settles the ties, so two
+        # pastes of the same second do not swap places between runs.
+        pastes = sort_records(pastes, order_field, order_direction, PASTE_SORT_KEYS)
 
         return {"pastes": self._display_data(pastes, show_content=False)}
 
@@ -387,4 +588,10 @@ class Paste(Phabfive):
         return f"{self.url}/P{paste_id}"
 
 
-__all__ = ["Paste"]
+__all__ = [
+    "PASTE_API_ORDERS",
+    "PASTE_SORT_KEYS",
+    "Paste",
+    "build_paste_search_constraints",
+    "paste_id_list",
+]

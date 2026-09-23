@@ -7,7 +7,12 @@ import logging
 
 from phabfive.constants import (
     PROJECT_COLORS,
+    PROJECT_ICONS,
     PROJECT_MILESTONE_ICON,
+    PROJECT_ORDER_DEFAULT,
+    PROJECT_ORDER_DIRECTIONS,
+    PROJECT_ORDER_FIELDS,
+    PROJECT_ORDER_SUGGESTIONS,
     PROJECT_POLICY_FIELDS,
     PROJECT_POLICY_TRANSACTIONS,
     PROJECT_STATUS_ACTIVE,
@@ -20,6 +25,7 @@ from phabfive.exceptions import (
     PhabfiveAPIException,
     PhabfiveConfigException,
     PhabfiveDataException,
+    PhabfiveInputException,
 )
 from phabfive.maniphest.resolvers import (
     describe_space,
@@ -27,6 +33,8 @@ from phabfive.maniphest.resolvers import (
     resolve_space,
     resolve_space_phids,
 )
+from phabfive.options import value_list
+from phabfive.ordering import parse_order, sort_records
 from phabfive.policy import (
     policy_label,
     policy_lockout_message,
@@ -43,6 +51,91 @@ from phabfive.project.resolvers import resolve_project
 from phabfive.users import resolve_user_phids
 
 log = logging.getLogger(__name__)
+
+
+#: ``(field, direction)`` to what ``project.search`` is sent as its order.
+#:
+#: A string is one of PhabricatorProjectQuery's builtin orders (name,
+#: newest, created, oldest, relevance); a list is a column vector, which is
+#: how Z-A is asked for - Phorge has no builtin for it, but "-name" is a
+#: column it orders by. Every phabfive spelling maps to one of them, so the
+#: server does the ordering and a limit is the top N of it rather than an
+#: arbitrary page sorted afterwards.
+PROJECT_API_ORDERS = {
+    ("name", "asc"): "name",
+    ("name", "desc"): ["-name"],
+    ("created", "desc"): "newest",
+    ("created", "asc"): "oldest",
+    ("relevance", None): "relevance",
+}
+
+#: The client-side key for each order field, which tie-breaks what the
+#: server already ordered. ``relevance`` is absent on purpose: the response
+#: carries no rank, so the server's order is the only one there is.
+PROJECT_SORT_KEYS = {
+    "name": lambda project: (
+        (project.get("fields", {}).get("name") or "").casefold(),
+        project.get("id") or 0,
+    ),
+    "created": lambda project: project.get("id") or 0,
+}
+
+
+def project_id_list(value, option="--ids"):
+    """Project ids as the integers ``project.search`` constrains on.
+
+    A project has no monogram - Phorge names one by hashtag or by id - so
+    this takes the bare number, and a hashtag is `slugs` rather than `ids`.
+
+    Parameters
+    ----------
+    value : str, int, list or None
+        ``"12,20"``, ``["12", 20]`` or ``12``
+    option : str
+        What to name in the error, e.g. ``"--ids"``
+
+    Returns
+    -------
+    list or None
+        The ids, or None when nothing was given
+
+    Raises
+    ------
+    PhabfiveInputException
+        For anything that is not a number. A hashtag is refused by name
+        rather than sent as an id nobody meant.
+    """
+    entries = value_list(value)
+
+    if not entries:
+        return None
+
+    ids = []
+
+    for entry in entries:
+        if not entry.isdigit():
+            raise PhabfiveInputException(
+                f"Invalid project ID '{entry}' for {option}. "
+                "Expected a number, e.g. 12; a hashtag goes to --slug."
+            )
+
+        ids.append(int(entry))
+
+    return ids
+
+
+def project_slug_list(value):
+    """Hashtags as ``project.search`` takes them in its `slugs` constraint.
+
+    A leading ``#`` is how a person writes a hashtag and is not part of the
+    slug, so it is dropped. Nothing else is normalised here: project.search
+    derives the slug from what it is given exactly the way Phorge derives
+    one from a project's name, which is what makes "which project owns this
+    hashtag" a single question rather than a guess about spaces and case.
+    """
+    slugs = [entry.lstrip("#") for entry in value_list(value)]
+
+    return [slug for slug in slugs if slug] or None
 
 
 def check_project_color(color):
@@ -63,6 +156,48 @@ def check_project_color(color):
             f"Unknown project color '{color}', "
             f"expected one of: {', '.join(PROJECT_COLORS)}"
         )
+
+
+def icons_in_use(phab):
+    """The stock icons, plus every icon a project on the instance carries.
+
+    The icon set is instance configuration (projects.icons) and no Conduit
+    method reports it, so the icons in use are the closest the API comes to
+    naming a custom one. A configured icon that no project uses yet is not
+    listed - the server still takes it - which is why every caller either
+    completes with this or *warns* against it, and none refuses an icon it
+    does not find.
+
+    Library code, so it lets a failed lookup fail: `phabfive.cli.completers`
+    falls back to the stock list on an error rather than writing the failure
+    down as the instance's answer, and `phabfive.spec.online` must be able to
+    tell a broken network from an unknown icon.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+
+    Returns
+    -------
+    list
+        PROJECT_ICONS, then any further icon in use, sorted
+    """
+    from phabfive.pagination import search_all_pages
+
+    projects = search_all_pages(
+        phab.project.search, constraints={"status": PROJECT_STATUS_ALL}
+    )
+    in_use = {
+        icon
+        for project in projects
+        if (icon := (project.get("fields", {}).get("icon") or {}).get("key"))
+    }
+
+    # "milestone" is Phorge's to give to a milestone, not a value to choose
+    in_use.discard(PROJECT_MILESTONE_ICON)
+
+    return PROJECT_ICONS + sorted(in_use - set(PROJECT_ICONS))
 
 
 class Project(Phabfive):
@@ -213,6 +348,11 @@ class Project(Phabfive):
         show_policy=False,
         show_members=False,
         limit=None,
+        ids=None,
+        phids=None,
+        slugs=None,
+        watchers=None,
+        order=None,
     ):
         """
         Search projects, as the records `show` answers with.
@@ -252,20 +392,54 @@ class Project(Phabfive):
             Include that section
         limit : int, optional
             How many projects to return in total; None for all of them
+        ids : list, optional
+            Project ids, as numbers. Every other filter still applies, so
+            this narrows a search rather than fetching those projects.
+        phids : list, optional
+            Project PHIDs, the same way
+        slugs : list, optional
+            Hashtags, with or without the leading "#". This is how to ask
+            which project owns a hashtag: Phorge normalises the slug the
+            way it derives one from a project's name, so "Web Team" and
+            "web_team" find the same project.
+        watchers : list, optional
+            Usernames (@user, user, @me); a project matches if any of them
+            watches it. Watching is not membership - a watcher follows a
+            project's activity without being on it.
+        order : str, optional
+            Result ordering as "<field>[:asc|:desc]", e.g. "created:desc".
+            The server does the ordering, so a limit keeps the first N of
+            it. Defaults to name, which is the order this search has always
+            printed.
 
         Returns
         -------
         dict
-            {"projects": [...]}, sorted by name, then by ID
+            {"projects": [...]}, in the order asked for; by name, then by
+            ID, unless --order said otherwise
 
         Raises
         ------
         PhabfiveConfigException
-            If a status or colour is unknown
+            If a status, colour or order is unknown
+        PhabfiveInputException
+            If an id is not a number
         PhabfiveDataException
             If a user, project or Space named does not exist, or the search
             fails
         """
+        # Resolved before anything is fetched, so a bad --order fails fast
+        # rather than after a walk of the instance.
+        order_field, order_direction = parse_order(
+            order,
+            PROJECT_ORDER_FIELDS,
+            PROJECT_ORDER_DIRECTIONS,
+            PROJECT_ORDER_DEFAULT,
+            suggestions=PROJECT_ORDER_SUGGESTIONS,
+        )
+        api_order = PROJECT_API_ORDERS[(order_field, order_direction)]
+        log.info(f"Ordering results by '{order_field}:{order_direction}'")
+
         if status not in PROJECT_STATUS_CHOICES:
             raise PhabfiveConfigException(
                 f"Unknown project status '{status}', "
@@ -284,11 +458,31 @@ class Project(Phabfive):
         if query:
             constraints["query"] = query
 
+        id_list = project_id_list(ids)
+        if id_list:
+            constraints["ids"] = id_list
+
+        phid_list = value_list(phids)
+        if phid_list:
+            constraints["phids"] = phid_list
+
+        slug_list = project_slug_list(slugs)
+        if slug_list:
+            constraints["slugs"] = slug_list
+
         if members:
             constraints["members"] = [
                 phid
                 for phid, _ in resolve_user_phids(
                     self.phab, members, option="--member"
+                ).values()
+            ]
+
+        if watchers:
+            constraints["watchers"] = [
+                phid
+                for phid, _ in resolve_user_phids(
+                    self.phab, watchers, option="--watcher"
                 ).values()
             ]
 
@@ -313,19 +507,26 @@ class Project(Phabfive):
 
         if icons or colors:
             found = self._search_by_look(
-                constraints, attachments, icons, colors, milestones, limit
+                constraints, attachments, icons, colors, milestones, limit, api_order
             )
         else:
             found = fetch_projects(
-                self.phab, constraints=constraints, attachments=attachments, limit=limit
+                self.phab,
+                constraints=constraints,
+                attachments=attachments,
+                limit=limit,
+                order=api_order,
             )
-        found = sorted(
-            found,
-            key=lambda project: (
-                (project.get("fields", {}).get("name") or "").casefold(),
-                project["id"],
-            ),
-        )
+
+        # The server already ordered these; this settles the ties and is
+        # what makes two searches merged by _search_by_look one ordering
+        # rather than one list after the other.
+        found = sort_records(found, order_field, order_direction, PROJECT_SORT_KEYS)
+
+        # After the ordering, so the limit keeps the top N of what was
+        # asked for rather than the first N that happened to arrive.
+        if limit:
+            found = found[:limit]
 
         projects = self._display_data(
             found, show_policy=show_policy, show_members=show_members
@@ -334,7 +535,7 @@ class Project(Phabfive):
         return {"projects": projects}
 
     def _search_by_look(
-        self, constraints, attachments, icons, colors, milestones, limit
+        self, constraints, attachments, icons, colors, milestones, limit, order=None
     ):
         """Search by icon and colour, the way Phorge shows them.
 
@@ -364,12 +565,17 @@ class Project(Phabfive):
         milestones : bool or None
             --milestones / --no-milestones
         limit : int or None
-            How many projects to return in total
+            How many projects the caller asked for. A cap on each of the
+            two searches, not the answer: both are ordered the same way, so
+            the top N of the two together is among the first N of each, and
+            the caller truncates once it has ordered them.
+        order : str or list, optional
+            What to send as project.search's order, see PROJECT_API_ORDERS
 
         Returns
         -------
         list
-            project.search result items
+            project.search result items, each search in the server's order
         """
         found = []
 
@@ -384,6 +590,7 @@ class Project(Phabfive):
                 constraints={**constraints, **look},
                 attachments=attachments,
                 limit=limit,
+                order=order,
             )
 
         if milestones is not False and (not icons or PROJECT_MILESTONE_ICON in icons):
@@ -391,6 +598,7 @@ class Project(Phabfive):
                 self.phab,
                 constraints={**constraints, "isMilestone": True},
                 attachments=attachments,
+                order=order,
             )
 
             if colors and candidates:
@@ -420,9 +628,10 @@ class Project(Phabfive):
 
             found += candidates
 
-        # Two searches, so the limit is applied to what they found together;
-        # the caller sorts by name, as it does a single search
-        return found[:limit] if limit else found
+        # Not truncated here: two searches concatenated are not in order
+        # yet, and cutting before the caller sorts them would drop
+        # milestones the ordering puts first.
+        return found
 
     def _resolve_search_spaces(self, spaces):
         """The Space PHIDs a search is narrowed to, or None for every Space.

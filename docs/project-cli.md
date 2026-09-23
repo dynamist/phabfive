@@ -141,10 +141,66 @@ Subprojects and milestones are included.
 | `--status` | `active` (the default), `archived`, or `any` |
 | `--icon`, `--color` | With any of these icons or colors |
 | `--space` | In these Spaces; `'*'` for all of them. Defaults to `PHAB_SPACE` |
+| `--ids` | Only these project ids, with every other filter still applied |
+| `--phids` | The same, by PHID |
+| `--slug` | With any of these hashtags. A hashtag is exact; `QUERY` is not |
+| `--watcher` | That any of these users watches: `@user`, `user` or `@me` |
+| `--order`, `-o` | How to sort: see [Ordering](#ordering) |
 | `--limit`, `-l` | This many at most; `0` for all. Defaults to 100 |
+| `--with` | Reads the searches from a YAML search spec |
 
 `--status=any` is the same word `maniphest search` uses. `--all` is a
 deprecated alias for it and prints a warning on stderr.
+
+`--with` runs what the spec says. The options a spec has a key for -
+`QUERY`, `--member`, `--parent`, `--ancestor`, `--milestones`, `--status`,
+`--icon`, `--color`, `--space`, `--show-policy`, `--show-members` and
+`--limit` - override the spec's value for every search in it. The five that a
+spec has no key for yet - `--ids`, `--phids`, `--slug`, `--watcher` and
+`--order` - are **refused** together with `--with` rather than accepted and
+ignored, because silently dropping a filter answers a narrower question than
+the one asked.
+
+A saved search is a search spec, the same format `maniphest search --with`
+reads:
+
+```yaml
+kind: search
+searches:
+  - type: project
+    title: Mine
+    search: {members: ["@me"], status: active}
+```
+
+One document may hold searches of several kinds - projects, tasks, pastes and
+credentials - and they run in the order they are written. Run a mixed document
+from `project search`, `paste search` or `passphrase search`: `maniphest
+search --with` runs task searches only, and refuses an item of another type by
+name rather than running it as one. See
+[Search Templates](search-templates.md#searching-other-objects).
+
+### Ordering
+
+`--order` takes `<field>[:asc|:desc]`, as `maniphest search --order` does. A
+bare field means the direction people usually want, and both directions are
+available for every field that has one:
+
+| Value | Order |
+|---|---|
+| `name` *(default)* | Alphabetical, A-Z |
+| `name:asc` | The same, said explicitly |
+| `name:desc` | Alphabetical, Z-A |
+| `created` | Newest project first |
+| `created:asc` | Oldest project first |
+| `created:desc` | The same as `created` |
+| `relevance` | Best text match first, and takes no direction |
+
+The order is sent to `project.search`, so `--limit` returns the first N in that
+order rather than an arbitrary N. `relevance` only means anything alongside
+`QUERY`, and is the one order phabfive cannot re-sort locally.
+
+An `--icon` or `--color` search is several searches merged, so the merge is
+ordered and limited here rather than by the server; the answer is the same.
 
 ### Icons and colors
 
@@ -349,3 +405,4 @@ renamed project completes straight away. See [Caching](caching.md).
 - [Policies](policies.md): the policy grammar and how policies are displayed
 - [Maniphest CLI](maniphest-cli.md): filing tasks under projects with `--tag`
 - [Caching](caching.md): the `projects` and `project-icons` caches
+- [Search Templates](search-templates.md): saving a search as a spec, and `--with`
