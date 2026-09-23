@@ -224,13 +224,30 @@ class TestOptionalVariables:
         except KeyError as exception:  # pragma: no cover - the bug, if it returns
             pytest.fail(f"bare KeyError: {exception!r}")
 
-    def test_an_unrendered_variable_is_not_a_key_error_either(self):
-        """Jinja2 answers an undefined variable with the empty string."""
+    def test_an_undefined_variable_in_a_task_field_is_refused(self):
+        """It used to render as the empty string and create the wrong task.
+
+        `Sprint {{ sprint_number }}` with nothing declaring `sprint_number`
+        became the title "Sprint ", and the task was created. Every entry
+        point now goes through `phabfive.spec.variables`, whose
+        StrictUndefined names the variable instead (#471). The documented
+        way to say a name may be missing is Jinja2's own `default` filter,
+        which the next test pins.
+        """
         phab = _phab()
 
-        result = _create(phab, [_task("Sprint {{ sprint_number }}")])
+        with pytest.raises(PhabfiveDataException, match="sprint_number"):
+            _create(phab, [_task("Sprint {{ sprint_number }}")])
 
-        assert {"type": "title", "value": "Sprint "} in _transactions(phab)
+        phab.maniphest.edit.assert_not_called()
+
+    def test_a_default_filter_is_how_a_task_field_stays_optional(self):
+        """The opt-out the error message names, and the only one there is."""
+        phab = _phab()
+
+        result = _create(phab, [_task('Sprint {{ sprint_number | default("?") }}')])
+
+        assert {"type": "title", "value": "Sprint ?"} in _transactions(phab)
         assert result["task_ids"] == [1]
 
     @pytest.mark.parametrize(
