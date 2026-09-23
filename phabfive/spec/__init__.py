@@ -22,10 +22,11 @@ spells on the command line, and it is what a caller does before the online
 pass: a value still holding `{{ who }}` names nothing an instance could be
 asked about.
 
-`Spec`, `Problem`, `SearchPlan` and `SearchResult` are the names `phabfive`
-itself re-exports, because they are what a caller holds: a spec, what is
-wrong with it, and the two halves of running a search from one. Everything
-else lives here, one import deeper - the tier `phabfive.transitions`,
+`Spec`, `Problem`, `SearchPlan`, `SearchResult` and `CreatePlan` are the
+names `phabfive` itself re-exports, because they are what a caller holds: a
+spec, what is wrong with it, the two halves of running a search from one, and
+what creating from one would create. Everything else lives here, one import
+deeper - the tier `phabfive.transitions`,
 `phabfive.policy` and `phabfive.ordering` already occupy.
 
 The names below are this subpackage's promise. Its modules carry more that is
@@ -40,11 +41,14 @@ helpers - `transition_pattern`, `policy_pattern`, `monogram_pattern`,
 `ResolveResult`, `ReferenceIndex`, `index_references`, `field_kind` and
 `DEFAULT_RESOLVERS` in `phabfive.spec.online`; `parse_time_with_unit` in
 `phabfive.spec.times`; `plan_search`, `plan_searches`, `run_search` and
-`task_ids` in `phabfive.spec.search`; and the engine - `resolve_variables`,
+`task_ids` in `phabfive.spec.search`; `CreateItem`, `CreateRecord`,
+`CreateReport`, `plan_create`, `apply_plan` and `apply_item` in
+`phabfive.spec.create`; and the engine - `resolve_variables`,
 `render_tree`, `render_string` - in `phabfive.spec.variables`. Each module's own `__all__`
 is the full list.
 """
 
+from phabfive.spec.create import CreatePlan as CreatePlan
 from phabfive.spec.envelope import Envelope as Envelope
 from phabfive.spec.envelope import Kind as Kind
 from phabfive.spec.envelope import Metadata as Metadata
@@ -65,6 +69,7 @@ from phabfive.spec.validate import validate_offline as validate_offline
 # Both spellings are load-bearing: __all__ is what mypy's no_implicit_reexport
 # reads, `import x as x` is what keeps ruff quiet about an unused import.
 __all__ = [
+    "CreatePlan",
     "Envelope",
     "Field",
     "FieldKind",

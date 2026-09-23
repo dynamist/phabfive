@@ -523,9 +523,14 @@ def test_every_kind_that_needs_the_instance_is_a_reference_kind():
         ("subscribers[3]", FieldKind.USER),
         ("projects[0]", FieldKind.PROJECT),
         ("space", FieldKind.SPACE),
+        ("parent", FieldKind.MONOGRAM),
         ("parents[0]", FieldKind.MONOGRAM),
         ("subtasks[1]", FieldKind.MONOGRAM),
-        ("title", None),
+        # A key nothing declares at all. `title:` used to stand here and no
+        # longer can: it is a declared create field now, so it answers with
+        # its own kind, and what this row is for is the key that answers
+        # with nothing.
+        ("nonsense", None),
     ],
 )
 def test_the_field_says_what_a_reference_names(name, expected):
@@ -570,16 +575,42 @@ def test_a_local_reference_names_nothing_online():
 def test_a_kind_with_no_resolver_is_left_unchecked_not_reported_clean():
     """A kind nothing answers for reports nothing rather than a verdict.
 
-    `parents:` and `subtasks:` are `FieldKind.MONOGRAM`, which still has no
-    resolver: the reference is indexed, nobody is asked, and nothing is
-    reported. Phase 2 answers for users, projects, Spaces and icons instead
-    (`tests/test_spec_resolvers.py`), so this uses a kind that is still open.
+    The references are indexed, nobody is asked, and nothing is reported -
+    never a clean bill of health for a check that never ran. Written with a
+    resolver list that answers only for users, because every kind a create
+    spec names now *has* a default resolver: #482 added
+    `phabfive.spec.online.TaskResolver`, which is what
+    `test_a_monogram_is_answered_by_the_default_resolvers` pins from the
+    other side.
     """
     spec = _spec({"parents": ["T999999"], "subtasks": ["T999998"]})
     phab = _phab()
 
-    assert _validate(phab, spec) == []
+    assert _validate(phab, spec, resolvers=(ManiphestUserResolver(),)) == []
     assert set(index_references(spec).kinds()) == {FieldKind.MONOGRAM}
+
+
+def test_a_monogram_is_answered_by_the_default_resolvers():
+    """`parents:` and `subtasks:` reach the instance since #482.
+
+    A task that does not exist is `unknown-reference` - reported once per
+    place it was named, from one `maniphest.search` over every id in the
+    document.
+    """
+    spec = _spec({"parents": ["T999999"], "subtasks": ["T999998"]})
+    phab = _phab()
+    phab.maniphest.search.return_value = {"data": []}
+
+    problems = _validate(phab, spec)
+
+    assert _codes(problems) == [
+        ("tasks[0]", "parents[0]", "T999999", "unknown-reference"),
+        ("tasks[0]", "subtasks[0]", "T999998", "unknown-reference"),
+    ]
+    assert phab.maniphest.search.call_count == 1
+    assert phab.maniphest.search.call_args.kwargs["constraints"] == {
+        "ids": [999998, 999999]
+    }
 
 
 def test_a_search_spec_s_user_filters_are_resolved():
@@ -643,6 +674,7 @@ def test_the_default_resolvers_are_the_kinds_that_have_landed():
         (FieldKind.PROJECT, frozenset()),
         (FieldKind.SPACE, frozenset()),
         (FieldKind.INSTANCE_ENUM, frozenset({"icon"})),
+        (FieldKind.MONOGRAM, frozenset()),
     ]
 
 

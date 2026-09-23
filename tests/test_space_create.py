@@ -16,7 +16,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveRemoteException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveRemoteException,
+)
 from phabfive.maniphest.core import Maniphest
 from phabfive.maniphest.resolvers import resolve_space
 
@@ -289,8 +293,11 @@ class TestCreatingFromATemplate:
         assert probes_for(two) == probes_for(one)
 
     def test_an_ambiguous_space_creates_nothing(self, mock_init, tmp_path):
-        # Resolution happens while the template is pre-processed, before any
-        # task is committed.
+        # Resolution happens while the plan is built, before any task is
+        # committed. Since #480 the template path runs on the spec engine,
+        # so the refusal is a PhabfiveDataException naming every problem in
+        # the document; `resolve_space`'s own sentence is unchanged and now
+        # says which task and which key named the Space.
         phab = _phab({3: "Archive", 10: "Archive"})
         maniphest = self._maniphest(phab)
         config = self._template(
@@ -298,7 +305,12 @@ class TestCreatingFromATemplate:
             "  - title: One\n    description: x\n    space: Archive\n",
         )
 
-        with pytest.raises(PhabfiveConfigException):
+        with pytest.raises(PhabfiveDataException) as excinfo:
             maniphest.create_tasks_from_yaml(config)
 
+        message = str(excinfo.value)
+        assert "tasks[0].space" in message
+        assert "ambiguous" in message
+        assert "S3 (Archive)" in message
+        assert "S10 (Archive)" in message
         phab.maniphest.edit.assert_not_called()

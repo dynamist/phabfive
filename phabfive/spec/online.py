@@ -29,6 +29,12 @@ What this module deliberately does not do:
 
 - **It does not raise on a validation failure.** It returns a list, so a
   frontend can render the report as per-field form errors.
+- **It does not throw the answers away.** :func:`validate_online` returns
+  only the problems, but it is a two-line wrapper over
+  :func:`resolve_references`, which answers with a :class:`Resolution`
+  carrying every PHID it resolved. A caller that validates and then acts -
+  `phabfive.spec.create` building transactions - takes that one, so a name
+  is looked up exactly once for the whole run.
 - **It converts no remote error into a problem.** `PhabfiveAPIException` and
   `PhabfiveConnectionException` propagate out of :func:`validate_online`
   untouched. Answering "this user does not exist" because the network was
@@ -95,7 +101,13 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol
 from phabfive.me import is_me
 from phabfive.pagination import search_all_pages
 from phabfive.spec.problems import Layer, Problem, Severity, problem
-from phabfive.spec.references import Reference, RefKind, iter_references
+from phabfive.spec.references import (
+    Reference,
+    RefKind,
+    classify_reference,
+    is_monogram,
+    iter_references,
+)
 from phabfive.spec.registry import OBJECT_TYPES, FieldKind, field_by_name
 from phabfive.users import USER_PHID_PREFIX
 
@@ -114,13 +126,17 @@ __all__ = [
     "ProjectResolver",
     "ReferenceGroup",
     "ReferenceIndex",
+    "Resolution",
     "ResolveResult",
     "Resolver",
     "SpaceResolver",
+    "TaskResolver",
     "field_kind",
     "field_name",
     "index_references",
+    "reference_for",
     "reference_group",
+    "resolve_references",
     "validate_online",
 ]
 
@@ -140,17 +156,20 @@ REFERENCE_KINDS = frozenset(
 
 # What each create-spec reference key names, for the keys the registry has
 # not reached yet. `phabfive.spec.references` declares WHICH create keys hold
-# a reference; the registry declares what a key's value IS - and it now does
-# so for `("project", "create")`, which is why `icon:` is absent here and
-# `field_kind` finds it in the registry instead. A task's create keys are
-# still bridged here. Every entry goes away as its object type's fields join
-# the registry.
+# a reference; the registry declares what a key's value IS - and `field_kind`
+# asks the registry first, so a key the registry declares must not be here
+# as well. Two sources of truth for one answer agree until they do not, and
+# nothing would notice.
+#
+# What is left is the three keys the registry deliberately does not declare:
+# `parent:`, `parents:` and `subtasks:` are `FieldKind.MONOGRAM`, and
+# declaring them would make the offline pass report `$platform` as
+# `bad-monogram` - a create spec has written `parents: ["$epic"]` since
+# Phase 1. See the note above `registry.DECLARED_COMPLETE`.
 _CREATE_FIELD_KINDS: Mapping[str, Mapping[str, FieldKind]] = {
     "task": {
-        "assignment": FieldKind.USER,
-        "subscribers": FieldKind.USER,
-        "projects": FieldKind.PROJECT,
-        "space": FieldKind.SPACE,
+        # `parent:` is `parents:` with one value, never a key of its own kind
+        "parent": FieldKind.MONOGRAM,
         "parents": FieldKind.MONOGRAM,
         "subtasks": FieldKind.MONOGRAM,
     },
@@ -180,6 +199,13 @@ FIELD_SCOPED_KINDS = frozenset({FieldKind.INSTANCE_ENUM})
 # unknown user on top of "assignee is undefined" is two problems for one
 # mistake, and the offline pass already owns the first one.
 _UNRENDERED = "{{"
+
+#: The PHID types this module names directly. `phabfive.users` and
+#: `phabfive.maniphest.resolvers` already export the user's and the project's;
+#: these two have no home outside a resolver yet, and a module-level literal
+#: is better than the same string written three times inside one.
+_TASK_PHID_PREFIX = "PHID-TASK-"
+_SPACE_PHID_PREFIX = "PHID-SPCE-"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -225,6 +251,13 @@ class ResolveResult:
     phid : str or None
         What it resolved to, when it resolved. Carried so that a caller that
         validates and then acts does not look the same name up twice.
+    label : str or None
+        What the instance calls the thing that was found - a username for
+        ``PHID-USER-...``, and for ``@me`` the caller's own. Carried for the
+        same reason `phid` is: a dry run echoes back the name a PHID or a
+        keyword stood for, and asking a second time to print it would undo
+        the point of the bulk lookup. `None` when the resolver has no better
+        name than the value itself.
     problem : str or None
         The `Problem.code` to report when it did not resolve, e.g.
         "unknown-user". None means it resolved.
@@ -248,11 +281,17 @@ class ResolveResult:
     reason: Optional[str] = None
     candidates: tuple[str, ...] = ()
     severity: str = Severity.ERROR
+    label: Optional[str] = None
 
     @property
     def resolved(self) -> bool:
         """Whether the instance answered yes."""
         return self.problem is None
+
+    @property
+    def name(self) -> str:
+        """The best name there is for what resolved: the label, else the value."""
+        return self.label or self.value
 
 
 class Resolver(Protocol):
@@ -524,13 +563,118 @@ def _reason(result: ResolveResult, reference: Reference) -> str:
     return f"{reference.value!r} does not name anything on this instance"
 
 
-def validate_online(
+@dataclasses.dataclass(frozen=True)
+class Resolution:
+    """One online pass: what was wrong, and what everything resolved to.
+
+    :func:`validate_online` answers the first half and throws the second
+    away, which is right for a caller that only validates. A caller that
+    validates and then **acts** - `phabfive.spec.create.plan_create` builds
+    a task's transactions out of PHIDs - needs the answers too, or it looks
+    every name up a second time and loses the one-request-per-kind property
+    this module exists for. `ResolveResult` already says it carries the PHID
+    "so that a caller that validates and then acts does not look the same
+    name up twice"; this is that caller.
+
+    Attributes
+    ----------
+    problems : tuple of Problem
+        Every unresolvable reference, in document order, exactly as
+        :func:`validate_online` returns them. Warnings as well as errors.
+    answers : mapping
+        What each resolver said, keyed by :class:`ReferenceGroup` and then by
+        the value as the spec wrote it. A group nothing answers for is
+        absent, and a value a resolver skipped is absent from its group -
+        both mean "nobody has a verdict", never "it is fine".
+
+    Not hashable: `answers` is a mapping, so a generated ``__hash__`` would
+    exist and raise the first time a `Resolution` went into a set.
+    """
+
+    problems: tuple[Problem, ...] = ()
+    answers: Mapping[ReferenceGroup, Mapping[str, ResolveResult]] = dataclasses.field(
+        default_factory=dict
+    )
+
+    __hash__ = None  # type: ignore[assignment]
+
+    @property
+    def errors(self) -> tuple[Problem, ...]:
+        """The problems that stop a plan. A warning is reported, never fatal."""
+        return tuple(one for one in self.problems if one.severity == Severity.ERROR)
+
+    def result(self, reference: Reference) -> Optional[ResolveResult]:
+        """What one reference resolved to, or None when nobody answered."""
+        group = reference_group(reference)
+
+        if group is None:
+            return None
+
+        return (self.answers.get(group) or {}).get(reference.value)
+
+    def phid(self, reference: Reference) -> Optional[str]:
+        """The PHID one reference resolved to, or None.
+
+        None covers three different things on purpose - nobody answers for
+        this kind, the answer was no, and a value that resolved to something
+        with no single PHID (a ``tag: team-*`` matching several projects).
+        A caller that has to tell them apart asks :meth:`result`.
+        """
+        found = self.result(reference)
+
+        return found.phid if found is not None else None
+
+    def phid_for(self, object_type: str, field: str, value: str) -> Optional[str]:
+        """The PHID one *value* resolved to, named by where it was written.
+
+        The convenience form of :meth:`phid` for a caller walking a spec's
+        items rather than its references: `object_type` and `field` are what
+        decide which lookup answered - a bare name in ``assignment:`` is a
+        user and the same word in ``projects:`` is a project - and the
+        object's path plays no part, because a value is resolved once for
+        the whole document.
+        """
+        return self.phid(reference_for(object_type, field, value))
+
+    def label_for(self, object_type: str, field: str, value: str) -> str:
+        """What the instance calls the thing one value named.
+
+        The value itself when nothing better was answered, so this is always
+        printable: it is what a dry run echoes back for ``@me`` and for a
+        PHID, the two spellings that say nothing to a reader.
+        """
+        found = self.result(reference_for(object_type, field, value))
+
+        return found.name if found is not None else value
+
+
+def reference_for(object_type: str, field: str, value: str) -> Reference:
+    """A reference to `value`, as if one item's `field` had written it.
+
+    The object path is left empty: it names *where* a value was written,
+    which decides how a problem is reported and never how a value is looked
+    up. A caller holding a real `Reference` passes that instead.
+    """
+    return Reference(
+        object="",
+        field=field,
+        value=value,
+        kind=classify_reference(value) or RefKind.NAME,
+        object_type=object_type,
+    )
+
+
+def resolve_references(
     spec: "Spec",
     app: "Phabfive",
     *,
     resolvers: Optional[Sequence[Resolver]] = None,
-) -> list[Problem]:
-    """Check every reference a spec makes against the instance, all at once.
+) -> Resolution:
+    """Ask the instance about every reference a spec makes, once each.
+
+    The whole online pass, answers kept. :func:`validate_online` is this
+    with the answers dropped, and the two cannot drift because there is one
+    walk and one set of requests behind both.
 
     Parameters
     ----------
@@ -541,29 +685,20 @@ def validate_online(
         An already-constructed app, used through `app.phab`. Nothing is
         constructed, no configuration is read, and nothing is written.
     resolvers : sequence of Resolver, optional
-        The resolvers to use, in place of :data:`DEFAULT_RESOLVERS`. This is
-        how an app registers its own kinds in a later phase, and how a test
-        supplies a fake one.
+        The resolvers to use, **in place of** :data:`DEFAULT_RESOLVERS` -
+        not merged with them. A caller adding one writes
+        ``(Mine(),) + DEFAULT_RESOLVERS``; first registration wins, so its
+        own answer beats the default for the same kind.
 
     Returns
     -------
-    list of Problem
-        Every unresolvable reference, in document order, each with
-        ``layer="online"``. Empty when everything resolved. **This never
-        raises because the spec was wrong** - that is the whole point, and
-        it is what lets a frontend render the report per field.
-
-        A problem carries the severity its resolver gave it, so a report may
-        hold warnings as well as errors and the caller counts them
-        separately: `phabfive spec validate` exits on the errors alone.
+    Resolution
 
     Raises
     ------
     PhabfiveRemoteException
-        The instance could not be asked: `PhabfiveConnectionException` when
-        the request never landed, `PhabfiveAPIException` when Conduit
-        refused it. Neither is a bad reference and neither is converted into
-        a problem - the caller decides what a failed check means.
+        The instance could not be asked. Never converted into a problem;
+        see :func:`validate_online`.
     """
     index = index_references(spec)
 
@@ -620,7 +755,51 @@ def validate_online(
             )
         )
 
-    return problems
+    return Resolution(problems=tuple(problems), answers=answers)
+
+
+def validate_online(
+    spec: "Spec",
+    app: "Phabfive",
+    *,
+    resolvers: Optional[Sequence[Resolver]] = None,
+) -> list[Problem]:
+    """Check every reference a spec makes against the instance, all at once.
+
+    Parameters
+    ----------
+    spec : Spec
+        The spec to check. Render it first if it declares variables; an
+        unrendered ``{{ ... }}`` is skipped rather than reported here.
+    app : Phabfive
+        An already-constructed app, used through `app.phab`. Nothing is
+        constructed, no configuration is read, and nothing is written.
+    resolvers : sequence of Resolver, optional
+        The resolvers to use, in place of :data:`DEFAULT_RESOLVERS`. This is
+        how an app registers its own kinds in a later phase, and how a test
+        supplies a fake one.
+
+    Returns
+    -------
+    list of Problem
+        Every unresolvable reference, in document order, each with
+        ``layer="online"``. Empty when everything resolved. **This never
+        raises because the spec was wrong** - that is the whole point, and
+        it is what lets a frontend render the report per field.
+
+        A problem carries the severity its resolver gave it, so a report may
+        hold warnings as well as errors and the caller counts them
+        separately: `phabfive spec validate` exits on the errors alone.
+
+    Raises
+    ------
+    PhabfiveRemoteException
+        The instance could not be asked: `PhabfiveConnectionException` when
+        the request never landed, `PhabfiveAPIException` when Conduit
+        refused it. Neither is a bad reference and neither is converted into
+        a problem - the caller decides what a failed check means.
+    """
+    return list(resolve_references(spec, app, resolvers=resolvers).problems)
 
 
 def _register(
@@ -759,7 +938,11 @@ class ManiphestUserResolver:
                     reason=f"No such user: {value!r}",
                 )
             else:
-                results[value] = ResolveResult(value=value, phid=record.get("phid"))
+                results[value] = ResolveResult(
+                    value=value,
+                    phid=record.get("phid"),
+                    label=_username(record),
+                )
 
         if phid_values:
             results.update(self._resolve_phids(app, phid_values))
@@ -777,6 +960,7 @@ class ManiphestUserResolver:
         """
         whoami = app.phab.user.whoami() or {}
         phid = whoami.get("phid") if isinstance(whoami, Mapping) else None
+        username = whoami.get("userName") if isinstance(whoami, Mapping) else None
 
         if not phid:
             return {
@@ -788,7 +972,10 @@ class ManiphestUserResolver:
                 for value in values
             }
 
-        return {value: ResolveResult(value=value, phid=phid) for value in values}
+        return {
+            value: ResolveResult(value=value, phid=phid, label=username)
+            for value in values
+        }
 
     def _resolve_phids(
         self, app: "Phabfive", values: Sequence[str]
@@ -806,7 +993,7 @@ class ManiphestUserResolver:
 
         return {
             value: (
-                ResolveResult(value=value, phid=value)
+                ResolveResult(value=value, phid=value, label=_username(found[value]))
                 if value in found
                 else ResolveResult(
                     value=value,
@@ -1024,8 +1211,139 @@ def _project_label(match: Any) -> str:
     return str(name or match.get("phid") or match)
 
 
+class TaskResolver:
+    """``T123`` and ``PHID-TASK-...``, every task the spec names at once.
+
+    The two spellings a task can be named by, and deliberately only those
+    two: a task has no unique name to be looked up by - two tasks are very
+    often called the same thing - so a bare word in ``parents:`` is a typo
+    rather than a task, and the offline pass already refuses it as
+    `bad-monogram` before this is reached. A `#hashtag` or an `@user` in a
+    key that names tasks is the same mistake and gets the same answer.
+
+    Batched, which is the part that changes: the template path used to make
+    one `maniphest.search` per parent and one per subtask, so a spec
+    hanging forty tasks off T1 asked about T1 forty times (#482). Every id
+    in the whole document goes into one request, and every PHID into a
+    second - two calls rather than one because Conduit ANDs its
+    constraints, so `{"ids": ..., "phids": ...}` would answer only the
+    tasks matching both.
+
+    A PHID is **asked about** rather than passed through. A mistyped one
+    that is never checked is a `parents.add` the server answers with an
+    opaque error much later, after some of the spec has already been
+    created.
+
+    The label is the monogram, for both spellings: a dry run that echoes
+    back ``PHID-TASK-jmqi4z...`` tells a reader nothing, and the monogram is
+    what they wrote or would have written.
+    """
+
+    kind: FieldKind = FieldKind.MONOGRAM
+    fields: frozenset[str] = frozenset()
+
+    def resolve(
+        self, app: "Phabfive", values: Sequence[str]
+    ) -> Mapping[str, ResolveResult]:
+        """Answer every task the spec named. See :class:`Resolver`."""
+        results: dict[str, ResolveResult] = {}
+        # A list per id, not one value: `T7` and `T07` are the same task
+        # written two ways, and a resolver that answers for only one of them
+        # leaves the other reported by nobody
+        ids: dict[int, list[str]] = {}
+        phids: list[str] = []
+
+        for value in values:
+            if value.startswith(_TASK_PHID_PREFIX):
+                phids.append(value)
+            elif is_monogram(value, prefixes=("T",)):
+                ids.setdefault(int(value[1:]), []).append(value)
+            else:
+                results[value] = ResolveResult(
+                    value=value,
+                    problem="bad-monogram",
+                    reason=(
+                        f"{value!r} does not name a task. A task is named by "
+                        f"its monogram (T123) or its PHID "
+                        f"({_TASK_PHID_PREFIX}...)"
+                    ),
+                )
+
+        if ids:
+            results.update(self._by_ids(app, ids))
+
+        if phids:
+            results.update(self._by_phids(app, phids))
+
+        return results
+
+    @staticmethod
+    def _by_ids(
+        app: "Phabfive", ids: Mapping[int, Sequence[str]]
+    ) -> dict[str, ResolveResult]:
+        """Every ``T123`` in the spec, in one `maniphest.search`."""
+        found = {
+            record["id"]: record
+            for record in search_all_pages(
+                app.phab.maniphest.search, constraints={"ids": sorted(ids)}
+            )
+            if isinstance(record, Mapping) and record.get("id") is not None
+        }
+
+        return {
+            value: (
+                ResolveResult(value=value, phid=found[task_id].get("phid"), label=value)
+                if task_id in found
+                else TaskResolver._missing(value)
+            )
+            for task_id, written in ids.items()
+            for value in written
+        }
+
+    @staticmethod
+    def _by_phids(app: "Phabfive", values: Sequence[str]) -> dict[str, ResolveResult]:
+        """Every ``PHID-TASK-...`` in the spec, in one more `maniphest.search`."""
+        found = {
+            record["phid"]: record
+            for record in search_all_pages(
+                app.phab.maniphest.search,
+                constraints={"phids": sorted(set(values))},
+            )
+            if isinstance(record, Mapping) and record.get("phid")
+        }
+
+        return {
+            value: (
+                ResolveResult(
+                    value=value,
+                    phid=value,
+                    label=(
+                        f"T{found[value]['id']}"
+                        if found[value].get("id") is not None
+                        else value
+                    ),
+                )
+                if value in found
+                else TaskResolver._missing(value)
+            )
+            for value in values
+        }
+
+    @staticmethod
+    def _missing(value: str) -> ResolveResult:
+        """The instance answered, and it has no such task."""
+        return ResolveResult(
+            value=value,
+            problem="unknown-reference",
+            reason=(
+                f"No such task: {value!r}. Unable to find it in this "
+                "phabricator instance"
+            ),
+        )
+
+
 class SpaceResolver:
-    """``S3``, a Space's name, or a pattern naming exactly one.
+    """``S3``, ``PHID-SPCE-...``, a Space's name, or a pattern naming one.
 
     Every Space the viewer can see is enumerated once - `fetch_all_spaces`,
     which probes the monogram range because `phid.lookup` is policy-filtered
@@ -1036,6 +1354,12 @@ class SpaceResolver:
     `maniphest create --space` agree by construction, including the rule
     that a pattern matching two Spaces is an error rather than a silent pick
     of the first: an object goes in exactly one Space.
+
+    A PHID is answered here rather than by `resolve_space`, which has never
+    taken one: it is matched against the Spaces already enumerated, so it
+    costs no request and a mistyped one is still refused. One grammar means
+    every field that names an object takes a PHID (#482), and a `space:` is
+    such a field.
     """
 
     kind: FieldKind = FieldKind.SPACE
@@ -1052,10 +1376,31 @@ class SpaceResolver:
         # right thing: a partial Space list would report real Spaces as
         # missing.
         all_spaces = fetch_all_spaces(app.phab)
+        by_phid = {
+            entry["phid"]: entry
+            for entry in all_spaces.values()
+            if isinstance(entry, Mapping) and entry.get("phid")
+        }
 
         results: dict[str, ResolveResult] = {}
 
         for value in values:
+            if value.startswith(_SPACE_PHID_PREFIX):
+                entry = by_phid.get(value)
+                results[value] = (
+                    ResolveResult(value=value, phid=value, label=entry.get("name"))
+                    if entry is not None
+                    else ResolveResult(
+                        value=value,
+                        problem="unknown-space",
+                        reason=(
+                            f"No Space you can see has the PHID {value!r}. "
+                            f"Visible Spaces: {', '.join(all_spaces) or 'none'}"
+                        ),
+                    )
+                )
+                continue
+
             try:
                 entry = resolve_space(app.phab, value, all_spaces=all_spaces)
             except PhabfiveConfigException as failure:
@@ -1141,11 +1486,14 @@ def _stock_icons() -> frozenset[str]:
 
 
 #: The resolvers `validate_online` uses when the caller names none. Phase 1
-#: shipped the user resolver; Phase 2 adds projects, Spaces and icons.
-#: Phase 3 adds theirs here as each app lands.
+#: shipped the user resolver; Phase 2 adds projects, Spaces and icons; #482
+#: adds tasks, which is what makes `parents:`, `parent:` and `subtasks:`
+#: answerable by `validate_online` and not only by a create plan.
+#: Phase 3 adds the rest here as each app lands.
 DEFAULT_RESOLVERS: tuple[Resolver, ...] = (
     ManiphestUserResolver(),
     ProjectResolver(),
     SpaceResolver(),
     IconResolver(),
+    TaskResolver(),
 )

@@ -168,10 +168,25 @@ class Field:
 _TASK = frozenset({"task"})
 _PROJECT = frozenset({"project"})
 # Paste search declares no key of its own: `text_query`, `author` and `limit`
-# are all shared, so there is no `_PASTE` to go with these.
+# are all shared, so there is no `_PASTE` to go with these. Paste *create*
+# does declare two, and shares four more with a task.
+_PASTE = frozenset({"paste"})
 _PASSPHRASE = frozenset({"passphrase"})
 _SEARCH = frozenset({"search"})
 _CREATE = frozenset({"create"})
+
+# The create-side shared key sets. A key two object types spell the same way
+# and mean the same thing by is one Field carrying both, exactly as
+# `text_query` is on the search side - which is what keeps "the web UI calls
+# this Name on a task and on a paste alike" a single declaration rather than
+# a comment in two places.
+_TASK_PASTE = frozenset({"task", "paste"})
+_TASK_PROJECT = frozenset({"task", "project"})
+
+# Every object type a create spec creates. `passphrase` is deliberately
+# absent: Phorge exposes no `passphrase.edit`, so a `passphrases:` section is
+# refused by name - see `phabfive.spec.references.UNCREATABLE_OBJECT_KEYS`.
+_CREATED = frozenset({"task", "project", "paste"})
 
 # Every object type a spec may search. A key all four spell the same way and
 # mean the same thing by - `text_query`, `limit` - is one Field carrying this
@@ -745,11 +760,11 @@ FIELDS: tuple[Field, ...] = (
     # `phabfive.cli.search_spec.refuse_unspecced`.
     # --- project, create -------------------------------------------------
     #
-    # Two keys of the several a `projects:` item holds, declared because they
-    # are the two the validation layers can say something about. The rest of
-    # the key set arrives with its command, which is why ("project", "create")
-    # is NOT in DECLARED_COMPLETE: until it is, an undeclared project key is
-    # left alone rather than called unknown.
+    # The first two keys of a `projects:` item, declared in Phase 1 because
+    # they are the two the validation layers could already say something
+    # about. The rest of the key set is declared further down, with the task
+    # and paste create blocks; see the note above DECLARED_COMPLETE for why
+    # none of the three pairs is called complete yet.
     Field(
         name="color",
         # Not INSTANCE_ENUM. The colour *keys* are fixed in Phorge's source -
@@ -777,6 +792,223 @@ FIELDS: tuple[Field, ...] = (
         cli="--icon",
         help="The icon the project is shown with.",
     ),
+    # --- task, create ----------------------------------------------------
+    #
+    # Exactly the keys `maniphest create` has a flag for. Four of them -
+    # `status`, `column`, `visible-to` and `editable-by` - are what a spec
+    # could not express before #481, and declaring them here is what makes
+    # the two paths the same key set rather than two overlapping ones.
+    #
+    # `id:` and `tasks:` are **not** declared, and neither are `parents:` and
+    # `subtasks:`. See the note above DECLARED_COMPLETE for both reasons.
+    Field(
+        name="title",
+        kind=FieldKind.TEXT,
+        # One declaration for a task and for a paste. Phorge's own API
+        # agrees that they are the same key - the transaction is `title` on
+        # `maniphest.edit` and on `paste.edit` alike - and so does the web
+        # UI, which labels both "Name". Reading `fields.title` back out of
+        # `paste.search` and `fields.name` out of `maniphest.search` is the
+        # asymmetry, and it is on the read side, not here.
+        objects=_TASK_PASTE,
+        verbs=_CREATE,
+        cli="--title",
+        help="What it is called; the web UI labels this Name.",
+    ),
+    Field(
+        name="description",
+        kind=FieldKind.TEXT,
+        objects=_TASK_PROJECT,
+        verbs=_CREATE,
+        cli="--description",
+        help="The body text, in remarkup.",
+    ),
+    Field(
+        name="priority",
+        # The priority *names* are `maniphest.priority.map` instance
+        # configuration, so nothing offline can list them - which is why
+        # there are no `choices` here and why the same word is a
+        # `FieldKind.PATTERN` on the search side, where it is a transition
+        # grammar over a task's history rather than one value.
+        kind=FieldKind.INSTANCE_ENUM,
+        objects=_TASK,
+        verbs=_CREATE,
+        cli="--priority",
+        help="Priority name, e.g. high or needs-triage.",
+    ),
+    Field(
+        name="status",
+        kind=FieldKind.INSTANCE_ENUM,
+        objects=_TASK,
+        verbs=_CREATE,
+        cli="--status",
+        help="Status key, e.g. open or resolved.",
+    ),
+    Field(
+        name="assignment",
+        kind=FieldKind.USER,
+        objects=_TASK,
+        verbs=_CREATE,
+        # The spec key and the flag are spelled differently on purpose: the
+        # template format has said `assignment:` since before there was a
+        # registry, and renaming a key in a file people already have is a
+        # change with no upside.
+        cli="--assign",
+        help="Assignee: a username, @me, or a user PHID.",
+    ),
+    Field(
+        name="subscribers",
+        kind=FieldKind.USER,
+        objects=_TASK_PASTE,
+        verbs=_CREATE,
+        cli="--subscribe",
+        multiple=True,
+        help="Subscribers: usernames, @me, or user PHIDs.",
+    ),
+    Field(
+        name="projects",
+        kind=FieldKind.PROJECT,
+        objects=_TASK_PASTE,
+        verbs=_CREATE,
+        cli="--tag",
+        multiple=True,
+        help="Projects to tag it into, by name, #hashtag or PHID.",
+    ),
+    Field(
+        name="column",
+        # A board's columns are instance data - they are created per
+        # workboard - so nothing offline can list them, and a column only
+        # means something together with the board it is on: a spec writing
+        # `column:` without `projects:` is refused the way
+        # `phabfive.edit.validators.validate_board_column_context` refuses
+        # `--column` without `--tag`. `phabfive.spec.validate` is where that
+        # rule lives and `phabfive.spec.create._columns` is what resolves
+        # the name against the board.
+        #
+        # A spec places the task in one `maniphest.edit`, where `maniphest
+        # create --column` creates the task and then sends a second edit
+        # carrying `objectIdentifier`. The one-edit form is verified against
+        # a real Phorge; a create spec has no code path that may carry an
+        # `objectIdentifier` at all, which is what makes anchoring to an
+        # existing object safe.
+        kind=FieldKind.INSTANCE_ENUM,
+        objects=_TASK,
+        verbs=_CREATE,
+        cli="--column",
+        help="Workboard column to place it in; needs projects: as well.",
+    ),
+    Field(
+        name="space",
+        kind=FieldKind.SPACE,
+        objects=_TASK_PROJECT,
+        verbs=_CREATE,
+        cli="--space",
+        # One Space, not a filter over several: the search-side `space` and
+        # `spaces` keys take patterns and mean "any of these", while this
+        # one names the single Space the object is created in.
+        help="The Space to create it in, by name or monogram.",
+    ),
+    Field(
+        name="visible-to",
+        kind=FieldKind.POLICY,
+        objects=_CREATED,
+        verbs=_CREATE,
+        cli="--visible-to",
+        help="View policy: a keyword, #project, @user or PHID.",
+    ),
+    Field(
+        name="editable-by",
+        kind=FieldKind.POLICY,
+        objects=_CREATED,
+        verbs=_CREATE,
+        cli="--editable-by",
+        help="Edit policy: a keyword, #project, @user or PHID.",
+    ),
+    # --- project, create, continued --------------------------------------
+    #
+    # `color:` and `icon:` are declared above, with the note about why a
+    # colour needs no network and an icon does.
+    Field(
+        name="name",
+        kind=FieldKind.TEXT,
+        objects=_PROJECT,
+        verbs=_CREATE,
+        # A positional argument on `project create`, not an option, the way
+        # `text_query` is on `maniphest search`.
+        cli=None,
+        help="The project's name, which is what its hashtag is derived from.",
+    ),
+    Field(
+        name="slugs",
+        kind=FieldKind.TEXT,
+        objects=_PROJECT,
+        verbs=_CREATE,
+        cli="--slug",
+        multiple=True,
+        # `slugs` is the one collection transaction in phabfive with no
+        # `.add` spelling: `project.edit` replaces the whole list. That is
+        # safe only on an object being created, which is why a create spec
+        # is the only place this key may appear at all.
+        help="Additional hashtags, with or without their '#'.",
+    ),
+    Field(
+        name="members",
+        kind=FieldKind.USER,
+        objects=_PROJECT,
+        verbs=_CREATE,
+        cli="--member",
+        multiple=True,
+        help="Members: usernames, @me, or user PHIDs.",
+    ),
+    Field(
+        name="parent",
+        # A project, not a monogram: the same word on the search side names
+        # a task's parent by `T123`, which is a different question.
+        kind=FieldKind.PROJECT,
+        objects=_PROJECT,
+        verbs=_CREATE,
+        cli="--parent",
+        help="Create it as a subproject of this project.",
+    ),
+    Field(
+        name="milestone-of",
+        kind=FieldKind.PROJECT,
+        objects=_PROJECT,
+        verbs=_CREATE,
+        cli="--milestone-of",
+        # A milestone takes no icon, colour or hashtag: its icon is fixed,
+        # its colour is its parent's and it has no slug. `project create`
+        # refuses the combination and a spec has to be refused the same way.
+        help="Create it as a milestone of this project; takes no icon or slugs.",
+    ),
+    Field(
+        name="joinable-by",
+        kind=FieldKind.POLICY,
+        objects=_PROJECT,
+        verbs=_CREATE,
+        cli="--joinable-by",
+        help="Join policy: a keyword, #project, @user or PHID.",
+    ),
+    # --- paste, create ---------------------------------------------------
+    #
+    # `title`, `projects`, `subscribers`, `visible-to` and `editable-by` are
+    # declared above, shared with a task. These two are the paste's own.
+    Field(
+        name="content",
+        kind=FieldKind.TEXT,
+        objects=_PASTE,
+        verbs=_CREATE,
+        cli="--content",
+        help="The paste's text.",
+    ),
+    Field(
+        name="language",
+        kind=FieldKind.TEXT,
+        objects=_PASTE,
+        verbs=_CREATE,
+        cli="--language",
+        help="Language for syntax highlighting, e.g. python.",
+    ),
 )
 
 
@@ -786,13 +1018,27 @@ FIELDS: tuple[Field, ...] = (
 #:
 #: Without this, declaring the first field of an object type would make every
 #: *other* key of that object an error: `validate._check_fields` reports an
-#: unknown key as soon as the pair has any declared field at all. So
-#: ("project", "create") declares `color` and `icon` and stays out of this
-#: set, and a `projects:` item keeps its `name:` and `description:` while
-#: those two are still checked. A pair joins this set in the change that
-#: finishes its key set - and `docs/search-templates.md` has to grow the
-#: bullet in the same change, see
+#: unknown key as soon as the pair has any declared field at all. A pair
+#: joins this set in the change that finishes its key set - and
+#: `docs/search-templates.md` has to grow the bullet in the same change, see
 #: `tests/test_search_template_keys.py`.
+#:
+#: **The three create pairs are not in it yet, and two separate things are
+#: missing before they can be.**
+#:
+#: 1. `id:` and `tasks:` are structure rather than values - a local name and
+#:    a list of child items - so they are not `Field`s and there is no
+#:    `FieldKind` that would describe either. `phabfive.spec.schema` writes
+#:    both into the generated create item schema itself, while
+#:    `validate._check_fields` reads the registry alone. Declaring a create
+#:    pair complete today would make the walk call `id:` an unknown key on a
+#:    spec the schema accepts, and the oracle and the walk have to agree.
+#: 2. `parents:` and `subtasks:` are undeclared for the same reason in
+#:    reverse: they are `FieldKind.MONOGRAM`, and `validate._check_monograms`
+#:    reports `$platform` as `bad-monogram` because it does not know that a
+#:    `$local-id` is a legal value of a create key. A create spec has been
+#:    able to write `parents: ["$epic"]` since Phase 1, so declaring them
+#:    before that check learns about local ids would turn a working spec red.
 DECLARED_COMPLETE: frozenset[tuple[str, str]] = frozenset(
     {
         ("task", "search"),

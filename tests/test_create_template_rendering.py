@@ -16,11 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from phabfive.exceptions import (
-    PhabfiveConfigException,
-    PhabfiveDataException,
-    PhabfiveRemoteException,
-)
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
 from phabfive.maniphest.core import Maniphest
 
 PROJECTS = {
@@ -82,15 +78,21 @@ class TestProjects:
         )
 
         assert {
-            "type": "projects.set",
+            "type": "projects.add",
             "value": ["PHID-PROJ-backend"],
         } in _transactions(phab)
 
     def test_a_rendered_name_is_the_one_looked_up(self):
-        """The braces used to reach the project map, and nothing matched them."""
+        """The braces used to reach the project map, and nothing matched them.
+
+        The exception is the spec engine's since #480: every unresolvable
+        reference in the document is reported in one `PhabfiveDataException`
+        rather than the first one raising `PhabfiveRemoteException` - which
+        said "the server could not be asked" about a server that answered.
+        """
         phab = _phab()
 
-        with pytest.raises(PhabfiveRemoteException) as excinfo:
+        with pytest.raises(PhabfiveDataException) as excinfo:
             _create(
                 phab,
                 [_task(projects=["{{ project_name }}"])],
@@ -99,6 +101,10 @@ class TestProjects:
 
         assert "'Nosuch'" in str(excinfo.value)
         assert "{{" not in str(excinfo.value)
+        # The item and the key are named, so a template with fifty tasks
+        # says which one
+        assert "tasks[0].projects[0]" in str(excinfo.value)
+        phab.maniphest.edit.assert_not_called()
 
     def test_a_variable_names_a_hashtag(self):
         phab = _phab()
@@ -110,7 +116,7 @@ class TestProjects:
         )
 
         assert {
-            "type": "projects.set",
+            "type": "projects.add",
             "value": ["PHID-PROJ-backend"],
         } in _transactions(phab)
 
@@ -124,7 +130,7 @@ class TestProjects:
         )
 
         assert {
-            "type": "projects.set",
+            "type": "projects.add",
             "value": ["PHID-PROJ-sprint"],
         } in _transactions(phab, call=1)
 
@@ -134,7 +140,7 @@ class TestProjects:
         _create(phab, [_task(projects=["Backend Team"])])
 
         assert {
-            "type": "projects.set",
+            "type": "projects.add",
             "value": ["PHID-PROJ-backend"],
         } in _transactions(phab)
 
@@ -148,7 +154,7 @@ class TestProjects:
         )
         phab.project.search.return_value = {"data": []}
 
-        with pytest.raises(PhabfiveConfigException) as excinfo:
+        with pytest.raises(PhabfiveDataException) as excinfo:
             _create(
                 phab,
                 [_task(projects=["{{ sprint }}"])],
@@ -156,6 +162,8 @@ class TestProjects:
             )
 
         assert "Sprint 1" in str(excinfo.value)
+        # Both candidates are still named, which is the point of the message
+        assert "ambiguous" in str(excinfo.value)
         phab.maniphest.edit.assert_not_called()
 
     def test_a_null_projects_key_is_no_projects(self):
@@ -165,7 +173,7 @@ class TestProjects:
         result = _create(phab, [_task(projects=None)])
 
         assert result["task_ids"] == [1]
-        assert all(t["type"] != "projects.set" for t in _transactions(phab))
+        assert all(t["type"] != "projects.add" for t in _transactions(phab))
 
     @pytest.mark.parametrize(
         "projects",

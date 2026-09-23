@@ -669,8 +669,13 @@ Search constraints are named per application and are not interchangeable: `paste
 has `--author` but no `--assigned`, and a constraint borrowed from another app fails with
 `ERR-INVALID-CONSTRAINT`.
 
-`phabfive edit` only implements tasks. A `P` or `K` monogram returns
-`Paste editing not yet implemented` / `Passphrase editing not yet implemented` and exits 1.
+`phabfive edit` only implements tasks, and the two other monograms are refused for
+different reasons. A `P` returns `Paste editing not yet implemented` - pending work. A
+`K` returns `Passphrases cannot be edited: Phorge exposes no passphrase.edit endpoint.
+Credentials must be edited in the web UI.` - not pending work: Phorge exposes
+`passphrase.query` and nothing else, so no flag, token or newer server changes the
+answer. Both exit 1. A create spec's `passphrases:` section is refused offline for the
+same reason.
 
 ## Templates
 

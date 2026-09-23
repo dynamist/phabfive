@@ -512,3 +512,186 @@ def test_paste_search_and_show_emit_the_same_record(phabfive):
     assert listed == shown
     assert shown["Paste"]["Name"] == title
     assert list(shown) == ["Link", "Paste", "Space"]
+
+
+# --------------------------------------------------------------------------
+# Create specs against a live instance (#483, #482, #485)
+# --------------------------------------------------------------------------
+
+
+def test_one_spec_creates_a_project_and_the_tasks_tagged_into_it(
+    phabfive, conduit, tmp_path
+):
+    """#483's acceptance, and the reason `$local-id` exists at all.
+
+    A task tagged into a project the same document creates needs a PHID
+    that does not exist until apply time. The project is created first -
+    the ordering is what makes that true whatever order the sections are
+    written in - and the task carries the PHID it came back as.
+
+    The project is named with a per-run prefix and left behind on purpose:
+    **Conduit cannot delete or archive a project**, so there is nothing to
+    clean up with, and `make reset` is the only cleanup this instance has.
+    """
+    unique = uuid.uuid4().hex[:8]
+    spec = tmp_path / "platform.yaml"
+    spec.write_text(
+        "spec: phorge/v1alpha1\n"
+        "kind: create\n"
+        "projects:\n"
+        f"  - id: platform\n"
+        f'    name: "e2e-spec-{unique}"\n'
+        f'    slugs: ["e2e-spec-{unique}"]\n'
+        "tasks:\n"
+        f'  - title: "e2e-spec-{unique} bootstrap"\n'
+        '    projects: ["$platform"]\n'
+        f'  - title: "e2e-spec-{unique} follow up"\n'
+        '    projects: ["$platform"]\n'
+    )
+
+    records = phabfive("maniphest", "create", "--with", str(spec), json_output=True)
+
+    assert len(records) == 2
+
+    projects = conduit(
+        "project.search", **{"constraints[slugs][0]": f"e2e-spec-{unique}"}
+    )["data"]
+    assert len(projects) == 1
+    project_phid = projects[0]["phid"]
+
+    ids = [int(record["Link"].rsplit("/T", 1)[-1]) for record in records]
+    found = conduit(
+        "maniphest.search",
+        **{
+            "constraints[ids][0]": ids[0],
+            "constraints[ids][1]": ids[1],
+            "attachments[projects]": "1",
+        },
+    )["data"]
+
+    assert len(found) == 2
+    for task in found:
+        assert task["attachments"]["projects"]["projectPHIDs"] == [project_phid]
+
+
+def test_anchoring_subtasks_keeps_the_ones_the_task_already_had(
+    phabfive, create_task, conduit, tmp_path
+):
+    """The data-loss trap the whole phase exists to close.
+
+    An anchor names an existing task and is never written: each new child
+    carries a `parents.add` naming it, so the subtasks it already had
+    cannot be discarded. A `subtasks.set` on the parent - which is what the
+    old template path emitted - would replace the list with the two new
+    ones.
+    """
+    epic, _ = create_task()
+    existing_a, title_a = create_task()
+    existing_b, title_b = create_task()
+
+    def phid_of(monogram):
+        [task] = conduit(
+            "maniphest.search",
+            **{"constraints[ids][0]": int(monogram.lstrip("T"))},
+        )["data"]
+        return task["phid"]
+
+    conduit(
+        "maniphest.edit",
+        **{
+            "objectIdentifier": epic,
+            "transactions[0][type]": "subtasks.add",
+            "transactions[0][value][0]": phid_of(existing_a),
+            "transactions[0][value][1]": phid_of(existing_b),
+        },
+    )
+
+    def subtask_titles():
+        [task] = phabfive("maniphest", "show", epic, json_output=True)
+        return sorted(one["Task"]["Name"] for one in task["Subtasks"])
+
+    before = subtask_titles()
+    assert before == sorted([title_a, title_b])
+
+    unique = uuid.uuid4().hex[:8]
+    spec = tmp_path / "anchor.yaml"
+    spec.write_text(
+        "spec: phorge/v1alpha1\n"
+        "kind: create\n"
+        "tasks:\n"
+        f"  - parent: {epic}\n"
+        "    tasks:\n"
+        f'      - title: "e2e-anchor-{unique} C"\n'
+        f'      - title: "e2e-anchor-{unique} D"\n'
+    )
+
+    phabfive("maniphest", "create", "--with", str(spec))
+
+    after = subtask_titles()
+
+    assert set(before) <= set(after)
+    assert len(after) == 4
+
+
+def test_a_spec_whose_object_is_refused_reports_what_exists(
+    phabfive_raw, conduit, tmp_path
+):
+    """#485 end to end: created, failed and skipped, and exit status 1.
+
+    A title of more than 255 characters is refused by Maniphest itself, so
+    the failure comes from the instance rather than from a mock.
+    """
+    unique = uuid.uuid4().hex[:8]
+    spec = tmp_path / "partial.yaml"
+    spec.write_text(
+        "spec: phorge/v1alpha1\n"
+        "kind: create\n"
+        "tasks:\n"
+        f'  - title: "e2e-partial-{unique} one"\n'
+        f'  - title: "{"x" * 300}"\n'
+        f'  - title: "e2e-partial-{unique} three"\n'
+    )
+
+    result = phabfive_raw(
+        "--format", "jsonl", "maniphest", "create", "--with", str(spec)
+    )
+
+    assert result.returncode == 1
+
+    records = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+
+    assert [one["status"] for one in records] == ["created", "failed", "skipped"]
+    assert records[0]["monogram"].startswith("T")
+    assert "255" in records[1]["reason"]
+    assert "3 of 3" not in result.stderr
+
+    # The one that was created really is there: a report that named an
+    # object it had not created would be worse than no report
+    found = conduit("maniphest.search", **{"constraints[ids][0]": records[0]["id"]})[
+        "data"
+    ]
+    assert found[0]["fields"]["name"] == f"e2e-partial-{unique} one"
+
+
+def test_a_create_spec_refuses_passphrases_offline(phabfive_raw, tmp_path):
+    """Phorge exposes no `passphrase.edit`, so no token is needed to know."""
+    spec = tmp_path / "creds.yaml"
+    spec.write_text(
+        "spec: phorge/v1alpha1\n"
+        "kind: create\n"
+        "passphrases:\n"
+        '  - name: "Deploy key"\n'
+        '    secret: "not-a-real-secret"\n'
+    )
+
+    result = phabfive_raw("--format", "json", "spec", "validate", str(spec))
+
+    assert result.returncode == 1
+
+    [problem] = json.loads(result.stdout)
+
+    assert problem["code"] == "not-creatable"
+    assert "no passphrase.edit endpoint" in problem["reason"]
+    # The section's body is counted, never echoed: it is credential material
+    assert problem["value"] == "1 item(s)"
+    assert "not-a-real-secret" not in result.stdout

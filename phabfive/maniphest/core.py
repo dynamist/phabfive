@@ -2,9 +2,7 @@
 
 """Main Maniphest class that orchestrates all submodules."""
 
-import copy
 import itertools
-import json
 import logging
 import functools
 from pathlib import Path
@@ -15,7 +13,6 @@ from phabfive.constants import (
     MANIPHEST_ORDER_DEFAULT,
     MANIPHEST_ORDER_DIRECTIONS,
     MANIPHEST_ORDER_FIELDS,
-    PRIORITY_DEFAULT,
     STATUS_MAP_CACHE_NAMESPACE,
     TASK_POLICY_FIELDS,
     TASK_POLICY_TRANSACTIONS,
@@ -47,12 +44,9 @@ from phabfive.maniphest.filters import (
 )
 from phabfive.maniphest.formatters import build_task_boards, build_task_display_data
 from phabfive.maniphest.resolvers import (
-    ambiguous_project_message,
     describe_space,
     describe_space_phid,
     fetch_all_spaces,
-    fetch_project_lookup_maps,
-    fetch_projects_by_phid,
     is_exact_monogram,
     resolve_project_phids,
     resolve_project_phids_for_create,
@@ -67,7 +61,6 @@ from phabfive.maniphest.utils import (
 from phabfive.pagination import iter_pages, search_all_pages
 from phabfive.spec.registry import constraint_for, field_by_name, fields_for
 from phabfive.spec.times import parse_time_with_unit
-from phabfive.spec.variables import render_string, resolve_variables
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
 from phabfive.me import is_me
@@ -2283,474 +2276,108 @@ class Maniphest(Phabfive):
         For a program that holds the template as data rather than as a file:
         `config` is what the template file would parse to, with its
         `variables` and `tasks` (see docs/create-templates.md). It is read,
-        never written: the copy this works on is what loses its `variables`
-        and carries the normalized priorities.
+        never written - `Spec.from_data` deep-copies it - so the same dict
+        can be handed in twice.
+
+        Three steps with an inspectable object between them, all of which
+        live in `phabfive.spec.create`: the data becomes a `Spec`, the spec
+        becomes a `CreatePlan` with everything resolved and nothing sent,
+        and the plan is applied. A program that wants the plan itself - to
+        show it, to count it, to serialize it - calls `plan_create` and
+        never this.
+
+        Parameters
+        ----------
+        config : dict
+            The template as data.
+        dry_run : bool
+            Preview rather than create. **Not** a parameter of applying: a
+            dry run builds the plan and never applies it, so the preview
+            cannot drift from what would be sent.
 
         Returns
         -------
         dict
             With "dry_run": True and the "tasks" that would be created, or
             the "task_ids" that were.
+
+        Raises
+        ------
+        phabfive.spec.create.CreateFailed
+            Something was refused partway through. `.report` holds one
+            record per object, so the caller can say what exists now
+            rather than only that it stopped.
         """
+        from phabfive.spec.create import apply_spec, plan_create
+
+        spec = self._create_spec(config)
+        plan = plan_create(self, spec.render())
+
+        if dry_run:
+            # `depth + 1`, because the preview has always indented a
+            # template's top-level tasks by one: the old recursion started
+            # at the document itself, which creates nothing, and counted its
+            # tasks as its children. `CreateItem.depth` is the honest 0 for
+            # an item written at the top of its section.
+            return {
+                "dry_run": True,
+                "tasks": [
+                    {
+                        "depth": item.depth + 1,
+                        "title": item.display.get("title"),
+                        "assignee": item.display.get("assignee"),
+                        "subscribers": list(item.display.get("subscribers") or []),
+                    }
+                    for item in plan.creating
+                ],
+            }
+
+        # `raise_for_failure` and not "raise what the server said": Conduit
+        # has no transactions, so a template whose fiftieth object is
+        # refused has left forty-nine real objects behind, and an exception
+        # carrying only the server's sentence throws away which. `CreateFailed`
+        # carries the record per object - created, failed and skipped - and
+        # the command prints them (#485).
+        report = apply_spec(self, plan).raise_for_failure()
+
+        # `task_ids` and not every id: a spec may create projects too, and a
+        # project's id handed to `_show_tasks_after_write` would be looked
+        # up as a task.
+        return {"task_ids": report.task_ids}
+
+    @staticmethod
+    def _create_spec(config):
+        """One creation template, as data, as a `Spec`.
+
+        The three refusals a template has always answered with, kept here
+        rather than in `phabfive.spec`: they name `tasks`, `variables` and
+        "a creation template" the way the command's users have read them
+        for years, where the envelope's own messages name a document and a
+        spec. Everything past this point is the spec engine.
+        """
+        from phabfive.spec.envelope import Spec
+
         if not isinstance(config, dict):
             raise PhabfiveDataException(
                 "A creation template is a mapping at the root level, not "
                 f"{type(config).__name__}"
             )
 
-        # A program holding the template as data may hand the same dict to
-        # this twice, so neither the `variables` pop below nor the priority
-        # normalization may reach into what the caller still holds
-        root_data = copy.deepcopy(config)
-
-        if dry_run:
-            log.warning("DRY RUN: Tasks will not be created in Phabricator")
-
-        def validate_priorities(task_config):
-            """Validate and normalize the priority of every task in the tree.
-
-            The same check --priority gets, and before anything is fetched or
-            created: an unvalidated priority reaches the server verbatim, and
-            a typo comes back as an opaque Conduit error instead of naming
-            the valid priorities (#465).
-            """
-            priority = task_config.get("priority")
-
-            if priority is not None:
-                # A `-` in YAML is null, and 2 is a number; neither names a
-                # priority, and neither survives validate_priority's .lower()
-                if not isinstance(priority, str):
-                    raise PhabfiveConfigException(
-                        f"priority takes a priority name, not {priority!r}"
-                    )
-
-                # Normalized in place, so the transaction built later carries
-                # the API's spelling of it rather than the template's
-                task_config["priority"] = self._validate_priority(priority)
-
-            for child_task in task_config.get("tasks") or []:
-                validate_priorities(child_task)
-
-        validate_priorities(root_data)
-
-        # Fetch all projects in phabricator, used to map ticket -> projects later.
-        # The map keys lowercased primary names AND slugs/hashtags so that
-        # project references in YAML match case-insensitively,
-        # mirroring resolve_project_phids_for_create() used by the --tag path.
-        project_name_to_id_map, _, ambiguous_project_names = fetch_project_lookup_maps(
-            self.phab
-        )
-
-        log.debug(project_name_to_id_map)
-
-        # Gather and remove variables to avoid using it or polluting the data
-        # later on. The key is optional, and an empty or null one is a template
-        # that defines no variables rather than an error
-        variables = root_data.pop("variables", None) or {}
-
-        # A list or a scalar has no names to render with, and asking it for
-        # .items() is the traceback the command has no handler for
-        if not isinstance(variables, dict):
-            raise PhabfiveConfigException(
-                f"variables takes a mapping of name to value, not {variables!r}"
-            )
-
-        # Resolve declared defaults, then render variables that reference other
-        # variables using dependency resolution. `resolve_variables` is the
-        # library-level shape of `--set`: a second argument of overrides that
-        # beat what the template declares (#471). The command does not pass one
-        # yet, so what it resolves today is the template's own variables.
-        variables = resolve_variables(variables)
-
-        # Main task recursion logic
-        if "tasks" not in root_data:
+        if "tasks" not in config:
             raise PhabfiveDataException(
                 "Config file must contain keyword tasks in the root"
             )
 
-        def render(value):
-            # StrictUndefined, through the one engine in
-            # phabfive.spec.variables (#471): a `{{ sprint_numbr }}` nobody
-            # declares used to render as the empty string and create the
-            # task with the wrong title. It is an error naming the variable
-            # instead, and `{{ x | default("...") }}` is the documented way
-            # to say a name may be missing.
-            return render_string(value, variables) if value else value
+        variables = config.get("variables")
 
-        def template_users(task_config):
-            """What every task in the tree names for assignment and subscribers."""
-            assignment = task_config.get("assignment")
-
-            if assignment is not None and not isinstance(assignment, str):
-                raise PhabfiveConfigException(
-                    f"assignment takes one user, not {assignment!r}"
-                )
-
-            subscribers = task_config.get("subscribers") or []
-
-            # Iterating a string would ask for each letter as a user, and a
-            # mapping for each of its keys
-            if not isinstance(subscribers, list):
-                raise PhabfiveConfigException(
-                    f"subscribers takes a list of users, not {subscribers!r}"
-                )
-
-            # A stray `-` in YAML is a null item, and 1234 is a number
-            not_names = [name for name in subscribers if not isinstance(name, str)]
-
-            if not_names:
-                raise PhabfiveConfigException(
-                    f"subscribers takes usernames, not {not_names[0]!r}"
-                )
-
-            assignments = [render(assignment)] if assignment else []
-            subscribed = [render(name) for name in subscribers]
-
-            for child_task in task_config.get("tasks") or []:
-                child_assignments, child_subscribed = template_users(child_task)
-                assignments += child_assignments
-                subscribed += child_subscribed
-
-            return assignments, subscribed
-
-        # Every user the template names, looked up once for the whole tree
-        # and before any task is created, so that a typo in the tenth task
-        # does not leave nine behind. Only those users are asked about: a
-        # single unpaged user.search saw the first 100 users and no more.
-        assignments, subscribed = template_users(root_data)
-        users = {}
-
-        for values, option in (
-            (assignments, "assignment"),
-            (subscribed, "subscribers"),
-        ):
-            if values:
-                users.update(
-                    self._resolve_users(list(dict.fromkeys(values)), option=option)
-                )
-
-        # The username each PHID was resolved to, for the dry-run preview
-        user_names = {phid: username or phid for phid, username in users.values()}
-
-        # A template can put every task in the same Space, so each one named
-        # is resolved once rather than once per task naming it
-        resolved_spaces = {}
-
-        def space_phid_for(space_name):
-            if space_name not in resolved_spaces:
-                resolved_spaces[space_name] = self._resolve_space(space_name)["phid"]
-
-            return resolved_spaces[space_name]
-
-        # Helper function to slim down transaction handling
-        def add_transaction(t, transaction_type, value):
-            t.append({"type": transaction_type, "value": value})
-
-        def r(data_block, variable_name, variables):
-            """
-            Helper method to simplify Jinja2 rendering of a given value to a set of variables
-            """
-            data = data_block.get(variable_name, None)
-
-            if data:
-                data_block[variable_name] = render(data)
-
-        def pre_process_tasks(task_config):
-            """
-            This is the main parser that can be run recurse in order to sort out an individual ticket and recurse down
-            to pre process each task and to query all internal ID:s and update the datastructure
-            """
-            log.debug("Pre processing tasks")
-            log.debug(task_config)
-
-            output = task_config.copy()
-
-            # Render strings that should be possible to render with Jinja2
-            r(output, "title", variables)
-            r(output, "description", variables)
-
-            # Validate and translate project names to internal project PHID:s
-            project_phids = []
-
-            project_names = output.get("projects") or []
-
-            # Iterating a string would ask for a project per letter, and a
-            # mapping for each of its keys, the way subscribers refuses
-            if not isinstance(project_names, list):
-                raise PhabfiveConfigException(
-                    f"projects takes a list of project names, not {project_names!r}"
-                )
-
-            for project_name in project_names:
-                # A `-` in YAML is a null item, and 1234 is a number; neither
-                # renders, and neither names a project
-                if not isinstance(project_name, str):
-                    raise PhabfiveConfigException(
-                        f"projects takes project names, not {project_name!r}"
-                    )
-
-                # Rendered like every other string field, and before the name
-                # is looked up: a template names a project by variable too
-                project_name = render(project_name)
-
-                ambiguous_phids = ambiguous_project_names.get(project_name.lower())
-                if ambiguous_phids:
-                    raise PhabfiveConfigException(
-                        ambiguous_project_message(
-                            project_name,
-                            fetch_projects_by_phid(self.phab, ambiguous_phids)
-                            or ambiguous_phids,
-                        )
-                    )
-
-                project_phid = project_name_to_id_map.get(project_name.lower(), None)
-
-                if not project_phid:
-                    raise PhabfiveRemoteException(
-                        f"Project '{project_name}' is not found on the phabricator server"
-                    )
-
-                project_phids.append(project_phid)
-
-            output["projects"] = project_phids
-
-            # Translate the assignee and subscribers to the PHIDs resolved above
-            assignment = output.get("assignment")
-
-            if assignment:
-                output["assignment"] = users[render(assignment)][0]
-
-            output["subscribers"] = list(
-                dict.fromkeys(
-                    users[render(name)][0] for name in output.get("subscribers") or []
-                )
+        # A list or a scalar has no names to render with, and asking it for
+        # .items() is the traceback the command has no handler for
+        if variables is not None and not isinstance(variables, dict):
+            raise PhabfiveConfigException(
+                f"variables takes a mapping of name to value, not {variables!r}"
             )
 
-            # Translate the Space to its PHID, refusing a pattern that names
-            # more than one the way --space does
-            r(output, "space", variables)
-            space_name = output.get("space")
-
-            if space_name:
-                output["space"] = space_phid_for(space_name)
-
-            # Recurse down and process all child tasks
-            processed_child_tasks = []
-            child_tasks = task_config.get("tasks", None)
-
-            if child_tasks:
-                processed_child_tasks = [
-                    pre_process_tasks(task) for task in child_tasks
-                ]
-
-            output["tasks"] = processed_child_tasks
-
-            return output
-
-        def recurse_build_transactions(task_config):
-            """
-            This block recurses over all tasks and builds the transaction set for this ticket and stores it
-            in the data structure.
-            """
-            log.debug("Building transactions for task_config")
-            log.debug(task_config)
-
-            # In order to not cause issues with injecting data in a recurse traversal, copy the input,
-            # modify the data and return data that is later used to build a new full data structure
-            output = task_config.copy()
-
-            transactions = []
-
-            if "title" in task_config and "description" in task_config:
-                add_transaction(transactions, "title", task_config["title"])
-                add_transaction(transactions, "description", task_config["description"])
-                # Validated and normalized by validate_priorities above; a
-                # `priority:` with nothing after it is no priority at all
-                add_transaction(
-                    transactions,
-                    "priority",
-                    task_config.get("priority") or PRIORITY_DEFAULT,
-                )
-
-                assignment = task_config.get("assignment")
-
-                if assignment:
-                    add_transaction(transactions, "owner", assignment)
-
-                projects = task_config.get("projects", [])
-
-                if projects:
-                    add_transaction(transactions, "projects.set", projects)
-
-                subscribers = task_config.get("subscribers", [])
-
-                if subscribers:
-                    add_transaction(transactions, "subscribers.set", subscribers)
-
-                space_phid = task_config.get("space")
-
-                if space_phid:
-                    add_transaction(transactions, "space", space_phid)
-
-                # Prepare all parent and subtasks, and check if we have a parent task from the config file
-                subtasks = task_config.get("subtasks", [])
-
-                if subtasks:
-                    subtasks_phids = []
-
-                    for ticket_id in subtasks:
-                        search_result = self.phab.maniphest.search(
-                            constraints={"ids": [int(ticket_id[1:])]},
-                        )
-
-                        if len(search_result["data"]) != 1:
-                            raise PhabfiveRemoteException(
-                                f"Unable to find subtask ticket in phabricator instance with ID={ticket_id}"
-                            )
-
-                        subtasks_phids.append(search_result["data"][0]["phid"])
-
-                    add_transaction(transactions, "subtasks.set", subtasks_phids)
-
-                parents = task_config.get("parents", [])
-
-                if parents:
-                    parent_phids = []
-
-                    for ticket_id in parents:
-                        search_result = self.phab.maniphest.search(
-                            constraints={"ids": [int(ticket_id[1:])]},
-                        )
-
-                        if len(search_result["data"]) != 1:
-                            raise PhabfiveRemoteException(
-                                f"Unable to find parent ticket in phabricator instance with ID={ticket_id}"
-                            )
-
-                        parent_phids.append(search_result["data"][0]["phid"])
-
-                    add_transaction(transactions, "parents.set", parent_phids)
-            elif "tasks" not in task_config:
-                log.warning(
-                    "Required fields 'title' and 'description' is not present in this data block, skipping ticket creation"
-                )
-
-            output["transactions"] = transactions
-
-            processed_child_tasks = []
-            child_tasks = task_config.get("tasks", None)
-
-            if child_tasks:
-                # If there is child tasks to create, recurse down to all of them one by one
-                processed_child_tasks = [
-                    recurse_build_transactions(task) for task in child_tasks
-                ]
-            else:
-                processed_child_tasks = []
-
-            output["tasks"] = processed_child_tasks
-
-            return output
-
-        # List to collect dry-run tasks (nonlocal to be accessible in nested function)
-        dry_run_tasks = []
-
-        # The IDs of the tasks actually created, in the order the recursion
-        # created them. Without this the method returned None on a real run
-        # and a caller had no way to name what it had just made, which is
-        # why `--with` could not answer `--format` (#344).
-        created_ids = []
-
-        def recurse_commit_transactions(task_config, parent_task_config, depth=0):
-            """
-            This recurse functions purpose is to iterate over all tickets, commit them to phabricator
-            and link them to eachother via the ticket hiearchy or explicit parent/subtask links.
-
-            task_config is the current task to create and the parent_task_config is if we have a tree
-            of tickets defined in our config file.
-            """
-            log.debug("\n -- Commiting task")
-            log.debug(json.dumps(task_config, indent=2))
-            log.debug(" ** parent block")
-            log.debug(json.dumps(parent_task_config, indent=2))
-
-            transactions_to_commit = task_config.get("transactions", [])
-
-            if transactions_to_commit:
-                # Parent ticket based on the task hiearchy defined in the config file we parsed is different
-                # from the explicit "ticket parent" that can be defined
-                if parent_task_config and "phid" in parent_task_config:
-                    add_transaction(
-                        transactions_to_commit,
-                        "parents.add",
-                        [parent_task_config["phid"]],
-                    )
-
-                log.debug(" -- transactions to commit")
-                log.debug(transactions_to_commit)
-
-                if dry_run:
-                    # Extract title from transactions for display
-                    title = next(
-                        (
-                            t["value"]
-                            for t in transactions_to_commit
-                            if t["type"] == "title"
-                        ),
-                        "<no title>",
-                    )
-                    values = {t["type"]: t["value"] for t in transactions_to_commit}
-                    owner = values.get("owner")
-                    dry_run_tasks.append(
-                        {
-                            "depth": depth,
-                            "title": title,
-                            "assignee": user_names[owner] if owner else None,
-                            "subscribers": [
-                                user_names[phid]
-                                for phid in values.get("subscribers.set", [])
-                            ],
-                        }
-                    )
-                else:
-                    result = self.phab.maniphest.edit(
-                        transactions=transactions_to_commit,
-                    )
-
-                    # Store the newly created ticket ID in the data structure so child tickets can look it up
-                    task_config["phid"] = str(result["object"]["phid"])
-                    created_ids.append(result["object"]["id"])
-            child_tasks = task_config.get("tasks", None)
-
-            if not transactions_to_commit and not child_tasks:
-                log.warning(
-                    "No transactions to commit and no child tasks - possible data issue"
-                )
-
-            if child_tasks:
-                for child_task in child_tasks:
-                    recurse_commit_transactions(child_task, task_config, depth + 1)
-
-        pre_process_output = pre_process_tasks(root_data)
-        log.debug("Final pre_process_output")
-        log.debug(json.dumps(pre_process_output, indent=2))
-        log.debug("\n----------------\n")
-
-        parsed_root_data = recurse_build_transactions(pre_process_output)
-        log.debug(" -- Final built transactions")
-        log.debug(json.dumps(parsed_root_data, indent=2))
-        log.debug(" -- transactions for all tickets")
-        log.debug(parsed_root_data)
-        log.debug("\n")
-
-        # Always start with a blank parent
-        recurse_commit_transactions(parsed_root_data, None)
-
-        # Return dry-run data if in dry-run mode
-        if dry_run:
-            return {"dry_run": True, "tasks": dry_run_tasks}
-
-        return {"task_ids": created_ids}
+        return Spec.from_data(config, kind="create")
 
     def create_task(
         self,

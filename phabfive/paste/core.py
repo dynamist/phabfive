@@ -49,6 +49,60 @@ PASTE_API_ORDERS = {
 PASTE_SORT_KEYS = {"created": lambda paste: paste.get("id") or 0}
 
 
+#: The Conduit transaction types that set a paste's policies. A paste has a
+#: view policy and an edit policy and no join policy, which is where its
+#: policy set differs from a project's.
+PASTE_POLICY_TRANSACTIONS = {
+    "view": "view",
+    "edit": "edit",
+}
+
+#: What each of them is called in a preview, which is what the web UI calls
+#: them rather than what the API calls them.
+PASTE_POLICY_LABELS = {
+    "view": "Visible To",
+    "edit": "Editable By",
+}
+
+
+def _values_and_names(values):
+    """One list key as ``(values, names)``, however the caller wrote it.
+
+    An entry is either a value or a ``(value, shown)`` pair: the command has
+    usernames and project names to send and to show, while a create spec has
+    PHIDs to send and the names the instance answered with to show. Order is
+    kept and a value named twice is sent once, so a preview lists exactly
+    what is subscribed.
+    """
+    pairs = [
+        (one[0], str(one[1]))
+        if isinstance(one, tuple) and len(one) == 2
+        else (one, str(one))
+        for one in (values or [])
+    ]
+    named = {}
+
+    for value, shown in pairs:
+        named.setdefault(value, shown)
+
+    return list(named), list(named.values())
+
+
+def _content_summary(content):
+    """A paste's text as one line, for a preview that must not print it all.
+
+    A paste is often a whole file, and a change record holds one string per
+    field. The text itself is what the command's own preview prints; this is
+    what a spec's dry run over twenty objects can afford.
+    """
+    if content is None:
+        return ""
+
+    lines = content.split("\n")
+
+    return f"({len(lines)} lines, {len(content)} chars)"
+
+
 def paste_id_list(value, option="--ids"):
     """Paste monograms as the integers ``paste.search`` constrains on.
 
@@ -224,8 +278,117 @@ class Paste(Phabfive):
             subscribers=subscribers,
         )
 
+    def paste_create_transactions(
+        self,
+        title=None,
+        *,
+        content=None,
+        language=None,
+        tags=None,
+        subscribers=None,
+        policies=None,
+    ):
+        """The transactions that create one paste, and what they would set.
+
+        The build half of the build/apply split `project create` and
+        `diffusion repo create` already have, and the half a create spec
+        calls: nothing is looked up and nothing is sent, so a caller that
+        resolved every name in a whole document in one pass builds each
+        paste from what came back.
+
+        Paste's field names are its own and not maniphest's: the transaction
+        is ``title`` where a task's is ``name``, and `paste.search` answers
+        with ``fields.title`` where `maniphest.search` answers with
+        ``fields.name``. The web UI calls both "Name", which is what the
+        preview says.
+
+        Parameters
+        ----------
+        title : str, optional
+            What the paste is called; "Name" in the web UI.
+        content : str, optional
+            The paste's text, sent as the ``text`` transaction.
+        language : str, optional
+            Language for syntax highlighting.
+        tags : list, optional
+            Projects to tag it into, as values or ``(value, shown)`` pairs.
+            The second element is what the preview prints, so a PHID never
+            has to reach a person.
+        subscribers : list, optional
+            Subscribers, as values or ``(value, shown)`` pairs.
+        policies : mapping, optional
+            ``{"view"|"edit": value}``, already through
+            `phabfive.policy.resolve_policy_value`. A paste has no join
+            policy.
+
+        Returns
+        -------
+        tuple
+            (transactions, changes), where a change is the
+            ``{"field", "old", "new"}`` record every preview in phabfive
+            renders.
+        """
+        tag_values, tag_names = _values_and_names(tags)
+        subscriber_values, subscriber_names = _values_and_names(subscribers)
+
+        asked = [
+            ("title", title, "Name", title),
+            ("text", content, "Content", _content_summary(content)),
+            ("language", language, "Language", language),
+            ("projects.add", tag_values, "Tags", ", ".join(tag_names)),
+            (
+                "subscribers.add",
+                subscriber_values,
+                "Subscribers",
+                ", ".join(subscriber_names),
+            ),
+        ]
+
+        for key, transaction in PASTE_POLICY_TRANSACTIONS.items():
+            value = (policies or {}).get(key)
+
+            if value is not None:
+                asked.append((transaction, value, PASTE_POLICY_LABELS[key], str(value)))
+
+        # Phabricator does not take None as a value, so a key that was not
+        # asked for is left out rather than sent empty.
+        transactions = [
+            {"type": kind, "value": value}
+            for kind, value, _, _ in asked
+            if value is not None
+        ]
+        changes = [
+            {"field": label, "old": None, "new": str(shown)}
+            for _, value, label, shown in asked
+            if value is not None and value != []
+        ]
+
+        return transactions, changes
+
+    def apply_paste_create(self, transactions):
+        """Send prepared transactions to create a paste.
+
+        Returns
+        -------
+        dict
+            {"id": ..., "phid": ...} of the new paste
+        """
+        try:
+            id_and_phid = self.phab.paste.edit(transactions=transactions)
+        except PhabfiveAPIException as a:
+            raise PhabfiveDataException(str(a).replace("ERR-CONDUIT-CORE: ", ""))
+
+        return id_and_phid["object"]
+
     def create_paste_from_content(
-        self, title=None, content=None, language=None, tags=None, subscribers=None
+        self,
+        title=None,
+        content=None,
+        language=None,
+        tags=None,
+        subscribers=None,
+        visible_to=None,
+        editable_by=None,
     ):
         """
         Create a paste with the given content.
@@ -235,31 +398,42 @@ class Paste(Phabfive):
         :type language: str
         :type tags: list
         :type subscribers: list
+        :type visible_to: str
+        :type editable_by: str
 
         :rtype: dict
         """
-        tags = tags if tags else []
-        subscribers = subscribers if subscribers else []
+        transactions, _ = self.paste_create_transactions(
+            title,
+            content=content,
+            language=language,
+            tags=tags,
+            subscribers=subscribers,
+            policies=self.resolve_paste_policies(
+                visible_to=visible_to, editable_by=editable_by
+            ),
+        )
 
-        transactions_values = [
-            {"type": "title", "value": title},
-            {"type": "text", "value": content},
-            {"type": "language", "value": language},
-            {"type": "projects.add", "value": tags},
-            {"type": "subscribers.add", "value": subscribers},
+        return self.apply_paste_create(transactions)
+
+    def resolve_paste_policies(self, visible_to=None, editable_by=None):
+        """The two policy keys a paste has, as ``{key: value}``, resolved once.
+
+        A paste has a view policy and an edit policy and no join policy,
+        which is the one place its policy set differs from a project's.
+        """
+        from phabfive.policy import resolve_policy_value
+
+        asked = [
+            ("view", visible_to, "--visible-to"),
+            ("edit", editable_by, "--editable-by"),
         ]
 
-        # Phabricator does not take None as a value
-        transactions = [
-            item for item in transactions_values if None not in item.values()
-        ]
-
-        try:
-            id_and_phid = self.phab.paste.edit(transactions=transactions)
-        except PhabfiveAPIException as a:
-            raise PhabfiveDataException(str(a).replace("ERR-CONDUIT-CORE: ", ""))
-
-        return id_and_phid["object"]
+        return {
+            key: resolve_policy_value(self.phab, value, option=option)
+            for key, value, option in asked
+            if value is not None
+        }
 
     def get_pastes(
         self, query_key=None, attachments=None, constraints=None, limit=None, order=None
@@ -590,6 +764,8 @@ class Paste(Phabfive):
 
 __all__ = [
     "PASTE_API_ORDERS",
+    "PASTE_POLICY_LABELS",
+    "PASTE_POLICY_TRANSACTIONS",
     "PASTE_SORT_KEYS",
     "Paste",
     "build_paste_search_constraints",
