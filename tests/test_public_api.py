@@ -58,6 +58,7 @@ BANNED = [
     "phabfive.passphrase",
     "phabfive.paste",
     "phabfive.project",
+    "phabfive.spec",
     "phabfive.user",
 ]
 
@@ -296,3 +297,176 @@ class TestLaziness:
         """Catching phabfive's errors must not cost the Conduit client."""
         code = "import phabfive; phabfive.PhabfiveException"
         assert _loaded_after(code, ["phabricator", "requests"]) == "[]"
+
+
+class TestSpecSurface:
+    """`Spec` and `Problem` are the spec's two top-level names (#475).
+
+    A web frontend builds a spec from a request body, validates it offline
+    with no token and no network, and only then constructs an app. That
+    whole first half must be reachable as `from phabfive import Spec`, and
+    reaching it must not cost the command line.
+    """
+
+    def test_spec_and_problem_are_exported(self):
+        assert {"Problem", "Spec"} <= set(phabfive.__all__)
+
+    @pytest.mark.parametrize("name", ["Problem", "Spec"])
+    def test_resolves_from_the_subpackage_not_a_module_inside_it(self, name):
+        """The rule the app classes already follow: map to the subpackage."""
+        assert phabfive._LAZY[name] == "phabfive.spec"
+
+    def test_the_rest_of_the_spec_stays_one_import_deeper(self):
+        """`load_spec` and friends are public, but not at the top level.
+
+        The tier `transitions`, `policy` and `ordering` occupy: in the
+        subpackage's `__all__`, reached with `from phabfive.spec import ...`,
+        and deliberately absent from the package's promise.
+        """
+        from phabfive import spec
+
+        deeper = {
+            "Envelope",
+            "Field",
+            "FieldKind",
+            "Kind",
+            "Metadata",
+            "Severity",
+            "build_schema",
+            "load_spec",
+            "parse_spec",
+            "spec_keys",
+            "validate_offline",
+            "validate_online",
+        }
+        assert deeper <= set(spec.__all__)
+        assert not deeper & set(phabfive.__all__)
+        for name in deeper:
+            assert hasattr(spec, name)
+
+    def test_touching_spec_does_not_import_the_cli(self):
+        """The acceptance test of #475, and the reason `Spec` is lazy.
+
+        `phabfive/cli/__init__.py` sets TYPER_USE_RICH as it imports. A
+        program that only ever asks for `phabfive.Spec` must not have its
+        environment rewritten underneath it.
+        """
+        assert _loaded_after("import phabfive; phabfive.Spec", CLI_ONLY) == "[]"
+
+    def test_touching_spec_does_not_set_typer_use_rich(self):
+        out = _run(
+            "import os; import phabfive; phabfive.Spec; "
+            "print(os.environ.get('TYPER_USE_RICH'))"
+        )
+        assert out == "None"
+
+    def test_touching_spec_does_not_import_the_client(self):
+        """Offline is offline: no phabricator, no requests, no terminal.
+
+        rich is in the list because the plain output defaults are what keep
+        a record holding `str` rather than `rich.Text`, and a library that
+        never renders has no use for it.
+        """
+        code = "import phabfive; phabfive.Spec; phabfive.Problem"
+        assert _loaded_after(code, ["phabricator", "requests", "rich"]) == "[]"
+
+    def test_validating_offline_needs_no_configuration(self, tmp_path):
+        """The library half of the web-frontend flow, in a bare interpreter.
+
+        An empty HOME and no PHAB_* variables leave nothing to discover, so
+        this fails if anything on the path reads `~/.arcrc`, `.arcconfig` or
+        `~/.config/phabfive.yaml` -- and the environment is compared before
+        and after, because a library must not rewrite it.
+
+        The spec has two mistakes and gets back two problems from one call,
+        which is what makes the result renderable as per-field form errors
+        rather than as the first thing that went wrong.
+        """
+        code = (
+            "import json, os, sys; before = dict(os.environ); import phabfive; "
+            "spec = phabfive.Spec.from_data("
+            "{'kind': 'create', 'tasks': [{'title': '{{ nope }}', "
+            "'projects': ['$missing']}]}); "
+            "problems = spec.validate_offline(); "
+            "print(json.dumps({"
+            "'codes': [p.code for p in problems], "
+            "'problems': [isinstance(p, phabfive.Problem) for p in problems], "
+            "'environ': before == dict(os.environ), "
+            "'loaded': [n for n in ('phabricator', 'requests', 'phabfive.core', "
+            "'phabfive.conduit', 'phabfive.cli') if n in sys.modules]}))"
+        )
+        env = {k: v for k, v in os.environ.items() if not k.startswith("PHAB_")}
+        env["HOME"] = str(tmp_path)
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert json.loads(result.stdout) == {
+            "codes": ["undefined-variable", "unknown-local-id"],
+            "problems": [True, True],
+            "environ": True,
+            "loaded": [],
+        }
+
+
+class TestFrozenBuildSeesEveryLazyModule:
+    """PyInstaller cannot follow `import_module(<variable>)`.
+
+    `phabfive/__init__.py` resolves every public name that way, so a module
+    only `_LAZY` reaches is missing from the six standalone executables and
+    nothing in the release pipeline says so -- the binary just dies on the
+    first consumer who touches the name. The build is whole today because
+    `phabfive/cli/` imports each of those modules literally somewhere, which
+    the module graph does follow; a `--hidden-import` is what covers one it
+    does not.
+    """
+
+    WORKFLOW = Path(__file__).resolve().parent.parent / ".github/workflows/release.yml"
+
+    def _hidden_imports(self):
+        text = self.WORKFLOW.read_text(encoding="utf-8")
+        return {
+            line.split("--hidden-import", 1)[1].strip().rstrip("\\").strip()
+            for line in text.splitlines()
+            if "--hidden-import" in line and not line.lstrip().startswith("#")
+        }
+
+    def _imported_by_the_cli(self):
+        """Every module named by a literal import anywhere under phabfive/cli/.
+
+        Function-level imports count: PyInstaller's module graph reads them
+        too. What it cannot read is a module name that only ever exists as a
+        dict value.
+        """
+        modules = set()
+        cli = Path(__file__).resolve().parent.parent / "phabfive" / "cli"
+        for path in sorted(cli.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                    modules.add(node.module)
+                elif isinstance(node, ast.Import):
+                    modules.update(alias.name for alias in node.names)
+        return modules
+
+    def test_every_lazy_module_is_reachable_from_a_frozen_build(self):
+        reachable = self._imported_by_the_cli() | self._hidden_imports()
+        missing = sorted(set(phabfive._LAZY.values()) - reachable)
+        assert not missing, (
+            "only _LAZY reaches these, so a frozen build loses them: "
+            + ", ".join(missing)
+        )
+
+    def test_the_spec_is_a_hidden_import(self):
+        """Pinned by name: `phabfive.Spec` is the consumer's entry point.
+
+        `phabfive/cli/spec.py` does import it, so the build happens to work
+        without this line -- but the library surface must not depend on the
+        command that happens to share it.
+        """
+        assert "phabfive.spec" in self._hidden_imports()
+        assert "phabfive.cli.spec" in self._hidden_imports()
