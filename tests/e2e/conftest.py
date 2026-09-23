@@ -166,9 +166,48 @@ def conduit(live_env):
     return call
 
 
+def _repositories_not_inactive(conduit):
+    """Every repository the instance still runs daemons for.
+
+    `constraints[status]=open` is the server-side half of that. Each
+    record's status is checked as well, because Conduit answers a
+    constraint value it does not recognise by ignoring it rather than by
+    failing - `constraints[status]=active` silently returns all 57
+    repositories where `open` returns the 18 active ones - so one wrong
+    word would otherwise put the permanent importers straight back into
+    the wait. The check is `!= "inactive"` rather than `== "active"` so
+    that a record whose status this cannot read is kept: an unknown
+    status has to mean keep waiting, or a renamed field would quietly
+    turn the wait into a no-op and make the tests that depend on it flaky
+    instead of failing.
+
+    The cursor is followed because a first page is not an answer. Conduit
+    pages at 100 by default, and an importing repository on page two
+    would be invisible - the wait would end early, which is the same
+    quiet flakiness again. The product's own `fetch_repositories` pages
+    for exactly this reason.
+    """
+    after = None
+
+    while True:
+        params = {"constraints[status]": "open"}
+        if after is not None:
+            params["after"] = after
+
+        page = conduit("diffusion.repository.search", **params)
+
+        yield from (
+            repo for repo in page["data"] if repo["fields"].get("status") != "inactive"
+        )
+
+        after = page["cursor"]["after"]
+        if after is None:
+            return
+
+
 @pytest.fixture(scope="session")
 def settled_repositories(conduit):
-    """Wait until no repository is still importing.
+    """Wait until no active repository is still importing.
 
     Phorge marks a hosted repository as importing until the daemons have
     finished its initial import, and the seeder does not wait for that -
@@ -177,21 +216,46 @@ def settled_repositories(conduit):
     therefore see `Importing` flip between two of its own invocations,
     which reads as the formats disagreeing when what actually changed was
     the repository. Asking for this first makes the four runs comparable.
+
+    Only active repositories are waited on. Phorge runs no daemons for an
+    inactive repository, so one deactivated mid-import keeps `isImporting`
+    true for good, and waiting on it means waiting out the whole deadline
+    on every later run - which is what the `create_repository` teardown
+    goes to some trouble to avoid creating more of.
+
+    Excluding them loses nothing, and not because the commands under test
+    hide them: `repo list all` lists every status, and `Importing` is on
+    every record it prints. It is the same fact that makes the wait
+    futile that makes the wait unnecessary - no daemon ever touches an
+    inactive repository, so its `isImporting` is frozen, and a frozen
+    value cannot flip between two invocations of the same command. What
+    this fixture is here to rule out is a value that moves.
+
+    Running out of the deadline skips rather than fails. It says the
+    daemons are not running or have not caught up, which is a fact about
+    the instance and never a phabfive regression, and it leaves the
+    format comparison with no stable data to compare.
     """
     deadline = time.monotonic() + 180
 
     while True:
-        repos = conduit("diffusion.repository.search")["data"]
+        importing = [
+            repo
+            for repo in _repositories_not_inactive(conduit)
+            if repo["fields"].get("isImporting")
+        ]
 
-        if not any(repo["fields"].get("isImporting") for repo in repos):
+        if not importing:
             return
 
-        assert time.monotonic() < deadline, (
-            "repositories were still importing after 180s: "
-            + ", ".join(
-                f"R{repo['id']}" for repo in repos if repo["fields"].get("isImporting")
+        if time.monotonic() >= deadline:
+            pytest.skip(
+                "instance state, not a phabfive failure: active repositories were "
+                "still importing after 180s: "
+                + ", ".join(f"R{repo['id']}" for repo in importing)
+                + " - check that the Phorge daemons are running"
             )
-        )
+
         time.sleep(2)
 
 
