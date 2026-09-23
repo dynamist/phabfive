@@ -16,6 +16,7 @@ of every import that would make either of those expensive.
 
 import enum
 from dataclasses import dataclass
+from dataclasses import field as _field
 from types import MappingProxyType
 from typing import Mapping, Optional
 
@@ -126,7 +127,12 @@ class Field:
     verbs: frozenset[str]
     cli: Optional[str] = None
     constraint: Optional[str] = None
-    constraints: Mapping[str, str] = _NO_CONSTRAINTS
+    # A MappingProxyType is immutable, but it is also *unhashable*, and an
+    # unhashable default is what dataclasses on 3.11 refuses as mutable.
+    # 3.10 and 3.14 accept it, so only the middle of the supported range
+    # broke, and only in CI. The factory hands back the one shared proxy,
+    # so a Field still costs nothing.
+    constraints: Mapping[str, str] = _field(default_factory=lambda: _NO_CONSTRAINTS)
     multiple: bool = False
     monograms: tuple[str, ...] = ()
     choices: tuple[str, ...] = ()
