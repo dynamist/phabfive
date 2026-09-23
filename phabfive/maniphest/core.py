@@ -34,8 +34,10 @@ from phabfive.maniphest.fetchers import (
     fetch_project_names_for_boards,
     fetch_task_relationships,
     fallback_status_map,
+    fetch_api_priority_values,
     fetch_api_status_map,
     get_api_priority_map,
+    get_column_info,
 )
 from phabfive.maniphest.filters import (
     task_matches_any_pattern,
@@ -62,13 +64,14 @@ from phabfive.maniphest.utils import (
     days_ago_to_timestamp,
     sort_tasks,
 )
-from phabfive.spec.registry import spec_keys
+from phabfive.pagination import iter_pages, search_all_pages
+from phabfive.spec.registry import constraint_for, field_by_name, fields_for
 from phabfive.spec.times import parse_time_with_unit
 from phabfive.spec.variables import render_string, resolve_variables
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import validate_priority, validate_status
 from phabfive.me import is_me
-from phabfive.options import split_list_option
+from phabfive.options import split_list_option, value_list
 from phabfive.policy import (
     policy_label,
     policy_lockout_message,
@@ -102,6 +105,146 @@ def _once_per_instance(method):
             return value
 
     return wrapper
+
+
+#: The constraints `task_search` sends only as an optimisation, and which it
+#: may therefore drop and ask again without. Each is a *lift*: a filter that
+#: is applied in Python either way, sent as a constraint so the server
+#: narrows what crosses the wire. An instance that does not know one of them
+#: (#434 - Phabricator and Phorge do not answer the same constraints) gets
+#: the same search without it, rather than an error for a search that used
+#: to work. Every other constraint decides results and must never be dropped.
+OPTIONAL_CONSTRAINTS = ("priorities", "columnPHIDs")
+
+#: Conduit's answer when an instance does not know a constraint.
+INVALID_CONSTRAINT = "ERR-INVALID-CONSTRAINT"
+
+
+def _search_key_for_constraint():
+    """Conduit constraint name -> the search key a person wrote for it.
+
+    So that an instance refusing ``closerPHIDs`` can be answered with
+    ``closed-by``, which is the half of the exchange the user chose. Built
+    from the registry rather than restated, so a key declared there cannot
+    drift out of the message.
+    """
+    keys = {}
+
+    for field in fields_for("task", "search"):
+        constraint = constraint_for(field, "task")
+        if constraint:
+            keys.setdefault(constraint, field.name)
+
+    return keys
+
+
+def _value_list(value):
+    """A comma-separated string, or a list, as a list of strings.
+
+    The reading is `phabfive.options.value_list`, which every app's list
+    filters share. The one thing maniphest wants on top is ``None`` rather
+    than an empty list for nothing at all: an empty constraint list is a
+    filter matching nothing, which is never what an absent option meant.
+    """
+    return value_list(value) or None
+
+
+def _task_id_list(value, option):
+    """Task monograms as the integers ``maniphest.search`` constrains on.
+
+    `phabfive.spec.search.task_ids` itself, which is the one grammar every
+    key that takes a task id reads: ``"T123,T456"``, ``["T123", "T456"]``
+    and a list whose entries hold commas. Not a second copy of it - this one
+    used to accept a bare ``123`` while ``--include`` refused the same value
+    on the same command, and `monograms=("T",)` in the registry is what both
+    are declared as.
+
+    Raises
+    ------
+    PhabfiveInputException
+        For anything that is not a task monogram. Another application's
+        monogram is not a task, so ``P45`` is refused by name rather than
+        sent as the id 45.
+    """
+    from phabfive.spec.search import task_ids
+
+    return task_ids(value, option=option)
+
+
+def _lift_types(key):
+    """Which condition types of one search key may become a constraint.
+
+    Read off the `Field` rather than written here: `Field.lifts` is where
+    the rule is declared, and a declaration nothing reads is a comment with
+    a mirror test. Changing a field's `lifts` to `()` therefore really does
+    stop that filter being narrowed server-side.
+    """
+    field = field_by_name(key, "task", "search")
+
+    return field.lifts if field is not None else ()
+
+
+def current_state_targets(patterns, key, lifts=None):
+    """The values a transition filter demands an object currently be in.
+
+    A pattern's conditions are ANDed, so a pattern holding a non-negated
+    ``in:`` condition can only match objects whose current state is that
+    condition's value, whatever else the pattern also asks about. When
+    *every* pattern has one, the union over the patterns is a superset of
+    what the filter will keep - which is exactly what a constraint may
+    narrow the fetch to, with the filter still deciding.
+
+    A pattern without one - ``been:High``, ``from:Low``, ``raised``,
+    ``not:in:Low`` - can match an object in any current state, so there is
+    nothing to narrow with and the answer is ``None``: all or nothing,
+    because narrowing on behalf of only some of an OR would drop matches.
+
+    Parameters
+    ----------
+    patterns : list or None
+        ColumnPattern, PriorityPattern or StatusPattern objects.
+    key : str
+        The condition key holding the value, i.e. "column", "priority" or
+        "status".
+    lifts : sequence of str, optional
+        The condition types that name a current state. The default is the
+        key's own `Field.lifts` from `phabfive.spec.registry`, which is the
+        single declaration of this rule; an empty one means the filter is
+        never narrowed.
+
+    Returns
+    -------
+    list or None
+        The distinct values, in the order the patterns name them, or None
+        when the filter cannot be narrowed.
+    """
+    if not patterns:
+        return None
+
+    liftable = frozenset(_lift_types(key) if lifts is None else lifts)
+
+    if not liftable:
+        return None
+
+    targets = []
+
+    for pattern in patterns:
+        wanted = [
+            condition[key]
+            for condition in pattern.conditions
+            if condition.get("type") in liftable
+            and not condition.get("negated")
+            and condition.get(key)
+        ]
+
+        if not wanted:
+            return None
+
+        for value in wanted:
+            if value not in targets:
+                targets.append(value)
+
+    return targets
 
 
 class Maniphest(Phabfive):
@@ -189,6 +332,29 @@ class Maniphest(Phabfive):
     def _get_api_priority_map(self):
         """Get mapping from Phabricator API numeric values to human-readable priority names."""
         return get_api_priority_map()
+
+    @_once_per_instance
+    def _get_api_priority_values(self):
+        """This instance's own priority spellings, name and keyword to value.
+
+        Asked of `maniphest.priority.search` rather than read off
+        `get_api_priority_map`, which is a constant: an instance that
+        relabelled a priority - or Phorge's own stock table, which calls 90
+        "Needs Triage" and not "Triage" - is not described by it, and
+        narrowing a search by a value guessed from it returns the wrong
+        tasks silently.
+
+        An empty mapping means the question could not be answered, and the
+        one caller answers that by not narrowing at all.
+        """
+        try:
+            return fetch_api_priority_values(self.phab)
+        except Exception as e:
+            log.debug(
+                f"Could not read this instance's priorities ({e}); "
+                "a --priority filter will not be narrowed server-side"
+            )
+            return {}
 
     @_once_per_instance
     def _get_api_status_map(self):
@@ -659,12 +825,18 @@ class Maniphest(Phabfive):
 
     def _load_search_config(self, template_path):
         """
-        Load search parameters from a YAML file (supports multi-document).
+        Load search parameters from a spec file (supports multi-document).
+
+        The reading is `phabfive.spec`'s: one loader for every spec phabfive
+        holds, which is what lets a search template be written as YAML, JSON
+        or TOML and read the same way. This adds only what the command has
+        always been handed on top - the legacy per-search mapping, and the
+        refusal of a key no `Field` declares.
 
         Parameters
         ----------
         template_path : str
-            Path to the YAML template file containing search parameters
+            Path to the spec file containing search parameters
 
         Returns
         -------
@@ -677,61 +849,40 @@ class Maniphest(Phabfive):
         PhabfiveException
             If the template file is invalid or contains unsupported parameters
         """
-        template_file = Path(template_path)
+        from phabfive.spec import load_spec
+        from phabfive.spec.search import check_search_params
 
-        if not template_file.exists():
-            raise PhabfiveConfigException(f"Template file not found: {template_path}")
-
-        if not template_file.is_file():
-            raise PhabfiveConfigException(f"Path is not a file: {template_path}")
-
-        try:
-            with open(template_file, "r", encoding="utf-8") as f:
-                yaml_loader = YAML()
-                # Load all documents from the YAML file
-                documents = list(yaml_loader.load_all(f))
-        except Exception as e:
-            raise PhabfiveDataException(
-                f"Failed to parse template file {template_path}: {e}"
-            )
-
-        if not documents:
-            raise PhabfiveDataException("Template file contains no documents")
+        # kind="search" rather than inference: a search template may legally
+        # carry only `title:` and `description:` with no `search:` key at
+        # all, and nothing could tell that from a create spec.
+        spec = load_spec(template_path, kind="search")
 
         search_configs = []
-        # Derived from the one Field declaration per key, so a key the
-        # command reads and this refuses cannot happen again (#295).
-        supported_params = spec_keys("task", "search")
 
-        for i, data in enumerate(documents):
-            if not isinstance(data, dict):
-                raise PhabfiveDataException(
-                    f"Document {i + 1} in YAML file must contain a dictionary at root level"
-                )
+        for index, item in enumerate(spec.items("search"), start=1):
+            search_params = item.get("search", {})
 
-            search_params = data.get("search", {})
-            if not isinstance(search_params, dict):
-                raise PhabfiveDataException(
-                    f"Document {i + 1}: 'search' section must be a dictionary"
-                )
-
-            # Validate supported parameters
-            invalid_params = set(search_params.keys()) - supported_params
-            if invalid_params:
-                raise PhabfiveDataException(
-                    f"Document {i + 1}: Unsupported search parameters: {', '.join(invalid_params)}. "
-                    f"Supported: {', '.join(sorted(supported_params))}"
-                )
+            # Derived from the one Field declaration per key, so a key the
+            # command reads and this refuses cannot happen again (#295).
+            check_search_params(search_params, where=f"Document {index}")
 
             # Keep an omitted title distinct from a generated display label.
             # The CLI uses this to decide whether a single template was
             # explicitly named by its author.
-            config = {
-                "search": search_params,
-                "title": data.get("title"),
-                "description": data.get("description", None),
-            }
-            search_configs.append(config)
+            #
+            # `type` is carried through, and it is load-bearing: dropping it
+            # made `plan_search` see None, fall back to the default "task"
+            # and run a `type: paste` item as a task search - a wrong answer
+            # with a straight face. The planner's own guard can only refuse
+            # what it is shown.
+            search_configs.append(
+                {
+                    "type": item.get("type"),
+                    "search": search_params,
+                    "title": item.get("title"),
+                    "description": item.get("description"),
+                }
+            )
 
         log.info(
             f"Loaded {len(search_configs)} search configuration(s) from {template_path}"
@@ -787,6 +938,151 @@ class Maniphest(Phabfive):
 
         return phids
 
+    def _lifted_priorities(self, priority_patterns):
+        """The ``priorities`` constraint a --priority filter can be narrowed by.
+
+        ``--priority in:High`` asks about a task's current priority, which
+        the server can answer; ``been:High``, ``from:Low``, ``raised`` and
+        the rest ask about its history, which only the transaction log
+        answers, so those keep fetching every task and filtering here. The
+        pattern is checked per task either way - this only decides how many
+        tasks are fetched to check.
+
+        All or nothing: a priority name this phabfive cannot turn into the
+        API's numeric value is left to the client-side filter, which compares
+        the name the server gave. Lifting only the names that map would
+        silently drop the tasks of the ones that did not.
+
+        The name-to-value table is **this instance's**, from
+        `maniphest.priority.search`, not the standard one in
+        `get_api_priority_map`. The standard one is a constant, so it cannot
+        see a relabelled priority: on an instance that calls value 50
+        "High", it would map "High" to 80, fetch the value-80 tasks, and the
+        client-side filter - which compares `fields.priority.name` - would
+        then drop every one of them. An empty answer means the instance
+        could not be asked, which is no lift rather than a guess.
+
+        Returns
+        -------
+        list or None
+            Priority values for the constraint, or None to send none.
+        """
+        targets = current_state_targets(priority_patterns, "priority")
+
+        if not targets:
+            return None
+
+        values = self._get_api_priority_values()
+
+        if not values:
+            return None
+
+        lifted = []
+        for target in targets:
+            value = values.get(str(target).lower())
+
+            if value is None:
+                log.debug(
+                    f"Not narrowing the search by priority: '{target}' is not "
+                    "a priority this instance names"
+                )
+                return None
+
+            lifted.append(value)
+
+        return sorted(set(lifted))
+
+    def _lifted_statuses(self, status_patterns, status_scope):
+        """The explicit ``statuses`` an --status filter can be narrowed by.
+
+        As `_lifted_priorities`, with one extra rule: the keys are
+        intersected with the scope the search would otherwise have asked
+        for, so ``--status in:Resolved`` still reaches nothing while the
+        scope is open - which is what it does today, and what
+        `phabfive.transitions.status.unreachable_conditions` warns about.
+        An empty intersection means no lift at all, leaving the scope's own
+        list in place.
+
+        Returns
+        -------
+        list or None
+            Status keys for the constraint, or None for the scope's list.
+        """
+        targets = current_state_targets(status_patterns, "status")
+
+        if not targets:
+            return None
+
+        status_map = self._get_api_status_map().get("statusMap") or {}
+        keys = []
+
+        for target in targets:
+            wanted = str(target).lower()
+            # By display name, which is what the pattern compares against,
+            # and by key as well: a key that is not a name matches nothing
+            # on the client, so asking for it only widens what is fetched.
+            matched = [
+                key
+                for key, name in status_map.items()
+                if str(name).lower() == wanted or str(key).lower() == wanted
+            ]
+
+            if not matched:
+                return None
+
+            keys.extend(matched)
+
+        if status_scope == "open":
+            allowed = set(self._get_open_statuses())
+        elif status_scope == "closed":
+            allowed = set(self._get_closed_statuses())
+        else:
+            allowed = None
+
+        if allowed is not None:
+            keys = [key for key in keys if key in allowed]
+
+        return sorted(dict.fromkeys(keys)) or None
+
+    def _lifted_column_phids(self, column_patterns, board_phids):
+        """The ``columnPHIDs`` a --column filter can be narrowed by.
+
+        Only with a board to resolve names on, which is why this needs the
+        project PHIDs `--tag` resolved to: without one, the boards a task is
+        on are read out of the task itself and are not known until it has
+        been fetched. Names are matched exactly, as
+        `phabfive.transitions.column.ColumnPattern._matches_current` does.
+
+        Returns
+        -------
+        list or None
+            Column PHIDs for the constraint, or None to send none.
+        """
+        targets = current_state_targets(column_patterns, "column")
+
+        if not targets or not board_phids:
+            return None
+
+        by_name = {}
+        for board_phid in board_phids:
+            for column_phid, info in get_column_info(self.phab, board_phid).items():
+                by_name.setdefault(info.get("name"), []).append(column_phid)
+
+        lifted = []
+        for target in targets:
+            matched = by_name.get(target)
+
+            if not matched:
+                log.debug(
+                    f"Not narrowing the search by column: no column named "
+                    f"'{target}' on the board(s) being searched"
+                )
+                return None
+
+            lifted.extend(matched)
+
+        return sorted(dict.fromkeys(lifted))
+
     def _build_search_constraints(
         self,
         status_scope="open",
@@ -798,12 +1094,43 @@ class Maniphest(Phabfive):
         created_before=None,
         updated_after=None,
         updated_before=None,
+        closed_after=None,
+        closed_before=None,
+        task_ids=None,
+        task_phids=None,
+        subscriber_phids=None,
+        closer_phids=None,
+        subtypes=None,
+        parent_ids=None,
+        subtask_ids=None,
+        has_parents=None,
+        has_subtasks=None,
+        statuses=None,
+        priorities=None,
+        column_phids=None,
     ):
         """
         Build the shared constraints for a maniphest.search call.
 
         Every task_search code path applies the same filters; only the
         project selection differs, so callers add "projects" themselves.
+
+        Parameters
+        ----------
+        status_scope : str
+            "open", "closed" or "any" - which statuses the server is asked
+            for when nothing narrower was worked out.
+        statuses : list, optional
+            Explicit status keys, which replace the scope's list. Worked out
+            from an ``in:`` status pattern and already intersected with the
+            scope, so it can only ever narrow what the scope would fetch.
+        priorities : list, optional
+            Priority values, from an ``in:`` priority pattern.
+        column_phids : list, optional
+            Workboard column PHIDs, from an ``in:`` column pattern.
+        has_parents, has_subtasks : bool, optional
+            Tri-state: None is no constraint, and False is a constraint
+            asking for the tasks that have none.
 
         Returns
         -------
@@ -813,7 +1140,15 @@ class Maniphest(Phabfive):
         """
         constraints = {}
 
-        if status_scope == "open":
+        if statuses:
+            # A status pattern that asks about the current status, e.g.
+            # "any+in:Resolved". Narrower than the scope it replaces and
+            # never wider - see _lifted_statuses - and the pattern is still
+            # checked per task, so this decides what is fetched, not what
+            # matches.
+            constraints["statuses"] = list(statuses)
+            log.info(f"Filtering to statuses: {constraints['statuses']}")
+        elif status_scope == "open":
             open_statuses = self._get_open_statuses()
             constraints["statuses"] = open_statuses
             log.info(f"Filtering to open statuses: {open_statuses}")
@@ -847,14 +1182,75 @@ class Maniphest(Phabfive):
             constraints["modifiedStart"] = int(updated_after)
         if updated_before:
             constraints["modifiedEnd"] = int(updated_before)
+        if closed_after:
+            constraints["closedStart"] = int(closed_after)
+        if closed_before:
+            constraints["closedEnd"] = int(closed_before)
+
+        if task_ids:
+            constraints["ids"] = list(task_ids)
+        if task_phids:
+            constraints["phids"] = list(task_phids)
+        if subscriber_phids:
+            constraints["subscribers"] = list(subscriber_phids)
+        if closer_phids:
+            constraints["closerPHIDs"] = list(closer_phids)
+        if subtypes:
+            constraints["subtypes"] = list(subtypes)
+        if parent_ids:
+            constraints["parentIDs"] = list(parent_ids)
+        if subtask_ids:
+            constraints["subtaskIDs"] = list(subtask_ids)
+
+        # Tri-state, so `is not None` rather than a truth test: False is
+        # "the tasks with no parent at all", which is a filter and not the
+        # absence of one.
+        if has_parents is not None:
+            constraints["hasParents"] = bool(has_parents)
+        if has_subtasks is not None:
+            constraints["hasSubtasks"] = bool(has_subtasks)
+
+        if priorities:
+            # A lift, like `statuses` above: the pattern still decides.
+            constraints["priorities"] = list(priorities)
+            log.info(f"Filtering to priorities: {constraints['priorities']}")
+        if column_phids:
+            constraints["columnPHIDs"] = list(column_phids)
+            log.info(f"Filtering to {len(constraints['columnPHIDs'])} column(s)")
 
         return constraints
+
+    def _search_page(self, **kwargs):
+        """One maniphest.search response, as the payload paging reads.
+
+        The client answers with a Result wrapping the payload; `.response`
+        is that payload, and unwrapping it here is what lets one cursor
+        loop - `phabfive.pagination` - serve maniphest as it serves every
+        other app. A caller that already holds a plain mapping, which is
+        what a stub hands back, is passed through unchanged.
+        """
+        result = self.phab.maniphest.search(**kwargs)
+
+        return getattr(result, "response", result)
 
     def _search_all_pages(self, constraints, log_context="", order=None):
         """
         Run maniphest.search, following cursors until every page is read.
 
-        The API returns at most 100 tasks per page.
+        The paging is `phabfive.pagination.iter_pages`, the one cursor loop
+        every app shares, rather than a bespoke copy: maniphest was the last
+        holdout. No total limit is passed, and deliberately - `--limit` is
+        applied after the client-side sort, the policy filter, the
+        transition filters and `--exclude`, so stopping early here would
+        return a different set of tasks (see task_search).
+
+        A constraint this instance does not know (#434: Phabricator and
+        Phorge do not answer the same ones) is answered twice over. When it
+        is one phabfive only sent to narrow the fetch, the search is asked
+        again without it and the client-side filters still decide; when it
+        is one that decides results, the error is translated into a sentence
+        naming the constraint, the search key a person wrote for it and the
+        instance, rather than surfaced as ERR-INVALID-CONSTRAINT.
 
         Parameters
         ----------
@@ -870,33 +1266,182 @@ class Maniphest(Phabfive):
         -------
         list
             Task dicts from every page, in the order returned.
+
+        Raises
+        ------
+        PhabfiveDataException
+            The instance does not accept a constraint this search needs.
         """
-        tasks = []
-        after = None
+        attempt = dict(constraints)
 
         while True:
-            kwargs = {"constraints": constraints, "attachments": {"columns": True}}
-            if order:
-                kwargs["order"] = order
-            if after:
-                kwargs["after"] = after
+            try:
+                return self._read_pages(attempt, log_context, order)
+            except PhabfiveAPIException as error:
+                if error.code != INVALID_CONSTRAINT:
+                    raise
 
-            result = self.phab.maniphest.search(**kwargs)
-            page = result.response["data"]
+                refused = self._refused_constraint(attempt)
+
+                if refused is None or refused not in OPTIONAL_CONSTRAINTS:
+                    raise self._unknown_constraint(attempt, refused) from error
+
+                log.warning(
+                    f"This instance does not accept {refused}; searching "
+                    "without it. The same tasks are found, but more of them "
+                    "are fetched and filtered here."
+                )
+
+                # One key fewer each time round, so this ends: an instance
+                # missing two of the optional constraints drops both.
+                attempt = {
+                    name: value for name, value in attempt.items() if name != refused
+                }
+
+    def _refused_constraint(self, constraints):
+        """Which constraint this instance refused, found by asking again.
+
+        Conduit names nothing. A real `maniphest.search` answers an unknown
+        key with ERR-INVALID-CONSTRAINT and the sentence ``Parameter
+        "constraints" includes an invalid key.`` - so a message that guessed
+        from the code alone would name every constraint the search sent, most
+        of which the instance accepts perfectly well, and tell the user to
+        drop them.
+
+        Asked instead, by bisection: half the constraints are sent on their
+        own with ``limit=1``, and whichever half is refused is halved again.
+        A search sending a dozen constraints costs four of these probes, each
+        one row, and only on a path that has already failed.
+
+        Parameters
+        ----------
+        constraints : dict
+            What the failing search sent.
+
+        Returns
+        -------
+        str or None
+            The constraint name, or None when no subset reproduces the
+            refusal - a bad value rather than a bad key, or an instance
+            answering inconsistently. The caller then names them all, as
+            candidates rather than as verdicts.
+        """
+        names = list(constraints)
+
+        if len(names) <= 1:
+            return names[0] if names else None
+
+        return self._bisect_refused(constraints, names)
+
+    def _bisect_refused(self, constraints, names):
+        """The refused constraint within `names`, or None if none is."""
+        if len(names) == 1:
+            return names[0]
+
+        middle = len(names) // 2
+
+        for half in (names[:middle], names[middle:]):
+            if self._refuses(constraints, half):
+                return self._bisect_refused(constraints, half)
+
+        return None
+
+    def _refuses(self, constraints, names):
+        """Whether one subset of the constraints is answered as invalid.
+
+        Any other failure - a dead socket, a bad token, a value the endpoint
+        dislikes - means these keys are not the ones being complained about,
+        so it answers False and the bisection looks elsewhere. Nothing is
+        raised out of here: this runs only to describe a failure that has
+        already happened, and it must not replace it with a worse one.
+        """
+        subset = {name: constraints[name] for name in names}
+
+        try:
+            self.phab.maniphest.search(constraints=subset, limit=1)
+        except PhabfiveAPIException as error:
+            return error.code == INVALID_CONSTRAINT
+        except Exception:  # pragma: no cover - defensive, see the docstring
+            return False
+
+        return False
+
+    def _read_pages(self, constraints, log_context="", order=None):
+        """Every page of one maniphest.search, concatenated.
+
+        The columns attachment is asked for on every page, which is not
+        free, and #478 wondered whether it could be conditional. It cannot,
+        not yet: three separate readers need it and two of them are not the
+        filters. `formatters.build_task_display_data` renders a task's
+        "Boards" out of it for *every* displayed task, and
+        `filters.task_matches_project_patterns` reads project membership off
+        `boards` because the search is not asked for the projects
+        attachment. So dropping it would quietly remove a section from the
+        output and change which tasks a `--tag a+b` search keeps. Making it
+        conditional means first giving those two readers a source of their
+        own, which is its own change with its own test.
+        """
+        kwargs = {"constraints": constraints, "attachments": {"columns": True}}
+        if order:
+            kwargs["order"] = order
+
+        tasks = []
+
+        for page in iter_pages(self._search_page, **kwargs):
             tasks.extend(page)
-
-            cursor = result.get("cursor", {})
-            after = cursor.get("after")
             log.debug(
                 f"{log_context}fetched page with {len(page)} tasks, "
-                f"total so far: {len(tasks)}, next cursor: {after}"
+                f"total so far: {len(tasks)}"
             )
 
-            if after is None:
-                # No more pages
-                break
-
         return tasks
+
+    def _unknown_constraint(self, constraints, refused=None):
+        """The error to raise for a constraint this instance does not have.
+
+        Conduit's own answer is ERR-INVALID-CONSTRAINT and, on a real
+        Phorge, ``Parameter "constraints" includes an invalid key.`` - which
+        names neither the key nor anything the person typed. Phabricator and
+        Phorge differ over which constraints exist and phabfive cannot yet
+        ask an instance which it has (#434), so `_refused_constraint` asks
+        the only way there is, and this says what came back.
+
+        Two sentences, because the two cases are not the same claim: one
+        constraint was identified and is named as the culprit, or none was
+        and the search's constraints are listed as *candidates*. Telling a
+        user to drop a key this instance accepts is worse than saying the
+        instance would not say which.
+
+        Parameters
+        ----------
+        constraints : dict
+            What the failing search sent.
+        refused : str, optional
+            The constraint the instance refused, when it could be isolated.
+        """
+        keys = _search_key_for_constraint()
+        instance = self.conf.get("PHAB_URL") or "this instance"
+
+        def described(name):
+            return f"'{name}' (from '{keys[name]}')" if name in keys else f"'{name}'"
+
+        if refused is not None:
+            return PhabfiveDataException(
+                f"maniphest.search on {instance} does not accept the "
+                f"constraint {described(refused)}. Phabricator and Phorge do "
+                "not answer the same constraints; drop that search key, or "
+                "use an instance that has it."
+            )
+
+        listed = ", ".join(described(name) for name in sorted(constraints))
+
+        return PhabfiveDataException(
+            f"maniphest.search on {instance} refused one of this search's "
+            f"constraints and did not say which. It sent {listed}. "
+            "Phabricator and Phorge do not answer the same constraints; "
+            "drop the search keys one at a time to find it, or use an "
+            "instance that has them."
+        )
 
     def task_search(
         self,
@@ -911,6 +1456,17 @@ class Maniphest(Phabfive):
         created_before=None,
         updated_after=None,
         updated_before=None,
+        closed_after=None,
+        closed_before=None,
+        ids=None,
+        phids=None,
+        subscriber=None,
+        subtype=None,
+        parent=None,
+        subtask=None,
+        has_parents=None,
+        has_subtasks=None,
+        closed_by=None,
         visible_to=None,
         editable_by=None,
         column_patterns=None,
@@ -955,6 +1511,25 @@ class Maniphest(Phabfive):
                       Supports units: h (hours), d (days), w (weeks), m (months), y (years).
         updated_before (str|int, optional): Tasks updated more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
                       Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+        closed_after  (str|int, optional): Tasks closed within TIME, as created_after.
+        closed_before (str|int, optional): Tasks closed more than TIME ago.
+        ids           (str|list, optional): Only these tasks ("T1,T2", ["T1"], 1), with every
+                      other filter still applied. The opposite of include_task_ids, which
+                      bypasses the filters; asking for both is an intersection and a union
+                      at once, which is exactly what each of them says.
+        phids         (str|list, optional): Only these task PHIDs, as ids.
+        subscriber    (str, optional): Only tasks a user is subscribed to. Use "@me", a
+                      username or a PHID; comma-separated for OR logic.
+        subtype       (str|list, optional): Only tasks of these subtype keys. Instance
+                      configuration, so the value is sent as written.
+        parent        (str|list, optional): Only the subtasks of these tasks.
+        subtask       (str|list, optional): Only the parents of these tasks.
+        has_parents   (bool, optional): True for tasks that are a subtask of something,
+                      False for the ones that are not. None sends no constraint.
+        has_subtasks  (bool, optional): True for tasks that have subtasks, False for the
+                      ones that do not. None sends no constraint.
+        closed_by     (str, optional): Only tasks closed by a user, as subscriber. A task
+                      that is still open was closed by nobody and never matches.
         visible_to    (str, optional): Only tasks whose view policy is exactly this, in the
                       grammar phabfive.policy accepts (public, users, admin, no-one,
                       #project, @user, @me or a PHID). Compared with the stored value, so
@@ -1001,6 +1576,19 @@ class Maniphest(Phabfive):
                 created_before,
                 updated_after,
                 updated_before,
+                closed_after,
+                closed_before,
+                ids,
+                phids,
+                subscriber,
+                subtype,
+                parent,
+                subtask,
+                # `is not None`, because False is the filter "tasks with no
+                # parent" rather than the absence of one.
+                has_parents is not None,
+                has_subtasks is not None,
+                closed_by,
                 visible_to,
                 editable_by,
                 column_patterns,
@@ -1057,6 +1645,18 @@ class Maniphest(Phabfive):
         api_order = PHORGE_ORDER_KEYS.get((order_field, order_direction))
         log.info(f"Ordering results by '{order_field}:{order_direction}'")
 
+        # The list-valued constraints, parsed before anything is fetched:
+        # they cost no request, so a monogram that is not one is answered
+        # before a search that would have thrown its answer away.
+        # Named as the spec spells the key, which is also the flag without
+        # its dashes: one value may arrive from either, so the sentence has
+        # to make sense for both.
+        task_ids = _task_id_list(ids, "'ids'")
+        task_phids = _value_list(phids)
+        subtypes = _value_list(subtype)
+        parent_ids = _task_id_list(parent, "'parent'")
+        subtask_ids = _task_id_list(subtask, "'subtask'")
+
         # Convert date filters to Unix timestamps (preserve original values for logging)
         created_after_original = created_after
         created_before_original = created_before
@@ -1075,6 +1675,10 @@ class Maniphest(Phabfive):
         if updated_before:
             updated_before_days = parse_time_with_unit(updated_before)
             updated_before = days_ago_to_timestamp(updated_before_days)
+        if closed_after:
+            closed_after = days_ago_to_timestamp(parse_time_with_unit(closed_after))
+        if closed_before:
+            closed_before = days_ago_to_timestamp(parse_time_with_unit(closed_before))
 
         # Resolve the user filters - convert @me or username(s) to PHID(s)
         assigned_phids = self._resolve_user_filter_phids(
@@ -1082,6 +1686,12 @@ class Maniphest(Phabfive):
         )
         author_phids = self._resolve_user_filter_phids(
             author, "authored by", option="--author"
+        )
+        subscriber_phids = self._resolve_user_filter_phids(
+            subscriber, "subscribed to by", option="--subscriber"
+        )
+        closer_phids = self._resolve_user_filter_phids(
+            closed_by, "closed by", option="--closed-by"
         )
 
         # Resolve space filter - convert space name/monogram(s) to PHID(s)
@@ -1192,6 +1802,46 @@ class Maniphest(Phabfive):
                     f"Filtering to tag(s): {tag} ({len(project_phids)} project(s))"
                 )
 
+        # What the server can be asked instead of every task being fetched
+        # and thrown away here. Each of these is worked out from a filter
+        # that still runs in Python afterwards, so they change how much is
+        # fetched and never what matches - see the three _lifted_* methods.
+        # The column one needs the boards --tag resolved to, which is why
+        # this is here and not beside the pattern parsing.
+        lifted_statuses = self._lifted_statuses(status_patterns, status_scope)
+        lifted_priorities = self._lifted_priorities(priority_patterns)
+        lifted_column_phids = self._lifted_column_phids(
+            column_patterns, project_phids if tag and tag != "*" else []
+        )
+
+        # Every code path below sends the same filters and differs only in
+        # which projects it names, so the arguments are settled once.
+        constraint_args = {
+            "status_scope": status_scope,
+            "statuses": lifted_statuses,
+            "priorities": lifted_priorities,
+            "column_phids": lifted_column_phids,
+            "text_query": text_query,
+            "assigned_phids": assigned_phids,
+            "author_phids": author_phids,
+            "subscriber_phids": subscriber_phids,
+            "closer_phids": closer_phids,
+            "space_phids": space_phids,
+            "created_after": created_after,
+            "created_before": created_before,
+            "updated_after": updated_after,
+            "updated_before": updated_before,
+            "closed_after": closed_after,
+            "closed_before": closed_before,
+            "task_ids": task_ids,
+            "task_phids": task_phids,
+            "subtypes": subtypes,
+            "parent_ids": parent_ids,
+            "subtask_ids": subtask_ids,
+            "has_parents": has_parents,
+            "has_subtasks": has_subtasks,
+        }
+
         if include_task_ids and not has_other_filters:
             # --include is the only criterion: skip the general search entirely
             # (an empty constraints dict would fetch every open task); the
@@ -1203,31 +1853,11 @@ class Maniphest(Phabfive):
                 log.info("Searching across all projects (tag='*', no project filter)")
             else:
                 log.info("No tag specified, searching across all projects")
-            constraints = self._build_search_constraints(
-                status_scope=status_scope,
-                text_query=text_query,
-                assigned_phids=assigned_phids,
-                author_phids=author_phids,
-                space_phids=space_phids,
-                created_after=created_after,
-                created_before=created_before,
-                updated_after=updated_after,
-                updated_before=updated_before,
-            )
+            constraints = self._build_search_constraints(**constraint_args)
 
             result_data = self._search_all_pages(constraints, order=api_order)
         else:
-            base_constraints = self._build_search_constraints(
-                status_scope=status_scope,
-                text_query=text_query,
-                assigned_phids=assigned_phids,
-                author_phids=author_phids,
-                space_phids=space_phids,
-                created_after=created_after,
-                created_before=created_before,
-                updated_after=updated_after,
-                updated_before=updated_before,
-            )
+            base_constraints = self._build_search_constraints(**constraint_args)
 
             # Handle multiple projects (make separate calls and merge)
             if len(project_phids) > 1:
@@ -1526,11 +2156,14 @@ class Maniphest(Phabfive):
         # Force-include tasks from --include: merged after post-filtering and
         # after the limit so they always survive; deduplicated by task id.
         if include_task_ids:
-            included_result = self.phab.maniphest.search(
+            # Paged, because one maniphest.search answers with at most 100
+            # tasks and a cursor: --include with more than a hundred ids
+            # used to read the first page and silently drop the rest.
+            included_tasks = search_all_pages(
+                self._search_page,
                 constraints={"ids": list(include_task_ids)},
                 attachments={"columns": True},
             )
-            included_tasks = included_result.response.get("data", [])
 
             found_ids = {t["id"] for t in included_tasks}
             for tid in include_task_ids:

@@ -29,11 +29,16 @@ machine that has never seen a token, and `tests/test_spec_isolation.py`
 proves it out of process rather than leaving it as an intention.
 
 What is deliberately **not** decided here: whether a priority, a status, a
-project icon or colour, a space or a policy *name* exists. Those are defined
-by the instance, and phabfive answers a failed status fetch with invented
-defaults - so deciding them offline would mean blessing a value the server
-never named. They are typed and shape-checked here and resolved by
+project icon, a space or a policy *name* exists. Those are defined by the
+instance, and phabfive answers a failed status fetch with invented defaults
+- so deciding them offline would mean blessing a value the server never
+named. They are typed and shape-checked here and resolved by
 `phabfive.spec.online`.
+
+A project **colour** is decided here, and is the one that looks like it
+should not be: the colour keys are fixed in Phorge's own source, where
+`projects.colors` relabels a colour but cannot add one, so a colour needs no
+token and no network. It is a `FieldKind.ENUM` with its choices on the field.
 """
 
 from __future__ import annotations
@@ -61,7 +66,13 @@ from phabfive.spec.references import (
     iter_references,
     local_id,
 )
-from phabfive.spec.registry import Field, FieldKind, field_by_name, fields_for
+from phabfive.spec.registry import (
+    DECLARED_COMPLETE,
+    Field,
+    FieldKind,
+    field_by_name,
+    fields_for,
+)
 from phabfive.spec.schema import SEARCH_ITEM_KEYS
 from phabfive.spec.times import parse_time_with_unit
 from phabfive.spec.variables import (
@@ -478,9 +489,11 @@ def _check_value(
     """One value against one declared field.
 
     This is where the registry's `FieldKind` decides what a value may be, and
-    where it decides to say nothing: a priority, a status, an icon, a colour,
-    a space or a policy *name* is the instance's to define, so those come
-    back checked for type and shape and no further.
+    where it decides to say nothing: a priority, a status, an icon, a space
+    or a policy *name* is the instance's to define, so those come back
+    checked for type and shape and no further. A project colour is not among
+    them - Phorge fixes those keys in its source, so the `ENUM` branch below
+    settles one from `field.choices`.
 
     `templated` is the set of ``(object, field)`` pairs whose spec text held
     ``{{``, taken from the spec before it was rendered.
@@ -525,20 +538,26 @@ def _check_value(
         return _check_monograms(object_path, field_path, field, value)
 
     if kind is FieldKind.ENUM:
-        if value not in field.choices:
-            return [
-                problem(
-                    object_path,
-                    field=field_path,
-                    value=value,
-                    reason=(
-                        f"{field.name} is one of: {', '.join(field.choices)} "
-                        f"(got {value!r})"
-                    ),
-                    code="unknown-value",
-                )
-            ]
-        return []
+        # A list-valued enum is each entry against the choices, not the list
+        # against them: `colors: [red, blue]` is two colours, and so is
+        # `colors: red,blue`, which is the spelling every list filter in
+        # phabfive also accepts.
+        entries = _entries(field, value)
+
+        return [
+            problem(
+                object_path,
+                field=field_path,
+                value=entry,
+                reason=(
+                    f"{field.name} is one of: {', '.join(field.choices)} "
+                    f"(got {entry!r})"
+                ),
+                code="unknown-value",
+            )
+            for entry in entries
+            if not _unrendered(entry) and entry not in field.choices
+        ]
 
     if kind is FieldKind.ORDER:
         return _check_order(object_path, field_path, field, value)
@@ -550,6 +569,26 @@ def _check_value(
         return wrong("text")
 
     return []
+
+
+def _entries(field: Field, value: Any) -> list:
+    """One field's values, however the spec wrote them.
+
+    A `multiple` field accepts a list and a comma-separated string alike -
+    the rule `phabfive.options.value_list` states for the commands - so a
+    check over its values has to read both. A field that is not `multiple`
+    has exactly one value, whatever its shape.
+    """
+    if not field.multiple:
+        return [value]
+
+    if isinstance(value, (list, tuple)):
+        return list(value)
+
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+
+    return [value]
 
 
 def _check_each_string(
@@ -814,11 +853,17 @@ def _check_fields(
 ) -> list[Problem]:
     """One mapping against the fields the registry declares for it.
 
-    An object type the registry declares **no** field for is left alone: a
-    registry that says nothing about an object cannot honestly call any of
-    its keys unknown, and Phase 1 declares task search fields and nothing
-    else. Adding a field is therefore all it takes for it to be accepted
-    here, which is what makes one declaration enough.
+    Two questions, answered separately, because the registry answers them
+    separately:
+
+    - **Is this key known?** Only for a pair in
+      `registry.DECLARED_COMPLETE`, whose key set is finished. A registry
+      that has declared two keys of an object cannot honestly call the third
+      unknown, and declaring the first field of an object type would
+      otherwise turn every other key of it into an error overnight.
+    - **Is this value right?** For every declared key, wherever it is. A
+      colour is checked in a `projects:` item today even though the rest of
+      that item's keys are not yet declared.
     """
     declared = fields_for(object_type, verb)
 
@@ -827,11 +872,15 @@ def _check_fields(
 
     problems: list[Problem] = []
     known = [field.name for field in declared]
+    complete = (object_type, verb) in DECLARED_COMPLETE
 
-    for raw_key in mapping:
-        key = str(raw_key)
+    if complete:
+        for raw_key in mapping:
+            key = str(raw_key)
 
-        if field_by_name(key, object_type, verb) is None:
+            if field_by_name(key, object_type, verb) is not None:
+                continue
+
             problems.append(
                 problem(
                     object_path,
@@ -1102,6 +1151,33 @@ def _check_references(spec: "Spec", local_ids: Mapping[str, str]) -> list[Proble
                         f"followed by letters, digits, '-', '_' or '.'"
                     ),
                     code="bad-local-id",
+                )
+            )
+            continue
+
+        # A glob means something in a *filter* key and nothing in a key
+        # that names what to attach: `maniphest create` refuses a "*" in
+        # `projects:` with no network at all, so a spec writing one is
+        # refused here rather than reported clean and then rejected by the
+        # apply path - which is the one thing the two layers exist to keep
+        # from happening.
+        if (
+            declared is not None
+            and not declared.patterns
+            and isinstance(reference.value, str)
+            and "*" in reference.value
+        ):
+            problems.append(
+                problem(
+                    reference.object,
+                    field=reference.field,
+                    value=reference.value,
+                    reason=(
+                        f"{name} names what to attach, not a filter, so a "
+                        f"wildcard is not a value it can use (got "
+                        f"{reference.value!r})"
+                    ),
+                    code="unknown-value",
                 )
             )
             continue

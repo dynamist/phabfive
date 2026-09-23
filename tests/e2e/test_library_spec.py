@@ -236,3 +236,164 @@ def test_the_whole_flow_loads_nothing_of_the_command(live_env, tmp_path):
         "environ": True,
         "loaded": [],
     }
+
+
+# --------------------------------------------------------------------------
+# A search spec, run from a dict, with no command anywhere (#476, #477)
+# --------------------------------------------------------------------------
+
+
+def test_a_search_spec_runs_from_a_dict(credentials, isolated):
+    """Plan, then run: the two halves, with no file and no CLI.
+
+    `plan_searches` is the atomic form - every reference in the whole spec
+    is resolved before the first query - which is what a program wanting the
+    report up front calls. The command uses the per-item form instead, so
+    that a later search's failure does not move ahead of an earlier
+    search's output.
+    """
+    from phabfive.spec.search import plan_searches, run_search
+
+    spec = phabfive.Spec.from_data(
+        {
+            "kind": "search",
+            "searches": [
+                {"title": "Mine", "search": {"assigned": "@admin", "limit": 5}},
+                {"search": {"status": "any", "limit": 3}},
+            ],
+        }
+    )
+
+    assert spec.validate_offline() == []
+
+    app = phabfive.Maniphest(**credentials)
+    plans = plan_searches(app, spec)
+
+    assert [plan.object_type for plan in plans] == ["task", "task"]
+    assert [plan.title for plan in plans] == ["Mine", None]
+    assert [plan.index for plan in plans] == [1, 2]
+    assert plans[0].params["assigned"] == "@admin"
+
+    results = [run_search(app, plan) for plan in plans]
+
+    # The second search asks for every task, so the instance's seed data
+    # guarantees at least one record
+    assert len(results[1].records) >= 1
+    assert all(isinstance(record, dict) for record in results[1].records)
+    assert all(isinstance(result, phabfive.SearchResult) for result in results)
+    assert all(isinstance(result.plan, phabfive.SearchPlan) for result in results)
+
+
+def test_a_search_spec_naming_a_user_who_does_not_exist_says_so_once(
+    credentials, isolated
+):
+    """The reference is resolved before anything is queried."""
+    from phabfive.spec.search import plan_searches
+
+    missing = f"nobody-{uuid.uuid4().hex[:8]}"
+    spec = phabfive.Spec.from_data(
+        {
+            "kind": "search",
+            "searches": [
+                {"search": {"assigned": f"@{missing}"}},
+                {"search": {"author": f"@{missing}-b"}},
+            ],
+        }
+    )
+
+    app = phabfive.Maniphest(**credentials)
+
+    problems = validate_online(spec, app)
+
+    assert [(p.object, p.field, p.code) for p in problems] == [
+        ("searches[0]", "search.assigned", "unknown-user"),
+        ("searches[1]", "search.author", "unknown-user"),
+    ]
+
+    with pytest.raises(phabfive.PhabfiveDataException) as error:
+        plan_searches(app, spec)
+
+    assert missing in str(error.value)
+
+
+def test_a_mixed_spec_runs_every_type_from_a_dict(credentials, isolated):
+    """One document, four object types, one client - and no command."""
+    from phabfive.search import records_of, run_spec
+
+    spec = phabfive.Spec.from_data(
+        {
+            "kind": "search",
+            "searches": [
+                {"type": "project", "search": {"status": "any", "limit": 2}},
+                {"type": "paste", "search": {"limit": 2}},
+                {"type": "passphrase", "search": {"limit": 2}},
+                {"type": "task", "search": {"status": "any", "limit": 2}},
+            ],
+        }
+    )
+
+    assert spec.validate_offline() == []
+
+    app = phabfive.Maniphest(**credentials)
+    results = list(run_spec(app, spec))
+
+    assert [result.plan.object_type for result in results] == [
+        "project",
+        "paste",
+        "passphrase",
+        "task",
+    ]
+
+    for result in results:
+        records = records_of(result)
+        assert isinstance(records, list)
+        assert len(records) <= 2
+        # The uniform view and the plan's own agree, whatever the payload is
+        assert records == result.records
+
+
+def test_a_search_spec_runs_with_nothing_of_the_command_loaded(live_env, tmp_path):
+    """Out of process, because the e2e suite has already imported the CLI."""
+    code = (
+        "import json, os, sys; before = dict(os.environ); "
+        "import phabfive; "
+        "from phabfive.search import records_of, run_spec; "
+        "spec = phabfive.Spec.from_data({'kind': 'search', 'searches': ["
+        "{'type': 'project', 'search': {'status': 'any', 'limit': 2}}, "
+        "{'search': {'status': 'any', 'limit': 2}}]}); "
+        "app = phabfive.Maniphest(url=os.environ['URL'], token=os.environ['TOKEN']); "
+        "results = list(run_spec(app, spec)); "
+        "print(json.dumps({"
+        "'offline': [p.as_record() for p in spec.validate_offline()], "
+        "'types': [r.plan.object_type for r in results], "
+        "'counts': [len(records_of(r)) for r in results], "
+        "'typer_use_rich': 'TYPER_USE_RICH' in os.environ, "
+        "'environ': before == dict(os.environ), "
+        "'loaded': [n for n in ('typer', 'click', 'InquirerPy', 'phabfive.cli') "
+        "if n in sys.modules]}))"
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PHAB_")}
+    env.pop("TYPER_USE_RICH", None)
+    env["HOME"] = str(tmp_path)
+    env["URL"] = live_env["PHAB_URL"]
+    env["TOKEN"] = live_env["PHAB_TOKEN"]
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    answered = json.loads(result.stdout)
+
+    assert answered["offline"] == []
+    assert answered["types"] == ["project", "task"]
+    assert all(count <= 2 for count in answered["counts"])
+    assert answered["typer_use_rich"] is False
+    assert answered["environ"] is True
+    assert answered["loaded"] == []

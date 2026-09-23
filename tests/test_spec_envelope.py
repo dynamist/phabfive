@@ -74,6 +74,10 @@ class TestNoEnvelopeIsTheNormalCase:
 
         assert [
             {
+                # `type` is part of the projection: without it the command
+                # cannot tell a paste search from a task one, and runs both
+                # as tasks
+                "type": item.get("type"),
                 "search": item["search"],
                 "title": item.get("title"),
                 "description": item.get("description"),

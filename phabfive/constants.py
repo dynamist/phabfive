@@ -446,17 +446,93 @@ MANIPHEST_ORDER_DIRECTIONS = {
 # Maniphest that is "priority" -- the same default as the web UI.
 MANIPHEST_ORDER_DEFAULT = "priority"
 
+
+def _order_choices(fields, directions):
+    """Every spelling an app's order parser accepts, for help and completion.
+
+    Both directions for every directional field, so nothing is available
+    only by implication, and the bare name alone for a directionless one.
+    """
+    return [
+        value
+        for field in fields
+        for value in (
+            [field]
+            if directions[field] is None
+            else [field, f"{field}:asc", f"{field}:desc"]
+        )
+    ]
+
+
 # Every spelling the parser accepts, for error messages and docs. Both
 # directions exist for every directional field, so nothing is implicit-only.
-MANIPHEST_ORDER_CHOICES = [
-    value
-    for field in MANIPHEST_ORDER_FIELDS
-    for value in (
-        [field]
-        if MANIPHEST_ORDER_DIRECTIONS[field] is None
-        else [field, f"{field}:asc", f"{field}:desc"]
-    )
-]
+# Built by the same helper as every other app's table - four order tables and
+# one rule, so a change to what a spelling is reaches all of them.
+MANIPHEST_ORDER_CHOICES = _order_choices(
+    MANIPHEST_ORDER_FIELDS, MANIPHEST_ORDER_DIRECTIONS
+)
+
+
+# Result ordering for the other searches. One table per app, because the
+# orders are per app: `project.search` can order by name and `paste.search`
+# cannot, and offering a field the endpoint has no order for would mean
+# reading the whole instance to sort it here - which is what `--limit` then
+# takes an arbitrary subset of.
+#
+# Every field below maps to something PhabricatorProjectQuery,
+# PhabricatorPasteQuery or PhabricatorPeopleQuery can actually order by, as
+# a builtin order or as a column vector; see each app's *_API_ORDERS.
+
+# project.search: builtin orders name, newest, created, oldest, relevance,
+# plus the "name" column, which takes a "-" for Z-A.
+PROJECT_ORDER_FIELDS = ["name", "created", "relevance"]
+PROJECT_ORDER_DIRECTIONS = {"name": "asc", "created": "desc", "relevance": None}
+# A-Z, which is the order `project search` has always printed and the order
+# Phorge's own project list opens in.
+PROJECT_ORDER_DEFAULT = "name"
+PROJECT_ORDER_CHOICES = _order_choices(PROJECT_ORDER_FIELDS, PROJECT_ORDER_DIRECTIONS)
+PROJECT_ORDER_SUGGESTIONS = {
+    "newest": "created",
+    "oldest": "created:asc",
+    "id": "created",
+    "title": "name",
+}
+
+# paste.search: builtin orders newest, created, oldest, relevance. There is
+# no title order - PhabricatorPasteQuery answers order key "title" with
+# "does not support sorting by order key" - so `title` is not offered.
+PASTE_ORDER_FIELDS = ["created", "relevance"]
+PASTE_ORDER_DIRECTIONS = {"created": "desc", "relevance": None}
+PASTE_ORDER_DEFAULT = "created"
+PASTE_ORDER_CHOICES = _order_choices(PASTE_ORDER_FIELDS, PASTE_ORDER_DIRECTIONS)
+PASTE_ORDER_SUGGESTIONS = {
+    "newest": "created",
+    "oldest": "created:asc",
+    "id": "created",
+}
+
+# user.search: builtin orders newest, created, oldest, relevance, plus the
+# "username" column both ways. Sorted by username is what `user search` has
+# always printed, and it is now what the server is asked for, so a --limit
+# keeps the first N usernames rather than an arbitrary N sorted afterwards.
+USER_ORDER_FIELDS = ["username", "created", "relevance"]
+USER_ORDER_DIRECTIONS = {"username": "asc", "created": "desc", "relevance": None}
+USER_ORDER_DEFAULT = "username"
+USER_ORDER_CHOICES = _order_choices(USER_ORDER_FIELDS, USER_ORDER_DIRECTIONS)
+USER_ORDER_SUGGESTIONS = {
+    "newest": "created",
+    "oldest": "created:asc",
+    "id": "created",
+    "name": "username",
+    "realname": "username",
+}
+
+# The statuses `paste search --status` takes, which are the two values
+# paste.search's "statuses" constraint knows. An unknown one is answered
+# with an empty result rather than an error, so phabfive refuses it first.
+PASTE_STATUS_ACTIVE = "active"
+PASTE_STATUS_ARCHIVED = "archived"
+PASTE_STATUS_CHOICES = [PASTE_STATUS_ACTIVE, PASTE_STATUS_ARCHIVED]
 
 
 __all__ = [
@@ -484,11 +560,24 @@ __all__ = [
     "MONOGRAMS",
     "OutputFormat",
     "PASTE_LANGUAGES",
+    "PASTE_ORDER_CHOICES",
+    "PASTE_ORDER_DEFAULT",
+    "PASTE_ORDER_DIRECTIONS",
+    "PASTE_ORDER_FIELDS",
+    "PASTE_ORDER_SUGGESTIONS",
+    "PASTE_STATUS_ACTIVE",
+    "PASTE_STATUS_ARCHIVED",
+    "PASTE_STATUS_CHOICES",
     "POLICY_KEYWORDS",
     "POLICY_LABELS",
     "POLICY_NOT_HOSTED",
     "PRIORITY_VALUES",
     "PRIORITY_DEFAULT",
+    "PROJECT_ORDER_CHOICES",
+    "PROJECT_ORDER_DEFAULT",
+    "PROJECT_ORDER_DIRECTIONS",
+    "PROJECT_ORDER_FIELDS",
+    "PROJECT_ORDER_SUGGESTIONS",
     "REPO_POLICY_FIELDS",
     "REPO_POLICY_TRANSACTIONS",
     "REPO_STATUS_CHOICES",
@@ -496,6 +585,11 @@ __all__ = [
     "TASK_POLICY_FIELDS",
     "TASK_POLICY_TRANSACTIONS",
     "URI_ROLES",
+    "USER_ORDER_CHOICES",
+    "USER_ORDER_DEFAULT",
+    "USER_ORDER_DIRECTIONS",
+    "USER_ORDER_FIELDS",
+    "USER_ORDER_SUGGESTIONS",
     "URI_ROLE_DISABLED",
     "VALIDATION_HINTS",
     "VALIDATORS",

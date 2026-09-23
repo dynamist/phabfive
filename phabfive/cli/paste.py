@@ -21,15 +21,37 @@ from phabfive.cli.output import (
     _setup_output_options,
     is_machine_format,
 )
-from phabfive.constants import MONOGRAMS
+from phabfive.constants import (
+    MONOGRAMS,
+    PASTE_ORDER_DEFAULT,
+    PASTE_ORDER_DIRECTIONS,
+    PASTE_ORDER_FIELDS,
+    PASTE_STATUS_CHOICES,
+)
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+)
 from phabfive.users import resolve_user_phid, resolve_user_phids
 from phabfive.cli.editor import resolve_assume_yes
-from phabfive.options import split_list_option
+from phabfive.options import any_list_value, split_list_option
+from phabfive.ordering import complete_order_value
+from phabfive.paste.core import build_paste_search_constraints
 from phabfive.paste.display import display_pastes
 
 paste_app = typer.Typer(
     cls=AgentFooterGroup, help="The paste app", no_args_is_help=True
 )
+
+
+def complete_paste_order(incomplete: str) -> List[str]:
+    """Complete `paste search --order`: fields first, directions after ":"."""
+    return complete_order_value(incomplete, PASTE_ORDER_FIELDS, PASTE_ORDER_DIRECTIONS)
+
+
+def complete_paste_status(incomplete: str) -> List[str]:
+    """Complete `paste search --status`: the two statuses paste.search knows."""
+    return [status for status in PASTE_STATUS_CHOICES if status.startswith(incomplete)]
 
 
 def _get_paste_app():
@@ -67,17 +89,70 @@ def search(
     text_query: Optional[str] = typer.Argument(
         None, help="Free-text search in paste title"
     ),
+    with_template: Optional[str] = typer.Option(
+        None,
+        "--with",
+        help="Load the search from a YAML search spec; every option below "
+        "overrides what the spec says",
+    ),
     author: Optional[str] = typer.Option(
         None,
         "--author",
         help="Filter by author (username, @me or user PHID)",
         autocompletion=complete_user_filter,
     ),
+    ids: Optional[List[str]] = typer.Option(
+        None,
+        "--ids",
+        help="Only these pastes (P123 or 123), with every other filter still "
+        "applied (repeatable, or comma-separated)",
+    ),
+    phids: Optional[List[str]] = typer.Option(
+        None,
+        "--phids",
+        help="Only these paste PHIDs, with every other filter still applied "
+        "(repeatable, or comma-separated)",
+    ),
+    language: Optional[List[str]] = typer.Option(
+        None,
+        "--language",
+        help="Pastes in any of these languages (repeatable, or comma-separated)",
+        autocompletion=complete_language,
+    ),
+    status: Optional[List[str]] = typer.Option(
+        None,
+        "--status",
+        help="Pastes of any of these statuses: active, archived "
+        "(repeatable, or comma-separated; default: both)",
+        autocompletion=complete_paste_status,
+    ),
+    created_after: Optional[str] = typer.Option(
+        None,
+        "--created-after",
+        help="Pastes created within TIME, e.g. 1h, 7d, 2w",
+    ),
+    created_before: Optional[str] = typer.Option(
+        None,
+        "--created-before",
+        help="Pastes created more than TIME ago, e.g. 1h, 7d, 2w",
+    ),
     limit: int = typer.Option(
         100, "--limit", "-l", help="Maximum results to return, 0 for all"
     ),
+    order: Optional[str] = typer.Option(
+        None,
+        "--order",
+        "-o",
+        help="Sort results by " + "|".join(PASTE_ORDER_FIELDS) + ", optionally "
+        f"suffixed with :asc or :desc  [default: {PASTE_ORDER_DEFAULT}]",
+        autocompletion=complete_paste_order,
+    ),
 ) -> None:
     """Search and list pastes with optional filters.
+
+    A paste has no modified-date filter: PhabricatorPasteQuery has no such
+    constraint, so --created-after and --created-before are the only dates
+    a search can narrow on.
 
     \b
     Examples:
@@ -85,37 +160,98 @@ def search(
         phabfive paste search --author=@me
         phabfive paste search "config" --author=@me
         phabfive paste search "config" --limit=250
+        phabfive paste search --language=python --created-after=7d
+        phabfive paste search --status=archived --order=created:asc
+        phabfive paste search --ids=P12,P13
         phabfive paste search --author=@me --limit=0
+        phabfive paste search --with searches.yaml
         phabfive --format=yaml paste search "notes"
     """
-    # Require at least one search criterion
-    if not text_query and not author:
+    # Require at least one search criterion - unless a spec carries them,
+    # which is checked per search once the spec has been read. --order is
+    # not one: it says how to sort a search, not which pastes to look at.
+    # The list options are asked through `any_list_value`, not tested raw:
+    # `--ids=,` is truthy as typer collected it and empty once it is parsed,
+    # so testing it raw would lift the guard and then send no constraint.
+    criteria = [
+        text_query,
+        author,
+        created_after,
+        created_before,
+        any_list_value(ids, phids, language, status),
+    ]
+    if not with_template and not any(criteria):
         _exit_with_help(ctx)
 
     _setup_output_options(ctx)
+
+    # Refused rather than ignored: none of these is a search spec key yet
+    from phabfive.cli.search_spec import refuse_unspecced
+
+    refuse_unspecced(
+        with_template,
+        {
+            "--ids": ids,
+            "--phids": phids,
+            "--language": language,
+            "--status": status,
+            "--created-after": created_after,
+            "--created-before": created_before,
+            "--order": order,
+        },
+    )
+
     paste = _get_paste_app()
 
-    # Build constraints
-    constraints: dict[str, object] = {}
+    if with_template:
+        from phabfive.cli.search_spec import load_search_spec, run_search_spec
 
-    # Handle free-text query
-    if text_query:
-        constraints["query"] = text_query
+        run_search_spec(
+            ctx,
+            paste,
+            load_search_spec(with_template),
+            # Keyed as a spec spells the key; None means "not given", so a
+            # flag nobody typed cannot clobber the spec's value
+            overrides={
+                "text_query": text_query,
+                "author": author,
+                "limit": limit if limit != 100 else None,
+            },
+        )
+        return
 
     # A username, @username, @me or user PHID
+    author_phids = None
     if author:
         author_phid, _ = resolve_user_phid(paste.phab, author, option="--author")
-        # Phorge's paste.search names this constraint "authors", not
-        # "authorPHIDs" as maniphest.search does for its own author filter
-        constraints["authors"] = [author_phid]
+        author_phids = [author_phid]
 
-    # Get pastes with constraints
-    # A limit is how many pastes to return, not the page size to ask for, and
-    # 0 - like maniphest search - means every match
-    result = paste.paste_search(
-        constraints=constraints if constraints else None,
-        limit=limit if limit > 0 else None,
-    )
+    # The constraints are built and checked in the library, so a spec and a
+    # flag are answered by the same check with the same message
+    try:
+        constraints = build_paste_search_constraints(
+            text_query=text_query,
+            author_phids=author_phids,
+            ids=split_list_option(ids),
+            phids=split_list_option(phids),
+            languages=split_list_option(language),
+            statuses=split_list_option(status),
+            created_after=created_after,
+            created_before=created_before,
+        )
+
+        # A limit is how many pastes to return, not the page size to ask
+        # for, and 0 - like maniphest search - means every match
+        result = paste.paste_search(
+            constraints=constraints if constraints else None,
+            limit=limit if limit > 0 else None,
+            order=order,
+        )
+    # PhabfiveInputException is a PhabfiveConfigException and needs no row
+    # of its own; see phabfive/exceptions.py.
+    except (PhabfiveConfigException, PhabfiveDataException) as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
 
     if not result["pastes"]:
         typer.echo("No pastes found", err=True)

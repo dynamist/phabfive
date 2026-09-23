@@ -463,6 +463,74 @@ def get_api_priority_map():
     }
 
 
+def fetch_api_priority_values(phab):
+    """This instance's priorities, as name and keyword to numeric value.
+
+    `get_api_priority_map` is the *standard* table - 100/90/80/50/25/0 with
+    Phabricator's own labels - and it is a constant, so it cannot answer
+    what an instance that relabelled a priority calls it. Phorge ships
+    `maniphest.priority.search`, which does, and this is that: the answer a
+    caller needs before it may turn a priority **name** into the numeric
+    value the `priorities` constraint takes.
+
+    Both spellings are keyed, lowercased: the display name ("Needs Triage",
+    which is what `fields.priority.name` carries and therefore what a
+    client-side filter compares) and each keyword ("triage", which is what a
+    task is edited with).
+
+    **Every name is keyed before any keyword**, rather than record by
+    record, so a keyword of one priority can never shadow the *name* of
+    another. That is the one way this could give a wrong answer: the
+    client-side filter compares display names, so a spelling that is one
+    priority's name and another's keyword has to resolve to the priority
+    whose name it is, or the narrowed fetch would return tasks the filter
+    then drops.
+
+    Raises rather than substituting the standard table. Narrowing a search
+    by a value guessed from a table this instance does not use returns the
+    wrong tasks and says nothing; the caller answers a failure by not
+    narrowing at all.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+
+    Returns
+    -------
+    dict
+        Lowercased name or keyword to int value, e.g.
+        ``{"high": 80, "needs triage": 90, "triage": 90}``
+    """
+    result = phab.maniphest.priority.search()
+
+    records = [
+        item
+        for item in result.get("data", [])
+        if isinstance(item.get("value"), int)
+        and not isinstance(item.get("value"), bool)
+    ]
+
+    values = {}
+
+    def remember(spelling, value):
+        if isinstance(spelling, str) and spelling.strip():
+            values.setdefault(spelling.strip().lower(), value)
+
+    for record in records:
+        remember(record.get("name"), record["value"])
+
+    for record in records:
+        for keyword in record.get("keywords") or []:
+            remember(keyword, record["value"])
+
+    log.debug(
+        f"Fetched {len(values)} priority spellings from maniphest.priority.search"
+    )
+
+    return values
+
+
 def get_api_priority_names(phab):
     """
     Get list of priority names from Phabricator API.

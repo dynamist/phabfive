@@ -50,4 +50,77 @@ def split_list_option(values):
     return list(dict.fromkeys(part for part in parts if part))
 
 
-__all__ = ["split_list_option"]
+def value_list(value):
+    """One filter's values, however a caller wrote them.
+
+    ``"1,2"``, ``["1", "2"]`` and ``1`` are the three spellings a list
+    filter accepts - a flag can only write the first, a spec may write any
+    of them - so every ``*_id_list`` and ``*_name_list`` in the apps reads
+    its argument through this one function rather than a copy of it.
+
+    Unlike :func:`split_list_option` nothing is de-duplicated: a search
+    constraint is a set on the server's side already, and keeping the order
+    and the repeats is what makes a round trip through a spec comparable.
+
+    Parameters
+    ----------
+    value : str, int, list, tuple or None
+        What was written.
+
+    Returns
+    -------
+    list
+        The non-empty entries, stripped, in the order given. Empty for
+        None, "" and a list holding nothing usable.
+
+    Examples
+    --------
+    >>> value_list("P12, P13")
+    ['P12', 'P13']
+    >>> value_list([",", ""])
+    []
+    """
+    if value is None or value == "":
+        return []
+
+    entries = value if isinstance(value, (list, tuple)) else [value]
+
+    return [
+        part.strip()
+        for entry in entries
+        for part in str(entry).split(",")
+        if part.strip()
+    ]
+
+
+def any_list_value(*values):
+    """Whether any list option carried something a filter can be built from.
+
+    ``--ids=,`` is a list holding one empty entry: truthy as typer collected
+    it, and empty once :func:`split_list_option` has read it. A "did you name
+    any filter at all" guard that tests the raw option therefore lets a
+    search through that then sends no constraint and reads the whole
+    instance - the case the guard exists to prevent. So the guard asks this
+    instead, which parses the value exactly as the constraint builder will.
+
+    Parameters
+    ----------
+    *values
+        What each option collected: None, a string, or a list of strings.
+
+    Returns
+    -------
+    bool
+        True when at least one of them holds a non-empty entry.
+
+    Examples
+    --------
+    >>> any_list_value(None, [","])
+    False
+    >>> any_list_value(None, ["P12"])
+    True
+    """
+    return any(split_list_option(value) for value in values)
+
+
+__all__ = ["any_list_value", "split_list_option", "value_list"]

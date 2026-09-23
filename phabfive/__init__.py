@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from phabfive.passphrase import Passphrase
     from phabfive.paste import Paste
     from phabfive.project import Project
-    from phabfive.spec import Problem, Spec
+    from phabfive.spec import Problem, SearchPlan, SearchResult, Spec
     from phabfive.user import User
 
 # The promise. Spelled out as literals rather than derived from _LAZY: ruff
@@ -83,6 +83,8 @@ __all__ = [
     "PhabfiveValidationException",
     "Problem",
     "Project",
+    "SearchPlan",
+    "SearchResult",
     "Spec",
     "TaskEdit",
     "User",
@@ -114,6 +116,8 @@ _LAZY = {
     "PhabfiveValidationException": "phabfive.exceptions",
     "Problem": "phabfive.spec",
     "Project": "phabfive.project",
+    "SearchPlan": "phabfive.spec",
+    "SearchResult": "phabfive.spec",
     "Spec": "phabfive.spec",
     "TaskEdit": "phabfive.edit",
     "User": "phabfive.user",
@@ -149,6 +153,7 @@ _SUBMODULES = (
     "paste",
     "policy",
     "project",
+    "search",
     "spec",
     "transitions",
     "user",

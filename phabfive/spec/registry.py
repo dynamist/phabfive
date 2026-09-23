@@ -23,6 +23,7 @@ from typing import Mapping, Optional
 from phabfive.exceptions import PhabfiveInputException
 
 __all__ = [
+    "DECLARED_COMPLETE",
     "FIELDS",
     "OBJECT_TYPES",
     "VERBS",
@@ -57,7 +58,9 @@ class FieldKind(enum.Enum):
     SPACE = "space"  # S1, name, pattern
     POLICY = "policy"  # POLICY_KEYWORDS, #project, @user, PHID
     MONOGRAM = "monogram"  # T123, P45, K7, R9
-    INSTANCE_ENUM = "instance-enum"  # priority, status, icon, color - online only
+    # priority, status and icon - online only. NOT colour: the colour keys
+    # are fixed in Phorge's own source, so colour is an ENUM with choices.
+    INSTANCE_ENUM = "instance-enum"
 
 
 # The object types a field may apply to. Declared rather than derived from
@@ -69,7 +72,7 @@ OBJECT_TYPES = frozenset({"task", "project", "paste", "passphrase"})
 # key and a search-only key can share a name without sharing a declaration.
 VERBS = frozenset({"search", "create"})
 
-_NO_CONSTRAINTS: Mapping[str, str] = MappingProxyType({})
+_NO_CONSTRAINTS: Mapping[str, Optional[str]] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -96,7 +99,24 @@ class Field:
     constraints
         Per-object-type override of ``constraint``: ``maniphest.search`` names
         the author filter ``authorPHIDs`` while ``paste.search`` names it
-        ``authors``. Read it through :func:`constraint_for`, never directly.
+        ``authors``. A value of ``None`` means *this* object type applies the
+        key client-side and sends nothing, which is how one `text_query`
+        serves both `paste.search`'s ``query`` constraint and the passphrase
+        walk that has no constraints at all. Read it through
+        :func:`constraint_for`, never directly.
+    lifts
+        For ``FieldKind.PATTERN`` only: the transition condition types whose
+        answer is the object's *current* state, and which the server can
+        therefore answer with ``constraint`` instead of phabfive reading every
+        task's history. ``("in",)`` everywhere today. Empty means the whole
+        pattern is applied client-side.
+
+        Declared rather than commented because moving a filter server-side
+        silently changes results when the condition is not pure current-state
+        equality: ``been:high`` and ``from:low`` are about a task's past and a
+        ``priorities`` constraint would answer a different question. A lifted
+        pattern is still re-checked in Python, so the constraint narrows what
+        is fetched and never decides what matches.
     multiple
         Whether a list is accepted as well as a comma-separated string.
     monograms
@@ -132,7 +152,10 @@ class Field:
     # 3.10 and 3.14 accept it, so only the middle of the supported range
     # broke, and only in CI. The factory hands back the one shared proxy,
     # so a Field still costs nothing.
-    constraints: Mapping[str, str] = _field(default_factory=lambda: _NO_CONSTRAINTS)
+    constraints: Mapping[str, Optional[str]] = _field(
+        default_factory=lambda: _NO_CONSTRAINTS
+    )
+    lifts: tuple[str, ...] = ()
     multiple: bool = False
     monograms: tuple[str, ...] = ()
     choices: tuple[str, ...] = ()
@@ -143,14 +166,63 @@ class Field:
 
 
 _TASK = frozenset({"task"})
+_PROJECT = frozenset({"project"})
+# Paste search declares no key of its own: `text_query`, `author` and `limit`
+# are all shared, so there is no `_PASTE` to go with these.
+_PASSPHRASE = frozenset({"passphrase"})
 _SEARCH = frozenset({"search"})
+_CREATE = frozenset({"create"})
+
+# Every object type a spec may search. A key all four spell the same way and
+# mean the same thing by - `text_query`, `limit` - is one Field carrying this
+# rather than four Fields with one name, which is also what keeps a
+# per-endpoint constraint quirk in one place. See `Field.constraints`.
+_SEARCHED = frozenset({"task", "project", "paste", "passphrase"})
+
+# The colours a project can be, restated rather than imported.
+# `phabfive.constants.PROJECT_COLORS` is the source of truth, but this
+# module is the cheap, dependency-free bottom of the spec stack and
+# `tests/test_spec_registry.py::test_the_registry_imports_only_the_standard_library`
+# refuses `phabfive.constants` in its import graph - while `choices` has to
+# be a literal, because FIELDS is built as this module is imported.
+# `tests/test_spec_resolvers.py` asserts the two lists are equal, so the
+# restatement cannot drift: adding a colour to constants turns it red.
+# As `_PROJECT_COLORS`: `phabfive.constants.PROJECT_STATUS_CHOICES` is the
+# source of truth and this module may not import it, so the two are pinned
+# equal by `tests/test_search_constraints_apps.py`.
+_PROJECT_STATUSES: tuple[str, ...] = ("active", "archived", "any")
+
+_PROJECT_COLORS: tuple[str, ...] = (
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "blue",
+    "indigo",
+    "violet",
+    "pink",
+    "grey",
+    "checkered",
+)
 
 
-# Phase 1 declares exactly the keys that exist today - the 22 that
-# phabfive.constants used to list by hand. A field declared here but not read by
-# the command would be accepted by the loader and silently ignored, which is
-# the drift this registry exists to end; the missing constraints arrive with
-# their command in #478 and #479.
+# Task search declares exactly the keys that exist today - the 22 that
+# phabfive.constants used to list by hand, plus the constraints #478 wired up.
+# A field declared here but not read by the command would be accepted by the
+# loader and silently ignored, which is the drift this registry exists to end.
+#
+# That rule is also why project, paste and user search declare nothing yet,
+# although #479 gave their commands the constraints and `--order` that
+# `maniphest search` has. What reads a *spec's* search keys for those types is
+# `phabfive.search.dispatch`, whose per-type builders are the only things that
+# can turn a key into that method's arguments; until a key is wired up there,
+# declaring it here would tell a spec writer about a filter nothing applies.
+# `dispatch.accepted_keys` carries the interim key set and switches to this
+# registry the moment it declares one - which is what
+# `tests/test_spec_search_apps.py` guards.
+#
+# Declaration order is the report order, so a block is appended and never
+# reordered. Each object type gets its own block, marked with a comment.
 #
 # The spelling quirks are the registry's job to describe, not to fix:
 # "text_query" is the one key with an underscore while every other key is
@@ -159,12 +231,19 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="text_query",
         kind=FieldKind.TEXT,
-        objects=_TASK,
+        # Every searchable object type takes free text, spelled the same way
+        # and meaning the same thing, so it is one declaration rather than
+        # four. Only where it *goes* differs, which `constraints` says.
+        objects=_SEARCHED,
         verbs=_SEARCH,
         # The CLI takes this as a positional argument, so there is no flag.
         cli=None,
         constraint="query",
-        help="Free-text search in task title and description.",
+        # There is no `passphrase.search`, only the legacy `passphrase.query`,
+        # which takes no constraints: the name filter is applied in Python
+        # over every credential the token can see.
+        constraints=MappingProxyType({"passphrase": None}),
+        help="Free-text search in the title and description.",
     ),
     Field(
         name="tag",
@@ -217,15 +296,16 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="author",
         kind=FieldKind.USER,
-        objects=_TASK,
+        objects=frozenset({"task", "paste"}),
         verbs=_SEARCH,
         cli="--author",
         constraint="authorPHIDs",
         # maniphest.search and paste.search disagree on this one name, and a
         # wrong key fails with ERR-INVALID-CONSTRAINT. Declared here so the
-        # quirk is described once; paste is not a searchable object type yet.
+        # quirk is described once, which is the whole reason `constraints`
+        # exists.
         constraints=MappingProxyType({"paste": "authors"}),
-        help="Task author: a username, @me, or a user PHID.",
+        help="Author: a username, @me, or a user PHID.",
     ),
     Field(
         name="space",
@@ -298,8 +378,12 @@ FIELDS: tuple[Field, ...] = (
         objects=_TASK,
         verbs=_SEARCH,
         cli="--column",
-        # Column transitions are read out of each task's history, in Python.
-        constraint=None,
+        # A transition filter is read out of each task's history, in Python -
+        # but a pattern made only of `in:` conditions asks about the *current*
+        # column, which `columnPHIDs` answers, so that one shape is narrowed
+        # by the server first and re-checked in Python. See `lifts`.
+        constraint="columnPHIDs",
+        lifts=("in",),
         help="Column transition filter, e.g. in:Backlog or never:Done.",
     ),
     Field(
@@ -308,8 +392,11 @@ FIELDS: tuple[Field, ...] = (
         objects=_TASK,
         verbs=_SEARCH,
         cli="--priority",
-        # Priority transitions are read out of each task's history, in Python.
-        constraint=None,
+        # As `column`: `in:High` is current state and becomes the `priorities`
+        # constraint, while `been:`, `never:`, `from:`, `to:`, `raised` and
+        # `lowered` are history and stay in Python.
+        constraint="priorities",
+        lifts=("in",),
         help="Priority transition filter, e.g. in:High or from:Low.",
     ),
     Field(
@@ -318,10 +405,12 @@ FIELDS: tuple[Field, ...] = (
         objects=_TASK,
         verbs=_SEARCH,
         cli="--status",
-        # Only the scope half of the pattern - open, closed, any - reaches the
-        # server as "statuses"; the transition conditions are applied over each
-        # task's history in Python.
+        # The scope half of the pattern - open, closed, any - reaches the
+        # server as "statuses", and so does an `in:` condition, which names a
+        # current status rather than a transition. Every other condition is
+        # applied over each task's history in Python.
         constraint="statuses",
+        lifts=("in",),
         default="open",
         help="open, closed, any, or transition patterns ANDed with +.",
     ),
@@ -360,21 +449,22 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="show-policy",
         kind=FieldKind.BOOL,
-        objects=_TASK,
+        objects=frozenset({"task", "project"}),
         verbs=_SEARCH,
         cli="--show-policy",
         constraint=None,
         default=False,
-        help="Display each task's policies.",
+        help="Display each result's policies.",
     ),
     Field(
         name="limit",
         kind=FieldKind.INT,
-        objects=_TASK,
+        objects=_SEARCHED,
         verbs=_SEARCH,
         cli="--limit",
         # Applied after ordering and after the post-filters, in Python, so the
-        # limit keeps the top N of the tasks that actually matched.
+        # limit keeps the top N of the records that actually matched. Never a
+        # constraint, for any of the four.
         constraint=None,
         default=100,
         help="Maximum results to return, 0 for all.",
@@ -390,6 +480,326 @@ FIELDS: tuple[Field, ...] = (
         constraint=None,
         help="Sort as <field>[:asc|:desc], e.g. updated:desc.",
     ),
+    # --- task, search: the constraints maniphest.search answers and
+    # phabfive used to leave on the table (#478) ---------------------------
+    #
+    # Every one of these is a filter the server applies, so the task never
+    # crosses the wire - which is the difference between a query and a full
+    # walk filtered in Python. Appended as a block rather than interleaved
+    # with the keys above, because `fields_for` returns declaration order and
+    # a validation report reads in that order.
+    Field(
+        name="ids",
+        kind=FieldKind.MONOGRAM,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--ids",
+        monograms=("T",),
+        constraint="ids",
+        multiple=True,
+        # Not `include`: these tasks are what is searched *for*, so every
+        # other filter still applies to them, and the result is the
+        # intersection. `include` is the opposite - it bypasses the filters.
+        help="Only these tasks, with every other filter still applied.",
+    ),
+    Field(
+        name="phids",
+        kind=FieldKind.TEXT,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--phids",
+        constraint="phids",
+        multiple=True,
+        help="Only these task PHIDs, with every other filter still applied.",
+    ),
+    Field(
+        name="subscriber",
+        kind=FieldKind.USER,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--subscriber",
+        constraint="subscribers",
+        multiple=True,
+        help="Tasks a user is subscribed to: a username, @me, or a PHID.",
+    ),
+    Field(
+        name="subtype",
+        kind=FieldKind.TEXT,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--subtype",
+        constraint="subtypes",
+        multiple=True,
+        # Instance configuration (`maniphest.subtypes`), and no Conduit method
+        # reports the list, so the value is passed through as written rather
+        # than checked against a set phabfive would have to guess at.
+        help="Task subtype key, e.g. 'default' or one this instance defines.",
+    ),
+    Field(
+        name="parent",
+        kind=FieldKind.MONOGRAM,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--parent",
+        monograms=("T",),
+        constraint="parentIDs",
+        multiple=True,
+        help="Subtasks of these tasks.",
+    ),
+    Field(
+        name="subtask",
+        kind=FieldKind.MONOGRAM,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--subtask",
+        monograms=("T",),
+        constraint="subtaskIDs",
+        multiple=True,
+        help="Parents of these tasks.",
+    ),
+    Field(
+        name="has-parents",
+        kind=FieldKind.BOOL,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--has-parents",
+        constraint="hasParents",
+        help="Only tasks that are a subtask of something.",
+    ),
+    Field(
+        name="has-subtasks",
+        kind=FieldKind.BOOL,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--has-subtasks",
+        constraint="hasSubtasks",
+        help="Only tasks that have subtasks.",
+    ),
+    Field(
+        name="closed-by",
+        kind=FieldKind.USER,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--closed-by",
+        constraint="closerPHIDs",
+        multiple=True,
+        help="Tasks closed by a user: a username, @me, or a user PHID.",
+    ),
+    Field(
+        name="closed-after",
+        kind=FieldKind.TIME,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--closed-after",
+        constraint="closedStart",
+        help="Tasks closed within TIME, e.g. 1h, 7d, 2w.",
+    ),
+    Field(
+        name="closed-before",
+        kind=FieldKind.TIME,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--closed-before",
+        constraint="closedEnd",
+        help="Tasks closed more than TIME ago.",
+    ),
+    # --- project, search -------------------------------------------------
+    #
+    # The key set `phabfive.search.dispatch` builds `Project.search`'s
+    # arguments from, which is what makes ("project", "search") complete: a
+    # key outside this block reaches nothing, so a spec naming one is an
+    # error rather than a filter that quietly does not happen.
+    #
+    # `text_query`, `limit` and `show-policy` are declared above, on the
+    # fields the object types share.
+    Field(
+        name="members",
+        kind=FieldKind.USER,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--member",
+        constraint="members",
+        multiple=True,
+        help="Projects one of these users is a member of.",
+    ),
+    Field(
+        name="parents",
+        kind=FieldKind.PROJECT,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--parent",
+        constraint="parents",
+        multiple=True,
+        help="Direct subprojects and milestones of these projects.",
+    ),
+    Field(
+        name="ancestors",
+        kind=FieldKind.PROJECT,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--ancestor",
+        constraint="ancestors",
+        multiple=True,
+        help="Everything anywhere beneath these projects.",
+    ),
+    Field(
+        name="milestones",
+        kind=FieldKind.BOOL,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--milestones",
+        constraint="isMilestone",
+        # Tri-state: absent is "both", which is neither of the two booleans,
+        # so there is no default.
+        help="true lists only milestones, false only what is not one.",
+    ),
+    Field(
+        name="status",
+        # Not the task `status`, which is a transition pattern over a task's
+        # history. A project is active or archived and that is all, so this
+        # is a plain enum of three - the third, "any", being no filter.
+        kind=FieldKind.ENUM,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--status",
+        constraint="status",
+        choices=_PROJECT_STATUSES,
+        default="active",
+        help="active, archived, or any.",
+    ),
+    Field(
+        name="icons",
+        # As a `projects:` item's `icon`: the icon set is `projects.icons`
+        # instance configuration that no Conduit method reports, so nothing
+        # offline can settle one.
+        kind=FieldKind.INSTANCE_ENUM,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--icon",
+        # project.search has no icon constraint: the search is run per icon
+        # and the results merged, in `Project._search_by_look`.
+        constraint=None,
+        multiple=True,
+        help="Projects shown with any of these icons.",
+    ),
+    Field(
+        name="colors",
+        kind=FieldKind.ENUM,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--color",
+        # As `icons`: merged from one search per colour, never sent.
+        constraint=None,
+        choices=_PROJECT_COLORS,
+        multiple=True,
+        help="Projects shown in any of these colours.",
+    ),
+    Field(
+        name="spaces",
+        # Plural, and not the task search's `space`: that one takes a
+        # comma-separated string of monograms, names and patterns, this one a
+        # list. The two are kept apart rather than merged into a spelling
+        # neither command has.
+        kind=FieldKind.SPACE,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--space",
+        constraint="spaces",
+        multiple=True,
+        help="Space monograms, names or patterns; none means PHAB_SPACE.",
+    ),
+    Field(
+        name="show-members",
+        kind=FieldKind.BOOL,
+        objects=_PROJECT,
+        verbs=_SEARCH,
+        cli="--show-members",
+        constraint=None,
+        default=False,
+        help="Display each project's members.",
+    ),
+    # --- passphrase, search ----------------------------------------------
+    #
+    # Two keys, and the walk behind them is the point: there is no
+    # `passphrase.search`, only the legacy `passphrase.query`, which takes no
+    # constraints at all. Both filters are applied in Python over every
+    # credential the token can see - see docs/search-templates.md.
+    Field(
+        name="type",
+        kind=FieldKind.TEXT,
+        objects=_PASSPHRASE,
+        verbs=_SEARCH,
+        cli="--type",
+        # passphrase.query has no constraints: applied in Python.
+        constraint=None,
+        help="Credential type: password, token, key or note.",
+    ),
+    # --- paste, search ----------------------------------------------------
+    #
+    # `text_query`, `author` and `limit` only, all declared above. The
+    # command's other filters - --ids, --phids, --language, --status,
+    # --created-after, --created-before, --order - are not spec keys yet:
+    # `phabfive.search.dispatch._paste_params` does not build them, and a key
+    # declared here that nothing reads is the drift this registry exists to
+    # end. They are refused by name today, see
+    # `phabfive.cli.search_spec.refuse_unspecced`.
+    # --- project, create -------------------------------------------------
+    #
+    # Two keys of the several a `projects:` item holds, declared because they
+    # are the two the validation layers can say something about. The rest of
+    # the key set arrives with its command, which is why ("project", "create")
+    # is NOT in DECLARED_COMPLETE: until it is, an undeclared project key is
+    # left alone rather than called unknown.
+    Field(
+        name="color",
+        # Not INSTANCE_ENUM. The colour *keys* are fixed in Phorge's source -
+        # projects.colors relabels a colour and can change the default, but
+        # cannot add one - so a colour needs no network to check, and
+        # `phabfive/project/core.py:check_project_color` already refuses an
+        # unknown one offline. Layer 1 answers it, from `choices`.
+        kind=FieldKind.ENUM,
+        objects=_PROJECT,
+        verbs=_CREATE,
+        cli="--color",
+        choices=_PROJECT_COLORS,
+        help="The colour the project is shown in.",
+    ),
+    Field(
+        name="icon",
+        # The opposite case, and the reason INSTANCE_ENUM still exists here:
+        # the icon set is `projects.icons` instance configuration and no
+        # Conduit method reports it, so the icons projects carry are only an
+        # approximation - the server still accepts a configured icon no
+        # project uses yet. Layer 2 therefore *warns*, and never fails.
+        kind=FieldKind.INSTANCE_ENUM,
+        objects=_PROJECT,
+        verbs=_CREATE,
+        cli="--icon",
+        help="The icon the project is shown with.",
+    ),
+)
+
+
+#: The ``(object type, verb)`` pairs whose declared key set is **complete**,
+#: and therefore the only ones an undeclared key is reported as
+#: ``unknown-key`` for.
+#:
+#: Without this, declaring the first field of an object type would make every
+#: *other* key of that object an error: `validate._check_fields` reports an
+#: unknown key as soon as the pair has any declared field at all. So
+#: ("project", "create") declares `color` and `icon` and stays out of this
+#: set, and a `projects:` item keeps its `name:` and `description:` while
+#: those two are still checked. A pair joins this set in the change that
+#: finishes its key set - and `docs/search-templates.md` has to grow the
+#: bullet in the same change, see
+#: `tests/test_search_template_keys.py`.
+DECLARED_COMPLETE: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("task", "search"),
+        ("project", "search"),
+        ("paste", "search"),
+        ("passphrase", "search"),
+    }
 )
 
 

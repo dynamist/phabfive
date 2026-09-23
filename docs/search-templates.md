@@ -126,10 +126,127 @@ search:
 - `show-metadata`: Display filter match metadata (true/false)
 - `show-policy`: Display each task's policies (true/false). Off by default: naming a
   policy that points at a project or a user costs one `phid.query` for the page
+- `ids`: Only these tasks, with every other filter still applied, as a comma-separated
+  string (`"T123,T456"`) or a YAML list. Unlike `include`, the filters still decide
+- `phids`: Only these task PHIDs, with every other filter still applied
+- `subscriber`: Tasks a user is subscribed to: a username, `"@me"`, or a user PHID
+- `subtype`: Task subtype key, e.g. `default` or one this instance defines in
+  `maniphest.subtypes`
+- `parent`: Only the subtasks of these tasks (`"T123"` or a YAML list)
+- `subtask`: Only the parents of these tasks (`"T123"` or a YAML list)
+- `has-parents`: Only tasks that are a subtask of something (true/false)
+- `has-subtasks`: Only tasks that have subtasks (true/false)
+- `closed-by`: Tasks closed by a user: a username, `"@me"`, or a user PHID
+- `closed-after`: Tasks closed within TIME (e.g., `"1w"`, `"2m"`, or `7` for days)
+- `closed-before`: Tasks closed more than TIME ago (e.g., `"1w"`, `"2m"`, or `7` for days)
 
 **Time Unit Support:**
 All date filters support time units: `h` (hours), `d` (days), `w` (weeks), `m` (months), `y` (years).
 Examples: `"12h"`, `"1w"`, `"2m"`, `"1y"`. Plain numbers default to days.
+
+## Searching Other Objects
+
+A template is a **search spec**, and every item in one says what it searches:
+
+```yaml
+kind: search
+searches:
+  - type: task
+    search: {column: "in:Blocked"}
+  - type: project
+    search: {status: active, members: ["@me"]}
+  - type: paste
+    search: {author: "@me"}
+  - type: passphrase
+    search: {type: key}
+```
+
+`type:` defaults to `task`, so every template written before this existed keeps
+meaning exactly what it meant. A document holding several items runs them in the
+order they are written, each through the app that searches that object, and all of
+them share one configuration and one connection.
+
+Each search command reads a spec with the same `--with`, and the command's own
+options override what the spec says:
+
+```bash
+phabfive project search --with searches.yaml
+phabfive paste search --with searches.yaml
+phabfive passphrase search --with searches.yaml
+```
+
+Which of the three you start from decides nothing but where the first connection
+comes from: `phabfive project search --with mixed.yaml` runs the paste and
+passphrase items in that file too.
+
+`phabfive maniphest search --with` reads a template of task searches, as it
+always has. It has not moved to the shared ingestion point yet, so it is not the
+command to run a document naming another `type:` from - use one of the three
+above. It does not guess, either: an item whose `type:` is not `task` is refused
+by name, with the command that runs it:
+
+```console
+$ phabfive maniphest search --with mixed.yaml
+ERROR: Search 1: 'maniphest search' runs a task search, and this one is a
+'paste' search. Run the spec from 'phabfive paste search --with' instead,
+which runs every type a spec holds.
+```
+
+Every key below is declared once, in `phabfive/spec/registry.py`, and the key
+set of each of the four object types is **complete**: a key that is not listed
+is an error naming the key rather than a filter that quietly does not happen.
+
+### project
+
+- `text_query`: Free text, matched the way the web UI's search box matches it
+- `members`: Projects any of these users is a member of (`"@me"`, a username or a
+  user PHID; a list, or comma-separated)
+- `parents`: Direct subprojects and milestones of these projects
+- `ancestors`: Projects anywhere beneath these projects
+- `milestones`: `true` for only milestones, `false` for no milestones, absent for both
+- `status`: `active` (the default), `archived`, or `any`
+- `icons`: Projects with any of these icons
+- `colors`: Projects of any of these colours; a milestone has its parent's
+- `spaces`: Space names, monograms or patterns; `"*"` for every Space. Absent means
+  `PHAB_SPACE`
+- `show-policy`: Display each project's policies (true/false)
+- `show-members`: Display each project's members (true/false)
+- `limit`: Maximum results, `0` for all (default `100`)
+
+A project search with no filter at all is a request rather than a mistake: it lists
+every active project in `PHAB_SPACE`.
+
+### paste
+
+- `text_query`: Free text, matched against the paste title
+- `author`: A username, `"@me"`, or a user PHID
+- `limit`: Maximum results, `0` for all (default `100`)
+
+The author filter is sent as Phorge's `authors` constraint, which is what
+`paste.search` calls it - `maniphest.search` calls the same filter `authorPHIDs`,
+and the wrong one fails with `ERR-INVALID-CONSTRAINT`.
+
+### passphrase
+
+- `text_query`: Part of a credential's name, matched case-insensitively
+- `type`: `password`, `token`, `key`, `ssh` or `note`
+- `limit`: Maximum matching credentials, `0` for all (default `100`)
+
+**What a passphrase search costs.** Phorge publishes no `passphrase.search`: the
+only method is the legacy `passphrase.query`, and it takes no constraints at all.
+So both filters above are applied by phabfive, in Python, over **every credential
+the token can see** - a search reads the whole list and tests each entry, whatever
+you filtered on. `limit` is counted locally for the same reason: sent to the
+server it would truncate the list before a single credential had been tested, so
+`--limit 2 --type key` could report none of the keys that exist. Reading stops as
+soon as enough have matched, which shortens the walk but does not make the query
+cheap - on a large instance, expect a passphrase search to cost roughly what
+listing every credential costs.
+
+A search spec also never fetches secret material. `--show-secret` cannot be
+combined with `--with`, because the walk above would fetch the secret of every
+credential on the instance rather than of the ones that matched; read one secret
+with `phabfive passphrase show K1` instead.
 
 ## Creating Your Own Templates
 

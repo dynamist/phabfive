@@ -16,13 +16,16 @@ Two things this module is deliberately not:
   job - can check a spec without phabfive at all. The suite uses
   ``jsonschema`` as a test oracle for exactly that reason.
 - **It is not where an instance's vocabulary lives.** Priorities, statuses,
-  project icons, colours, spaces and policy *names* are defined by the
-  Phorge instance, and `phabfive.maniphest` answers a failed status fetch
-  with invented defaults. Baking either into a generated schema would let it
+  project icons, spaces and policy *names* are defined by the Phorge
+  instance, and `phabfive.maniphest` answers a failed status fetch with
+  invented defaults. Baking either into a generated schema would let it
   bless a value the server never named, so those keys are typed and
   shape-checked here and resolved by the online pass. What is in the schema
   is only what is genuinely static: the spec version, the kinds, the order
-  grammar, the transition grammar and the *shape* of a policy.
+  grammar, the transition grammar, the *shape* of a policy - and the project
+  colours, which belong on this side of the line: their keys are fixed in
+  Phorge's source, so `projects.colors` relabels a colour but cannot add
+  one, and a `FieldKind.ENUM` publishes the ten.
 
 Library code: it prints nothing, reads no configuration and opens no socket.
 `phabfive.constants` and `phabfive.transitions` are imported inside the
@@ -55,6 +58,7 @@ from phabfive.spec.references import (
     NESTED_KEY,
 )
 from phabfive.spec.registry import (
+    DECLARED_COMPLETE,
     OBJECT_TYPES,
     Field,
     FieldKind,
@@ -67,6 +71,7 @@ __all__ = [
     "SEARCH_ITEM_KEYS",
     "TIME_PATTERN",
     "build_schema",
+    "enum_list_pattern",
     "monogram_grammar_alternatives",
     "monogram_list_pattern",
     "monogram_pattern",
@@ -278,6 +283,22 @@ def monogram_list_pattern(prefixes: tuple[str, ...] = ()) -> str:
     return f"^[ \\t]*{one}(?:[ \\t]*,[ \\t]*{one})*[ \\t]*$"
 
 
+@functools.lru_cache(maxsize=None)
+def enum_list_pattern(choices: tuple[str, ...]) -> str:
+    """The pattern a comma-separated string of enum values must match.
+
+    The same rule as :func:`monogram_list_pattern`, for the same reason: a
+    `multiple` field's *scalar* spelling is the comma-separated one -
+    ``colors: "red,blue"`` is what a flag can write and what
+    `phabfive.options.value_list` reads - and a JSON Schema ``enum`` can
+    only describe one value at a time. So the list spelling keeps the enum
+    and the scalar one becomes this.
+    """
+    one = "(?:" + "|".join(re.escape(choice) for choice in choices) + ")"
+
+    return f"^[ \\t]*{one}(?:[ \\t]*,[ \\t]*{one})*[ \\t]*$"
+
+
 def monogram_grammar_alternatives(prefixes: tuple[str, ...] = ()) -> tuple[str, ...]:
     """Each application's monogram pattern, unanchored.
 
@@ -321,6 +342,12 @@ def _scalar_schema(field: Field) -> dict[str, Any]:
         }
 
     if kind is FieldKind.ENUM:
+        if field.multiple:
+            # As MONOGRAM below: the scalar spelling of a list filter is the
+            # comma-separated one, which an `enum` cannot express. The list
+            # spelling keeps the enum, see `_one_of_list`.
+            return {"type": "string", "pattern": enum_list_pattern(field.choices)}
+
         return {"enum": list(field.choices)}
 
     if kind is FieldKind.ORDER:
@@ -343,7 +370,8 @@ def _scalar_schema(field: Field) -> dict[str, Any]:
 
     # USER, PROJECT, SPACE and INSTANCE_ENUM are all free text offline: what
     # they name is the instance's to answer, and a guessed enum here would
-    # bless a value the server never had.
+    # bless a value the server never had. A project colour is NOT one of
+    # them - it is a FieldKind.ENUM above, and its ten keys are published.
     return {"type": "string"}
 
 
@@ -391,17 +419,23 @@ def _one_of_list(field: Field, scalar: dict[str, Any]) -> dict[str, Any]:
     if field.kind is FieldKind.MONOGRAM:
         return {"type": "string", "pattern": monogram_pattern()}
 
+    if field.kind is FieldKind.ENUM:
+        return {"enum": list(field.choices)}
+
     return dict(scalar)
 
 
 def _fields_schema(object_type: str, verb: str) -> dict[str, Any]:
     """Every declared field of one object type and verb, as an object schema.
 
-    An object type with no declared field for this verb is **permissive**:
-    ``additionalProperties`` stays true, because a registry that declares
-    nothing about an object cannot honestly call any of its keys unknown.
-    Phase 1 declares search fields for tasks and nothing else, so this is
-    what a create spec and a project search get until their fields land.
+    ``additionalProperties`` is false only for a pair in
+    `registry.DECLARED_COMPLETE`, whose key set is finished. Everything else
+    is **permissive**, because a registry that has declared two keys of an
+    object cannot honestly call the third unknown - a project create schema
+    describes `color:` and `icon:` and still accepts the `name:` nothing has
+    declared yet. This is the same gate `validate._check_fields` applies, and
+    the two have to agree or the oracle and the walk disagree over a spec
+    neither is wrong about.
     """
     declared = fields_for(object_type, verb)
 
@@ -411,7 +445,7 @@ def _fields_schema(object_type: str, verb: str) -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {field.name: property_schema(field) for field in declared},
-        "additionalProperties": False,
+        "additionalProperties": (object_type, verb) not in DECLARED_COMPLETE,
     }
 
 
@@ -655,10 +689,11 @@ def build_schema(
         "title": title,
         "description": (
             "Generated from phabfive.spec.registry. Instance-defined values - "
-            "priorities, statuses, project icons and colours, spaces and policy "
-            "names - are typed but not enumerated here on purpose: only the "
-            "server knows them, so a schema that guessed could bless a value "
-            "it never had."
+            "priorities, statuses, project icons, spaces and policy names - "
+            "are typed but not enumerated here on purpose: only the server "
+            "knows them, so a schema that guessed could bless a value it "
+            "never had. Project colours are enumerated, because Phorge fixes "
+            "those keys in its own source."
         ),
     }
     document.update(body)

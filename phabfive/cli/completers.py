@@ -12,7 +12,6 @@ from phabfive.constants import (
     POLICY_LABELS,
     PROJECT_COLORS,
     PROJECT_ICONS,
-    PROJECT_STATUS_ALL,
     PROJECT_STATUS_CHOICES,
     REPO_STATUS_CHOICES,
     USER_ROLE_ANY,
@@ -863,15 +862,24 @@ def _cached_user_records(incomplete: str, include_disabled: bool) -> list:
     return records
 
 
-def _user_completions(incomplete: str, include_disabled: bool) -> list:
+def _user_completions(
+    incomplete: str, include_disabled: bool, shortcuts: bool = True
+) -> list:
     """Return (username, real name or None) pairs matching the typed text.
 
     Only usernames that start with the typed text are offered, because Typer
     drops the rest; the real name is offered as a description instead, so
     searching for "Bergstrom" cannot complete "sonja.bergstrom".
+
+    `shortcuts` is False for an option that takes a **stored** username and
+    nothing else - `user search --usernames`, whose constraint matches the
+    name exactly. Offering `@me` there would hand the shell a value the
+    command is documented to refuse.
     """
     if incomplete.startswith("@"):
         # No username starts with "@", so the API has nothing to add here
+        if not shortcuts:
+            return []
         return [(ME_SHORTCUT, "yourself")] if ME_SHORTCUT.startswith(incomplete) else []
 
     records = _cached_user_records(incomplete, include_disabled)
@@ -879,7 +887,7 @@ def _user_completions(incomplete: str, include_disabled: bool) -> list:
     # @me is only offered before a username is typed, since it can never be
     # a prefix of one
     pairs: list[tuple[str, str | None]] = (
-        [(ME_SHORTCUT, "yourself")] if not incomplete else []
+        [(ME_SHORTCUT, "yourself")] if shortcuts and not incomplete else []
     )
 
     incomplete_lower = incomplete.lower()
@@ -990,6 +998,31 @@ def complete_user_list_filter(incomplete: str) -> list[str | tuple[str, str]]:
     """
     typed, comma, last = incomplete.rpartition(",")
     pairs = _user_completions(last, include_disabled=True)
+    return _as_completions(pairs, prefix=f"{typed}{comma}")
+
+
+def complete_username_list(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete a comma-separated list of **stored** usernames.
+
+    `user search --usernames` sends the `usernames` constraint, which matches
+    the name a user is stored under exactly, so `phabfive.users.user_name_list`
+    refuses anything starting with "@". Offering `@me` here would therefore
+    complete a value guaranteed to exit 1, which is why this is a separate
+    completer from :func:`complete_user_list_filter` rather than a flag on it.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching usernames, each prefixed with the names already typed, and
+        no shortcut
+    """
+    typed, comma, last = incomplete.rpartition(",")
+    pairs = _user_completions(last, include_disabled=True, shortcuts=False)
     return _as_completions(pairs, prefix=f"{typed}{comma}")
 
 
@@ -1185,29 +1218,18 @@ PROJECT_ICON_CACHE_NAMESPACE = "project-icons"
 def _fetch_project_icons(phab) -> List[str]:
     """The stock icons, plus every icon a project on the instance carries.
 
-    The icon set is instance configuration (projects.icons) and no Conduit
-    method reports it, so the icons in use are the closest the API comes to
-    naming a custom one. A configured icon that no project uses yet is not
-    offered - the server still takes it.
+    The lookup itself is `phabfive.project.core.icons_in_use`: the same
+    question is asked by `phabfive spec validate`, which may not import
+    anything under `phabfive.cli`, so it lives in library code and this is
+    the completion's way in. Imported inside the function because completion
+    runs on every TAB and most completions never ask the server at all.
 
     Lets a failed lookup fail, so that _cached_values falls back to the
     stock list without writing it down as the instance's answer.
     """
-    from phabfive.pagination import search_all_pages
+    from phabfive.project.core import icons_in_use
 
-    projects = search_all_pages(
-        phab.project.search, constraints={"status": PROJECT_STATUS_ALL}
-    )
-    in_use = {
-        icon
-        for project in projects
-        if (icon := (project.get("fields", {}).get("icon") or {}).get("key"))
-    }
-
-    # "milestone" is Phorge's to give to a milestone, not a value to choose
-    in_use.discard("milestone")
-
-    return PROJECT_ICONS + sorted(in_use - set(PROJECT_ICONS))
+    return icons_in_use(phab)
 
 
 def complete_project_icon(incomplete: str) -> List[str]:
@@ -1303,7 +1325,10 @@ def complete_order(incomplete: str) -> List[str]:
     """Complete result ordering values for maniphest search --order.
 
     Completes progressively rather than dumping every spelling: the bare
-    fields first, then the two directions once a ":" is typed.
+    fields first, then the two directions once a ":" is typed. The rule is
+    `phabfive.ordering.complete_order_value`, which every app's `--order`
+    completer shares; this is maniphest's table handed to it, not a second
+    copy of the logic.
 
     Parameters
     ----------
@@ -1315,14 +1340,11 @@ def complete_order(incomplete: str) -> List[str]:
     list
         Matching order completions
     """
-    if ":" in incomplete:
-        field = incomplete.split(":", 1)[0]
-        if not MANIPHEST_ORDER_DIRECTIONS.get(field):
-            # Unknown field, or one that takes no direction
-            return []
-        return _complete_fixed(incomplete, [f"{field}:asc", f"{field}:desc"])
+    from phabfive.ordering import complete_order_value
 
-    return _complete_fixed(incomplete, MANIPHEST_ORDER_FIELDS)
+    return complete_order_value(
+        incomplete, MANIPHEST_ORDER_FIELDS, MANIPHEST_ORDER_DIRECTIONS
+    )
 
 
 # Suffixes `phabfive spec validate` reads, exactly the ones

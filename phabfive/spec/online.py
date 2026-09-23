@@ -39,39 +39,62 @@ What this module deliberately does not do:
   module never reads `~/.arcrc`, a config file or the environment.
 - **It writes nothing.** Every call it makes is a `*.search` or `whoami`.
 
-Phase 1 ships the protocol, the index, the atomic collection and exactly one
-resolver - :class:`ManiphestUserResolver`, which proves the protocol end to
-end. The rest of the table in #473 lands with its app in Phases 2 and 3:
-projects and their ambiguity, spaces by monogram/name/pattern, `T123`
-parents and subtasks, policy values, status and priority for *this*
-instance, a column on the named board, and a project hashtag that is already
-taken. Each is a new `Resolver` added to :data:`DEFAULT_RESOLVERS`; nothing
-else here has to change.
+Phase 1 shipped the protocol, the index, the atomic collection and one
+resolver - :class:`ManiphestUserResolver`. Phase 2 adds
+:class:`ProjectResolver`, :class:`SpaceResolver` and :class:`IconResolver`,
+so a spec naming a user, a project, a Space and an icon that do not exist
+reports all four from one run. The rest of the table in #473 lands with its
+app: `T123` parents and subtasks, policy values, status and priority for
+*this* instance, a column on the named board, and a project hashtag that is
+already taken. Each is a new `Resolver` added to :data:`DEFAULT_RESOLVERS`;
+nothing else here has to change.
 
-Two seams are worth naming now, so that the next phase is not surprised:
+**A resolver may cost a request; a colour costs none.** The colour keys are
+fixed in Phorge's own source - `projects.colors` relabels a colour but
+cannot add one - so `color:` is a `FieldKind.ENUM` in the registry and the
+offline pass settles it. Nothing here asks about one. An **icon** is the
+opposite: the icon set is `projects.icons` instance configuration that no
+Conduit method reports, so the icons projects carry are only an
+approximation of it and the server still accepts a configured icon no
+project uses yet. :class:`IconResolver` therefore reports
+`Severity.WARNING`, which is what keeps an exit status honest: a warning
+says "this may be a typo", never "this is wrong".
 
-- A resolver answers for a whole `FieldKind`, and `FieldKind.INSTANCE_ENUM`
-  covers status, priority, icon and colour, which are four different
-  lookups. The kind alone does not say which, so whoever answers for it will
-  need the field name too. Left open rather than guessed at here.
-- `phabfive.spec.references` declares *which* create keys hold a reference;
+The one seam left:
+
+- `phabfive.spec.references` declares *which* keys hold a reference;
   `phabfive.spec.registry` declares what a key's value *is*, but for search
-  fields only so far. :data:`_CREATE_FIELD_KINDS` bridges the two until the
-  create fields join the registry, at which point it goes away - a search
-  spec therefore has no online references in Phase 1, because
-  `references.REFERENCE_FIELDS` has no entry for a search item yet.
+  fields and two project create fields so far. :data:`_CREATE_FIELD_KINDS`
+  bridges the two until the create fields join the registry, at which point
+  its create half goes away. Its ``"search"`` half stays a little longer: a
+  `searches:` item's object type is ``"search"`` rather than one of the
+  registry's, because what it searches is its own ``type:``, and the four
+  user filters declared there mean a user whichever type that is.
+
+The seam Phase 1 left open - that a resolver answered for a whole
+`FieldKind` while `FieldKind.INSTANCE_ENUM` covers several different lookups
+- is closed by :class:`ReferenceGroup`. Moving colour to `ENUM` removed one
+of the four; status, priority and icon are told apart by the **field name**,
+and the choice was to key the *registration* rather than the call:
+a resolver declares which field names it answers for in `Resolver.fields`,
+`validate_online` groups the index by `(kind, field)` for the kinds in
+:data:`FIELD_SCOPED_KINDS` and by kind alone for every other, and each group
+is still one call with every distinct value in it. Passing the field name
+into `resolve()` instead would have turned every resolver into a re-grouper
+and cost a request per field.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import fnmatch
 import logging
 from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from phabfive.me import is_me
 from phabfive.pagination import search_all_pages
-from phabfive.spec.problems import Layer, Problem, problem
+from phabfive.spec.problems import Layer, Problem, Severity, problem
 from phabfive.spec.references import Reference, RefKind, iter_references
 from phabfive.spec.registry import OBJECT_TYPES, FieldKind, field_by_name
 from phabfive.users import USER_PHID_PREFIX
@@ -84,13 +107,20 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "DEFAULT_RESOLVERS",
+    "FIELD_SCOPED_KINDS",
     "REFERENCE_KINDS",
+    "IconResolver",
     "ManiphestUserResolver",
+    "ProjectResolver",
+    "ReferenceGroup",
     "ReferenceIndex",
     "ResolveResult",
     "Resolver",
+    "SpaceResolver",
     "field_kind",
+    "field_name",
     "index_references",
+    "reference_group",
     "validate_online",
 ]
 
@@ -108,12 +138,13 @@ REFERENCE_KINDS = frozenset(
     }
 )
 
-# What each create-spec reference key names. `phabfive.spec.references`
-# declares WHICH create keys hold a reference; the registry declares what a
-# key's value IS, but only for search fields so far. Until the create fields
-# join the registry - `references.py` says in so many words that its table
-# moves there then - this is the one bridge between the two, and it is the
-# whole of what a Phase 2 app has to add here.
+# What each create-spec reference key names, for the keys the registry has
+# not reached yet. `phabfive.spec.references` declares WHICH create keys hold
+# a reference; the registry declares what a key's value IS - and it now does
+# so for `("project", "create")`, which is why `icon:` is absent here and
+# `field_kind` finds it in the registry instead. A task's create keys are
+# still bridged here. Every entry goes away as its object type's fields join
+# the registry.
 _CREATE_FIELD_KINDS: Mapping[str, Mapping[str, FieldKind]] = {
     "task": {
         "assignment": FieldKind.USER,
@@ -123,12 +154,59 @@ _CREATE_FIELD_KINDS: Mapping[str, Mapping[str, FieldKind]] = {
         "parents": FieldKind.MONOGRAM,
         "subtasks": FieldKind.MONOGRAM,
     },
+    # A `searches:` item's object type is "search", not one of the registry's,
+    # because what it searches is its own `type:`. These four keys mean a user
+    # whichever type that is, so the kind is the same for all of them and the
+    # item's own type does not have to be plumbed through here. A key that
+    # ever means something different per searched type gets that plumbing
+    # then, with the test that needs it.
+    "search": {
+        "assigned": FieldKind.USER,
+        "author": FieldKind.USER,
+        "subscriber": FieldKind.USER,
+        "closed-by": FieldKind.USER,
+    },
 }
+
+#: The kinds whose lookup is decided by the *field* as well as the kind.
+#: `FieldKind.INSTANCE_ENUM` is one kind covering three different questions -
+#: is this a status, is this a priority, is this an icon - and they are three
+#: different requests. Every other kind is one lookup however many keys carry
+#: it, so ``#infra`` named by both ``projects:`` and ``tag:`` stays one group
+#: and therefore one `project.query`.
+FIELD_SCOPED_KINDS = frozenset({FieldKind.INSTANCE_ENUM})
 
 # An unrendered variable is not a reference. Reporting "{{ assignee }}" as an
 # unknown user on top of "assignee is undefined" is two problems for one
 # mistake, and the offline pass already owns the first one.
 _UNRENDERED = "{{"
+
+
+@dataclasses.dataclass(frozen=True)
+class ReferenceGroup:
+    """One lookup: every value asked about in one call.
+
+    A group is a kind, plus the field name for the kinds in
+    :data:`FIELD_SCOPED_KINDS` where the kind alone does not say which
+    question is being asked. `field` is ``None`` for every other kind, which
+    is what keeps one request serving every key that carries it.
+
+    Attributes
+    ----------
+    kind : FieldKind
+        What the values are.
+    field : str or None
+        The spec key, without its index - ``"parents[0]"`` is ``"parents"``.
+        ``None`` means "every field of this kind".
+    """
+
+    kind: FieldKind
+    field: Optional[str] = None
+
+    def __str__(self) -> str:
+        return (
+            self.kind.value if self.field is None else f"{self.kind.value}:{self.field}"
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -155,6 +233,13 @@ class ResolveResult:
         a generic one naming the value.
     candidates : tuple of str
         The several things an ambiguous value matched, for the message.
+    severity : str
+        `Severity.ERROR`, or `Severity.WARNING` for a lookup that cannot be
+        conclusive. An icon is the case this exists for: no Conduit method
+        reports the configured icon set, so an icon outside the observed one
+        may still be one the server takes, and reporting it as an error
+        would refuse a spec that would have applied. A warning is reported
+        like any other problem and costs no exit status.
     """
 
     value: str
@@ -162,6 +247,7 @@ class ResolveResult:
     problem: Optional[str] = None
     reason: Optional[str] = None
     candidates: tuple[str, ...] = ()
+    severity: str = Severity.ERROR
 
     @property
     def resolved(self) -> bool:
@@ -181,9 +267,23 @@ class Resolver(Protocol):
     `PhabfiveConnectionException` and `PhabfiveAPIException` out of
     `resolve` untouched - and **returns a failure** when it asked and the
     answer was no. Anything else reports a broken network as a broken spec.
+
+    Attributes
+    ----------
+    kind : FieldKind
+        The kind of reference this answers for.
+    fields : frozenset of str
+        The spec keys it answers for, when the kind alone is not enough -
+        `FieldKind.INSTANCE_ENUM` covers a status, a priority and an icon,
+        which are three different requests. Empty means every field of the
+        kind, which is what all but the field-scoped kinds use. The
+        registration carries this rather than the call, so the bulk contract
+        - "called once with every distinct value in your group" - is
+        unchanged.
     """
 
     kind: FieldKind
+    fields: frozenset[str]
 
     def resolve(
         self, app: "Phabfive", values: Sequence[str]
@@ -213,30 +313,37 @@ class ReferenceIndex:
     """Every reference in a spec, in document order and deduplicated by value.
 
     Two views over one walk: `references` is document order, which is what
-    makes the report deterministic and therefore testable, and `values` is
-    the distinct set per kind, which is what makes one request serve every
-    item that named the same thing.
+    makes the report deterministic and therefore testable, and the groups are
+    the distinct values per :class:`ReferenceGroup`, which is what makes one
+    request serve every item that named the same thing.
+
+    Grouping is by kind alone for every kind but the ones in
+    :data:`FIELD_SCOPED_KINDS`, which group by ``(kind, field)`` because one
+    kind there covers several different lookups. `kinds`, `values` and `sites`
+    are the kind-wide views over the same data, kept because a caller that
+    only wants "every project this spec names" should not have to know which
+    kinds are scoped.
     """
 
     def __init__(self, references: Sequence[Reference] = ()) -> None:
         self._references: tuple[Reference, ...] = tuple(references)
-        self._kinds: dict[int, FieldKind] = {}
+        self._groups_at: dict[int, ReferenceGroup] = {}
 
         # dict, not set: first-appearance order is the order values reach a
         # resolver, so a failing request names them the way the file does
-        self._values: dict[FieldKind, dict[str, list[Reference]]] = {}
+        self._values: dict[ReferenceGroup, dict[str, list[Reference]]] = {}
 
         for position, reference in enumerate(self._references):
-            kind = field_kind(reference)
+            group = reference_group(reference)
 
-            if kind is None or kind not in REFERENCE_KINDS:
+            if group is None:
                 # Nothing online answers for it - a $local-id, or a key no
                 # app has claimed yet. Kept in `references`, asked about by
                 # nobody
                 continue
 
-            self._kinds[position] = kind
-            by_value = self._values.setdefault(kind, {})
+            self._groups_at[position] = group
+            by_value = self._values.setdefault(group, {})
             by_value.setdefault(reference.value, []).append(reference)
 
     @property
@@ -244,34 +351,58 @@ class ReferenceIndex:
         """Every reference, in the order the document wrote them."""
         return self._references
 
+    def groups(self) -> tuple[ReferenceGroup, ...]:
+        """The lookups present, in first-appearance order.
+
+        One group is one call to one resolver, so this is also the number of
+        resolvers `validate_online` will reach for.
+        """
+        return tuple(self._values)
+
+    def values_in(self, group: ReferenceGroup) -> tuple[str, ...]:
+        """The distinct values of one group, in first-appearance order."""
+        return tuple(self._values.get(group, {}))
+
     def kinds(self) -> tuple[FieldKind, ...]:
         """The kinds present, in first-appearance order.
 
         A kind that is absent is never asked about, so a spec naming no user
         costs no `user.search`.
         """
-        return tuple(self._values)
+        return tuple(dict.fromkeys(group.kind for group in self._values))
 
     def values(self, kind: FieldKind) -> tuple[str, ...]:
-        """The distinct values of one kind, in first-appearance order."""
-        return tuple(self._values.get(kind, {}))
+        """The distinct values of one kind, across its groups, in order."""
+        return tuple(
+            dict.fromkeys(
+                value
+                for group, values in self._values.items()
+                if group.kind is kind
+                for value in values
+            )
+        )
 
     def sites(self, kind: FieldKind, value: str) -> tuple[Reference, ...]:
         """Every place that named one value, in document order."""
-        return tuple(self._values.get(kind, {}).get(value, ()))
+        return tuple(
+            reference
+            for group, values in self._values.items()
+            if group.kind is kind
+            for reference in values.get(value, ())
+        )
 
-    def resolvable(self) -> Iterator[tuple[FieldKind, Reference]]:
+    def resolvable(self) -> Iterator[tuple[ReferenceGroup, Reference]]:
         """Every reference something online answers for, in document order.
 
-        The kind comes with it because `Reference.kind` is the *spelling* -
+        The group comes with it because `Reference.kind` is the *spelling* -
         `RefKind.NAME` for a bare word - while the lookup is decided by the
-        field it sits in. See :func:`field_kind`.
+        field it sits in. See :func:`reference_group`.
         """
         for position, reference in enumerate(self._references):
-            kind = self._kinds.get(position)
+            group = self._groups_at.get(position)
 
-            if kind is not None:
-                yield kind, reference
+            if group is not None:
+                yield group, reference
 
     def __len__(self) -> int:
         return len(self._references)
@@ -281,7 +412,7 @@ class ReferenceIndex:
 
     def __repr__(self) -> str:
         counts = ", ".join(
-            f"{kind.value}={len(values)}" for kind, values in self._values.items()
+            f"{group}={len(values)}" for group, values in self._values.items()
         )
         return (
             f"<ReferenceIndex {len(self._references)} references: {counts or 'none'}>"
@@ -304,8 +435,7 @@ def field_kind(reference: Reference) -> Optional[FieldKind]:
     if reference.kind is RefKind.LOCAL:
         return None
 
-    # "parents[0]" is the key "parents"
-    name = reference.field.split("[", 1)[0]
+    name = field_name(reference)
 
     # Only "create": `iter_references` gives a search item the object type
     # "search", which is not a registry object type, so a search reference
@@ -318,6 +448,36 @@ def field_kind(reference: Reference) -> Optional[FieldKind]:
             return declared.kind
 
     return _CREATE_FIELD_KINDS.get(reference.object_type, {}).get(name)
+
+
+def field_name(reference: Reference) -> str:
+    """The key one reference sits in, without its index or its section.
+
+    ``"parents[0]"`` is ``"parents"`` and a search spec's
+    ``"search.assigned[1]"`` is ``"assigned"``. The index names *which*
+    value and the section names *where* it is, both of which a problem
+    reports; the key alone names *what kind of question* it is, which is
+    what picks the resolver.
+    """
+    return reference.field.split("[", 1)[0].rsplit(".", 1)[-1]
+
+
+def reference_group(reference: Reference) -> Optional[ReferenceGroup]:
+    """Which lookup answers one reference, or None when nothing online does.
+
+    The field name is carried only for :data:`FIELD_SCOPED_KINDS`. Carrying
+    it for every kind would split ``projects:`` and ``tag:`` into two groups
+    naming the same projects, and cost two requests to answer one question.
+    """
+    kind = field_kind(reference)
+
+    if kind is None or kind not in REFERENCE_KINDS:
+        return None
+
+    if kind in FIELD_SCOPED_KINDS:
+        return ReferenceGroup(kind=kind, field=field_name(reference))
+
+    return ReferenceGroup(kind=kind)
 
 
 def index_references(spec: "Spec") -> ReferenceIndex:
@@ -393,6 +553,10 @@ def validate_online(
         raises because the spec was wrong** - that is the whole point, and
         it is what lets a frontend render the report per field.
 
+        A problem carries the severity its resolver gave it, so a report may
+        hold warnings as well as errors and the caller counts them
+        separately: `phabfive spec validate` exits on the errors alone.
+
     Raises
     ------
     PhabfiveRemoteException
@@ -404,32 +568,28 @@ def validate_online(
     index = index_references(spec)
 
     chosen = DEFAULT_RESOLVERS if resolvers is None else tuple(resolvers)
+    registered = _register(chosen)
 
-    by_kind: dict[FieldKind, Resolver] = {}
-    for resolver in chosen:
-        # First registration wins, so a caller's own list is prepended
-        by_kind.setdefault(resolver.kind, resolver)
+    answers: dict[ReferenceGroup, Mapping[str, ResolveResult]] = {}
 
-    answers: dict[FieldKind, Mapping[str, ResolveResult]] = {}
+    for group in index.groups():
+        resolver = _resolver_for(registered, group)
 
-    for kind in index.kinds():
-        for_kind = by_kind.get(kind)
-
-        if for_kind is None:
+        if resolver is None:
             # Not yet implemented rather than clean: say so, and report
             # nothing. Reporting a problem would be an invented verdict
             log.debug(
-                f"No resolver for {kind.value} references; "
-                f"{len(index.values(kind))} left unchecked"
+                f"No resolver for {group} references; "
+                f"{len(index.values_in(group))} left unchecked"
             )
             continue
 
-        answers[kind] = for_kind.resolve(app, index.values(kind)) or {}
+        answers[group] = resolver.resolve(app, index.values_in(group)) or {}
 
     problems: list[Problem] = []
 
-    for kind, reference in index.resolvable():
-        answered = answers.get(kind)
+    for group, reference in index.resolvable():
+        answered = answers.get(group)
 
         if answered is None:
             continue
@@ -440,7 +600,7 @@ def validate_online(
             # A resolver that skipped a value it was handed. Not a verdict,
             # so it is not reported - but it is a bug worth saying out loud
             log.warning(
-                f"Resolver for {kind.value} did not answer for "
+                f"Resolver for {group} did not answer for "
                 f"{reference.value!r}; it is left unchecked"
             )
             continue
@@ -456,10 +616,53 @@ def validate_online(
                 reason=_reason(result, reference),
                 code=result.problem or "unknown-reference",
                 layer=Layer.ONLINE,
+                severity=result.severity,
             )
         )
 
     return problems
+
+
+def _register(
+    resolvers: Sequence[Resolver],
+) -> tuple[dict[tuple[FieldKind, str], Resolver], dict[FieldKind, Resolver]]:
+    """The two tables a group is looked up in, most specific first.
+
+    First registration wins in both, so a caller's own list is prepended to
+    the defaults rather than merged with them.
+    """
+    by_field: dict[tuple[FieldKind, str], Resolver] = {}
+    by_kind: dict[FieldKind, Resolver] = {}
+
+    for resolver in resolvers:
+        # getattr, not `resolver.fields`: the protocol declares it, but a
+        # resolver written against the Phase 1 protocol has none, and a
+        # caller's own resolver is not a reason to traceback.
+        declared: frozenset[str] = getattr(resolver, "fields", frozenset())
+
+        for name in declared:
+            by_field.setdefault((resolver.kind, name), resolver)
+
+        if not declared:
+            by_kind.setdefault(resolver.kind, resolver)
+
+    return by_field, by_kind
+
+
+def _resolver_for(
+    registered: tuple[dict[tuple[FieldKind, str], Resolver], dict[FieldKind, Resolver]],
+    group: ReferenceGroup,
+) -> Optional[Resolver]:
+    """The resolver that answers one group: its field's, else its kind's."""
+    by_field, by_kind = registered
+
+    if group.field is not None:
+        named = by_field.get((group.kind, group.field))
+
+        if named is not None:
+            return named
+
+    return by_kind.get(group.kind)
 
 
 def _search_users(app: "Phabfive", constraints: Mapping[str, Any]) -> list[Any]:
@@ -512,6 +715,7 @@ class ManiphestUserResolver:
     """
 
     kind: FieldKind = FieldKind.USER
+    fields: frozenset[str] = frozenset()
 
     def resolve(
         self, app: "Phabfive", values: Sequence[str]
@@ -629,6 +833,334 @@ class ManiphestUserResolver:
         }
 
 
+# --------------------------------------------------------------------------
+# Projects, Spaces and icons
+#
+# Each of the three imports its lookup from `phabfive.maniphest.resolvers`
+# or `phabfive.project.core` INSIDE `resolve`, never at module level:
+# importing either reaches `phabfive.core`, `phabricator` and `requests`,
+# and `tests/test_spec_isolation.py` imports every module of this subpackage
+# in a fresh interpreter and asserts none of the three arrived. The offline
+# path must stay free of them; the online path is welcome to pay for them
+# the moment it actually asks the instance something.
+# --------------------------------------------------------------------------
+
+
+class ProjectResolver:
+    """``#hashtag``, ``Name``, ``8048`` and ``PHID-PROJ-...``, in one request.
+
+    One `project.query` enumerates every project the viewer can see, keyed
+    by lowercased name **and** by every slug, which is
+    `fetch_project_lookup_maps` - the same map `maniphest create` resolves
+    `projects:` through, so a spec that validates resolves to the same PHIDs
+    when it is applied.
+
+    **Ambiguity is not absence.** Several projects can share a name -
+    milestones called "Sprint 1" in different parents - and
+    `fetch_project_lookup_maps` deliberately leaves such a name out of the
+    map rather than picking one. Reporting that as "no such project" would
+    send somebody looking for a project that is right there, so it is
+    `ambiguous-project`, with the candidates named:
+    `ambiguous_project_message` already writes that sentence and this does
+    not write a second one.
+    """
+
+    kind: FieldKind = FieldKind.PROJECT
+    fields: frozenset[str] = frozenset()
+
+    def resolve(
+        self, app: "Phabfive", values: Sequence[str]
+    ) -> Mapping[str, ResolveResult]:
+        """Answer every project the spec named. See :class:`Resolver`."""
+        from phabfive.maniphest.resolvers import (
+            PROJECT_PHID_PREFIX,
+            fetch_project_lookup_maps,
+        )
+
+        name_to_phid, _, ambiguous_names = fetch_project_lookup_maps(app.phab)
+
+        # Every project came back, so a PHID is answered from the same walk
+        # rather than from a second request. An ambiguous name is left out of
+        # name_to_phid but its projects are real, so their PHIDs count too.
+        known_phids = set(name_to_phid.values())
+        known_phids.update(phid for phids in ambiguous_names.values() for phid in phids)
+
+        results: dict[str, ResolveResult] = {}
+        ambiguous: dict[str, list[str]] = {}
+        numeric: list[str] = []
+
+        for value in values:
+            key = (value[1:] if value.startswith("#") else value).casefold()
+
+            if value.startswith(PROJECT_PHID_PREFIX):
+                results[value] = (
+                    ResolveResult(value=value, phid=value)
+                    if value in known_phids
+                    else self._missing(value)
+                )
+            elif "*" in value:
+                results[value] = self._wildcard(value, name_to_phid, ambiguous_names)
+            elif key in name_to_phid:
+                results[value] = ResolveResult(value=value, phid=name_to_phid[key])
+            elif key in ambiguous_names:
+                ambiguous[value] = list(ambiguous_names[key])
+            elif value.isascii() and value.isdigit():
+                # A numeric project id is the one spelling the enumeration
+                # does not key, so it costs one more request - for every id
+                # in the spec at once, not one each.
+                numeric.append(value)
+            else:
+                results[value] = self._missing(value)
+
+        if ambiguous:
+            results.update(self._describe_ambiguous(app, ambiguous))
+
+        if numeric:
+            results.update(self._resolve_ids(app, numeric))
+
+        return results
+
+    @staticmethod
+    def _missing(value: str) -> ResolveResult:
+        return ResolveResult(
+            value=value,
+            problem="unknown-project",
+            reason=f"No such project: {value!r}",
+        )
+
+    @staticmethod
+    def _wildcard(
+        value: str,
+        name_to_phid: Mapping[str, str],
+        ambiguous_names: Mapping[str, Sequence[str]],
+    ) -> ResolveResult:
+        """A pattern resolves when it matches something, and names no PHID.
+
+        `tag: team-*` is a filter over several projects rather than one
+        project, so there is no single PHID to carry forward - only the fact
+        that it matched. A pattern that matches nothing is reported, because
+        a search filtered by it silently returns nothing at all.
+
+        This answers only for the keys that *mean* something by a glob.
+        `projects:` on a create item does not - `maniphest create` refuses a
+        wildcard there with no network - and
+        `phabfive.spec.references.ReferenceField.patterns` says which keys
+        are which, so the offline pass reports such a value before this is
+        ever reached. Blessing one here is what made a create spec validate
+        clean and then be refused when it was applied.
+        """
+        pattern = value.casefold()
+        keys = list(name_to_phid) + list(ambiguous_names)
+
+        if any(fnmatch.fnmatch(key, pattern) for key in keys):
+            return ResolveResult(value=value)
+
+        return ResolveResult(
+            value=value,
+            problem="unknown-project",
+            reason=f"No project matches the pattern {value!r}",
+        )
+
+    @staticmethod
+    def _describe_ambiguous(
+        app: "Phabfive", ambiguous: Mapping[str, Sequence[str]]
+    ) -> dict[str, ResolveResult]:
+        """One `project.search` describes every ambiguous name at once."""
+        from phabfive.maniphest.resolvers import (
+            ambiguous_project_message,
+            fetch_projects_by_phid,
+        )
+
+        wanted = sorted({phid for phids in ambiguous.values() for phid in phids})
+        # Best effort, and deliberately so: this is only how the candidates
+        # are *described*. The verdict was already reached from the map, so a
+        # failure here costs a nicer sentence and never a wrong answer.
+        described = {
+            record["phid"]: record
+            for record in fetch_projects_by_phid(app.phab, wanted)
+            if isinstance(record, Mapping) and record.get("phid")
+        }
+
+        results: dict[str, ResolveResult] = {}
+
+        for value, phids in ambiguous.items():
+            matches = [described.get(phid, phid) for phid in phids]
+            results[value] = ResolveResult(
+                value=value,
+                problem="ambiguous-project",
+                reason=ambiguous_project_message(value, matches),
+                candidates=tuple(_project_label(match) for match in matches),
+            )
+
+        return results
+
+    @staticmethod
+    def _resolve_ids(
+        app: "Phabfive", values: Sequence[str]
+    ) -> dict[str, ResolveResult]:
+        """Numeric project ids, every one of them in one `project.search`.
+
+        `lookup_project_by_id` is the equivalent helper for a command and is
+        deliberately not used: it answers a failed request with ``None``,
+        which this layer would report as "no such project" - a broken
+        network read as a broken spec.
+        """
+        found = {
+            str(record["id"]): record
+            for record in search_all_pages(
+                app.phab.project.search,
+                constraints={"ids": [int(value) for value in values]},
+            )
+            if isinstance(record, Mapping) and record.get("id") is not None
+        }
+
+        return {
+            value: (
+                ResolveResult(value=value, phid=found[value].get("phid"))
+                if value in found
+                else ProjectResolver._missing(value)
+            )
+            for value in values
+        }
+
+
+def _project_label(match: Any) -> str:
+    """One ambiguity candidate, named the way Phorge's web UI names it."""
+    if not isinstance(match, Mapping):
+        return str(match)
+
+    fields = match.get("fields") or {}
+    name = fields.get("name") if isinstance(fields, Mapping) else None
+    parent = fields.get("parent") if isinstance(fields, Mapping) else None
+
+    if isinstance(parent, Mapping) and parent.get("name"):
+        return f"{name} ({parent['name']})"
+
+    return str(name or match.get("phid") or match)
+
+
+class SpaceResolver:
+    """``S3``, a Space's name, or a pattern naming exactly one.
+
+    Every Space the viewer can see is enumerated once - `fetch_all_spaces`,
+    which probes the monogram range because `phid.lookup` is policy-filtered
+    and the visible monograms are therefore sparse - and every value in the
+    spec is then resolved against that one answer with no further request.
+
+    `resolve_space` is what does the resolving, so a spec and
+    `maniphest create --space` agree by construction, including the rule
+    that a pattern matching two Spaces is an error rather than a silent pick
+    of the first: an object goes in exactly one Space.
+    """
+
+    kind: FieldKind = FieldKind.SPACE
+    fields: frozenset[str] = frozenset()
+
+    def resolve(
+        self, app: "Phabfive", values: Sequence[str]
+    ) -> Mapping[str, ResolveResult]:
+        """Answer every Space the spec named. See :class:`Resolver`."""
+        from phabfive.exceptions import PhabfiveConfigException
+        from phabfive.maniphest.resolvers import fetch_all_spaces, resolve_space
+
+        # Raises PhabfiveRemoteException when the probe failed, which is the
+        # right thing: a partial Space list would report real Spaces as
+        # missing.
+        all_spaces = fetch_all_spaces(app.phab)
+
+        results: dict[str, ResolveResult] = {}
+
+        for value in values:
+            try:
+                entry = resolve_space(app.phab, value, all_spaces=all_spaces)
+            except PhabfiveConfigException as failure:
+                # The instance answered and the answer was no - either
+                # nothing matched or several did. `resolve_space` has
+                # already written the sentence, including the Spaces the
+                # viewer can see, so it is reported rather than restated.
+                results[value] = ResolveResult(
+                    value=value,
+                    problem="unknown-space",
+                    reason=str(failure),
+                )
+            else:
+                results[value] = ResolveResult(value=value, phid=entry.get("phid"))
+
+        return results
+
+
+class IconResolver:
+    """A project icon, which can only ever be a **warning**.
+
+    `projects.icons` is instance configuration and no Conduit method reports
+    it, so the closest the API comes to naming a custom icon is the set of
+    icons projects actually carry. An icon that is configured but that no
+    project uses yet is indistinguishable from a typo - and the server takes
+    it. Refusing one would refuse a spec that would have applied, so an
+    unrecognised icon is `unknown-icon` at `Severity.WARNING`: reported,
+    counted as a warning, and costing no exit status.
+
+    Field-scoped, because `FieldKind.INSTANCE_ENUM` is also what a status
+    and a priority are: `fields` is what says this one answers for `icon:`
+    and leaves the other two to their own resolvers.
+    """
+
+    kind: FieldKind = FieldKind.INSTANCE_ENUM
+    fields: frozenset[str] = frozenset({"icon"})
+
+    def resolve(
+        self, app: "Phabfive", values: Sequence[str]
+    ) -> Mapping[str, ResolveResult]:
+        """Answer every icon the spec named. See :class:`Resolver`."""
+        from phabfive.constants import PROJECT_MILESTONE_ICON
+        from phabfive.project.core import icons_in_use
+
+        doubtful = [value for value in values if value not in _stock_icons()]
+
+        if not doubtful:
+            return {value: ResolveResult(value=value) for value in values}
+
+        # One `project.search` over every project, however many icons the
+        # spec names - and only when at least one of them was not a stock
+        # icon, so the common spec costs nothing at all.
+        known = set(icons_in_use(app.phab))
+        # Phorge gives every milestone this icon whatever is stored on it, so
+        # it is a real key that may well appear on no project at all.
+        known.add(PROJECT_MILESTONE_ICON)
+
+        return {
+            value: (
+                ResolveResult(value=value)
+                if value not in doubtful or value in known
+                else ResolveResult(
+                    value=value,
+                    problem="unknown-icon",
+                    reason=(
+                        f"No project uses the icon {value!r} and it is not one "
+                        "Phorge ships, so it may be misspelled. An icon "
+                        "configured in projects.icons that no project uses yet "
+                        "cannot be checked."
+                    ),
+                    severity=Severity.WARNING,
+                )
+            )
+            for value in values
+        }
+
+
+def _stock_icons() -> frozenset[str]:
+    """The icons Phorge ships, which need no request to recognise."""
+    from phabfive.constants import PROJECT_ICONS
+
+    return frozenset(PROJECT_ICONS)
+
+
 #: The resolvers `validate_online` uses when the caller names none. Phase 1
-#: ships one; Phases 2 and 3 add theirs here as each app lands.
-DEFAULT_RESOLVERS: tuple[Resolver, ...] = (ManiphestUserResolver(),)
+#: shipped the user resolver; Phase 2 adds projects, Spaces and icons.
+#: Phase 3 adds theirs here as each app lands.
+DEFAULT_RESOLVERS: tuple[Resolver, ...] = (
+    ManiphestUserResolver(),
+    ProjectResolver(),
+    SpaceResolver(),
+    IconResolver(),
+)

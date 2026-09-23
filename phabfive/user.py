@@ -12,18 +12,104 @@ from urllib.parse import urlparse
 from phabricator import Phabricator
 
 # phabfive imports
-from phabfive.constants import USER_ROLE_CONSTRAINTS, USER_ROLES
+from phabfive.constants import (
+    USER_ORDER_DEFAULT,
+    USER_ORDER_DIRECTIONS,
+    USER_ORDER_FIELDS,
+    USER_ORDER_SUGGESTIONS,
+    USER_ROLE_CONSTRAINTS,
+    USER_ROLES,
+)
 from phabfive.conduit import Conduit
 from phabfive.core import Phabfive
 from phabfive.exceptions import (
     PhabfiveAPIException,
     PhabfiveConfigException,
+    PhabfiveInputException,
     PhabfiveRemoteException,
 )
-from phabfive.maniphest.utils import format_timestamp
+from phabfive.maniphest.utils import format_timestamp, time_constraint
+from phabfive.options import value_list
+from phabfive.ordering import parse_order, sort_records
 from phabfive.pagination import iter_pages
 
 log = logging.getLogger(__name__)
+
+
+#: ``(field, direction)`` to what ``user.search`` is sent as its order.
+#:
+#: PhabricatorPeopleQuery's builtin orders are newest, created, oldest and
+#: relevance - none of them by name - so A-Z is asked for as the "username"
+#: column, which it does order by, and Z-A as "-username". A list is a
+#: column vector and a string is a builtin; Conduit takes either.
+USER_API_ORDERS = {
+    ("username", "asc"): ["username"],
+    ("username", "desc"): ["-username"],
+    ("created", "desc"): "newest",
+    ("created", "asc"): "oldest",
+    ("relevance", None): "relevance",
+}
+
+#: The client-side key per order field, which tie-breaks what the server
+#: already ordered. ``relevance`` is absent: the response carries no rank.
+USER_SORT_KEYS = {
+    "username": lambda user: (user.get("fields", {}).get("username") or "").casefold(),
+    "created": lambda user: user.get("id") or 0,
+}
+
+
+def user_id_list(value, option="--ids"):
+    """User ids as the integers ``user.search`` constrains on.
+
+    A user has no monogram - Phorge names one by username or by PHID - so
+    this takes the bare number, and a username goes to --usernames.
+
+    Raises
+    ------
+    PhabfiveInputException
+        For anything that is not a number
+    """
+    entries = value_list(value)
+
+    if not entries:
+        return None
+
+    ids = []
+
+    for entry in entries:
+        if not entry.isdigit():
+            raise PhabfiveInputException(
+                f"Invalid user ID '{entry}' for {option}. Expected a number, "
+                "e.g. 12; a username goes to --usernames."
+            )
+
+        ids.append(int(entry))
+
+    return ids
+
+
+def user_name_list(value, option="--usernames"):
+    """Exact usernames, as ``user.search``'s `usernames` constraint takes them.
+
+    A shortcut is not a username: the constraint matches the stored name
+    exactly, so "@me" would be answered with an empty result rather than an
+    error - which reads as "there is no such user".
+
+    Raises
+    ------
+    PhabfiveInputException
+        For a value that cannot be a username
+    """
+    names = value_list(value)
+
+    for name in names:
+        if name.startswith("@"):
+            raise PhabfiveInputException(
+                f"Invalid username '{name}' for {option}. Expected an exact "
+                "username; --username matches any part of one instead."
+            )
+
+    return names or None
 
 
 def _fold(text):
@@ -203,8 +289,24 @@ class User(Phabfive):
         not_roles=None,
         show_metadata=False,
         limit=None,
+        ids=None,
+        phids=None,
+        usernames=None,
+        created_after=None,
+        created_before=None,
+        order=None,
     ):
         """Search users, filtered by name and by the roles Phorge reports.
+
+        Where each filter is applied is not an implementation detail here,
+        because it decides what a search costs. `ids`, `phids`,
+        `usernames`, the dates and the disabled, bot, list and admin roles
+        are constraints user.search applies itself, so only matching users
+        cross the wire. The rest - `username`, `realname`, and the
+        verified, approved and activated roles, which have no constraint of
+        their own - are matched on the records here, so a search using only
+        those reads every user the token can see, a page at a time, and
+        stops as soon as `limit` of them have matched.
 
         Parameters
         ----------
@@ -223,20 +325,48 @@ class User(Phabfive):
             Include the Metadata section
         limit : int, optional
             How many matching users to return in total; None for all of them
+        ids : list, optional
+            User ids, as numbers. Every other filter still applies.
+        phids : list, optional
+            User PHIDs, the same way
+        usernames : list, optional
+            Exact usernames, which is what user.search's own constraint
+            matches - `username` is the substring filter instead
+        created_after, created_before : str or int, optional
+            TIME values, e.g. "7d", "2w"
+        order : str, optional
+            Result ordering as "<field>[:asc|:desc]", e.g. "created:desc".
+            The server does the ordering, so a limit keeps the first N of
+            it. Defaults to username, which is the order this search has
+            always printed.
 
         Returns
         -------
         list
-            One record per user, sorted by username
+            One record per user, in the order asked for; by username unless
+            --order said otherwise
 
         Raises
         ------
         PhabfiveConfigException
             If a role is not one Phorge reports, or is both asked for and
-            excluded
+            excluded, or the order is not one of USER_ORDER_FIELDS
+        PhabfiveInputException
+            If an id or a time is not one
         PhabfiveRemoteException
             If the search fails
         """
+        # Resolved before anything is fetched, so a bad --order fails fast
+        order_field, order_direction = parse_order(
+            order,
+            USER_ORDER_FIELDS,
+            USER_ORDER_DIRECTIONS,
+            USER_ORDER_DEFAULT,
+            suggestions=USER_ORDER_SUGGESTIONS,
+        )
+        api_order = USER_API_ORDERS[(order_field, order_direction)]
+        log.info(f"Ordering results by '{order_field}:{order_direction}'")
+
         roles = list(dict.fromkeys(roles or []))
         not_roles = list(dict.fromkeys(not_roles or []))
 
@@ -266,6 +396,28 @@ class User(Phabfive):
         server_text = query or username or realname
         if server_text:
             constraints["nameLike"] = server_text
+
+        id_list = user_id_list(ids)
+        if id_list:
+            constraints["ids"] = id_list
+
+        phid_list = value_list(phids)
+        if phid_list:
+            constraints["phids"] = phid_list
+
+        # Exact, where nameLike above matches any part of a name. Both can
+        # be given: user.search ANDs its constraints.
+        username_list = user_name_list(usernames)
+        if username_list:
+            constraints["usernames"] = username_list
+
+        created_start = time_constraint(created_after, "created-after")
+        if created_start is not None:
+            constraints["createdStart"] = created_start
+
+        created_end = time_constraint(created_before, "created-before")
+        if created_end is not None:
+            constraints["createdEnd"] = created_end
 
         # A role the server can filter on is sent as a constraint, so the
         # pages carry only matching users. The rest are matched here.
@@ -304,14 +456,18 @@ class User(Phabfive):
             self.phab.user.search,
             limit=None if filtering_here else limit,
             constraints=constraints,
+            order=api_order,
         ):
             users.extend(user for user in page if matches(user))
 
+            # The pages arrive in the order asked for, so stopping early
+            # keeps the first N of that order rather than an arbitrary N
             if limit is not None and len(users) >= limit:
                 users = users[:limit]
                 break
 
-        users.sort(key=lambda user: user["fields"]["username"].casefold())
+        # The server already ordered these; this settles the ties
+        users = sort_records(users, order_field, order_direction, USER_SORT_KEYS)
 
         return [self._user_record(user, show_metadata) for user in users]
 
@@ -351,4 +507,10 @@ class User(Phabfive):
         return record
 
 
-__all__ = ["User"]
+__all__ = [
+    "USER_API_ORDERS",
+    "USER_SORT_KEYS",
+    "User",
+    "user_id_list",
+    "user_name_list",
+]

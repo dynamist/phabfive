@@ -131,11 +131,27 @@ class ReferenceField:
         The monogram prefixes the key accepts, e.g. ``("T",)`` for
         ``parents:``. Empty means a monogram is not a meaningful value for
         this key, so nothing is checked against the monogram grammar.
+    patterns
+        Whether a glob is a value this key means something by. A **filter**
+        key does - ``tag: team-*`` selects several projects - while a key
+        that names the objects to attach to a thing being created does not:
+        `maniphest create` refuses a ``*`` in ``projects:`` outright
+        (`phabfive.maniphest.resolvers.resolve_project_phids_for_create`),
+        so a spec writing one has to be refused too, or validation would
+        bless a spec that the apply path then rejects.
+    separator
+        The character this key's value may hold several references apart
+        with, e.g. ``","`` for ``assigned: "@me,alice"`` - which is OR, and
+        is what `maniphest search --assigned` has always accepted. ``None``
+        means the whole value is one reference, so a comma in it is part of
+        a name.
     """
 
     name: str
     multiple: bool = False
     monograms: tuple[str, ...] = ()
+    patterns: bool = False
+    separator: Optional[str] = None
 
 
 _TASK_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
@@ -147,14 +163,50 @@ _TASK_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
     ReferenceField("space"),
 )
 
-#: Which keys of each created object type hold references.
+_PROJECT_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
+    # An icon names something only the instance can answer for - the icon set
+    # is `projects.icons` configuration that no Conduit method reports - so it
+    # is walked here and resolved by the online pass, which *warns* about one
+    # it cannot recognise rather than refusing it. `color:` is deliberately
+    # absent: the colour keys are fixed in Phorge's source, so the offline
+    # pass settles a colour from `registry.FIELDS` alone.
+    ReferenceField("icon"),
+)
+
+_SEARCH_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
+    # The four user filters, which is deliberately all of them. Each one is
+    # already a hard failure today - `Maniphest._resolve_user_filter_phids`
+    # raises `PhabfiveDataException` for a name the instance does not have -
+    # so resolving them here changes *when* the error appears and not
+    # whether, which is the only kind of reference this may declare without
+    # changing what an existing template does.
+    #
+    # `tag:` and `space:` are deliberately absent. A project or a Space that
+    # matches nothing is a `log.error`/`log.warning` and exit 0 today, so
+    # declaring either would turn every template naming one into a failure.
+    # That is a change worth making and it needs its own test and a line in
+    # docs/search-templates.md.
+    #
+    # The values are comma-separated because that is what the filters accept:
+    # `assigned: "@me,alice"` is two references, and reading it as one would
+    # report a user called "@me,alice".
+    ReferenceField("assigned", separator=","),
+    ReferenceField("author", separator=","),
+    ReferenceField("subscriber", multiple=True, separator=","),
+    ReferenceField("closed-by", multiple=True, separator=","),
+)
+
+#: Which keys of each object type hold references. The key is the *spec
+#: object* type, so ``"search"`` is one item of a search spec, whose own
+#: ``type:`` says what it searches.
 REFERENCE_FIELDS: Mapping[str, tuple[ReferenceField, ...]] = {
     "task": _TASK_REFERENCE_FIELDS,
-    # A project spec and a paste spec have no declared fields yet, so nothing
-    # inside one is read as a reference. Their sections still validate their
-    # envelope, their variables and their local ids.
-    "project": (),
+    "project": _PROJECT_REFERENCE_FIELDS,
+    # A paste spec has no declared field yet, so nothing inside one is read as
+    # a reference. Its section still validates its envelope, its variables and
+    # its local ids.
     "paste": (),
+    "search": _SEARCH_REFERENCE_FIELDS,
 }
 
 
@@ -345,16 +397,45 @@ def iter_objects(spec: "Spec") -> Iterator[SpecObject]:
 
 
 def _values(item: Mapping[str, Any], declared: ReferenceField) -> list[tuple[str, Any]]:
-    """One reference field's values, each with the field path naming it."""
+    """One reference field's values, each with the field path naming it.
+
+    A key that declares a `separator` holds several references in one
+    string - ``assigned: "@me,alice"`` - so each part is its own reference
+    and gets its own index. A key without one keeps the whole value,
+    because a comma in a project name is part of the name.
+    """
     value = item.get(declared.name)
 
     if value is None:
         return []
 
     if declared.multiple and isinstance(value, (list, tuple)):
-        return [(f"{declared.name}[{index}]", one) for index, one in enumerate(value)]
+        entries: list[Any] = list(value)
+    else:
+        entries = [value]
 
-    return [(declared.name, value)]
+    if declared.separator is None:
+        if len(entries) == 1 and not declared.multiple:
+            return [(declared.name, entries[0])]
+
+        return [(f"{declared.name}[{index}]", one) for index, one in enumerate(entries)]
+
+    parts = [
+        part.strip()
+        for one in entries
+        for part in (str(one).split(declared.separator) if isinstance(one, str) else [])
+        if part.strip()
+    ]
+
+    if not parts:
+        # Not a string, or nothing usable in it - handed on whole so that the
+        # schema pass reports the type rather than this silently dropping it
+        return [(declared.name, value)]
+
+    if len(parts) == 1:
+        return [(declared.name, parts[0])]
+
+    return [(f"{declared.name}[{index}]", part) for index, part in enumerate(parts)]
 
 
 def iter_references(spec: "Spec") -> Iterator[Reference]:
@@ -369,8 +450,19 @@ def iter_references(spec: "Spec") -> Iterator[Reference]:
     to ask the server about each distinct value of each kind exactly once.
     """
     for spec_object in iter_objects(spec):
+        # A `searches:` item's filters live under its `search:` key, and the
+        # report names them the way the offline pass does - "search.assigned"
+        # - so the two layers point at the same place in the file.
+        if spec_object.object_type == "search":
+            filters = spec_object.data.get("search")
+            mapping = filters if isinstance(filters, Mapping) else {}
+            prefix = "search."
+        else:
+            mapping = spec_object.data
+            prefix = ""
+
         for declared in REFERENCE_FIELDS.get(spec_object.object_type, ()):
-            for field_path, value in _values(spec_object.data, declared):
+            for field_path, value in _values(mapping, declared):
                 kind = classify_reference(value)
 
                 if kind is None:
@@ -378,7 +470,7 @@ def iter_references(spec: "Spec") -> Iterator[Reference]:
 
                 yield Reference(
                     object=spec_object.path,
-                    field=field_path,
+                    field=f"{prefix}{field_path}",
                     value=value,
                     kind=kind,
                     object_type=spec_object.object_type,

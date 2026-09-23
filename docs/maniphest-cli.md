@@ -310,7 +310,50 @@ On an instance that has a user called `me`, `@me` is an error too, and the error
 lists both PHIDs to choose from.
 
 !!! important
-    **Validation:** At least one filter is required (text query, --tag, --include, --assigned, --author, --space, --created-after, --created-before, --updated-after, --updated-before, --visible-to, --editable-by, --column, --priority or --status) to prevent accidentally querying all tasks. `--status=any` on its own is the deliberate way to ask for all of them.
+    **Validation:** At least one filter is required, to prevent accidentally
+    querying all tasks. Any one of these counts:
+
+    `TEXT_QUERY`, `--tag`, `--ids`, `--phids`, `--include`, `--assigned`,
+    `--author`, `--subscriber`, `--closed-by`, `--subtype`, `--parent`,
+    `--subtask`, `--has-parents`, `--has-subtasks`, `--space`,
+    `--created-after`, `--created-before`, `--updated-after`,
+    `--updated-before`, `--closed-after`, `--closed-before`, `--visible-to`,
+    `--editable-by`, `--column`, `--priority` or `--status`.
+
+    `--exclude`, `--order` and the `--show-*` flags do **not** count: they say
+    what to leave out, how to sort and what to display, not which tasks to look
+    at. `--status=any` on its own is the deliberate way to ask for all of them.
+
+### Narrowing by identity and structure
+
+These reach `maniphest.search` as constraints, so only matching tasks cross the
+wire:
+
+| Option | Filter |
+|---|---|
+| `--ids T1,T2` | Only these tasks, with every other filter still applied |
+| `--phids PHID-TASK-...` | The same, by PHID |
+| `--subscriber @me,alice` | Tasks any of them is subscribed to |
+| `--subtype bug` | Tasks of this subtype (`maniphest.subtypes` configuration) |
+| `--parent T10` | Subtasks of these tasks |
+| `--subtask T11` | Parents of these tasks |
+| `--has-parents` | Only tasks that are a subtask of something |
+| `--has-subtasks` | Only tasks that have subtasks |
+| `--closed-by @me` | Tasks closed by any of these users |
+| `--closed-after 7d` | Tasks closed within TIME |
+| `--closed-before 30d` | Tasks closed more than TIME ago |
+
+`--ids` is not `--include`: an id given to `--ids` is still subject to every
+other filter, and the result is the intersection. `--include` is the opposite -
+it forces a task into the results whatever the filters say.
+
+A task id is written as a monogram, `T123`, everywhere - `--ids`, `--parent`,
+`--subtask`, `--include` and `--exclude` alike, and in a spec. A bare number is
+refused by name.
+
+`--has-parents` and `--has-subtasks` are tri-state: not given sends nothing,
+and the flags set them true. The false half - "tasks with no parent at all" - is
+written in a [search template](search-templates.md) as `has-parents: false`.
 
 ### Listing Every Task
 

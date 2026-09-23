@@ -620,6 +620,64 @@ def search(
     updated_before: Optional[str] = typer.Option(
         None, "--updated-before", help="Tasks updated more than TIME ago"
     ),
+    closed_after: Optional[str] = typer.Option(
+        None, "--closed-after", help="Tasks closed within TIME (e.g., 1h, 7d, 2w)"
+    ),
+    closed_before: Optional[str] = typer.Option(
+        None, "--closed-before", help="Tasks closed more than TIME ago"
+    ),
+    closed_by: Optional[str] = typer.Option(
+        None,
+        "--closed-by",
+        help="Filter by who closed the task: username, @me for yourself, or user PHID",
+        autocompletion=complete_user_list_filter,
+    ),
+    ids: Optional[str] = typer.Option(
+        None,
+        "--ids",
+        help="Only these tasks, with the other filters still applied "
+        "(e.g., T123 or T123,T456). Use --include to bypass the filters",
+    ),
+    phids: Optional[str] = typer.Option(
+        None,
+        "--phids",
+        help="Only these task PHIDs, with the other filters still applied",
+    ),
+    subscriber: Optional[str] = typer.Option(
+        None,
+        "--subscriber",
+        help="Filter by subscriber: username, @me for yourself, or user PHID",
+        autocompletion=complete_user_list_filter,
+    ),
+    subtype: Optional[str] = typer.Option(
+        None,
+        "--subtype",
+        help="Filter by task subtype key, e.g. default",
+    ),
+    parent: Optional[str] = typer.Option(
+        None,
+        "--parent",
+        help="Only the subtasks of these tasks (e.g., T123 or T123,T456)",
+    ),
+    subtask: Optional[str] = typer.Option(
+        None,
+        "--subtask",
+        help="Only the parents of these tasks (e.g., T123 or T123,T456)",
+    ),
+    # Optional[bool] rather than bool: a flag nobody typed has to stay
+    # distinguishable from --has-parents meaning "no", the way every other
+    # override here does. Only the True half has a flag; a template says
+    # `has-parents: false` for the other one.
+    has_parents: Optional[bool] = typer.Option(
+        None,
+        "--has-parents",
+        help="Only tasks that are a subtask of something",
+    ),
+    has_subtasks: Optional[bool] = typer.Option(
+        None,
+        "--has-subtasks",
+        help="Only tasks that have subtasks",
+    ),
     include_all: bool = typer.Option(
         False,
         "--all",
@@ -667,21 +725,28 @@ def search(
     ),
 ) -> None:
     """Search for Maniphest tasks."""
-    from phabfive.transitions import parse_column_patterns, parse_priority_patterns
+    from phabfive.spec.search import (
+        SearchPlanError,
+        banner_title,
+        plan_search,
+        run_search,
+        wants_banner,
+    )
 
     _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
 
-    # Load YAML configurations if --with is provided
-    search_configs = []
     if with_template:
         try:
-            search_configs = maniphest._load_search_config(with_template)
+            search_items = maniphest._load_search_config(with_template)
         except Exception as e:
             typer.echo(f"ERROR: Failed to load template file: {e}", err=True)
             raise typer.Exit(1)
     else:
-        search_configs = [
+        # No template is one unconstrained search, which the criteria guard
+        # below then answers with the help unless the command line supplied
+        # something to search for.
+        search_items = [
             {
                 "search": {},
                 "title": None,
@@ -689,133 +754,109 @@ def search(
             }
         ]
 
-    def get_param(cli_value, yaml_params, yaml_key, default=None):
-        """Get value with CLI override priority."""
-        if cli_value is not None:
-            return cli_value
-        return yaml_params.get(yaml_key, default)
+    # Only what the command line actually carried, keyed as a spec spells it.
+    # Typer has no unset marker: a boolean flag that was not given and one
+    # that was given as false are the same value, and `--limit 100` cannot be
+    # told from the default. Passing None for those is what keeps a flag
+    # nobody typed from clobbering a template's value - a quirk, since
+    # `--limit 100` therefore cannot override a template's `limit: 5`, and one
+    # that is kept deliberately: click's parameter source is the correct fix
+    # and it would change behaviour, so it is its own issue.
+    overrides = {
+        "text_query": text_query,
+        "tag": tag,
+        "include": include,
+        "exclude": exclude,
+        "assigned": assigned,
+        "author": author,
+        "space": space,
+        "visible-to": visible_to,
+        "editable-by": editable_by,
+        "created-after": created_after,
+        "created-before": created_before,
+        "updated-after": updated_after,
+        "updated-before": updated_before,
+        "closed-after": closed_after,
+        "closed-before": closed_before,
+        "closed-by": closed_by,
+        "ids": ids,
+        "phids": phids,
+        "subscriber": subscriber,
+        "subtype": subtype,
+        "parent": parent,
+        "subtask": subtask,
+        # Already None when the flag was not given, which is what the
+        # sentinel above spells out longhand for the older boolean flags.
+        "has-parents": has_parents,
+        "has-subtasks": has_subtasks,
+        "column": column,
+        "priority": priority,
+        "status": status,
+        "show-history": show_history if show_history else None,
+        "show-metadata": show_metadata if show_metadata else None,
+        "show-policy": show_policy if show_policy else None,
+        "all": include_all if include_all else None,
+        "limit": limit if limit != 100 else None,
+        "order": order,
+    }
 
-    # Execute each search configuration
     output_format = _get_output_format(ctx)
+    total = len(search_items)
 
-    for index, config in enumerate(search_configs, start=1):
-        yaml_params = config["search"]
-
+    # One item at a time, all the way through. Planning every search up front
+    # would move a later search's failure ahead of an earlier search's
+    # results, which is a visible change to what a person sees; a program
+    # that wants the atomic report calls `plan_searches` instead.
+    for index, item in enumerate(search_items, start=1):
         # Only rich and tree formats use human-facing search banners. A single
         # template needs one when its author supplied a title or description;
         # multi-document templates still need labels to separate their results.
-        if output_format in ("rich", "tree") and (
-            len(search_configs) > 1 or config["title"] or config["description"]
+        if output_format in ("rich", "tree") and wants_banner(
+            item["title"], item["description"], total
         ):
             typer.echo(f"\n{'=' * 60}")
-            typer.echo(f"🔍 {config['title'] or f'Search {index}'}")
-            if config["description"]:
-                typer.echo(f"📝 {config['description']}")
+            typer.echo(f"🔍 {banner_title(item['title'], index)}")
+            if item["description"]:
+                typer.echo(f"📝 {item['description']}")
             typer.echo(f"{'=' * 60}")
 
-        # Parse filter patterns with CLI override priority
-        column_patterns = None
-        column_pattern = get_param(column, yaml_params, "column")
-        if column_pattern:
-            try:
-                column_patterns = parse_column_patterns(column_pattern)
-            except Exception as e:
-                typer.echo(f"ERROR: Invalid column filter pattern: {e}", err=True)
-                raise typer.Exit(1)
-
-        priority_patterns = None
-        priority_pattern = get_param(priority, yaml_params, "priority")
-        if priority_pattern:
-            try:
-                priority_patterns = parse_priority_patterns(priority_pattern)
-            except Exception as e:
-                typer.echo(f"ERROR: Invalid priority filter pattern: {e}", err=True)
-                raise typer.Exit(1)
-
-        status_patterns = None
-        status_pattern = get_param(status, yaml_params, "status")
-        if status_pattern:
-            try:
-                status_patterns = maniphest.parse_status_patterns_with_api(
-                    status_pattern
+        try:
+            plan = plan_search(
+                maniphest,
+                item,
+                overrides=overrides,
+                index=index,
+                total=total,
+            )
+        except SearchPlanError as e:
+            # A task id that is not one, and an id in both lists, are
+            # sentences of their own and have never carried the prefix.
+            if e.check in ("invalid-task-id", "include-exclude-overlap"):
+                typer.echo(str(e), err=True)
+            elif e.check == "unsupported-type":
+                # `maniphest search` searches tasks. A spec item naming
+                # another object type is refused rather than run as a task
+                # search, and the sentence names a command that does run it.
+                typer.echo(
+                    f"ERROR: {banner_title(item['title'], index)}: "
+                    f"'maniphest search' runs a task search, and this one is "
+                    f"a {e.object_type!r} search. Run the spec from "
+                    f"'phabfive {e.object_type} search --with' instead, "
+                    f"which runs every type a spec holds.",
+                    err=True,
                 )
-            except Exception as e:
-                typer.echo(f"ERROR: Invalid status filter pattern: {e}", err=True)
-                raise typer.Exit(1)
-
-        # Get other parameters with CLI override priority
-        final_show_history = get_param(
-            show_history if show_history else None,
-            yaml_params,
-            "show-history",
-            False,
-        )
-        final_show_metadata = get_param(
-            show_metadata if show_metadata else None,
-            yaml_params,
-            "show-metadata",
-            False,
-        )
-        final_show_policy = get_param(
-            show_policy if show_policy else None,
-            yaml_params,
-            "show-policy",
-            False,
-        )
-        final_text_query = get_param(text_query, yaml_params, "text_query")
-        final_tag = get_param(tag, yaml_params, "tag")
-        final_include = get_param(include, yaml_params, "include")
-        final_exclude = get_param(exclude, yaml_params, "exclude")
-
-        def parse_task_id_list(value):
-            """Parse monograms into task ID ints.
-
-            Accepts a comma-separated string ("T123,T456") or, from YAML
-            templates, a list of monograms (["T123", "T456"]).
-            """
-            if not value:
-                return None
-            raw_items = value if isinstance(value, (list, tuple)) else [value]
-            maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
-            task_id_list = []
-            for raw_item in raw_items:
-                for part in str(raw_item).split(","):
-                    part = part.strip()
-                    if not part:
-                        continue
-                    if not re.match(maniphest_pattern, part):
-                        typer.echo(
-                            f"Invalid task ID '{part}'. Expected format: T123",
-                            err=True,
-                        )
-                        raise typer.Exit(1)
-                    task_id_list.append(int(part[1:]))
-            return task_id_list or None
-
-        include_task_ids = parse_task_id_list(final_include)
-        exclude_task_ids = parse_task_id_list(final_exclude)
-
-        overlap = set(include_task_ids or []) & set(exclude_task_ids or [])
-        if overlap:
-            overlap_str = ", ".join(f"T{tid}" for tid in sorted(overlap))
-            typer.echo(f"{overlap_str} cannot be both included and excluded", err=True)
+            else:
+                typer.echo(f"ERROR: {e}", err=True)
             raise typer.Exit(1)
-        final_assigned = get_param(assigned, yaml_params, "assigned")
-        final_author = get_param(author, yaml_params, "author")
-        final_space = get_param(space, yaml_params, "space")
-        final_visible_to = get_param(visible_to, yaml_params, "visible-to")
-        final_editable_by = get_param(editable_by, yaml_params, "editable-by")
-        final_created_after = get_param(created_after, yaml_params, "created-after")
-        final_created_before = get_param(created_before, yaml_params, "created-before")
-        final_updated_after = get_param(updated_after, yaml_params, "updated-after")
-        final_updated_before = get_param(updated_before, yaml_params, "updated-before")
-        final_include_closed = get_param(
-            include_all if include_all else None,
-            yaml_params,
-            "all",
-            False,
-        )
-        if final_include_closed:
+        except (PhabfiveConfigException, PhabfiveDataException) as e:
+            typer.echo(f"ERROR: {e}", err=True)
+            raise typer.Exit(1)
+
+        # The deprecation stays here rather than in the planner: both
+        # sentences name command-line spellings, and which of the two is
+        # printed depends on where the value came from, which only the
+        # command knows. The planner answers whether the scopes contradict.
+        if plan.params["include_closed"]:
             # --all only ever lifted the open-only default, which is what
             # --status=any says without promising "every task" (#419).
             if include_all:
@@ -828,81 +869,23 @@ def search(
                     "use 'status: any' instead.",
                     err=True,
                 )
-            named_scopes = {
-                condition.get("type")
-                for pattern in status_patterns or []
-                for condition in pattern.conditions
-            } & {"open", "closed"}
-            if named_scopes:
+            conflicting = plan.conflicting_status_scopes
+            if conflicting:
                 typer.echo(
                     f"ERROR: --all cannot be combined with --status "
-                    f"{'/'.join(sorted(named_scopes))}; use --status alone",
+                    f"{'/'.join(conflicting)}; use --status alone",
                     err=True,
                 )
                 raise typer.Exit(1)
-        final_limit = get_param(
-            limit if limit != 100 else None,
-            yaml_params,
-            "limit",
-            100,
-        )
-        # Left possibly None so task_search applies the default; giving the
-        # option a non-None default here would silently beat a template's
-        # "order:" on every run.
-        final_order = get_param(order, yaml_params, "order")
 
-        # Check if any search criteria provided. A bare "search" still prints
-        # help rather than querying the whole instance; --status=any is how a
-        # script asks for every task on purpose, and the deprecated --all
-        # still counts as the same request.
-        has_criteria = any(
-            [
-                final_text_query,
-                final_tag,
-                final_assigned,
-                final_author,
-                final_space,
-                final_visible_to,
-                final_editable_by,
-                final_created_after,
-                final_created_before,
-                final_updated_after,
-                final_updated_before,
-                final_include_closed,
-                column_patterns,
-                priority_patterns,
-                status_patterns,
-                include_task_ids,
-            ]
-        )
-        if not has_criteria:
+        # A bare "search" still prints help rather than querying the whole
+        # instance; --status=any is how a script asks for every task on
+        # purpose, and the deprecated --all still counts as the same request.
+        if not plan.has_criteria:
             _exit_with_help(ctx)
 
         try:
-            result = maniphest.task_search(
-                text_query=final_text_query,
-                tag=final_tag,
-                include_task_ids=include_task_ids,
-                exclude_task_ids=exclude_task_ids,
-                assigned=final_assigned,
-                author=final_author,
-                space=final_space,
-                visible_to=final_visible_to,
-                editable_by=final_editable_by,
-                created_after=final_created_after,
-                created_before=final_created_before,
-                updated_after=final_updated_after,
-                updated_before=final_updated_before,
-                column_patterns=column_patterns,
-                priority_patterns=priority_patterns,
-                status_patterns=status_patterns,
-                show_history=final_show_history,
-                show_metadata=final_show_metadata,
-                show_policy=final_show_policy,
-                include_closed=final_include_closed,
-                limit=final_limit,
-                order=final_order,
-            )
+            result = run_search(maniphest, plan)
         except (PhabfiveConfigException, PhabfiveDataException) as e:
             # A policy value outside the grammar is a config error, a project
             # or user it names that does not exist a data error; both are
@@ -910,14 +893,14 @@ def search(
             typer.echo(f"ERROR: {e}", err=True)
             raise typer.Exit(1)
 
-        _display_tasks(result, output_format, maniphest, tabular=True)
+        _display_tasks(result.payload, output_format, maniphest, tabular=True)
 
         # An empty search printed nothing at all. When it searched for text,
         # say why that may be, since the likeliest reason is a part of a word
         # given to a search that matches whole words.
-        if final_text_query and not (result or {}).get("tasks"):
+        if plan.text_query and not (result.payload or {}).get("tasks"):
             typer.echo("No tasks found", err=True)
-            _echo_no_match_hint(final_text_query)
+            _echo_no_match_hint(plan.text_query)
 
 
 def _get_edit_app():

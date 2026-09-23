@@ -563,32 +563,82 @@ def test_a_local_reference_names_nothing_online():
 
 
 def test_a_kind_with_no_resolver_is_left_unchecked_not_reported_clean():
-    """Phase 1 ships one resolver; the rest report nothing rather than a verdict."""
-    spec = _spec({"projects": ["#nosuch"], "space": "S9"})
+    """A kind nothing answers for reports nothing rather than a verdict.
+
+    `parents:` and `subtasks:` are `FieldKind.MONOGRAM`, which still has no
+    resolver: the reference is indexed, nobody is asked, and nothing is
+    reported. Phase 2 answers for users, projects, Spaces and icons instead
+    (`tests/test_spec_resolvers.py`), so this uses a kind that is still open.
+    """
+    spec = _spec({"parents": ["T999999"], "subtasks": ["T999998"]})
     phab = _phab()
 
     assert _validate(phab, spec) == []
-    assert set(index_references(spec).kinds()) == {
-        FieldKind.PROJECT,
-        FieldKind.SPACE,
-    }
+    assert set(index_references(spec).kinds()) == {FieldKind.MONOGRAM}
 
 
-def test_a_search_spec_has_no_online_references_yet():
-    """`references.REFERENCE_FIELDS` declares create keys only, in Phase 1."""
+def test_a_search_spec_s_user_filters_are_resolved():
+    """The four user filters of a `searches:` item, asked about once.
+
+    Phase 1 declared create keys only, so a search spec's references were
+    walked and nothing was found. They are declared now - and deliberately
+    only the four whose value is already a hard failure when it does not
+    resolve, so this changes *when* a bad `assigned:` is reported and not
+    whether.
+    """
     spec = Spec.from_data(
-        {"kind": "search", "searches": [{"search": {"assigned": "nosuch"}}]},
+        {
+            "kind": "search",
+            "searches": [
+                {"search": {"assigned": "nosuch,alice", "author": "nosuch"}},
+                {"search": {"subscriber": ["alice"], "closed-by": "nosuch"}},
+            ],
+        },
+        source="<test>",
+    )
+    phab = _phab()
+
+    problems = _validate(phab, spec)
+
+    assert [(one.object, one.field, one.value, one.code) for one in problems] == [
+        ("searches[0]", "search.assigned[0]", "nosuch", "unknown-user"),
+        ("searches[0]", "search.author", "nosuch", "unknown-user"),
+        ("searches[1]", "search.closed-by", "nosuch", "unknown-user"),
+    ]
+
+    # One request for every distinct name in the whole spec
+    assert phab.user.search.call_count == 1
+
+
+def test_a_search_spec_s_tag_and_space_are_still_left_alone():
+    """Declaring either would change an existing template's exit status.
+
+    A `tag:` matching nothing is a `log.error` and exit 0 today, and a
+    `space:` that does not resolve is a `log.warning` and no filter at all.
+    Reporting either as a problem is a change worth making and it needs its
+    own test and a line in docs/search-templates.md - it is not this.
+    """
+    spec = Spec.from_data(
+        {
+            "kind": "search",
+            "searches": [{"search": {"tag": "nosuchproject", "space": "S9999"}}],
+        },
         source="<test>",
     )
     phab = _phab()
 
     assert index_references(spec).references == ()
     assert _validate(phab, spec) == []
-    phab.user.search.assert_not_called()
 
 
-def test_phase_one_ships_exactly_the_user_resolver():
-    assert [r.kind for r in DEFAULT_RESOLVERS] == [FieldKind.USER]
+def test_the_default_resolvers_are_the_kinds_that_have_landed():
+    """One entry per lookup that exists, and the icon one is field-scoped."""
+    assert [(r.kind, r.fields) for r in DEFAULT_RESOLVERS] == [
+        (FieldKind.USER, frozenset()),
+        (FieldKind.PROJECT, frozenset()),
+        (FieldKind.SPACE, frozenset()),
+        (FieldKind.INSTANCE_ENUM, frozenset({"icon"})),
+    ]
 
 
 def test_a_caller_supplies_its_own_resolvers():

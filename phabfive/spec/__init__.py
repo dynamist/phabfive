@@ -22,10 +22,11 @@ spells on the command line, and it is what a caller does before the online
 pass: a value still holding `{{ who }}` names nothing an instance could be
 asked about.
 
-`Spec` and `Problem` are the two names `phabfive` itself re-exports, because
-they are what a caller holds. Everything else lives here, one import deeper -
-the tier `phabfive.transitions`, `phabfive.policy` and `phabfive.ordering`
-already occupy.
+`Spec`, `Problem`, `SearchPlan` and `SearchResult` are the names `phabfive`
+itself re-exports, because they are what a caller holds: a spec, what is
+wrong with it, and the two halves of running a search from one. Everything
+else lives here, one import deeper - the tier `phabfive.transitions`,
+`phabfive.policy` and `phabfive.ordering` already occupy.
 
 The names below are this subpackage's promise. Its modules carry more that is
 public still: `SpecFormat`, `detect_format`, `load_documents` and
@@ -38,8 +39,9 @@ helpers - `transition_pattern`, `policy_pattern`, `monogram_pattern`,
 `monogram_list_pattern` - in `phabfive.spec.schema`; `Resolver`,
 `ResolveResult`, `ReferenceIndex`, `index_references`, `field_kind` and
 `DEFAULT_RESOLVERS` in `phabfive.spec.online`; `parse_time_with_unit` in
-`phabfive.spec.times`; and the engine - `resolve_variables`, `render_tree`,
-`render_string` - in `phabfive.spec.variables`. Each module's own `__all__`
+`phabfive.spec.times`; `plan_search`, `plan_searches`, `run_search` and
+`task_ids` in `phabfive.spec.search`; and the engine - `resolve_variables`,
+`render_tree`, `render_string` - in `phabfive.spec.variables`. Each module's own `__all__`
 is the full list.
 """
 
@@ -56,6 +58,8 @@ from phabfive.spec.registry import Field as Field
 from phabfive.spec.registry import FieldKind as FieldKind
 from phabfive.spec.registry import spec_keys as spec_keys
 from phabfive.spec.schema import build_schema as build_schema
+from phabfive.spec.search import SearchPlan as SearchPlan
+from phabfive.spec.search import SearchResult as SearchResult
 from phabfive.spec.validate import validate_offline as validate_offline
 
 # Both spellings are load-bearing: __all__ is what mypy's no_implicit_reexport
@@ -67,6 +71,8 @@ __all__ = [
     "Kind",
     "Metadata",
     "Problem",
+    "SearchPlan",
+    "SearchResult",
     "Severity",
     "Spec",
     "build_schema",

@@ -97,6 +97,12 @@ def search(
     text_query: Optional[str] = typer.Argument(
         None, help="Search by name (partial match)"
     ),
+    with_template: Optional[str] = typer.Option(
+        None,
+        "--with",
+        help="Load the search from a YAML search spec; every option below "
+        "overrides what the spec says",
+    ),
     credential_type: Optional[str] = typer.Option(
         None,
         "--type",
@@ -125,16 +131,52 @@ def search(
         phabfive passphrase search --type=password
         phabfive passphrase search "api" --type=token
         phabfive passphrase search --type=key --limit=0
+        phabfive passphrase search --with searches.yaml
         phabfive --format=json passphrase search --type=key
+
+    Both filters are applied here rather than by Phorge: passphrase.query
+    takes no constraints, so a search reads every credential the token can
+    see and tests each one. A small --limit shortens that walk once enough
+    have matched, it does not make the query cheap.
     """
     from phabfive.passphrase.display import display_passphrases_list
 
-    # Require at least one search criterion
-    if not text_query and not credential_type:
+    # Require at least one search criterion - unless a spec carries them,
+    # which is checked per search once the spec has been read
+    if not with_template and not text_query and not credential_type:
         _exit_with_help(ctx)
+
+    # A spec never fetches secret material: the filters are applied in
+    # Python over every credential on the instance, so a search asking for
+    # secrets would fetch every secret rather than the ones that matched
+    if with_template and show_secret:
+        typer.echo(
+            "ERROR: --show-secret cannot be combined with --with; a search "
+            "spec never fetches secret material, use `passphrase show` for "
+            "one credential",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     _setup_output_options(ctx)
     passphrase = _get_passphrase_app()
+
+    if with_template:
+        from phabfive.cli.search_spec import load_search_spec, run_search_spec
+
+        run_search_spec(
+            ctx,
+            passphrase,
+            load_search_spec(with_template),
+            # Keyed as a spec spells the key; None means "not given", so a
+            # flag nobody typed cannot clobber the spec's value
+            overrides={
+                "text_query": text_query,
+                "type": credential_type,
+                "limit": limit if limit != 100 else None,
+            },
+        )
+        return
 
     try:
         credentials = passphrase.search_passphrases(
