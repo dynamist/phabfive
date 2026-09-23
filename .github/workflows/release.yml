@@ -138,7 +138,15 @@ jobs:
           # ever being reported. phabfive/__init__.py resolves its public names
           # through import_module(<variable>), which PyInstaller cannot follow,
           # so a library module no phabfive.cli module imports needs a
-          # --hidden-import here.
+          # --hidden-import here. phabfive.spec is such a module -- `phabfive.Spec`
+          # and `phabfive.Problem` reach it only through _LAZY. One line covers the
+          # whole subpackage: phabfive/spec/__init__.py imports envelope, loader,
+          # online, problems, registry, schema and validate literally, and those
+          # pull in references and variables the same way, so the module graph
+          # follows the rest once it has the package (times.py included, which
+          # validate.py imports literally). scripts/smoke.py runs
+          # `spec validate --offline` on a shipped template against the built
+          # binary, which is what actually proves this line is enough.
           pyinstaller --onefile --name phabfive _entry.py \
             --collect-data phabfive \
             --copy-metadata phabfive \
@@ -153,7 +161,9 @@ jobs:
             --hidden-import phabfive.cli.paste \
             --hidden-import phabfive.cli.user \
             --hidden-import phabfive.cli.repl \
+            --hidden-import phabfive.cli.spec \
             --hidden-import phabfive.cli.completers \
+            --hidden-import phabfive.spec \
             --exclude-module mkdocs
 
       - name: Rename artifact

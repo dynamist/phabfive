@@ -5,6 +5,19 @@ The command is one consumer of the classes it is built from:
 
     from phabfive import Maniphest
 
+A program that reads a spec - a web frontend building one from a request
+body, say - needs no command line either:
+
+    from phabfive import Maniphest, Spec
+
+    spec = Spec.from_data(payload)
+    problems = spec.validate_offline()
+    problems += spec.validate_online(Maniphest(url=URL, token=TOKEN))
+
+`Spec` and `Problem` are the two spec names exported here, because they are
+what a caller holds; `load_spec`, `validate_offline`, `validate_online` and
+the rest are one import deeper, in `phabfive.spec`.
+
 Every public name is resolved lazily (PEP 562), so `import phabfive` pulls in
 no third-party module. The module that defines a name is imported the first
 time the name is touched. See AGENTS.md for why this must stay lazy -- it is
@@ -44,6 +57,7 @@ if TYPE_CHECKING:
     from phabfive.passphrase import Passphrase
     from phabfive.paste import Paste
     from phabfive.project import Project
+    from phabfive.spec import Problem, Spec
     from phabfive.user import User
 
 # The promise. Spelled out as literals rather than derived from _LAZY: ruff
@@ -67,7 +81,9 @@ __all__ = [
     "PhabfiveNotFoundException",
     "PhabfiveRemoteException",
     "PhabfiveValidationException",
+    "Problem",
     "Project",
+    "Spec",
     "TaskEdit",
     "User",
     "__version__",
@@ -96,7 +112,9 @@ _LAZY = {
     "PhabfiveNotFoundException": "phabfive.exceptions",
     "PhabfiveRemoteException": "phabfive.exceptions",
     "PhabfiveValidationException": "phabfive.exceptions",
+    "Problem": "phabfive.spec",
     "Project": "phabfive.project",
+    "Spec": "phabfive.spec",
     "TaskEdit": "phabfive.edit",
     "User": "phabfive.user",
 }
@@ -131,6 +149,7 @@ _SUBMODULES = (
     "paste",
     "policy",
     "project",
+    "spec",
     "transitions",
     "user",
     "yaml_utils",
