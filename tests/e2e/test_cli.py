@@ -3,6 +3,7 @@
 
 # python std lib
 import json
+import time
 import uuid
 from urllib.parse import urlparse
 
@@ -753,3 +754,70 @@ def test_a_create_spec_refuses_passphrases_offline(phabfive_raw, tmp_path):
     # The section's body is counted, never echoed: it is credential material
     assert problem["value"] == "1 item(s)"
     assert "not-a-real-secret" not in result.stdout
+
+
+def _imported_commits(conduit, callsign):
+    """The commits of one repository, once its import has finished.
+
+    Only this repository is waited for, not every one as
+    `settled_repositories` does: a commit row exists only once the daemons
+    have discovered it, and an inactive repository elsewhere on the instance
+    never finishes importing at all.
+    """
+    deadline = time.monotonic() + 180
+
+    while True:
+        [repo] = conduit(
+            "diffusion.repository.search", **{"constraints[callsigns][0]": callsign}
+        )["data"]
+
+        if not repo["fields"].get("isImporting"):
+            return conduit(
+                "diffusion.commit.search",
+                **{"constraints[repositories][0]": repo["phid"]},
+            )["data"]
+
+        assert time.monotonic() < deadline, f"r{callsign} still importing after 180s"
+        time.sleep(2)
+
+
+def test_commits_attach_and_detach_by_short_hash(
+    phabfive, phabfive_raw, conduit, create_task
+):
+    """`--attach` on create and edit, and `--detach`, against GUNNAR's history.
+
+    A bare short hash is the spelling only the instance can resolve: it is
+    looked for in every repository, and what `maniphest show` names it by is
+    the monogram Diffusion gives it. Attaching one that is already attached,
+    or detaching one that is not, is no change, as for subscribers.
+    """
+    commits = _imported_commits(conduit, "GUNNAR")
+    assert len(commits) >= 2, "the seed gives GUNNAR three commits"
+    first, second = (commit["fields"]["identifier"] for commit in commits[:2])
+
+    def attached():
+        [task] = phabfive("maniphest", "show", task_id, json_output=True)
+        return sorted(c["Commit"]["Identifier"] for c in task["Commits"])
+
+    task_id, _title = create_task("--attach", first[:7])
+    phabfive("maniphest", "edit", task_id, "--attach", f"rGUNNAR{second[:12]}")
+
+    assert attached() == sorted([f"rGUNNAR{first[:12]}", f"rGUNNAR{second[:12]}"])
+
+    [task] = phabfive("maniphest", "show", task_id, json_output=True)
+    assert all(c["Link"] and c["Commit"]["Summary"] for c in task["Commits"])
+
+    again = phabfive_raw("maniphest", "edit", task_id, "--attach", first, "--yes")
+    assert again.returncode == 0, again.stderr
+    assert "No changes" in again.stderr
+
+    phabfive("maniphest", "edit", task_id, "--detach", first[:7], "--yes")
+    assert attached() == [f"rGUNNAR{second[:12]}"]
+
+    gone = phabfive_raw("maniphest", "edit", task_id, "--detach", first, "--yes")
+    assert gone.returncode == 0, gone.stderr
+    assert "No changes" in gone.stderr
+
+    unknown = phabfive_raw("maniphest", "edit", task_id, "--attach", "0" * 12)
+    assert unknown.returncode == 1
+    assert "No such commit" in unknown.stderr

@@ -118,6 +118,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "CommitResolver",
     "DEFAULT_RESOLVERS",
     "FIELD_SCOPED_KINDS",
     "REFERENCE_KINDS",
@@ -150,6 +151,7 @@ REFERENCE_KINDS = frozenset(
         FieldKind.SPACE,
         FieldKind.POLICY,
         FieldKind.MONOGRAM,
+        FieldKind.COMMIT,
         FieldKind.INSTANCE_ENUM,
     }
 )
@@ -172,6 +174,7 @@ _CREATE_FIELD_KINDS: Mapping[str, Mapping[str, FieldKind]] = {
         "parent": FieldKind.MONOGRAM,
         "parents": FieldKind.MONOGRAM,
         "subtasks": FieldKind.MONOGRAM,
+        "commits": FieldKind.COMMIT,
     },
     # A `searches:` item's object type is "search", not one of the registry's,
     # because what it searches is its own `type:`. These four keys mean a user
@@ -1342,6 +1345,63 @@ class TaskResolver:
         )
 
 
+class CommitResolver:
+    """``rGUNNAR7d7fc2c``, ``R1:7d7fc2c``, ``7d7fc2c`` and ``PHID-CMIT-...``.
+
+    The spellings ``--attach`` takes, through the same lookup
+    (`phabfive.commits.lookup_commits`), so a spec and the command cannot
+    disagree about what names a commit. One `diffusion.commit.search` per
+    distinct value - a result does not say which identifier it matched - and
+    one `phid.query` for the names of all of them.
+
+    A bare hash is the spelling that can name several commits: the same
+    commit in a fork, or a mirror next to its original. That is an error
+    naming the candidates, not a guess.
+
+    The label is the monogram Diffusion gives the commit, whichever spelling
+    was written.
+    """
+
+    kind: FieldKind = FieldKind.COMMIT
+    fields: frozenset[str] = frozenset()
+
+    def resolve(
+        self, app: "Phabfive", values: Sequence[str]
+    ) -> Mapping[str, ResolveResult]:
+        """Answer every commit the spec named. See :class:`Resolver`."""
+        from phabfive.commits import MIN_HASH_LENGTH, is_too_short, lookup_commits
+
+        results: dict[str, ResolveResult] = {}
+
+        for value, commits in lookup_commits(app.phab, values).items():
+            if len(commits) == 1:
+                [(phid, name)] = commits
+                results[value] = ResolveResult(value=value, phid=phid, label=name)
+            elif commits:
+                names = ", ".join(sorted(name for _, name in commits))
+                results[value] = ResolveResult(
+                    value=value,
+                    problem="ambiguous-commit",
+                    reason=(
+                        f"{value!r} matches {names}. Name the repository, "
+                        "e.g. rCALLSIGN<hash> or R1:<hash>"
+                    ),
+                )
+            else:
+                hint = (
+                    f" A hash needs at least {MIN_HASH_LENGTH} characters."
+                    if is_too_short(value)
+                    else ""
+                )
+                results[value] = ResolveResult(
+                    value=value,
+                    problem="unknown-commit",
+                    reason=f"No such commit: {value!r}.{hint}",
+                )
+
+        return results
+
+
 class SpaceResolver:
     """``S3``, ``PHID-SPCE-...``, a Space's name, or a pattern naming one.
 
@@ -1496,4 +1556,5 @@ DEFAULT_RESOLVERS: tuple[Resolver, ...] = (
     SpaceResolver(),
     IconResolver(),
     TaskResolver(),
+    CommitResolver(),
 )

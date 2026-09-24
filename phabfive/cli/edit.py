@@ -18,6 +18,7 @@ from phabfive.cli.completers import (
 )
 from phabfive.cli.output import _get_output_format, _setup_output_options
 from phabfive.cli.editor import resolve_assume_yes
+from phabfive.commits import COMMIT_GRAMMAR
 from phabfive.policy import POLICY_GRAMMAR
 
 
@@ -95,6 +96,28 @@ def edit_command(
         hidden=True,
         help="Alias for --unsubscribe",
         autocompletion=complete_user_list,
+    ),
+    attach: Optional[List[str]] = typer.Option(
+        None,
+        "--attach",
+        help=f"Attach a commit ({COMMIT_GRAMMAR}; repeatable, or comma-separated)",
+    ),
+    add_commit: Optional[List[str]] = typer.Option(
+        None,
+        "--add-commit",
+        hidden=True,
+        help="Alias for --attach",
+    ),
+    detach: Optional[List[str]] = typer.Option(
+        None,
+        "--detach",
+        help=f"Detach a commit ({COMMIT_GRAMMAR}; repeatable, or comma-separated)",
+    ),
+    remove_commit: Optional[List[str]] = typer.Option(
+        None,
+        "--remove-commit",
+        hidden=True,
+        help="Alias for --detach",
     ),
     comment: Optional[str] = typer.Option(
         None,
@@ -184,6 +207,8 @@ def edit_command(
         description=description,
         subscribe=[*(subscribe or []), *(add_subscriber or [])],
         unsubscribe=[*(unsubscribe or []), *(remove_subscriber or [])],
+        attach=[*(attach or []), *(add_commit or [])],
+        detach=[*(detach or []), *(remove_commit or [])],
         comment=comment,
         space=space,
         visible_to=visible_to,

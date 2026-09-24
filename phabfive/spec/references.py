@@ -219,6 +219,10 @@ _TASK_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
     ReferenceField("parent", monograms=("T",), creates=("task",)),
     ReferenceField("parents", multiple=True, monograms=("T",), creates=("task",)),
     ReferenceField("subtasks", multiple=True, monograms=("T",), creates=("task",)),
+    # No monograms and no `creates`: a commit's rGUNNAR7d7fc2c is outside the
+    # monogram grammar, so offline it reads as a name, and nothing in a spec
+    # creates a commit. Only the instance can say whether one exists
+    ReferenceField("commits", multiple=True),
     ReferenceField("projects", multiple=True, creates=("project",)),
     # No `creates`: nothing in a spec creates a user or a Space, so a
     # `$ref` in one of these names something that will never exist.

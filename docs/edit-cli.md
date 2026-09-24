@@ -55,6 +55,8 @@ Options:
   --tag=BOARD               Specify board context for --column (also adds task to board)
   --column=COLUMN           Set column on board (or use forward/backward)
   --assign=USER             Set assignee (use @me for yourself)
+  --attach=COMMIT           Attach a commit (rCALLSIGN<hash>, R1:<hash>, hash or PHID)
+  --detach=COMMIT           Detach a commit, spelled as for --attach
   --comment=TEXT            Add comment with changes
   --space=SPACE             Move to a Space (monogram, name, or unique pattern)
   --dry-run                 Show changes without applying
@@ -251,6 +253,40 @@ phabfive edit T123 --assign=alice
 # Assign to yourself
 phabfive edit T123 --assign=@me
 ```
+
+### Attaching Commits
+
+`--attach` attaches commits to a task and `--detach` detaches them, the way
+`--subscribe` and `--unsubscribe` handle subscribers. Both are repeatable and
+comma-separated, may be given in one edit, and send only what changes: a commit
+already attached is not attached again, and one that is not attached is not
+detached. The same commit in both is refused, however each was spelled.
+`--add-commit` and `--remove-commit` are accepted as other names for the two.
+
+A commit is named any way Diffusion accepts:
+
+| Spelling | Names |
+|---|---|
+| `rGUNNAR7d7fc2c3e002` | the commit in the repository with callsign `GUNNAR` |
+| `R1:7d7fc2c3e002` | the commit in repository `R1` |
+| `7d7fc2c` | the commit with that hash, in whichever repository has it |
+| `PHID-CMIT-...` | the commit with that PHID |
+
+```bash
+phabfive edit T123 --attach=7d7fc2c
+phabfive edit T123 T124 --attach=rGUNNAR7d7fc2c3e002 --detach=R10:3ce278cd9912 --dry-run
+```
+
+```
+[DRY RUN] Would apply to T123:
+  Commits: Added: rGUNNAR7d7fc2c3e002
+  Commits: Removed: R10:3ce278cd9912
+```
+
+A bare hash needs at least seven characters. One that matches commits in more
+than one repository - a fork, or a mirror next to the original - is an error
+listing them, so name the repository instead. `maniphest show` lists a task's
+commits under `Commits`, each linked to its page in Diffusion.
 
 ### Policy Management
 

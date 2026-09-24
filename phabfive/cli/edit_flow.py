@@ -60,6 +60,8 @@ def run_edit(
     description=None,
     subscribe=None,
     unsubscribe=None,
+    attach=None,
+    detach=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -88,6 +90,8 @@ def run_edit(
         description (str): Description text, or "" to open $EDITOR
         subscribe (list): Users to add as subscribers
         unsubscribe (list): Users to remove from the subscribers
+        attach (list): Commits to attach, by monogram, hash or PHID
+        detach (list): Commits to detach, spelled as for attach
         comment (str): Comment to add
         space (str): Space to move the object to
         visible_to (str): Who can see it, the --visible-to policy
@@ -114,6 +118,8 @@ def run_edit(
             description is not None,
             subscribe,
             unsubscribe,
+            attach,
+            detach,
             comment,
             space,
             visible_to,
@@ -155,6 +161,8 @@ def run_edit(
                         description=description,
                         subscribe=subscribe,
                         unsubscribe=unsubscribe,
+                        attach=attach,
+                        detach=detach,
                         comment=comment,
                         space=space,
                         visible_to=visible_to,
@@ -201,6 +209,8 @@ def run_edit(
                         description=description,
                         subscribe=subscribe,
                         unsubscribe=unsubscribe,
+                        attach=attach,
+                        detach=detach,
                         comment=comment,
                         space=space,
                         visible_to=visible_to,
@@ -250,6 +260,8 @@ def run_edit(
                     description=description,
                     subscribe=subscribe,
                     unsubscribe=unsubscribe,
+                    attach=attach,
+                    detach=detach,
                     comment=comment,
                     space=space,
                     visible_to=visible_to,
@@ -300,6 +312,8 @@ def _edit_task_single(
     description=None,
     subscribe=None,
     unsubscribe=None,
+    attach=None,
+    detach=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -323,6 +337,8 @@ def _edit_task_single(
         description (str): Description text, "" to clear, "-" to read from stdin
         subscribe (list): Users to add as subscribers
         unsubscribe (list): Users to remove from the subscribers
+        attach (list): Commits to attach, by monogram, hash or PHID
+        detach (list): Commits to detach, spelled as for attach
         comment (str): Comment to add
         space (str): Space to move the task to
         visible_to (str): Who can see it, the --visible-to policy
@@ -385,6 +401,8 @@ def _edit_task_single(
                 description=final_description,
                 subscribe=subscribe,
                 unsubscribe=unsubscribe,
+                attach=attach,
+                detach=detach,
                 comment=comment,
                 space=space,
                 visible_to=visible_to,
@@ -407,6 +425,8 @@ def _edit_task_single(
                 description=final_description,
                 subscribe=subscribe,
                 unsubscribe=unsubscribe,
+                attach=attach,
+                detach=detach,
                 comment=comment,
                 space=space,
                 visible_to=visible_to,
@@ -509,6 +529,8 @@ def edit_tasks_batch(
     description=None,
     subscribe=None,
     unsubscribe=None,
+    attach=None,
+    detach=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -535,6 +557,8 @@ def edit_tasks_batch(
         description (str): Description text to set
         subscribe (list): Users to add as subscribers
         unsubscribe (list): Users to remove from the subscribers
+        attach (list): Commits to attach, by monogram, hash or PHID
+        detach (list): Commits to detach, spelled as for attach
         comment (str): Comment to add
         space (str): Space to move the tasks to
         visible_to (str): Who can see it, the --visible-to policy
@@ -570,6 +594,8 @@ def edit_tasks_batch(
             description=description,
             subscribe=subscribe,
             unsubscribe=unsubscribe,
+            attach=attach,
+            detach=detach,
             comment=comment,
             space=space,
             visible_to=visible_to,

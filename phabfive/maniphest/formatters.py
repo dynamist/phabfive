@@ -640,6 +640,7 @@ def build_task_display_data(
     comments_map=None,
     parents_map=None,
     subtasks_map=None,
+    commits_map=None,
     matching_boards_map=None,
     matching_priority_map=None,
     matching_status_map=None,
@@ -679,6 +680,10 @@ def build_task_display_data(
         Mapping of task ID to assignee transitions
     comments_map : dict, optional
         Mapping of task ID to comments list
+    parents_map, subtasks_map : dict, optional
+        Mapping of task ID to related tasks
+    commits_map : dict, optional
+        Mapping of task ID to related commits
     matching_boards_map : dict, optional
         Mapping of task ID to matching board PHIDs
     matching_priority_map : dict, optional
@@ -721,6 +726,8 @@ def build_task_display_data(
         parents_map = {}
     if subtasks_map is None:
         subtasks_map = {}
+    if commits_map is None:
+        commits_map = {}
     if matching_boards_map is None:
         matching_boards_map = {}
     if matching_priority_map is None:
@@ -866,6 +873,7 @@ def build_task_display_data(
         # These are populated by task_show(), empty for task_search()
         task_dict["Parents"] = parents_map.get(item["id"], [])
         task_dict["Subtasks"] = subtasks_map.get(item["id"], [])
+        task_dict["Commits"] = commits_map.get(item["id"], [])
 
         # Add Comments section if show_comments is enabled
         if show_comments:

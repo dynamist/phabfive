@@ -334,6 +334,16 @@ only what changes (`--add-subscriber` and `--remove-subscriber` are hidden alias
 phabfive maniphest edit T123 --subscribe=@bob --unsubscribe=@me
 ```
 
+Commits work the same way with `--attach` and `--detach` (hidden aliases `--add-commit` and
+`--remove-commit`), and `maniphest create` takes `--attach`. A commit is `rCALLSIGN<hash>`,
+`R1:<hash>`, a bare hash of at least 7 characters (searched in every repository; one found in
+several is an error listing them) or a `PHID-CMIT-...`. `maniphest show` lists them under
+`Commits`, and a create spec takes `commits:`:
+
+```bash
+phabfive maniphest edit T123 --attach=7d7fc2c --detach=rGUNNAR3ce278cd9912
+```
+
 Watching a project cannot be changed from phabfive: Conduit's `project.edit` has no watchers
 transaction, so it is done in the web UI. `project search --watcher` only filters by it.
 

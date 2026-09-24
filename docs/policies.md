@@ -168,6 +168,7 @@ phabfive maniphest show T237 --show-policy --no-description
     Can Interact: All Users
   Parents: []
   Subtasks: []
+  Commits: []
 ```
 
 The flag is on six commands:
@@ -355,6 +356,7 @@ phabfive maniphest show T239 --show-policy --no-description
     Can Interact: '#infrastructure'
   Parents: []
   Subtasks: []
+  Commits: []
 ```
 
 Move the view policy and the interact policy moves with it. `T240` below is

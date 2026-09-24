@@ -58,6 +58,8 @@ CODES: tuple[str, ...] = (
     "unknown-project",
     "ambiguous-project",
     "unknown-space",
+    "unknown-commit",
+    "ambiguous-commit",
     # A warning, never an error: the icon set is instance configuration that
     # no Conduit method reports, so an icon outside the observed set may be
     # one `projects.icons` configured and no project carries yet.

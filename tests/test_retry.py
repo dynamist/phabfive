@@ -332,6 +332,10 @@ class TestClassification:
             [{"type": "view", "value": "users"}, {"type": "status", "value": "open"}]
         )
 
+    def test_attaching_a_commit_is_idempotent(self):
+        """Adding an edge that is already there changes nothing."""
+        assert is_idempotent_edit([{"type": "commits.add", "value": ["PHID-CMIT-1"]}])
+
     def test_a_comment_is_not(self):
         assert not is_idempotent_edit(
             [{"type": "status", "value": "open"}, {"type": "comment", "value": "x"}]

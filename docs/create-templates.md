@@ -73,6 +73,7 @@ tasks:
 | `parents` | list | Parent task IDs | `["T123", "T456"]` |
 | `subtasks` | list | Subtask IDs to attach | `["T789"]` |
 | `id` | string | A name the rest of this file can refer to this task by; see [Referring to what the same file creates](#referring-to-what-the-same-file-creates) | `"epic"` |
+| `commits` | list | Commits to attach, as for `--attach` (supports Jinja2 variables) | `["rGUNNAR7d7fc2c3e002", "7d7fc2c"]` |
 | `tasks` | list | Nested subtasks (see [Subtasks](#subtasks)) | Array of task objects |
 
 Only `title` is required. A task with a title and no description is created;
@@ -250,6 +251,25 @@ Nesting links tasks the same template creates - see [Subtasks](#subtasks) -
 and `$local-id` links anything to anything; see the next section. A monogram
 in `parents` or `subtasks` that no task answers to is an error, and nothing
 is created.
+
+`commits` attaches commits that already exist, named the way `--attach` takes
+them - `rCALLSIGN<hash>`, `R1:<hash>`, a bare hash of at least seven characters,
+or a PHID. Like every list in a create spec it is sent as `commits.add`. Quote
+a hash: YAML reads one made only of digits as a number.
+
+```yaml
+variables:
+  sha: "7d7fc2c"
+
+tasks:
+  - title: "Release the telemetry frame"
+    description: "Follow-up to the format sketch"
+    commits: ["{{ sha }}", "R10:3ce278cd9912"]
+```
+
+A commit that does not exist, or a bare hash that more than one repository
+has, is reported by `phabfive spec validate` and refused before anything is
+created.
 
 #### Hanging new subtasks off a task that already exists
 
