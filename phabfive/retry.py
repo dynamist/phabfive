@@ -84,6 +84,9 @@ IDEMPOTENT_TRANSACTIONS = frozenset(
         "subscribers.set",
         "subscribers.add",
         "subscribers.remove",
+        "commits.set",
+        "commits.add",
+        "commits.remove",
     }
 )
 

@@ -34,6 +34,7 @@ from phabfive.cli.output import (
     _setup_output_options,
     is_machine_format,
 )
+from phabfive.commits import COMMIT_GRAMMAR
 from phabfive.constants import MONOGRAMS
 from phabfive.cli.editor import resolve_assume_yes
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
@@ -98,6 +99,8 @@ _CREATE_OPTIONS_IGNORED_BY_TEMPLATE = {
     "priority": "--priority",
     "add_subscriber": "--add-subscriber",
     "subscribe": "--subscribe",
+    "attach": "--attach",
+    "add_commit": "--add-commit",
     "space": "--space",
     "visible_to": "--visible-to",
     "editable_by": "--editable-by",
@@ -394,6 +397,17 @@ def create(
         help="Alias for --subscribe",
         autocompletion=complete_user_list,
     ),
+    attach: Optional[List[str]] = typer.Option(
+        None,
+        "--attach",
+        help=f"Attach a commit ({COMMIT_GRAMMAR}; repeatable, or comma-separated)",
+    ),
+    add_commit: Optional[List[str]] = typer.Option(
+        None,
+        "--add-commit",
+        hidden=True,
+        help="Alias for --attach",
+    ),
     space: Optional[str] = typer.Option(
         None,
         "--space",
@@ -513,6 +527,9 @@ def create(
                 if task.get("subscribers"):
                     subscribers = ", ".join(task["subscribers"])
                     print(f"{indent}  Subscribers: {subscribers}", file=preview)
+                if task.get("commits"):
+                    commits = ", ".join(task["commits"])
+                    print(f"{indent}  Commits: {commits}", file=preview)
         elif machine and result and result.get("task_ids"):
             # One query for the whole template, and the same records
             # `maniphest show` gives - a tree of tasks is still just tasks.
@@ -547,6 +564,7 @@ def create(
         subscribers = _split_values_to_add(
             [*(subscribe or []), *(add_subscriber or [])], "--subscribe"
         )
+        commits = split_list_option([*(attach or []), *(add_commit or [])])
 
         # Validate --column requires --tag
         if column and not tags:
@@ -575,6 +593,7 @@ def create(
                 status=status,
                 priority=priority,
                 subscribers=subscribers,
+                commits=commits,
                 column=column,
                 board_phid=board_phid,
                 space=space,
@@ -613,6 +632,11 @@ def create(
                 if result.get("subscribers"):
                     print(
                         f"  Subscribers: {', '.join(result['subscribers'])}",
+                        file=preview,
+                    )
+                if result.get("commits"):
+                    print(
+                        f"  Commits: {', '.join(result['commits'])}",
                         file=preview,
                     )
                 if result.get("space"):
@@ -1067,6 +1091,28 @@ def edit(
         help="Alias for --unsubscribe",
         autocompletion=complete_user_list,
     ),
+    attach: Optional[List[str]] = typer.Option(
+        None,
+        "--attach",
+        help=f"Attach a commit ({COMMIT_GRAMMAR}; repeatable, or comma-separated)",
+    ),
+    add_commit: Optional[List[str]] = typer.Option(
+        None,
+        "--add-commit",
+        hidden=True,
+        help="Alias for --attach",
+    ),
+    detach: Optional[List[str]] = typer.Option(
+        None,
+        "--detach",
+        help=f"Detach a commit ({COMMIT_GRAMMAR}; repeatable, or comma-separated)",
+    ),
+    remove_commit: Optional[List[str]] = typer.Option(
+        None,
+        "--remove-commit",
+        hidden=True,
+        help="Alias for --detach",
+    ),
     comment_text: Optional[str] = typer.Option(
         None,
         "--comment",
@@ -1187,6 +1233,8 @@ def edit(
         description=description,
         subscribe=[*(subscribe or []), *(add_subscriber or [])],
         unsubscribe=[*(unsubscribe or []), *(remove_subscriber or [])],
+        attach=[*(attach or []), *(add_commit or [])],
+        detach=[*(detach or []), *(remove_commit or [])],
         comment=comment_text,
         space=space,
         visible_to=visible_to,

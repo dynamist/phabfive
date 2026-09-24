@@ -114,6 +114,37 @@ Creating a task subscribes its author, who can leave with
 `--unsubscribe=@me`. The owner of a task is notified by Phorge whether
 subscribed or not.
 
+### Commits
+
+`maniphest edit` (and `phabfive edit`) attaches commits with `--attach` and
+detaches them with `--detach`; `maniphest create` takes `--attach`. Each takes a
+`rCALLSIGN<hash>`, an `R1:<hash>`, a bare hash of at least seven characters or
+a commit PHID, and like the subscriber options they are repeatable,
+comma-separated and send only what changes:
+
+```bash
+phabfive maniphest create "Fix the importer" --tag=Backend --attach=7d7fc2c
+phabfive maniphest edit T123 --attach=rGUNNAR7d7fc2c3e002,R10:3ce278cd9912
+phabfive maniphest edit T123 --detach=7d7fc2c
+```
+
+`--add-commit` and `--remove-commit` are accepted as other names for the two.
+
+`maniphest show` lists commits after the parents and subtasks, each by the name
+Diffusion gives it and linked to its page. Machine-readable formats always carry
+the key, as they do `Parents` and `Subtasks`:
+
+```yaml
+  Commits:
+  - Link: http://phorge.localhost/rGUNNAR7d7fc2c3e0023069cb381fa88cc08b559d40afb0
+    Commit:
+      Identifier: rGUNNAR7d7fc2c3e002
+      Summary: Sketch the telemetry frame format
+```
+
+A bare hash that more than one repository has is an error naming each match;
+see [Attaching Commits](edit-cli.md#attaching-commits).
+
 ### Add Comments
 
 Add a comment to a task:
@@ -130,7 +161,7 @@ Create multiple related tasks in bulk using YAML configuration files. Task creat
 
 - **Hierarchical structures**: Create epics with subtasks automatically linked
 - **Variable substitution**: Use Jinja2 templating for dynamic content
-- **Task relationships**: Attach tasks to existing parents and subtasks by monogram
+- **Task relationships**: Attach tasks to existing parents and subtasks by monogram, and commits by monogram or hash
 - **Team assignments**: Assign tasks to users and add subscribers
 - **Project association**: Automatically tag tasks with relevant projects
 

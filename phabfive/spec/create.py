@@ -123,6 +123,7 @@ COLLECTION_FIELDS: tuple[str, ...] = (
     "subscribers",
     "parents",
     "subtasks",
+    "commits",
 )
 
 # Which spec key sets which policy, per object type. The value of each is a
@@ -1093,7 +1094,7 @@ def _projects(entry: _Entry) -> list[str]:
 
 
 def _monograms(entry: _Entry, *keys: str) -> list[str]:
-    """One task's `parent:`, `parents:` or `subtasks:`, as a list of strings.
+    """One task's `parent:`, `parents:`, `subtasks:` or `commits:`, as strings.
 
     Several keys at once for `parent:` and `parents:`, which are one
     meaning with two spellings: both name the objects this item hangs off,
@@ -1214,6 +1215,7 @@ def _task_item(
         "status": status,
         "assignee": None,
         "subscribers": [],
+        "commits": [],
         "projects": [],
         "space": None,
     }
@@ -1268,6 +1270,14 @@ def _task_item(
 
     if subtasks:
         transactions.append({"type": "subtasks.add", "value": subtasks})
+
+    commit_phids, commit_names = _resolved_named(
+        resolution, "task", "commits", _monograms(entry, "commits")
+    )
+
+    if commit_phids:
+        transactions.append({"type": "commits.add", "value": commit_phids})
+        display["commits"] = commit_names
 
     parents = _resolved_list(
         resolution, "task", "parents", _monograms(entry, *ANCHOR_KEYS)

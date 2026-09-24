@@ -755,11 +755,20 @@ def get_current_column(task, board_phid, column_info):
     return col_data["name"] if col_data else None
 
 
-def fetch_task_relationships(phab, task_phid, relationship_type):
-    """
-    Fetch parent or subtask relationships for a task.
+_RELATIONSHIP_EDGE_TYPES = {
+    "parents": "task.parent",
+    "subtasks": "task.subtask",
+    "commits": "task.commit",
+}
 
-    Uses the edge.search API to query task relationships.
+
+def fetch_task_edges(phab, task_phid, relationship_type):
+    """
+    Fetch the parents, subtasks or commits of a task, raising on failure.
+
+    For an edit, which has to know what is there before it can say what
+    changes: answering a failed lookup with nothing would report removing a
+    commit as no change.
 
     Parameters
     ----------
@@ -768,29 +777,50 @@ def fetch_task_relationships(phab, task_phid, relationship_type):
     task_phid : str
         Task PHID (e.g., "PHID-TASK-...")
     relationship_type : str
-        Either "parents" or "subtasks"
+        "parents", "subtasks" or "commits"
 
     Returns
     -------
     list
-        List of related task PHIDs
+        List of related task or commit PHIDs
     """
-    edge_type = "task.parent" if relationship_type == "parents" else "task.subtask"
+    edge_type = _RELATIONSHIP_EDGE_TYPES[relationship_type]
+    result = phab.edge.search(sourcePHIDs=[task_phid], types=[edge_type])
 
+    related_phids = [
+        edge["destinationPHID"]
+        for edge in (result or {}).get("data", [])
+        if edge.get("destinationPHID")
+    ]
+
+    log.debug(f"Found {len(related_phids)} {relationship_type} for task {task_phid}")
+    return related_phids
+
+
+def fetch_task_relationships(phab, task_phid, relationship_type):
+    """
+    Fetch the parents, subtasks or commits of a task, for display.
+
+    Uses the edge.search API to query task relationships. A failure is logged
+    and answered with nothing, so one lookup cannot fail a whole `show`; see
+    `fetch_task_edges` for the one that raises.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    task_phid : str
+        Task PHID (e.g., "PHID-TASK-...")
+    relationship_type : str
+        "parents", "subtasks" or "commits"
+
+    Returns
+    -------
+    list
+        List of related task or commit PHIDs
+    """
     try:
-        result = phab.edge.search(sourcePHIDs=[task_phid], types=[edge_type])
-
-        related_phids = []
-        for edge in result.get("data", []):
-            dest_phid = edge.get("destinationPHID")
-            if dest_phid:
-                related_phids.append(dest_phid)
-
-        log.debug(
-            f"Found {len(related_phids)} {relationship_type} for task {task_phid}"
-        )
-        return related_phids
-
+        return fetch_task_edges(phab, task_phid, relationship_type)
     except Exception as e:
         log.warning(
             f"Failed to fetch {relationship_type} for {task_phid}: {type(e).__name__}: {e}"

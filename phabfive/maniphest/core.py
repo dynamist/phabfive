@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ruamel.yaml import YAML
 
+from phabfive.commits import fetch_commit_handles, resolve_commit_phids
 from phabfive.constants import (
     MANIPHEST_ORDER_DEFAULT,
     MANIPHEST_ORDER_DIRECTIONS,
@@ -29,6 +30,7 @@ from phabfive.exceptions import (
 from phabfive.maniphest.fetchers import (
     fetch_all_transactions,
     fetch_project_names_for_boards,
+    fetch_task_edges,
     fetch_task_relationships,
     fallback_status_map,
     fetch_api_priority_values,
@@ -504,6 +506,7 @@ class Maniphest(Phabfive):
         comments_map=None,
         parents_map=None,
         subtasks_map=None,
+        commits_map=None,
         matching_boards_map=None,
         matching_priority_map=None,
         matching_status_map=None,
@@ -528,6 +531,7 @@ class Maniphest(Phabfive):
             comments_map=comments_map,
             parents_map=parents_map,
             subtasks_map=subtasks_map,
+            commits_map=commits_map,
             matching_boards_map=matching_boards_map,
             matching_priority_map=matching_priority_map,
             matching_status_map=matching_status_map,
@@ -628,6 +632,7 @@ class Maniphest(Phabfive):
         comments_map = {}
         parents_map = {}
         subtasks_map = {}
+        commits_map = {}
 
         for task_data in result_data:
             task_id = task_data["id"]
@@ -700,6 +705,13 @@ class Maniphest(Phabfive):
                     parents_map[task_id] = []
                     subtasks_map[task_id] = []
 
+                commit_phids = fetch_task_relationships(self.phab, task_phid, "commits")
+                commits_map[task_id] = (
+                    fetch_commit_handles(self.phab, commit_phids)
+                    if commit_phids
+                    else []
+                )
+
         # Use shared method to build task data
         display_data = self._build_task_display_data(
             result_data,
@@ -710,6 +722,7 @@ class Maniphest(Phabfive):
             comments_map=comments_map,
             parents_map=parents_map,
             subtasks_map=subtasks_map,
+            commits_map=commits_map,
             show_history=show_history,
             show_metadata=show_metadata,
             show_comments=show_comments,
@@ -2327,6 +2340,7 @@ class Maniphest(Phabfive):
                         "title": item.display.get("title"),
                         "assignee": item.display.get("assignee"),
                         "subscribers": list(item.display.get("subscribers") or []),
+                        "commits": list(item.display.get("commits") or []),
                     }
                     for item in plan.creating
                 ],
@@ -2388,6 +2402,7 @@ class Maniphest(Phabfive):
         status=None,
         priority=None,
         subscribers=None,
+        commits=None,
         column=None,
         board_phid=None,
         space=None,
@@ -2416,6 +2431,9 @@ class Maniphest(Phabfive):
         subscribers : list, optional
             Subscriber usernames (supports @me for current user). Each item
             may hold several, separated by commas
+        commits : list, optional
+            Commits to attach, by monogram, hash or PHID. Each item may hold
+            several, separated by commas
         column : str, optional
             Column name on board for initial placement
         board_phid : str, optional
@@ -2446,6 +2464,10 @@ class Maniphest(Phabfive):
             policy value outside the grammar)
         PhabfiveDataException
             If a policy names a project or user that does not exist
+        PhabfiveNotFoundException
+            If a commit does not exist
+        PhabfiveInputException
+            If a commit hash matches more than one commit
         PhabfiveRemoteException
             If API call fails
         """
@@ -2458,6 +2480,7 @@ class Maniphest(Phabfive):
         # Repeatable and comma-separated, like every other list of values
         parsed_tags = split_list_option(tags)
         parsed_subscribers = split_list_option(subscribers)
+        parsed_commits = split_list_option(commits)
 
         # Build transactions list
         transactions = []
@@ -2513,6 +2536,20 @@ class Maniphest(Phabfive):
         else:
             subscriber_display = parsed_subscribers
 
+        # Resolve commits to PHIDs (monograms, hashes or PHIDs)
+        commit_display = []
+        if parsed_commits:
+            resolved_commits = resolve_commit_phids(
+                self.phab, parsed_commits, option="--attach"
+            )
+            commit_phids = list(
+                dict.fromkeys(phid for phid, _ in resolved_commits.values())
+            )
+            commit_display = list(
+                dict.fromkeys(name for _, name in resolved_commits.values())
+            )
+            transactions.append({"type": "commits.set", "value": commit_phids})
+
         # Resolve the Space to place the task in. Filtering may name several
         # Spaces at once; creating in one cannot, so this demands exactly one.
         space_display = None
@@ -2560,6 +2597,7 @@ class Maniphest(Phabfive):
                 "tags": parsed_tags,
                 "column": column,
                 "subscribers": subscriber_display,
+                "commits": commit_display,
                 "space": space_display,
                 "policy": policy_display,
             }
@@ -2639,11 +2677,13 @@ class Maniphest(Phabfive):
         assign=None,
         description=None,
         subscribe=None,
+        attach=None,
         comment=None,
         space=None,
         visible_to=None,
         editable_by=None,
         unsubscribe=None,
+        detach=None,
     ):
         """Compute the transactions for a task edit, without applying them.
 
@@ -2670,6 +2710,8 @@ class Maniphest(Phabfive):
             Description text to set
         subscribe : list, optional
             Users to add as subscribers (@me for current user)
+        attach : list, optional
+            Commits to attach, by monogram, hash or PHID
         comment : str, optional
             Comment to add
         space : str, optional
@@ -2682,6 +2724,8 @@ class Maniphest(Phabfive):
             form uses.
         unsubscribe : list, optional
             Users to remove from the subscribers (@me for current user)
+        detach : list, optional
+            Commits to detach, spelled as for `attach`
 
         Returns
         -------
@@ -2694,7 +2738,7 @@ class Maniphest(Phabfive):
         PhabfiveInputException
             On an argument value that cannot be used
         PhabfiveNotFoundException
-            On a task, user or column that does not exist
+            On a task, user, commit or column that does not exist
         PhabfiveConfigException
             If a policy value is outside the grammar
         PhabfiveDataException
@@ -2909,6 +2953,24 @@ class Maniphest(Phabfive):
             )
             transactions.extend(sub_transactions)
             changes.extend(sub_changes)
+
+        # Handle commits, as subscribers: only a change is sent
+        if attach or detach:
+            commit_transactions, commit_changes = user_list_edit(
+                "commits",
+                "Commits",
+                fetch_task_edges(self.phab, task_data["phid"], "commits"),
+                added=resolve_commit_phids(
+                    self.phab, split_list_option(attach), option="--attach"
+                ),
+                removed=resolve_commit_phids(
+                    self.phab,
+                    split_list_option(detach),
+                    option="--detach",
+                ),
+            )
+            transactions.extend(commit_transactions)
+            changes.extend(commit_changes)
 
         # Handle space
         if space:

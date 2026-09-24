@@ -54,6 +54,34 @@ def render_records(output_format, renderers):
         sys.exit(0)
 
 
+def _commit_line(commit, phabfive_instance):
+    """The parts of one related commit's line: its linked monogram and summary.
+
+    Parameters
+    ----------
+    commit : dict
+        ``{"Link": url, "Commit": {"Identifier": ..., "Summary": ...}}``
+    phabfive_instance : Phabfive
+        Instance to access format_link()
+
+    Returns
+    -------
+    tuple
+        Parts for ``Text.assemble``
+    """
+    details = commit.get("Commit", {})
+    identifier = details.get("Identifier", "")
+    summary = details.get("Summary", "")
+    link = phabfive_instance.format_link(
+        commit.get("Link", ""), identifier, show_url=False
+    )
+
+    if summary:
+        return (link, f": {_escape_for_rich(summary)}")
+
+    return (link,)
+
+
 def _escape_for_rich(content):
     """Escape user content for safe Rich printing.
 
@@ -174,6 +202,7 @@ def _display_task_rich(console, task_dict, phabfive_instance, show_description=T
     boards = task_dict.get("Boards", {})
     parents = task_dict.get("Parents", [])
     subtasks = task_dict.get("Subtasks", [])
+    commits = task_dict.get("Commits", [])
     history = task_dict.get("History", {})
     metadata = task_dict.get("Metadata", {})
 
@@ -267,6 +296,14 @@ def _display_task_rich(console, task_dict, phabfive_instance, show_description=T
                 Text.assemble("    - ", task_link, f": {_escape_for_rich(name)}")
             )
 
+    # Print Commits section (only if non-empty)
+    if commits:
+        console.print("  Commits:")
+        for commit in commits:
+            console.print(
+                Text.assemble("    - ", *_commit_line(commit, phabfive_instance))
+            )
+
     # Print History section
     if history:
         console.print("  History:")
@@ -334,6 +371,7 @@ def _display_task_tree(console, task_dict, phabfive_instance, show_description=T
     boards = task_dict.get("Boards", {})
     parents = task_dict.get("Parents", [])
     subtasks = task_dict.get("Subtasks", [])
+    commits = task_dict.get("Commits", [])
     history = task_dict.get("History", {})
     metadata = task_dict.get("Metadata", {})
 
@@ -415,6 +453,12 @@ def _display_task_tree(console, task_dict, phabfive_instance, show_description=T
             task_id = link.split("/")[-1] if link else ""
             task_link = phabfive_instance.format_link(link, task_id, show_url=False)
             subtasks_branch.add(Text.assemble(task_link, f": {_escape_for_rich(name)}"))
+
+    # Add Commits section (only if non-empty)
+    if commits:
+        commits_branch = tree.add("Commits")
+        for commit in commits:
+            commits_branch.add(Text.assemble(*_commit_line(commit, phabfive_instance)))
 
     # Add History section
     if history:
@@ -520,9 +564,10 @@ def _display_task_yaml(task_dict, show_description=True):
                 boards[board_name] = board_data
         output["Boards"] = boards
 
-    # Always include Parents and Subtasks (even if empty list)
+    # Always include Parents, Subtasks and Commits (even if empty list)
     output["Parents"] = task_dict.get("Parents", [])
     output["Subtasks"] = task_dict.get("Subtasks", [])
+    output["Commits"] = task_dict.get("Commits", [])
 
     # Add History section if present
     if task_dict.get("History"):
@@ -613,9 +658,10 @@ def _build_task_json_output(task_dict, show_description=True):
                 boards[board_name] = board_data
         output["Boards"] = boards
 
-    # Always include Parents and Subtasks (even if empty list)
+    # Always include Parents, Subtasks and Commits (even if empty list)
     output["Parents"] = task_dict.get("Parents", [])
     output["Subtasks"] = task_dict.get("Subtasks", [])
+    output["Commits"] = task_dict.get("Commits", [])
 
     # Add History section if present
     if task_dict.get("History"):

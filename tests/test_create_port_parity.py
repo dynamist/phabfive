@@ -292,8 +292,15 @@ class TestTheReturnValue:
                     "title": "Parent",
                     "assignee": "alice",
                     "subscribers": ["bob", "caller"],
+                    "commits": [],
                 },
-                {"depth": 2, "title": "Child", "assignee": None, "subscribers": []},
+                {
+                    "depth": 2,
+                    "title": "Child",
+                    "assignee": None,
+                    "subscribers": [],
+                    "commits": [],
+                },
             ],
         }
         phab.maniphest.edit.assert_not_called()

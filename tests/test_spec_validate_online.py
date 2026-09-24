@@ -507,6 +507,7 @@ def test_every_kind_that_needs_the_instance_is_a_reference_kind():
         FieldKind.SPACE,
         FieldKind.POLICY,
         FieldKind.MONOGRAM,
+        FieldKind.COMMIT,
         FieldKind.INSTANCE_ENUM,
     }
 
@@ -526,6 +527,7 @@ def test_every_kind_that_needs_the_instance_is_a_reference_kind():
         ("parent", FieldKind.MONOGRAM),
         ("parents[0]", FieldKind.MONOGRAM),
         ("subtasks[1]", FieldKind.MONOGRAM),
+        ("commits[0]", FieldKind.COMMIT),
         # A key nothing declares at all. `title:` used to stand here and no
         # longer can: it is a declared create field now, so it answers with
         # its own kind, and what this row is for is the key that answers
@@ -675,6 +677,7 @@ def test_the_default_resolvers_are_the_kinds_that_have_landed():
         (FieldKind.SPACE, frozenset()),
         (FieldKind.INSTANCE_ENUM, frozenset({"icon"})),
         (FieldKind.MONOGRAM, frozenset()),
+        (FieldKind.COMMIT, frozenset()),
     ]
 
 

@@ -42,8 +42,8 @@ class FieldKind(enum.Enum):
 
     The two layers of validation read this: ``TEXT`` through ``PATTERN`` can be
     checked offline from the value alone, while ``USER``, ``PROJECT``,
-    ``SPACE``, ``POLICY``, ``MONOGRAM`` and ``INSTANCE_ENUM`` need the server
-    and are therefore only shape-checked offline.
+    ``SPACE``, ``POLICY``, ``MONOGRAM``, ``COMMIT`` and ``INSTANCE_ENUM`` need
+    the server and are therefore only shape-checked offline.
     """
 
     TEXT = "text"
@@ -58,6 +58,7 @@ class FieldKind(enum.Enum):
     SPACE = "space"  # S1, name, pattern
     POLICY = "policy"  # POLICY_KEYWORDS, #project, @user, PHID
     MONOGRAM = "monogram"  # T123, P45, K7, R9
+    COMMIT = "commit"  # rGUNNAR7d7fc2c, R1:7d7fc2c, 7d7fc2c, PHID-CMIT-...
     # priority, status and icon - online only. NOT colour: the colour keys
     # are fixed in Phorge's own source, so colour is an ENUM with choices.
     INSTANCE_ENUM = "instance-enum"
