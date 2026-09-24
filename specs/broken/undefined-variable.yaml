@@ -1,0 +1,24 @@
+# Wrong on purpose: reports `undefined-variable`, offline.
+#
+# `{{ sprint }}` is read by a title and declared by nothing. The report
+# names the object and the field that reads it, because that is where
+# somebody has to go - and it does so once per place, so a name read in
+# four titles is four problems and not one.
+#
+# The fix is either a `variables:` block declaring it, `{default: ...}` in
+# one, or `--set sprint="Sprint 1"` on the command line.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: undefined-variable
+  description: A title reading a variable nothing declares.
+  version: "1"
+  author: phabfive
+
+variables:
+  owner: mikael.wallin
+
+tasks:
+  - title: "{{ sprint }}: write the release checklist"
+    description: Declared variables are fine; {{ owner }} resolves.
+    assignment: "{{ owner }}"

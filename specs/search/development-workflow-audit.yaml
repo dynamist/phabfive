@@ -1,0 +1,47 @@
+# An audit of the development workflow, one search per stage.
+#
+#   phabfive search -f specs/search/development-workflow-audit.yaml
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: development-workflow-audit
+  description: >-
+    Where work is in the pipeline and which way it is moving: what waits for
+    review, what moved forward, what moved backward, and what is finished but
+    still on the board. The `forward` and `backward` column patterns are what
+    make the middle two possible at all.
+  version: "1"
+  author: phabfive
+searches:
+  - type: task
+    title: "🔄 Tasks Ready for Review"
+    description: "Work that needs review attention"
+    search:
+      column: "in:Review,in:Code Review,in:QA"
+      created-after: 14
+      show-history: true
+
+  - type: task
+    title: "⚡ Fast-Moving Tasks"
+    description: "Tasks that moved through multiple columns recently"
+    search:
+      column: "forward"
+      updated-after: 3
+      show-history: true
+      show-metadata: true
+
+  - type: task
+    title: "⏪ Tasks Moving Backward"
+    description: "Work that may have encountered issues"
+    search:
+      column: "backward"
+      updated-after: 7
+      show-history: true
+
+  - type: task
+    title: "🏁 Tasks Resolved But Not in Done"
+    description: "Cleanup needed - resolved tasks still on active boards"
+    search:
+      status: "closed+in:Resolved,closed+in:Duplicate"
+      column: "not:in:Done"
+      show-history: false

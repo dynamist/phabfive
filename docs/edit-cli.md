@@ -402,7 +402,7 @@ Use powerful search filters and pipe to edit:
 
 ```bash
 # Resolve all tasks created before a date
-phabfive maniphest search --created-before="2024-01-01" --status=open | \
+phabfive maniphest search --created-before=1y --status=open | \
   phabfive edit --status=wontfix --comment="Closed old tasks"
 
 # Move tasks updated in last week to Done
@@ -444,15 +444,15 @@ Benefits:
 
 ```bash
 # Move all completed tasks to Done
-phabfive maniphest search --tag="Sprint 42" --status=resolved | \
+phabfive maniphest search --tag="Sprint 42" --status="in:Resolved" | \
   phabfive edit --column=Done
 
 # Triage new tasks
-phabfive maniphest search --tag="Sprint 42" --column="Backlog" | \
+phabfive maniphest search --tag="Sprint 42" --column="in:Backlog" | \
   phabfive edit --priority=triage --column="Triage"
 
 # Bump priority for P1 tasks
-phabfive maniphest search --tag="Sprint 42" --priority=high | \
+phabfive maniphest search --tag="Sprint 42" --priority="in:High" | \
   phabfive edit --priority=raise
 ```
 
@@ -476,15 +476,15 @@ phabfive maniphest search --tag="Backend" | \
 
 ```bash
 # Mark your tasks as done
-phabfive maniphest search --assigned=@me --status=resolved | \
+phabfive maniphest search --assigned=@me --status="in:Resolved" | \
   phabfive edit --column=Done --comment="Completed"
 
 # Deprioritize all your low-priority tasks
-phabfive maniphest search --assigned=@me --priority=normal | \
+phabfive maniphest search --assigned=@me --priority="in:Normal" | \
   phabfive edit --priority=lower
 
 # Move your in-progress tasks forward
-phabfive maniphest search --assigned=@me --column="In Progress" | \
+phabfive maniphest search --assigned=@me --column="in:In Progress" | \
   phabfive edit --column=forward
 
 # Triage the tasks you filed yourself (--author, not --assigned)
@@ -513,10 +513,10 @@ Control output format for piping and display:
 phabfive edit T123 --priority=high
 
 # Force strict YAML for piping
-phabfive edit T123 --priority=high --format=strict
+phabfive --format=strict edit T123 --priority=high
 
 # Force rich formatting
-phabfive edit T123 --priority=high --format=rich
+phabfive --format=rich edit T123 --priority=high
 ```
 
 **Format auto-detection:**
@@ -572,7 +572,7 @@ reported as possibly applied, and not sent again.
 full speed against a server that is already struggling:
 
 ```bash
-phabfive maniphest search --assigned=@me --format=yaml | PHAB_PACE=1 phabfive edit --status=resolved --yes
+phabfive --format=yaml maniphest search --assigned=@me | PHAB_PACE=1 phabfive edit --status=resolved --yes
 ```
 
 See [Retries](retries.md) for the policy and `PHAB_RETRY`/`PHAB_BACKOFF_MAX`.
@@ -621,14 +621,17 @@ phabfive edit T123 --priority=raise
 phabfive edit T123 --priority=high
 ```
 
-### 5. Combine with Search Templates
+### 5. Combine with Search Specs
 
-Use search templates for complex recurring batch operations:
+Use a search spec for complex recurring batch operations:
 
 ```bash
-phabfive maniphest search --with templates/weekly-sprint-tasks.yaml | \
-  phabfive edit --column=Done --status=resolved
+phabfive search -f specs/search/high-priority-stale-tasks.yaml | \
+  phabfive edit --status=resolved --dry-run
 ```
+
+The spec names the search once; `phabfive edit` reads the monograms out of what it
+printed. Drop `--dry-run` when the preview is what you meant.
 
 ## Troubleshooting
 
@@ -647,7 +650,7 @@ phabfive edit T123 --tag="Sprint 42" --column=Done
 
 **Solution:** Check column names are spelled correctly (case-insensitive):
 ```bash
-phabfive maniphest show T123 --all
+phabfive maniphest show T123
 # Look at "Boards" section for column names
 ```
 
@@ -682,8 +685,8 @@ phabfive edit T123 --priority=high --dry-run
 
 - [Maniphest CLI](maniphest-cli.md) - Complete task management guide
 - [Policies](policies.md) - Who can see, edit and interact with an object
-- [Search Templates](search-templates.md) - Reusable search queries
-- [Create Templates](create-templates.md) - Bulk task creation
+- [Searching with Specs](search-specs.md) - Reusable searches in a file
+- [Creating with Specs](create-specs.md) - Bulk creation from a file
 - [Retries](retries.md) - What is retried, how long it waits, and pacing
 
 ## Architecture and Future Support

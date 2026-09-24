@@ -28,6 +28,7 @@ from phabfive.exceptions import (
 from phabfive.maniphest.core import Maniphest
 from phabfive.spec import Spec
 from phabfive.spec.create import (
+    EDIT_ENDPOINTS,
     CreateItem,
     CreatePlan,
     CreatePlanError,
@@ -481,8 +482,24 @@ class TestRefusals:
 
         assert excinfo.value.check == "unsupported-kind"
 
-    def test_an_object_type_nothing_creates_yet_is_refused_by_name(self):
-        """`pastes:` is the section nothing creates; `projects:` was, until #483."""
+    def test_an_object_type_nothing_creates_yet_is_refused_by_name(self, monkeypatch):
+        """The guard between a new section and its builder.
+
+        Every type `CREATE_OBJECT_KEYS` walks has a builder today - tasks
+        and projects since #483, pastes since #481 - so the refusal has no
+        live case and has to be provoked to be covered. That is the point
+        of it: the day a section is added ahead of its builder, a spec
+        naming it is refused by name rather than planned into a create
+        that leaves the section's fields on the floor.
+
+        `passphrases:` is refused by a different mechanism and never
+        reaches here: `phabfive.spec.references.UNCREATABLE_OBJECT_KEYS`
+        answers it offline, because no token is needed to know that Phorge
+        publishes no `passphrase.edit`.
+        """
+        monkeypatch.setattr(
+            "phabfive.spec.create.CREATABLE_TYPES", frozenset({"task", "project"})
+        )
         spec = Spec.from_data({"kind": "create", "pastes": [{"title": "Notes"}]})
 
         with pytest.raises(CreatePlanError) as excinfo:
@@ -918,3 +935,119 @@ class TestAColumnDoesNotReportTheSymptom:
             "priority",
         ]
         phab.project.column.search.assert_not_called()
+
+
+class TestAPasteIsPlannedLikeEverythingElse:
+    """The second half of #481: `pastes:` reaches `paste.edit`.
+
+    A paste is the simplest thing a create spec holds - a leaf with no
+    parent, no children and no space - so what is pinned here is that it
+    goes through the *same* machinery as a task and a project rather than a
+    path of its own: `Paste.paste_create_transactions` builds it, the online
+    pass resolves its `projects:` and `subscribers:`, and a `$local-id` in
+    either waits for the item that declares it.
+    """
+
+    def test_a_paste_becomes_one_item_sent_to_paste_edit(self):
+        phab = _phab()
+
+        plan = _plan(
+            phab,
+            {"pastes": [{"title": "Release notes", "content": "hi", "language": "md"}]},
+        )
+
+        assert [item.object_type for item in plan.items] == ["paste"]
+        assert {one["type"] for one in plan.items[0].transactions} == {
+            "title",
+            "text",
+            "language",
+        }
+        assert EDIT_ENDPOINTS["paste"] == "paste"
+
+    def test_the_transaction_is_title_and_never_name(self):
+        """`paste.edit` names it `title`; the preview labels it "Name"."""
+        phab = _phab()
+
+        plan = _plan(phab, {"pastes": [{"title": "Notes"}]})
+        sent = {one["type"]: one["value"] for one in plan.items[0].transactions}
+
+        assert sent == {"title": "Notes"}
+        assert plan.items[0].display["title"] == "Notes"
+        assert plan.items[0].display["changes"][0]["field"] == "Name"
+
+    def test_a_paste_with_no_title_is_reported_rather_than_dropped(self):
+        phab = _phab()
+
+        with pytest.raises(PhabfiveDataException) as excinfo:
+            _plan(phab, {"pastes": [{"content": "orphan"}]})
+
+        assert "pastes[0]" in str(excinfo.value)
+        assert "title" in str(excinfo.value)
+
+    def test_its_projects_and_subscribers_are_resolved(self):
+        phab = _phab()
+
+        plan = _plan(
+            phab,
+            {
+                "pastes": [
+                    {
+                        "title": "Notes",
+                        "projects": ["Backend Team"],
+                        "subscribers": ["alice"],
+                    }
+                ]
+            },
+        )
+        sent = {one["type"]: one["value"] for one in plan.items[0].transactions}
+
+        assert sent["projects.add"] == ["PHID-PROJ-backend"]
+        assert sent["subscribers.add"] == ["PHID-USER-alice"]
+        # The preview names people and projects, never their PHIDs.
+        shown = {one["field"]: one["new"] for one in plan.items[0].display["changes"]}
+        assert shown["Tags"] == "Backend Team"
+        assert shown["Subscribers"] == "alice"
+
+    def test_a_local_id_makes_the_paste_wait_for_the_project(self):
+        """A paste tagged into a project the same document creates."""
+        phab = _phab()
+
+        plan = _plan(
+            phab,
+            {
+                "projects": [{"id": "home", "name": "New Home"}],
+                "pastes": [{"title": "Notes", "projects": ["$home"]}],
+            },
+        )
+        paste = next(item for item in plan.items if item.object_type == "paste")
+
+        # The link is by *path*: `_linked` turns the `$home` the file wrote
+        # into the item that declares it, because an item is its path.
+        assert paste.depends_on == ("projects[0]",)
+        # The transaction still holds the literal, substituted at apply time.
+        sent = {one["type"]: one["value"] for one in paste.transactions}
+        assert sent["projects.add"] == ["$home"]
+        # The project is created first, whatever order the file wrote them in.
+        assert [item.object_type for item in plan.items] == ["project", "paste"]
+
+    def test_a_paste_never_sends_set_or_remove(self):
+        phab = _phab()
+
+        plan = _plan(
+            phab,
+            {"pastes": [{"title": "Notes", "projects": ["Backend Team"]}]},
+        )
+
+        assert not any(
+            one["type"].endswith((".set", ".remove"))
+            for one in plan.items[0].transactions
+        )
+
+    def test_nothing_builds_a_paste_app_for_a_spec_with_no_paste(self):
+        """One sibling per object type the document names, and no others."""
+        phab = _phab()
+
+        with patch("phabfive.create.dispatch.app_for") as app_for:
+            _plan(phab, {"tasks": [_task()]})
+
+        app_for.assert_not_called()

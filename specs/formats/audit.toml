@@ -1,0 +1,32 @@
+# The TOML spelling of specs/formats/audit.yaml: one [[searches]] per
+# search, with its constraints in the [searches.search] table beneath it.
+#
+#   phabfive search -f specs/formats/audit.toml
+spec = "phorge/v1alpha1"
+kind = "search"
+
+[metadata]
+name = "audit"
+description = "The same search spec in YAML, JSON, JSONL and TOML."
+version = "1"
+author = "phabfive"
+
+[[searches]]
+type = "task"
+title = "Open work"
+description = "Everything still open, most recently touched first."
+
+[searches.search]
+status = "open"
+order = "updated:desc"
+limit = 25
+
+[[searches]]
+type = "project"
+title = "Active projects"
+description = "The projects that work could be tagged into."
+
+[searches.search]
+status = "active"
+milestones = false
+limit = 25

@@ -33,7 +33,7 @@ a temp file first.
 
 ruamel.yaml is kept for YAML rather than routing everything through
 anyconfig: `load_all` and `preserve_quotes` come from it, and
-`templates/task-create/test-template-v2.yml` depends on anchors resolving.
+`specs/create/feature-epic.yaml` depends on anchors resolving.
 JSON and TOML get thin readers over the standard library instead of a hidden
 backend registry.
 

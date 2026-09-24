@@ -21,6 +21,7 @@ from phabfive.cli.output import (
     _setup_output_options,
     is_machine_format,
 )
+from phabfive.cli.spec_flags import with_spec_option
 from phabfive.constants import (
     MONOGRAMS,
     PASTE_ORDER_DEFAULT,
@@ -44,6 +45,27 @@ from phabfive.paste.display import display_pastes
 paste_app = typer.Typer(
     cls=AgentFooterGroup, help="The paste app", no_args_is_help=True
 )
+
+
+# Every option of `paste create` a spec is applied instead of: a spec is
+# applied as it stands, so a value given alongside --with would be dropped
+# without a word, and it is refused rather than ignored (#465). Keyed by the
+# command's parameter name, valued with the option as it is typed; the same
+# shape `maniphest create` and `project create` each declare, read by the
+# one `refuse_unspecced_create`.
+_CREATE_OPTIONS_IGNORED_BY_SPEC = {
+    "title": "TITLE",
+    "file": "FILE",
+    "title_opt": "--title",
+    "content": "--content",
+    "language": "--language",
+    "tag": "--tag",
+    "subscribe": "--subscribe",
+    "visible_to": "--visible-to",
+    "editable_by": "--editable-by",
+    "yes": "--yes",
+    "interactive": "--interactive",
+}
 
 
 def complete_paste_order(incomplete: str) -> List[str]:
@@ -91,12 +113,7 @@ def search(
     text_query: Optional[str] = typer.Argument(
         None, help="Free-text search in paste title"
     ),
-    with_template: Optional[str] = typer.Option(
-        None,
-        "--with",
-        help="Load the search from a YAML search spec; every option below "
-        "overrides what the spec says",
-    ),
+    with_template: Optional[str] = with_spec_option("search"),
     author: Optional[str] = typer.Option(
         None,
         "--author",
@@ -268,7 +285,9 @@ def search(
 @paste_app.command()
 def create(
     ctx: typer.Context,
-    title: Optional[str] = typer.Argument(None, help="Title for Paste"),
+    title: Optional[str] = typer.Argument(
+        None, help="Title for Paste (required unless using --with)"
+    ),
     file: Optional[str] = typer.Argument(
         None, help="File with content (optional if using --content or $EDITOR)"
     ),
@@ -278,6 +297,7 @@ def create(
         hidden=True,
         help="Title for Paste (hidden, use positional argument instead)",
     ),
+    with_template: Optional[str] = with_spec_option("create"),
     content: Optional[str] = typer.Option(
         None,
         "--content",
@@ -336,7 +356,17 @@ def create(
         phabfive paste create "Code" --language=python  # opens $EDITOR
         phabfive paste create "Notes" --subscribe=@me --tag=project
         phabfive paste create "Secret" --content=... --visible-to='#platform'
+        phabfive paste create --with specs/create/release-notes-paste.yaml
     """
+    # `--with` is the deprecated spelling of `phabfive apply -f FILE`, and
+    # it is the same flag on all three create commands: what a spec creates
+    # is decided by the file, so this runs every object type it holds.
+    # Refused before anything is constructed or connected, so a call that
+    # is wrong however it resolves costs no request.
+    from phabfive.cli.create_spec import refuse_unspecced_create
+
+    refuse_unspecced_create(ctx, with_template, _CREATE_OPTIONS_IGNORED_BY_SPEC)
+
     # A policy outside the grammar is refused before the instance is
     # reached: Conduit reads an unknown value as a policy nobody satisfies,
     # and so answers a typo with a self-lockout error.
@@ -365,6 +395,13 @@ def create(
     output_format = _get_output_format(ctx)
     machine = is_machine_format(output_format)
     preview = sys.stderr if machine else sys.stdout
+
+    if with_template:
+        from phabfive.cli.create_spec import load_create_spec, run_create_spec
+
+        spec = load_create_spec(with_template)
+        run_create_spec(ctx, paste, spec, with_template, dry_run=dry_run)
+        return
 
     # Merge positional and option title (positional takes precedence)
     final_title = title or title_opt

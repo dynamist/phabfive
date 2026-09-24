@@ -1,0 +1,45 @@
+# One document, three applications: what is still open, which projects the
+# work sits in, and the release notes already written.
+#
+#   phabfive search -f specs/search/release-readiness.yaml
+#
+# `kind:` carries the verb and never the object type, which is what lets one
+# search spec ask three applications in one run. Each item says what it
+# searches with its own `type:`, and each carries its own result banner.
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: release-readiness
+  description: A task, a project and a paste search, in one document.
+  version: "1"
+  author: phabfive
+
+searches:
+  - type: task
+    title: Open blockers
+    description: |
+      Everything still open, most important first. The priority is an
+      *order* here rather than a `priority:` filter on purpose: a priority
+      pattern is a transition grammar, so phabfive reads every candidate
+      task's history to answer it, while an order is one parameter the
+      server applies. `specs/search/escalated-priorities.yaml` is where
+      the pattern spelling is worth its cost.
+    search:
+      status: open
+      order: priority:desc
+      limit: 25
+
+  - type: project
+    title: Where the work sits
+    description: The projects those blockers are tagged into.
+    search:
+      status: active
+      milestones: false
+      limit: 25
+
+  - type: paste
+    title: Release notes so far
+    description: Pastes whose name or body mentions the release.
+    search:
+      text_query: release notes
+      limit: 10

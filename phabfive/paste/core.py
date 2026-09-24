@@ -318,9 +318,12 @@ class Paste(Phabfive):
         subscribers : list, optional
             Subscribers, as values or ``(value, shown)`` pairs.
         policies : mapping, optional
-            ``{"view"|"edit": value}``, already through
-            `phabfive.policy.resolve_policy_value`. A paste has no join
-            policy.
+            ``{"view"|"edit": value}`` or ``{key: (value, shown)}``, already
+            through `phabfive.policy.resolve_policy_value` - the same two
+            spellings `Project.project_create_transactions` takes, so a
+            create spec hands both builders what it resolved in one pass and
+            the preview names ``#development`` rather than its PHID. A paste
+            has no join policy.
 
         Returns
         -------
@@ -346,17 +349,30 @@ class Paste(Phabfive):
         ]
 
         for key, transaction in PASTE_POLICY_TRANSACTIONS.items():
-            value = (policies or {}).get(key)
+            asked_for = (policies or {}).get(key)
 
-            if value is not None:
-                asked.append((transaction, value, PASTE_POLICY_LABELS[key], str(value)))
+            if asked_for is None:
+                continue
+
+            value, shown = (
+                asked_for
+                if isinstance(asked_for, tuple) and len(asked_for) == 2
+                else (asked_for, asked_for)
+            )
+            asked.append((transaction, value, PASTE_POLICY_LABELS[key], str(shown)))
 
         # Phabricator does not take None as a value, so a key that was not
-        # asked for is left out rather than sent empty.
+        # asked for is left out rather than sent empty - and an *empty list*
+        # is the same thing said in the other spelling. `projects.add: []`
+        # is a no-op on the wire, so dropping it changes nothing that is
+        # created; what it changes is what a create spec's `--dry-run`
+        # shows, which used to carry two empty arrays on every paste where
+        # a task carries only the keys the file wrote. One rule for both,
+        # and it is the one `changes` has always used.
         transactions = [
             {"type": kind, "value": value}
             for kind, value, _, _ in asked
-            if value is not None
+            if value is not None and value != []
         ]
         changes = [
             {"field": label, "old": None, "new": str(shown)}

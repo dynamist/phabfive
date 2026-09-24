@@ -175,13 +175,16 @@ phabfive -v maniphest search --tag myproject
 
 ## Shell Completion
 
-Enable tab completion for bash, zsh, or fish:
+Enable tab completion for bash, zsh or fish:
 
 ```bash
-phabfive --install-completion bash
-phabfive --install-completion zsh
-phabfive --install-completion fish
+phabfive --install-completion
 ```
+
+It installs for **the shell you are in**: the option takes no argument, so run
+it from bash to get bash completion and from fish to get fish's. `phabfive
+--show-completion` prints the script instead of writing it, if you would rather
+put it somewhere yourself.
 
 After installation, restart your shell or source your profile.
 

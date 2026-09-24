@@ -9,40 +9,46 @@ that needs it**, never at the top of the function and never in a callback.
 That is the whole reason this module does not route unconditionally through
 ``phabfive.cli.apps.get_app`` the way every other command does.
 
-Exit status, because the two layers mean different things to a caller - a CI
-job linting a repository of specs cares only about 1, a deploy pipeline
-cares about both:
+**The exit status table is not repeated here.** It is stated once, in
+`phabfive.cli.spec_report`, together with the reporting that goes with it,
+and is shared with ``phabfive apply`` and ``phabfive search``: a problem has
+to read identically whichever of the three found it, and a second copy of
+the table is how the three would drift (#486). Of the five statuses it
+defines, this command uses 0 through 3; 4 is ``apply``'s alone.
 
-===  ===========================================================
-  0  clean
-  1  the offline layer failed, or the file could not be read
-  2  the online layer failed: a reference does not resolve
-  3  the instance could not be asked at all
-===  ===========================================================
-
-3 is not in the issue's table. It is here because a
-``PhabfiveRemoteException`` out of the online pass is not a bad spec, and
-reporting it as 2 would tell a deploy pipeline the spec is broken when the
-network was - which is exactly the distinction the separate codes exist for.
-A machine with no ``PHAB_URL`` and no ``~/.arcrc`` is the same answer for
-the same reason: the offline layer passed and the online one never ran.
+What is worth saying here is why 3 exists at all, since the issue's table
+had only three: a ``PhabfiveRemoteException`` out of the online pass is not
+a bad spec, and reporting it as 2 would tell a deploy pipeline the spec is
+broken when the network was - which is exactly the distinction the separate
+codes exist for. A machine with no ``PHAB_URL`` and no ``~/.arcrc`` is the
+same answer for the same reason: the offline layer passed and the online one
+never ran.
 """
 
 import enum
 import os
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import Any, List, Optional
 
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import complete_spec_file
 from phabfive.cli.output import _get_output_format, _setup_output_options
-from phabfive.constants import is_machine_format
+from phabfive.cli.spec_report import (
+    CODE_UNREACHABLE,
+    CODE_UNREADABLE,
+    DOCUMENT,
+    EXIT_CLEAN,
+    EXIT_OFFLINE,
+    EXIT_ONLINE,
+    EXIT_UNREACHABLE,
+    counts as _counts,
+    parse_overrides as _parse_overrides,
+    report as _report,
+    undefined_variable_problem,
+    unreadable_problem,
+)
 from phabfive.exceptions import PhabfiveException, PhabfiveRemoteException
-from phabfive.json_output import emit_records
-
-if TYPE_CHECKING:  # pragma: no cover - annotations only
-    from phabfive.spec.problems import Problem
 
 spec_app = typer.Typer(
     cls=AgentFooterGroup,
@@ -50,24 +56,12 @@ spec_app = typer.Typer(
     no_args_is_help=True,
 )
 
-# What each exit status means. Named because the tests and the docstring
-# above both read them, and a bare `raise typer.Exit(2)` says nothing.
-EXIT_CLEAN = 0
-EXIT_OFFLINE = 1
-EXIT_ONLINE = 2
-EXIT_UNREACHABLE = 3
-
-# The two codes the command itself reports, which no validation layer emits:
-# a file that could not be read or parsed, and an instance that could not be
-# asked. Both are structural - the library raises for them rather than
-# returning a Problem - but a --format=json reader must still get a record
-# rather than a bare exit status, so the command builds one.
-CODE_UNREADABLE = "unreadable"
-CODE_UNREACHABLE = "unreachable"
-
-# The object path problems about the document itself carry, as problems.py
-# spells it.
-DOCUMENT = "$"
+# The exit statuses, the two codes the command itself reports and the object
+# path a document-level problem carries all live in `spec_report`, which
+# `apply` and `search` share: a problem must read identically whichever
+# command found it, and a copy is how the three would drift. They are
+# imported back rather than re-spelled so `phabfive.cli.spec` still answers
+# for every name it always has.
 
 
 class Unconfigured(Exception):
@@ -85,46 +79,6 @@ class SpecKind(str, enum.Enum):
 
     create = "create"
     search = "search"
-
-
-def _parse_overrides(assignments: List[str]) -> dict:
-    """Read ``--set name=value`` pairs into the mapping the layers take.
-
-    A later ``--set`` of the same name wins, which is what a caller building
-    a command line up in a loop expects.
-
-    Parameters
-    ----------
-    assignments : list of str
-        The raw ``NAME=VALUE`` strings, in the order they were given
-
-    Returns
-    -------
-    dict
-        Name to value, both strings
-
-    Raises
-    ------
-    typer.Exit
-        A pair with no "=" in it, which is a usage mistake and not a spec
-        problem. It leaves with EXIT_OFFLINE because the spec was never
-        checked, so claiming it is clean would be a lie.
-    """
-    overrides = {}
-
-    for assignment in assignments:
-        name, separator, value = assignment.partition("=")
-
-        if not separator or not name.strip():
-            typer.echo(
-                f"Error: --set expects NAME=VALUE, got {assignment!r}",
-                err=True,
-            )
-            raise typer.Exit(EXIT_OFFLINE)
-
-        overrides[name.strip()] = value
-
-    return overrides
 
 
 def _online_app() -> Any:
@@ -171,125 +125,6 @@ def _online_app() -> Any:
             raise Unconfigured(str(error)) from error
 
         return new_app(Maniphest)
-
-
-def _grouped(problems: List["Problem"]) -> List[tuple]:
-    """Problems by the object they are about, in the order they were found.
-
-    Document order is what the layers promise and what a person reads down,
-    so nothing is sorted here.
-
-    Parameters
-    ----------
-    problems : list of Problem
-        Every problem both layers reported, offline first
-
-    Returns
-    -------
-    list of tuple
-        (object path, list of problems), first-seen order
-    """
-    order: List[str] = []
-    by_object: dict = {}
-
-    for one in problems:
-        if one.object not in by_object:
-            order.append(one.object)
-            by_object[one.object] = []
-        by_object[one.object].append(one)
-
-    return [(name, by_object[name]) for name in order]
-
-
-def _counts(problems: List["Problem"]) -> tuple:
-    """How many errors and how many warnings, as a pair."""
-    from phabfive.spec.problems import Severity
-
-    errors = sum(1 for one in problems if one.severity == Severity.ERROR)
-    return errors, len(problems) - errors
-
-
-def _plural(count: int, noun: str) -> str:
-    """One error, or two errors - the noun agreeing with the count."""
-    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
-
-
-def _summary(problems: List["Problem"], source: str) -> str:
-    """The one line that says what the whole run found."""
-    errors, warnings = _counts(problems)
-
-    return f"{source}: {_plural(errors, 'error')}, {_plural(warnings, 'warning')}"
-
-
-def _clean_line(source: str, layers: str) -> str:
-    """What a clean run says, because saying nothing is not an answer (#395)."""
-    return f"{source}: no problems found ({layers})."
-
-
-def _emit_human(problems: List["Problem"], source: str, layers: str) -> None:
-    """Print the report a person reads, grouped by object."""
-    from phabfive.spec.problems import Severity
-
-    if not problems:
-        typer.echo(_clean_line(source, layers))
-        return
-
-    for name, group in _grouped(problems):
-        typer.echo(name)
-        for one in group:
-            where = one.field if one.field is not None else "(object)"
-            mark = "" if one.severity == Severity.ERROR else " (warning)"
-            typer.echo(f"  {where}: {one.reason} [{one.code}]{mark}")
-
-    typer.echo("")
-    typer.echo(_summary(problems, source))
-
-
-def _emit_machine(problems: List["Problem"], output_format: str) -> None:
-    """Emit one record per problem, and the same records for every format.
-
-    json and jsonl go through `phabfive.json_output`, which is what keeps
-    the two from drifting; yaml is the same list of records dumped as one
-    document. An empty result is an empty list, not silence - the sentence
-    saying so goes to stderr, so stdout on its own stays parseable.
-    """
-    records = [one.as_record() for one in problems]
-
-    if output_format in ("json", "jsonl"):
-        emit_records(records, output_format)
-        return
-
-    from io import StringIO
-
-    from ruamel.yaml import YAML
-
-    yaml = YAML()
-    yaml.default_flow_style = False
-    stream = StringIO()
-    yaml.dump(records, stream)
-    print(stream.getvalue(), end="")
-
-
-def _report(
-    problems: List["Problem"], source: str, layers: str, output_format: str
-) -> None:
-    """Emit the report in whichever format was asked for.
-
-    A machine format puts the records on stdout and the sentence about them
-    on stderr, the way every other command that writes does (#344), so a
-    reader piping stdout into `jq` sees records and nothing else.
-    """
-    if is_machine_format(output_format):
-        _emit_machine(problems, output_format)
-
-        if problems:
-            typer.echo(_summary(problems, source), err=True)
-        else:
-            typer.echo(_clean_line(source, layers), err=True)
-
-        return
-
-    _emit_human(problems, source, layers)
 
 
 @spec_app.command("validate")
@@ -374,22 +209,7 @@ def spec_validate(
         # hang one on, which is why the loader raises. A --format=json
         # reader still needs a record rather than a bare status, so the
         # command makes the one record the library would not.
-        _report(
-            [
-                Problem(
-                    object=DOCUMENT,
-                    field=None,
-                    value=source,
-                    reason=str(error),
-                    code=CODE_UNREADABLE,
-                    layer=Layer.OFFLINE,
-                    severity=Severity.ERROR,
-                )
-            ],
-            source,
-            layers,
-            output_format,
-        )
+        _report([unreadable_problem(source, str(error))], source, layers, output_format)
         raise typer.Exit(EXIT_OFFLINE)
 
     problems = list(validate_offline(spec, variables=overrides))
@@ -414,18 +234,7 @@ def spec_validate(
             spec = spec.render(overrides)
         except PhabfiveException as error:
             _report(
-                problems
-                + [
-                    Problem(
-                        object=DOCUMENT,
-                        field=None,
-                        value=None,
-                        reason=str(error),
-                        code="undefined-variable",
-                        layer=Layer.OFFLINE,
-                        severity=Severity.ERROR,
-                    )
-                ],
+                problems + [undefined_variable_problem(str(error))],
                 source,
                 layers,
                 output_format,
@@ -491,4 +300,19 @@ def spec_validate(
     raise typer.Exit(EXIT_ONLINE if errors else EXIT_CLEAN)
 
 
-__all__ = ["spec_app", "spec_validate"]
+# The names lifted into `spec_report` are listed here as well: they have
+# been this module's surface since #474 and are read by name, so re-exporting
+# them is deliberate rather than an import that happens to be visible.
+__all__ = [
+    "CODE_UNREACHABLE",
+    "CODE_UNREADABLE",
+    "DOCUMENT",
+    "EXIT_CLEAN",
+    "EXIT_OFFLINE",
+    "EXIT_ONLINE",
+    "EXIT_UNREACHABLE",
+    "SpecKind",
+    "Unconfigured",
+    "spec_app",
+    "spec_validate",
+]

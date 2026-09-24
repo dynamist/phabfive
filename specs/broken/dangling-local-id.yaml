@@ -1,0 +1,24 @@
+# Wrong on purpose: reports `unknown-local-id`, offline.
+#
+# `$platfrom` is a typo for `$platform`, and nothing in the file declares
+# it. This is caught before anything is created, which is the point of
+# checking it offline: half a document applied is objects that exist, and
+# Conduit has no way to take them back.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: dangling-local-id
+  description: A $ref naming a local id no item declares.
+  version: "1"
+  author: phabfive
+
+projects:
+  - id: platform
+    name: Platform Engineering
+    slugs:
+      - platform-eng
+
+tasks:
+  - title: Write the platform runbook
+    projects:
+      - "$platfrom"

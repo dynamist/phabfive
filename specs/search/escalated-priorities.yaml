@@ -1,0 +1,22 @@
+# Tasks whose priority was raised in the past month.
+#
+#   phabfive search -f specs/search/escalated-priorities.yaml
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: escalated-priorities
+  description: >-
+    Escalations, and what kind of work becomes urgent: every task whose
+    priority went up in the last month, with the transition history that
+    shows the path it took.
+  version: "1"
+  author: phabfive
+searches:
+  - type: task
+    title: "📈 Priority Escalations"
+    description: "Tasks that were raised, and where they were raised from"
+    search:
+      priority: "raised"
+      updated-after: 30
+      show-history: true
+      show-metadata: true

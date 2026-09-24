@@ -59,13 +59,13 @@ from phabfive.spec.schema import (
     transition_pattern,
 )
 
-TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
+SPEC_ROOT = Path(__file__).resolve().parent.parent / "specs"
 
-SEARCH_TEMPLATES = sorted((TEMPLATES / "task-search").glob("*.yaml"))
-CREATE_TEMPLATES = sorted(
+SEARCH_SPECS = sorted((SPEC_ROOT / "search").glob("*.yaml"))
+CREATE_SPECS = sorted(
     path
     for pattern in ("*.yaml", "*.yml")
-    for path in (TEMPLATES / "task-create").glob(pattern)
+    for path in (SPEC_ROOT / "create").glob(pattern)
 )
 
 
@@ -94,11 +94,11 @@ def check(text, *, kind=None, variables=None):
 class TestTheCorpusIsThere:
     """Guard the guard: an empty glob would make half this file vacuous."""
 
-    def test_the_search_templates_are_found(self):
-        assert len(SEARCH_TEMPLATES) >= 8
+    def test_the_search_specs_are_found(self):
+        assert len(SEARCH_SPECS) >= 8
 
-    def test_the_create_templates_are_found(self):
-        assert len(CREATE_TEMPLATES) >= 3
+    def test_the_create_specs_are_found(self):
+        assert len(CREATE_SPECS) >= 3
 
 
 class TestTheSchemaIsGeneratedFromTheRegistry:
@@ -251,6 +251,30 @@ class TestTheGeneratedDocumentIsRealJsonSchema:
         assert schema["additionalProperties"] is True
 
 
+#: Shipped specs the published JSON Schema refuses although the validation
+#: pass accepts them, and `phabfive apply` runs them. **Empty, and it is
+#: meant to stay empty**: a consumer generating the schema for editor
+#: validation would otherwise get a red squiggle on a file this repository
+#: ships as an example. The last entry was `platform-bootstrap.yaml`, which
+#: `policy_pattern()` refused because it had no `$local-id` branch while the
+#: hand-rolled walk accepts one in any policy field; the pattern learned `$`
+#: rather than the file being changed.
+ORACLE_GAPS: dict[str, str] = {}
+
+
+def _create_params():
+    """Every shipped create spec, the known schema gaps marked xfail."""
+    return [
+        pytest.param(
+            path,
+            marks=[pytest.mark.xfail(reason=ORACLE_GAPS[path.name], strict=True)],
+        )
+        if path.name in ORACLE_GAPS
+        else path
+        for path in CREATE_SPECS
+    ]
+
+
 class TestTheOracleAgrees:
     """jsonschema's verdict and the hand-rolled walk's, over one corpus.
 
@@ -304,20 +328,33 @@ class TestTheOracleAgrees:
         assert self._oracle(text) is False
         assert errors(check(text)) != []
 
-    @pytest.mark.parametrize("path", SEARCH_TEMPLATES)
-    def test_the_shipped_search_templates_satisfy_both(self, path):
+    @staticmethod
+    def _schema_sees(spec):
+        """What the schema pass is handed: the document with variables in.
+
+        `validate_offline` renders before it reaches the schema, and it has
+        to: `updated-after: "{{ stale_days }}"` is a string holding a
+        template until something supplies the value, and no JSON Schema can
+        say "a time, or a template that will become one". The published
+        schema therefore describes a **rendered** document, and an oracle
+        that fed it the raw file would be comparing two different questions.
+        """
+        return (spec.render() if spec.variables else spec).to_data()
+
+    @pytest.mark.parametrize("path", SEARCH_SPECS, ids=lambda path: path.name)
+    def test_the_shipped_search_specs_satisfy_both(self, path):
         spec = load_spec(path, kind="search")
         validator = jsonschema.Draft202012Validator(build_schema(Kind.SEARCH))
 
-        assert list(validator.iter_errors(spec.to_data())) == []
+        assert list(validator.iter_errors(self._schema_sees(spec))) == []
         assert validate_offline(spec) == []
 
-    @pytest.mark.parametrize("path", CREATE_TEMPLATES)
-    def test_the_shipped_create_templates_satisfy_both(self, path):
+    @pytest.mark.parametrize("path", _create_params(), ids=lambda path: path.name)
+    def test_the_shipped_create_specs_satisfy_both(self, path):
         spec = load_spec(path, kind="create")
         validator = jsonschema.Draft202012Validator(build_schema(Kind.CREATE))
 
-        assert list(validator.iter_errors(spec.to_data())) == []
+        assert list(validator.iter_errors(self._schema_sees(spec))) == []
         assert validate_offline(spec) == []
 
 

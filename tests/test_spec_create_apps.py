@@ -72,7 +72,11 @@ def _by_type(transactions):
 #: Flags that are about the run and not about the object being created, so
 #: no spec key answers to them: a spec is a file, and how to print it, what
 #: to confirm and whether to send it at all are the command's.
-NOT_SPEC_FLAGS = frozenset({"--dry-run", "--interactive", "--yes", "--help"})
+#: Flags that are about *this run* rather than about the object being
+#: created, so a spec key for one would make no sense. `--with` is here
+#: because it *is* the spec: it names the file the other flags would be read
+#: out of, which is why it is also refused alongside every one of them.
+NOT_SPEC_FLAGS = frozenset({"--dry-run", "--interactive", "--with", "--yes", "--help"})
 
 
 def _flags(app, command, hidden=True):
@@ -657,12 +661,14 @@ class TestPasteCreateTransactions:
 
         assert created == {"id": 42, "phid": "PHID-PSTE"}
         sent = paste.phab.paste.edit.call_args.kwargs["transactions"]
+        # No empty `projects.add`/`subscribers.add`: a collection nobody
+        # asked to fill is left out, the same way `language` is when it is
+        # None. An empty `.add` was a no-op that only ever showed up in a
+        # create spec's dry run.
         assert _by_type(sent) == {
             "title": "Deploy notes",
             "text": "run it",
             "language": "yaml",
-            "projects.add": [],
-            "subscribers.add": [],
         }
 
     def test_a_policy_asked_for_is_resolved_once_and_sent(self):

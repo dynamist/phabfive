@@ -10,6 +10,11 @@ from phabfive.cli import app
 
 SUBCOMMANDS = [
     "edit",
+    # `apply` and `search` run a spec file, whatever object types it holds
+    # (#486). Registered as commands rather than groups, so click lists them
+    # with `edit` and ahead of the groups.
+    "apply",
+    "search",
     "cache",
     "passphrase",
     "diffusion",

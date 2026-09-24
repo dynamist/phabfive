@@ -12,28 +12,16 @@ files only when asked. test_skill_is_package_data guards that path from the
 resource side, independently of the CLI.
 """
 
-import re
 import subprocess
 import sys
 from importlib import resources
 
-import click
-import pytest
-from typer.main import get_command
-
-from phabfive.cli import _VALUELESS_GLOBAL_FLAGS, app
+from phabfive.cli import _VALUELESS_GLOBAL_FLAGS
 
 _ENTRYPOINT = (
     "import sys; sys.argv = ['phabfive', *sys.argv[1:]]; "
     "from phabfive.cli import cli_entrypoint; cli_entrypoint()"
 )
-
-# A fenced block introduced by ```bash
-_BASH_BLOCK = re.compile(r"^```bash$(.*?)^```$", re.MULTILINE | re.DOTALL)
-
-# A value rather than a subcommand: a monogram list such as T1,T2, a quoted
-# string, or a <placeholder>
-_NOT_A_SUBCOMMAND = re.compile(r"^([TKPR]\d+(,[TKPR]\d+)*|[<\"'$].*)$")
 
 
 def _skill_text() -> str:
@@ -107,43 +95,9 @@ def test_flag_takes_no_value():
     assert "--skill" in _VALUELESS_GLOBAL_FLAGS
 
 
-def _documented_commands():
-    """Every "phabfive ..." command path the skill tells an agent to run.
-
-    Deliberately conservative: lines with a pipe or a shell variable are
-    skipped, and the path stops at the first option, monogram or placeholder.
-    """
-    for block in _BASH_BLOCK.findall(_skill_text()):
-        for line in block.splitlines():
-            line = line.strip()
-            if not line.startswith("phabfive ") or "|" in line or "$" in line:
-                continue
-            path = []
-            for word in line.split()[1:]:
-                if word.startswith("-") or _NOT_A_SUBCOMMAND.match(word):
-                    break
-                path.append(word)
-            if path:
-                yield line, tuple(path)
-
-
-def test_the_skill_documents_commands():
-    """Guard the guard: a broken extractor would make the next test vacuous."""
-    assert len(set(_documented_commands())) > 10
-
-
-@pytest.mark.parametrize(
-    "line,path",
-    sorted(set(_documented_commands())),
-    ids=lambda value: " ".join(value) if isinstance(value, tuple) else None,
-)
-def test_documented_command_exists(line, path):
-    """The skill goes stale silently; this is what notices."""
-    command = get_command(app)
-    ctx = click.Context(command, info_name="phabfive")
-
-    for name in path:
-        assert isinstance(command, click.Group), f"{line!r}: {name} is not a group"
-        command = command.get_command(ctx, name)
-        assert command is not None, f"{line!r}: no such command {name}"
-        ctx = click.Context(command, parent=ctx, info_name=name)
+# The command lines in the skill are resolved against the real application
+# by tests/test_skill_commands.py, which walks every fenced block rather than
+# the ```bash ones alone, checks the options as well as the command path, and
+# checks that every repository path a line names exists. It lives in its own
+# file because it is a gate on the *content* of the skill, while this one is
+# a gate on `--skill` the flag.

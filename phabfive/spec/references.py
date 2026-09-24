@@ -279,7 +279,7 @@ _SEARCH_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
     # matches nothing is a `log.error`/`log.warning` and exit 0 today, so
     # declaring either would turn every template naming one into a failure.
     # That is a change worth making and it needs its own test and a line in
-    # docs/search-templates.md.
+    # docs/search-specs.md.
     #
     # The values are comma-separated because that is what the filters accept:
     # `assigned: "@me,alice"` is two references, and reading it as one would
@@ -290,16 +290,29 @@ _SEARCH_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
     ReferenceField("closed-by", multiple=True, separator=","),
 )
 
+_PASTE_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
+    # A paste's whole reference set, and it is a subset of a task's: the four
+    # keys `registry.FIELDS` declares for (paste, create) that name something
+    # rather than hold text. No `space:` - `paste.edit` has no space
+    # transaction - and no `joinable-by:`, which only a project has.
+    #
+    # `projects:` carries `creates=("project",)` for the same reason a task's
+    # does: a paste tagged into a project the same document creates points at
+    # a PHID that does not exist until apply time, which is what a
+    # `$local-id` is for.
+    ReferenceField("projects", multiple=True, creates=("project",)),
+    ReferenceField("subscribers", multiple=True),
+    ReferenceField("visible-to", creates=("project",)),
+    ReferenceField("editable-by", creates=("project",)),
+)
+
 #: Which keys of each object type hold references. The key is the *spec
 #: object* type, so ``"search"`` is one item of a search spec, whose own
 #: ``type:`` says what it searches.
 REFERENCE_FIELDS: Mapping[str, tuple[ReferenceField, ...]] = {
     "task": _TASK_REFERENCE_FIELDS,
     "project": _PROJECT_REFERENCE_FIELDS,
-    # A paste spec has no declared field yet, so nothing inside one is read as
-    # a reference. Its section still validates its envelope, its variables and
-    # its local ids.
-    "paste": (),
+    "paste": _PASTE_REFERENCE_FIELDS,
     "search": _SEARCH_REFERENCE_FIELDS,
 }
 

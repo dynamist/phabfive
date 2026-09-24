@@ -248,12 +248,18 @@ def policy_pattern() -> str:
     that exists is the online pass's question. The keyword list comes from
     `phabfive.constants`, imported here for the reason the module docstring
     gives.
+
+    ``$local-id`` is one of the shapes. A create spec may make a task visible
+    to a project the same document creates, which is what
+    ``specs/create/platform-bootstrap.yaml`` does, and the hand-rolled walk
+    accepts it in any policy field - so a schema that did not would call a
+    document invalid that every other reader plans cleanly.
     """
     from phabfive.constants import POLICY_KEYWORDS
 
     keywords = "|".join(re.escape(keyword) for keyword in POLICY_KEYWORDS)
 
-    return f"^(?:(?:{keywords})|PHID-.+|#.+|@.+)$"
+    return f"^(?:(?:{keywords})|PHID-.+|#.+|@.+|\\${LOCAL_ID_PATTERN})$"
 
 
 @functools.lru_cache(maxsize=None)

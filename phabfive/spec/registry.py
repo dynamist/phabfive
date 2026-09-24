@@ -389,6 +389,23 @@ FIELDS: tuple[Field, ...] = (
         help="Only tasks whose edit policy is exactly this.",
     ),
     Field(
+        name="commits",
+        # Declared here so the generated key tables carry it. The feature
+        # landed on main while Phase 4 was in flight (#463) and brought its
+        # own FieldKind, ReferenceField and resolver, but not this - so
+        # `commits:` worked while `docs/phorge-spec.md` did not mention it,
+        # which is the drift the registry exists to make impossible.
+        #
+        # `commits.add` like every list in a create spec: a commit attached
+        # to a task that already has commits must not discard them.
+        kind=FieldKind.COMMIT,
+        objects=_TASK,
+        verbs=_CREATE,
+        cli="--attach",
+        multiple=True,
+        help="Commits to attach, by rCALLSIGNhash, R1:hash, a bare hash or a PHID.",
+    ),
+    Field(
         name="column",
         kind=FieldKind.PATTERN,
         objects=_TASK,
@@ -722,7 +739,7 @@ FIELDS: tuple[Field, ...] = (
         cli="--space",
         constraint="spaces",
         multiple=True,
-        help="Space monograms, names or patterns; none means PHAB_SPACE.",
+        help="Space monograms, names or patterns; none means the reader's default Space.",
     ),
     Field(
         name="show-members",
@@ -739,7 +756,7 @@ FIELDS: tuple[Field, ...] = (
     # Two keys, and the walk behind them is the point: there is no
     # `passphrase.search`, only the legacy `passphrase.query`, which takes no
     # constraints at all. Both filters are applied in Python over every
-    # credential the token can see - see docs/search-templates.md.
+    # credential the token can see - see docs/search-specs.md.
     Field(
         name="type",
         kind=FieldKind.TEXT,
@@ -1021,8 +1038,8 @@ FIELDS: tuple[Field, ...] = (
 #: *other* key of that object an error: `validate._check_fields` reports an
 #: unknown key as soon as the pair has any declared field at all. A pair
 #: joins this set in the change that finishes its key set - and
-#: `docs/search-templates.md` has to grow the bullet in the same change, see
-#: `tests/test_search_template_keys.py`.
+#: `docs/phorge-spec.md` has to say so in the same change, which
+#: `tests/test_spec_docs.py` is what holds it to.
 #:
 #: **The three create pairs are not in it yet, and two separate things are
 #: missing before they can be.**

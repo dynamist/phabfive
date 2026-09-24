@@ -1,10 +1,23 @@
----
-# Mega Test File - 2024 GUNNAR Project Simulation
-# Simulates one year of realistic project work for RMI GUNNAR secure chip development
-# ~70 tasks with varied priorities, statuses, assignments, and cross-project tags
+# One year of a programme in one file: ~70 tasks across four quarters, and
+# a variable block where later variables are built out of earlier ones.
 #
-# Usage: phabfive maniphest create --with templates/task-create/mega-2024-simulation.yml
-
+#   phabfive apply -f specs/create/large-programme.yaml --dry-run
+#   phabfive apply -f specs/create/large-programme.yaml
+#
+# This is the scale example. It is what the development Phorge is seeded
+# around (docs/phorge-setup.md), so every project and person it names exists
+# there, and running it without --dry-run creates about seventy tasks.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: large-programme
+  description: >-
+    A simulated year of work on the GUNNAR secure chip: four quarters of
+    epics with subtasks, bugs and recurring work, tagged across seven
+    projects and assigned across the seeded team. Demonstrates scale, and
+    variables that are rendered from other variables.
+  version: "2024"
+  author: phabfive
 variables:
   # Base variables
   year: 2024

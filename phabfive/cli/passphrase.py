@@ -12,6 +12,7 @@ from phabfive.cli.output import (
     _setup_output_options,
 )
 from phabfive.cli.completers import complete_passphrase_type
+from phabfive.cli.spec_flags import with_spec_option
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
@@ -97,12 +98,7 @@ def search(
     text_query: Optional[str] = typer.Argument(
         None, help="Search by name (partial match)"
     ),
-    with_template: Optional[str] = typer.Option(
-        None,
-        "--with",
-        help="Load the search from a YAML search spec; every option below "
-        "overrides what the spec says",
-    ),
+    with_template: Optional[str] = with_spec_option("search"),
     credential_type: Optional[str] = typer.Option(
         None,
         "--type",

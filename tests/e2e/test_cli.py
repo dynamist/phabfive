@@ -610,7 +610,11 @@ def test_one_spec_creates_a_project_and_the_tasks_tagged_into_it(
 
     records = phabfive("maniphest", "create", "--with", str(spec), json_output=True)
 
-    assert len(records) == 2
+    # One record per object, **including the project**, which is what
+    # unifying the three `create --with` commands on `apply -f`'s runner
+    # bought: the old template path answered with `maniphest show` records,
+    # so a spec that created a project reported it nowhere.
+    assert [one["type"] for one in records] == ["project", "task", "task"]
 
     projects = conduit(
         "project.search", **{"constraints[slugs][0]": f"e2e-spec-{unique}"}
@@ -618,7 +622,10 @@ def test_one_spec_creates_a_project_and_the_tasks_tagged_into_it(
     assert len(projects) == 1
     project_phid = projects[0]["phid"]
 
-    ids = [int(record["Link"].rsplit("/T", 1)[-1]) for record in records]
+    assert records[0]["phid"] == project_phid
+    assert records[0]["local_id"] == "platform"
+
+    ids = [one["id"] for one in records if one["type"] == "task"]
     found = conduit(
         "maniphest.search",
         **{
@@ -821,3 +828,136 @@ def test_commits_attach_and_detach_by_short_hash(
     unknown = phabfive_raw("maniphest", "edit", task_id, "--attach", "0" * 12)
     assert unknown.returncode == 1
     assert "No such commit" in unknown.stderr
+
+
+# --------------------------------------------------------------------------
+# `phabfive apply -f` and `phabfive search -f` (#486)
+# --------------------------------------------------------------------------
+
+
+def test_apply_creates_a_project_and_the_tasks_tagged_into_it(
+    phabfive, phabfive_raw, conduit, tmp_path
+):
+    """#486's acceptance: the verb runs the whole document.
+
+    The same spec as `maniphest create --with` runs above, through the
+    top-level command instead - which is the point of having one, since a
+    document creating a project does not belong under `maniphest`. The dry
+    run goes first and has to leave the instance untouched, because a
+    preview that writes is the one thing `--dry-run` may never do.
+
+    The project is left behind on purpose: **Conduit cannot delete or
+    archive a project**, so `make reset` is this instance's only cleanup.
+    """
+    unique = uuid.uuid4().hex[:8]
+    spec = tmp_path / "bootstrap.yaml"
+    spec.write_text(
+        "spec: phorge/v1alpha1\n"
+        "kind: create\n"
+        "metadata:\n"
+        "  description: A project and the tasks tagged into it\n"
+        "projects:\n"
+        "  - id: platform\n"
+        f'    name: "e2e-apply-{unique}"\n'
+        f'    slugs: ["e2e-apply-{unique}"]\n'
+        "tasks:\n"
+        "  - id: epic\n"
+        f'    title: "e2e-apply-{unique} epic"\n'
+        '    projects: ["$platform"]\n'
+        f'  - title: "e2e-apply-{unique} follow up"\n'
+        '    projects: ["$platform"]\n'
+        '    parents: ["$epic"]\n'
+    )
+
+    dry = phabfive_raw("--format", "json", "apply", "-f", str(spec), "--dry-run")
+
+    assert dry.returncode == 0, f"{dry.stdout}\n{dry.stderr}"
+    assert [one["type"] for one in json.loads(dry.stdout)] == [
+        "project",
+        "task",
+        "task",
+    ]
+    assert (
+        conduit("project.search", **{"constraints[slugs][0]": f"e2e-apply-{unique}"})[
+            "data"
+        ]
+        == []
+    )
+
+    records = phabfive("apply", "-f", str(spec), json_output=True)
+
+    assert [one["status"] for one in records] == ["created", "created", "created"]
+    assert [one["type"] for one in records] == ["project", "task", "task"]
+
+    projects = conduit(
+        "project.search", **{"constraints[slugs][0]": f"e2e-apply-{unique}"}
+    )["data"]
+    assert len(projects) == 1
+    project_phid = projects[0]["phid"]
+
+    tagged = conduit(
+        "maniphest.search",
+        **{
+            "constraints[ids][0]": records[1]["id"],
+            "constraints[ids][1]": records[2]["id"],
+            "attachments[projects]": "1",
+        },
+    )["data"]
+
+    assert len(tagged) == 2
+    for task in tagged:
+        assert task["attachments"]["projects"]["projectPHIDs"] == [project_phid]
+
+    # The second task hangs off the first, by the `$epic` the spec named
+    [child] = [one for one in tagged if one["id"] == records[2]["id"]]
+    parents = conduit(
+        "maniphest.search",
+        **{"constraints[subtaskIDs][0]": child["id"]},
+    )["data"]
+    assert [one["id"] for one in parents] == [records[1]["id"]]
+
+
+def test_each_command_refuses_the_other_kind_by_name(phabfive_raw, tmp_path):
+    """Neither is a schema error: each names the command that does run it."""
+    create = tmp_path / "create.yaml"
+    create.write_text('kind: create\ntasks:\n  - title: "nothing is created"\n')
+
+    search = tmp_path / "search.yaml"
+    search.write_text("kind: search\nsearches:\n  - search: {limit: 1}\n")
+
+    refused_apply = phabfive_raw("apply", "-f", str(search))
+    refused_search = phabfive_raw("search", "-f", str(create))
+
+    assert refused_apply.returncode == 1
+    assert f"phabfive search -f {search}" in refused_apply.stderr
+    assert refused_search.returncode == 1
+    assert f"phabfive apply -f {create}" in refused_search.stderr
+
+    # Nothing was created by the refusal, which is what "run it with" means
+    assert refused_search.stdout.strip() == ""
+
+
+def test_search_runs_every_object_type_one_spec_holds(phabfive_raw, tmp_path):
+    """One file, a task search and a project search, in document order."""
+    spec = tmp_path / "readiness.yaml"
+    spec.write_text(
+        "spec: phorge/v1alpha1\n"
+        "kind: search\n"
+        "searches:\n"
+        "  - type: task\n"
+        "    search: {status: open, limit: 3}\n"
+        "  - type: project\n"
+        "    search: {status: active, limit: 3}\n"
+    )
+
+    result = phabfive_raw("--format", "jsonl", "search", "-f", str(spec))
+
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+
+    records = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    sections = [next(key for key in one if key != "Link") for one in records]
+
+    # Not an exact list: what the instance holds is not this test's to say.
+    # Both types ran, each record says which it is, and tasks came first.
+    assert set(sections) == {"Task", "Project"}
+    assert sections == sorted(sections, key=["Task", "Project"].index)

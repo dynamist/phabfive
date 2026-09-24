@@ -1,0 +1,27 @@
+# High priority tasks that nobody has touched lately.
+#
+#   phabfive search -f specs/search/high-priority-stale-tasks.yaml
+#   phabfive search -f specs/search/high-priority-stale-tasks.yaml --set stale_days=30
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: high-priority-stale-tasks
+  description: >-
+    Important work that may have stalled: anything at High, Unbreak Now! or
+    Needs Triage that has not been updated for two weeks. `--set
+    stale_days=30` widens that window without editing the file.
+  version: "1"
+  author: phabfive
+variables:
+  # Declared with a default, so the file runs as it is and `--set` is an
+  # option rather than a requirement.
+  stale_days: {default: 14}
+searches:
+  - type: task
+    title: "🔥 Stale High Priority Tasks"
+    description: "Important work with no recent activity"
+    search:
+      priority: "in:High,in:Unbreak Now!,in:Triage"
+      updated-after: "{{ stale_days }}"
+      show-history: true
+      show-metadata: true

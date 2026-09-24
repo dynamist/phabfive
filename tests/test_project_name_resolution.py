@@ -200,27 +200,49 @@ class TestYamlCreateResolution:
 
 
 class TestCreateCommand:
-    @pytest.mark.parametrize(
-        "args",
-        [
-            ["create", "Plan the sprint", "--tag", "Sprint 1", "--description", ""],
-            ["create", "--with", "tasks.yaml"],
-        ],
-    )
+    @pytest.mark.parametrize("spec_file", [False, True])
     @patch("phabfive.cli.maniphest._get_maniphest_app")
-    def test_ambiguous_tag_is_a_clean_error(self, mock_get_app, args):
+    def test_ambiguous_tag_is_a_clean_error(self, mock_get_app, spec_file, tmp_path):
+        """Both ways in, because both used to answer with a traceback.
+
+        `--with` is `phabfive apply -f` under its old name since the three
+        `create --with` commands were unified (`phabfive.cli.create_spec`),
+        so the ambiguity is raised where the planner resolves the name
+        rather than inside the template recursion - and it still has to
+        reach the terminal as one sentence and exit 1.
+        """
+        import phabfive.create
         from typer.testing import CliRunner
 
         from phabfive.cli.maniphest import maniphest_app
 
         maniphest = MagicMock()
         maniphest.create_task.side_effect = PhabfiveConfigException(AMBIGUOUS)
-        maniphest.create_tasks_from_yaml.side_effect = PhabfiveConfigException(
-            AMBIGUOUS
-        )
         mock_get_app.return_value = maniphest
 
-        result = CliRunner().invoke(maniphest_app, args)
+        if spec_file:
+            spec = tmp_path / "tasks.yaml"
+            spec.write_text(
+                "spec: phorge/v1alpha1\nkind: create\n"
+                "tasks:\n  - title: Plan the sprint\n    projects: [Sprint 1]\n"
+            )
+            args = ["create", "--with", str(spec)]
+        else:
+            args = [
+                "create",
+                "Plan the sprint",
+                "--tag",
+                "Sprint 1",
+                "--description",
+                "",
+            ]
+
+        with patch.object(
+            phabfive.create,
+            "plan_spec",
+            side_effect=PhabfiveConfigException(AMBIGUOUS),
+        ):
+            result = CliRunner().invoke(maniphest_app, args)
 
         assert result.exit_code == 1
         assert f"Error: {AMBIGUOUS}" in result.output

@@ -2,11 +2,18 @@
 
 """A spec may say what it is, and a spec that says nothing still loads.
 
-The envelope - `spec:`, `kind:`, `metadata:` - is entirely optional, so the
-assertions that matter most here are the ones about files that carry none of
-it: every template in `templates/` works today and must keep working
-untouched, which is checked against the two readers it has to replace rather
-than against a hand-written expectation.
+The envelope - `spec:`, `kind:`, `metadata:` - is optional, and both halves
+of that are pinned here. `TestAnEnvelopeIsOptional` writes its files inline:
+inference is ergonomics that stays, so `tasks:` alone is enough to say what
+a document is, and a user writing one by hand never has to type a version
+string to get it read.
+
+The shipped corpus is the other half, and since #489 it is the *enveloped*
+half: all eleven files declare `spec:` and `kind:`, because an example
+teaches the shape it shows and `phorge/v1alpha1` is explicitly free to
+churn. What the corpus is asked here is the thing a fixture cannot fake -
+the real files, through `_load_search_config` and through `Spec`, answering
+the same thing.
 
 The rest is the envelope itself: a kind inferred from the body, an ambiguous
 file refused instead of guessed, an unknown `spec:` version refused by name,
@@ -36,14 +43,34 @@ from phabfive.spec.envelope import (
 )
 from phabfive.spec.loader import load_documents
 
-TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
+SPEC_ROOT = Path(__file__).resolve().parent.parent / "specs"
 
-SEARCH_TEMPLATES = sorted((TEMPLATES / "task-search").glob("*.yaml"))
-CREATE_TEMPLATES = sorted(
+SEARCH_SPECS = sorted((SPEC_ROOT / "search").glob("*.yaml"))
+CREATE_SPECS = sorted(
     path
     for pattern in ("*.yaml", "*.yml")
-    for path in (TEMPLATES / "task-create").glob(pattern)
+    for path in (SPEC_ROOT / "create").glob(pattern)
 )
+
+
+def _searches_only_tasks(path):
+    """Whether every search in one file runs against Maniphest.
+
+    `Maniphest._load_search_config` checks each `search:` against the *task*
+    key set, so it refuses a project or paste search by design - `milestones`
+    is not a task filter. The backward-compatibility promise that reader
+    pins is therefore a promise about task searches: the other object types
+    arrived with the spec format and never had a `--with` reader to be
+    compatible with. The corpus walk in tests/test_spec_corpus.py is what
+    covers those.
+    """
+    return all(
+        (item.get("type") or "task") == "task"
+        for item in load_spec(path, kind="search").items("search")
+    )
+
+
+TASK_SEARCH_SPECS = [path for path in SEARCH_SPECS if _searches_only_tasks(path)]
 
 
 def write(tmp_path, name, text):
@@ -52,25 +79,34 @@ def write(tmp_path, name, text):
     return path
 
 
-class TestNoEnvelopeIsTheNormalCase:
-    """Every shipped template carries no envelope at all, and still loads."""
+class TestTheShippedCorpus:
+    """The shipped specs read the same through every reader that sees them."""
 
     def test_the_corpus_is_there(self):
         """Guard the guard: an empty glob would make everything below vacuous."""
-        assert len(SEARCH_TEMPLATES) >= 8
-        assert len(CREATE_TEMPLATES) >= 3
+        assert len(SEARCH_SPECS) >= 8
+        assert len(CREATE_SPECS) >= 3
+        assert len(TASK_SEARCH_SPECS) >= 8
 
-    @pytest.mark.parametrize("path", SEARCH_TEMPLATES, ids=lambda path: path.name)
-    def test_a_search_template_reads_as_load_search_config_reads_it(self, path):
+    @pytest.mark.parametrize("path", TASK_SEARCH_SPECS, ids=lambda path: path.name)
+    def test_a_search_spec_reads_as_load_search_config_reads_it(self, path):
         """The whole backward-compatibility promise, at the Spec level.
 
         `_load_search_config` is what `maniphest search --with` calls today,
         and three of these files are multi-document, which is the case a
         single-document reader would silently truncate.
+
+        The spec is rendered first, because the command renders before it
+        reads the filters: a `{{ stale_days }}` reaching the time parser as
+        itself is the bug that put the render there, so comparing the
+        unrendered spec would pin the shape nothing uses.
         """
         legacy = Maniphest.__new__(Maniphest)._load_search_config(str(path))
 
         spec = load_spec(path, kind="search")
+
+        if spec.variables:
+            spec = spec.render()
 
         assert [
             {
@@ -85,20 +121,25 @@ class TestNoEnvelopeIsTheNormalCase:
             for item in spec.items("search")
         ] == legacy
 
-    @pytest.mark.parametrize("path", SEARCH_TEMPLATES, ids=lambda path: path.name)
-    def test_a_search_template_declares_no_envelope(self, path):
-        spec = load_spec(path, kind="search")
+    @pytest.mark.parametrize("path", SEARCH_SPECS, ids=lambda path: path.name)
+    def test_a_search_spec_declares_its_envelope(self, path):
+        """The shipped files are what a user copies, so they show the format."""
+        spec = load_spec(path)
 
-        assert spec.envelope == Envelope(
-            spec=None, kind=Kind.SEARCH, kind_declared=False, metadata=Metadata()
-        )
+        assert spec.envelope.spec == SPEC_VERSION
+        assert spec.envelope.kind is Kind.SEARCH
+        assert spec.envelope.kind_declared is True
+        assert spec.envelope.metadata.description
 
-    @pytest.mark.parametrize("path", CREATE_TEMPLATES, ids=lambda path: path.name)
-    def test_a_create_template_keeps_its_variables_and_its_tasks(self, path):
+    @pytest.mark.parametrize("path", CREATE_SPECS, ids=lambda path: path.name)
+    def test_a_create_spec_keeps_its_variables_and_its_items(self, path):
         """The shape `create_tasks_from_config` reads, split the way it splits it.
 
-        It pops `variables` off the root and then wants `tasks`; a Spec hands
-        both over without the caller reaching into a raw dict.
+        It pops `variables` off the root and then wants the items; a Spec
+        hands both over without the caller reaching into a raw dict. Every
+        object type a create spec may hold is asserted, not only `tasks`: a
+        spec that creates one project and no task is a create spec, and
+        reading only `tasks` from it is how a whole root key goes unread.
         """
         raw = load_documents(path)[0]
 
@@ -106,21 +147,62 @@ class TestNoEnvelopeIsTheNormalCase:
 
         assert spec.kind is Kind.CREATE
         assert spec.variables == (raw.get("variables") or {})
-        assert spec.items("task") == raw["tasks"]
         assert "variables" not in spec.body
+
+        for key, object_type in (
+            ("tasks", "task"),
+            ("projects", "project"),
+            ("pastes", "paste"),
+        ):
+            assert spec.items(object_type) == (raw.get(key) or []), key
 
     def test_yaml_anchors_survive_into_the_body(self):
         """&WORKGROUP/*WORKGROUP is a YAML feature and must still expand."""
-        spec = load_spec(TEMPLATES / "task-create" / "test-template-v2.yml")
+        spec = load_spec(SPEC_ROOT / "create" / "feature-epic.yaml")
 
-        assert spec.variables["workgroup"] == ["hholm", "grok"]
+        assert spec.variables["workgroup"] == [
+            "gabriel.blomqvist",
+            "sebastian.soderberg",
+        ]
 
-    def test_a_create_template_needs_no_kind_argument(self):
+
+class TestAnEnvelopeIsOptional:
+    """A document that says nothing about itself is still read.
+
+    Written inline rather than against the corpus, which declares its
+    envelope since #489. Inference is kept as ergonomics - a file that says
+    `tasks:` has already said what it is - and not as a promise that files
+    written before the format keep working, which `phorge/v1alpha1` does not
+    make.
+    """
+
+    def test_a_search_document_declares_no_envelope(self, tmp_path):
+        path = write(
+            tmp_path,
+            "search.yaml",
+            "search:\n  priority: high\n",
+        )
+
+        spec = load_spec(path, kind="search")
+
+        assert spec.envelope == Envelope(
+            spec=None, kind=Kind.SEARCH, kind_declared=False, metadata=Metadata()
+        )
+
+    def test_a_create_document_needs_no_kind_argument(self, tmp_path):
         """`tasks:` is enough to say what the file is."""
-        spec = load_spec(TEMPLATES / "task-create" / "test-template.yaml")
+        path = write(
+            tmp_path,
+            "create.yaml",
+            "variables:\n  who: alice\ntasks:\n  - title: Ship it\n",
+        )
+
+        spec = load_spec(path)
 
         assert spec.kind is Kind.CREATE
         assert spec.envelope.kind_declared is False
+        assert spec.variables == {"who": "alice"}
+        assert spec.items("task") == [{"title": "Ship it"}]
 
 
 class TestKindInference:

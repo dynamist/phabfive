@@ -1,0 +1,26 @@
+# The pastes you wrote.
+#
+#   phabfive search -f specs/search/my-pastes.yaml
+#
+# `@me` is the caller, resolved through `user.whoami` at run time, so the
+# same file answers differently for each person who runs it. A user actually
+# called "me" is written `me` without the `@`.
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: my-pastes
+  description: Pastes authored by whoever runs the spec.
+  version: "1"
+  author: phabfive
+
+searches:
+  - type: paste
+    title: My pastes
+    description: |
+      A paste search takes an author, a free-text query and a limit, and
+      nothing else - `paste.search` publishes no other constraint, and a
+      filter it does not publish is one phabfive would have to apply by
+      walking every paste.
+    search:
+      author: "@me"
+      limit: 25

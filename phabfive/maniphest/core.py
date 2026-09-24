@@ -856,12 +856,23 @@ class Maniphest(Phabfive):
             If the template file is invalid or contains unsupported parameters
         """
         from phabfive.spec import load_spec
+        from phabfive.spec.envelope import DEFAULT_SEARCH_TYPE
         from phabfive.spec.search import check_search_params
 
         # kind="search" rather than inference: a search template may legally
         # carry only `title:` and `description:` with no `search:` key at
         # all, and nothing could tell that from a create spec.
         spec = load_spec(template_path, kind="search")
+
+        # A spec's variables are rendered before the filters are read, the
+        # same way `phabfive.cli.search_spec.load_search_spec` does it for the
+        # other four `--with` commands. Without this a `{{ stale_days }}` in a
+        # filter reached the parser as itself and was answered with "Invalid
+        # time format: '{{ stale_days }}'", which says nothing about
+        # variables at all. This path takes no `--set`, so a variable with no
+        # default is still an error here - that is what `search -f` is for.
+        if spec.variables:
+            spec = spec.render()
 
         search_configs = []
 
@@ -870,7 +881,16 @@ class Maniphest(Phabfive):
 
             # Derived from the one Field declaration per key, so a key the
             # command reads and this refuses cannot happen again (#295).
-            check_search_params(search_params, where=f"Document {index}")
+            #
+            # Only for the items this command could run. An item that says
+            # `type: project` is refused by the planner, by name, with the
+            # command that does run it - and checking its keys against the
+            # *task* key set first would answer a project search with
+            # "Unsupported search parameters: milestones", which is true of
+            # nothing and says nothing about what is actually wrong. The
+            # planner sees `type:` because it is carried through below.
+            if (item.get("type") or DEFAULT_SEARCH_TYPE) == DEFAULT_SEARCH_TYPE:
+                check_search_params(search_params, where=f"Document {index}")
 
             # Keep an omitted title distinct from a generated display label.
             # The CLI uses this to decide whether a single template was
@@ -2288,7 +2308,7 @@ class Maniphest(Phabfive):
 
         For a program that holds the template as data rather than as a file:
         `config` is what the template file would parse to, with its
-        `variables` and `tasks` (see docs/create-templates.md). It is read,
+        `variables` and `tasks` (see docs/create-specs.md). It is read,
         never written - `Spec.from_data` deep-copies it - so the same dict
         can be handed in twice.
 

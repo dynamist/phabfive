@@ -25,6 +25,7 @@ from phabfive.cli.project import project_app
 from phabfive.cli.repl import repl_app
 from phabfive.cli.shell_completion import MonogramGroup, install_bash_escaping
 from phabfive.cli.spec import spec_app
+from phabfive.cli.spec_run import apply_command, search_command
 from phabfive.cli.user import user_app
 from phabfive.constants import (
     AutoOption,
@@ -325,6 +326,13 @@ app.add_typer(project_app, name="project")
 app.add_typer(user_app, name="user")
 app.add_typer(maniphest_app, name="maniphest")
 app.add_typer(spec_app, name="spec")
+# Two commands rather than a group, so neither takes `no_args_is_help` or
+# `AgentFooterGroup`: `phabfive apply` with nothing after it is click's own
+# "Missing option '-f'". `-f` is an option and not a positional deliberately,
+# because `phabfive search "needle"` is the obvious next thing to want and a
+# required positional would have spent that slot on a filename.
+app.command(name="apply")(apply_command)
+app.command(name="search")(search_command)
 # Show repl command only if ptpython is installed (phabfive[repl])
 try:
     import ptpython  # noqa: F401

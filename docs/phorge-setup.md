@@ -252,19 +252,21 @@ uv run phabfive maniphest search --tag '*'
 
 ## Create Test Tasks
 
-After configuring phabfive, you can populate Phorge with ~70 realistic test tasks:
+After configuring phabfive, you can populate Phorge with a year of realistic test tasks:
 
 ```bash
-uv run phabfive maniphest create --with templates/task-create/mega-2024-simulation.yml
+uv run phabfive apply -f specs/create/large-programme.yaml
 ```
 
-This creates a full year simulation of project work for the RMI GUNNAR team, including EPICs with subtasks, varied priorities, and assignments across the default projects.
+This creates a full year simulation of project work, including epics with subtasks, varied priorities, and assignments across the default projects. It is the largest spec that ships - about seventy objects - which is what makes it the one worth running against a disposable instance.
 
-Use `--dry-run` to preview without creating:
+Use `--dry-run` to plan it without creating anything:
 
 ```bash
-uv run phabfive maniphest create --with templates/task-create/mega-2024-simulation.yml --dry-run
+uv run phabfive apply -f specs/create/large-programme.yaml --dry-run
 ```
+
+`specs/` holds smaller ones too: `specs/create/sprint-tasks.yaml` is three tasks, and `specs/search/blocked-tasks.yaml` is a search to run afterwards with `phabfive search -f`.
 
 ## Using the API Token
 

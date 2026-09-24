@@ -251,12 +251,15 @@ class TestAMappingValueIsStillAValue:
         assert declared_value({"default": 42}) == (True, 42)
 
     def test_a_mapping_valued_variable_survives_resolution(self):
-        """templates/task-create/test-template-v2.yml has a list-valued one."""
+        """specs/create/feature-epic.yaml has a list-valued one."""
         resolved = resolve_variables(
-            {"workgroup": ["hholm", "grok"], "owners": {"lead": "alice"}}
+            {
+                "workgroup": ["gabriel.blomqvist", "sebastian.soderberg"],
+                "owners": {"lead": "alice"},
+            }
         )
 
-        assert resolved["workgroup"] == ["hholm", "grok"]
+        assert resolved["workgroup"] == ["gabriel.blomqvist", "sebastian.soderberg"]
         assert resolved["owners"] == {"lead": "alice"}
 
     def test_an_explicit_null_default_is_a_value_not_a_hole(self):

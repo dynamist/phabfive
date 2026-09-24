@@ -1,0 +1,21 @@
+# Tasks that are blocked now, or that have been blocked before.
+#
+#   phabfive search -f specs/search/blocked-tasks.yaml
+#   phabfive --format=json search -f specs/search/blocked-tasks.yaml
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: blocked-tasks
+  description: >-
+    Where work gets stuck: tasks sitting in a Blocked column, and tasks that
+    have passed through Waiting or Blocked at some point. Narrow it to one
+    project by adding a `tag:` to the search below.
+  version: "1"
+  author: phabfive
+searches:
+  - type: task
+    title: "🚫 Blocked or Previously Blocked"
+    description: "Workflow bottlenecks: where work stops moving"
+    search:
+      column: "in:Blocked,been:Waiting,been:Blocked"
+      show-history: true

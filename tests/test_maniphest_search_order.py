@@ -617,7 +617,9 @@ class TestTemplateSearchHeaders:
         )
 
         assert result.exit_code == 0
-        assert result.output == "[]\n"
+        # stdout, not `output`: `--with` is deprecated since #486 and warns
+        # on stderr, and it is the record stream that must carry no header.
+        assert result.stdout == "[]\n"
 
     @pytest.mark.parametrize(
         ("output_format", "payload"),
@@ -641,16 +643,18 @@ class TestTemplateSearchHeaders:
         )
 
         assert result.exit_code == 0
-        assert "Named search" not in result.output
+        # stdout, not `output`: `--with` warns on stderr since #486, and a
+        # machine format's stdout is what a reader parses.
+        assert "Named search" not in result.stdout
         if output_format == "json":
-            assert json.loads(result.output) == [{"Task": {"Name": "Example"}}]
+            assert json.loads(result.stdout) == [{"Task": {"Name": "Example"}}]
         elif output_format == "jsonl":
-            lines = result.output.splitlines()
+            lines = result.stdout.splitlines()
             assert [json.loads(line) for line in lines] == [
                 {"Task": {"Name": "Example"}}
             ]
         else:
-            assert yaml.safe_load(result.output) == [{"Task": {"Name": "Example"}}]
+            assert yaml.safe_load(result.stdout) == [{"Task": {"Name": "Example"}}]
 
     def test_value_output_has_no_template_header(self):
         result = self._run(

@@ -106,8 +106,51 @@ def a_maniphest():
 
 def _template(tmp_path):
     template = tmp_path / "tasks.yaml"
-    template.write_text("tasks:\n")
+    template.write_text(
+        "spec: phorge/v1alpha1\nkind: create\ntasks:\n  - title: Parent\n"
+    )
     return template
+
+
+@pytest.fixture
+def planner():
+    """The planner `--with` reaches, stubbed, so these tests are the command's.
+
+    `--with` is `phabfive apply -f` under its old name
+    (`phabfive.cli.create_spec`), so what it does with a file is
+    `phabfive.create.plan_spec` and then `phabfive.create.apply_plan`. What
+    is under test here is which options the command refuses and which it
+    honours, none of which needs a real plan - and a `MagicMock` app cannot
+    produce one.
+
+    Yields ``(plan_spec, apply_plan)``, both patched.
+    """
+    import phabfive.create
+    from phabfive.spec.create import CreateItem, CreatePlan, CreateRecord
+
+    plan = CreatePlan(
+        items=(
+            CreateItem(
+                object_type="task", path="tasks[0]", display={"title": "Parent"}
+            ),
+        )
+    )
+    records = [
+        CreateRecord(
+            object_type="task",
+            path="tasks[0]",
+            status="created",
+            id=7,
+            monogram="T7",
+            title="Parent",
+        )
+    ]
+
+    with patch.object(phabfive.create, "plan_spec", return_value=plan) as plan_spec:
+        with patch.object(
+            phabfive.create, "apply_plan", return_value=iter(records)
+        ) as apply_plan:
+            yield plan_spec, apply_plan
 
 
 class TestTemplatePriority:
@@ -184,17 +227,20 @@ class TestTemplatePriority:
         phab.maniphest.edit.assert_not_called()
 
     def test_the_cli_reports_it(self, tmp_path):
+        import phabfive.create
+
         maniphest = MagicMock()
-        maniphest.create_tasks_from_yaml.side_effect = PhabfiveConfigException(
+        template = _template(tmp_path)
+        refusal = PhabfiveConfigException(
             "Invalid priority 'hgih'. Valid choices: Unbreak, Triage, High, "
             "Normal, Low, Wish"
         )
-        template = _template(tmp_path)
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
-            result = runner.invoke(
-                app, ["maniphest", "create", "--with", str(template)]
-            )
+            with patch.object(phabfive.create, "plan_spec", side_effect=refusal):
+                result = runner.invoke(
+                    app, ["maniphest", "create", "--with", str(template)]
+                )
 
         assert result.exit_code == 1
         assert "Invalid priority 'hgih'" in result.stderr
@@ -221,9 +267,10 @@ class TestOptionsAlongsideTemplate:
             (["--interactive"], "--interactive"),
         ],
     )
-    def test_it_is_refused_by_name(self, tmp_path, argv, option):
+    def test_it_is_refused_by_name(self, tmp_path, argv, option, planner):
         maniphest = a_maniphest()
         template = _template(tmp_path)
+        plan_spec, _ = planner
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
             result = runner.invoke(
@@ -232,12 +279,13 @@ class TestOptionsAlongsideTemplate:
 
         assert result.exit_code != 0
         assert option in result.stderr
-        maniphest.create_tasks_from_yaml.assert_not_called()
+        plan_spec.assert_not_called()
 
-    def test_a_title_is_refused_too(self, tmp_path):
+    def test_a_title_is_refused_too(self, tmp_path, planner):
         """It was dropped as silently as the options were."""
         maniphest = a_maniphest()
         template = _template(tmp_path)
+        plan_spec, _ = planner
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
             result = runner.invoke(
@@ -246,7 +294,7 @@ class TestOptionsAlongsideTemplate:
 
         assert result.exit_code != 0
         assert "--with cannot be combined with" in result.stderr
-        maniphest.create_tasks_from_yaml.assert_not_called()
+        plan_spec.assert_not_called()
 
     def test_every_offending_option_is_named(self, tmp_path):
         maniphest = a_maniphest()
@@ -271,10 +319,11 @@ class TestOptionsAlongsideTemplate:
         assert "--tag" in result.stderr
         assert "--priority" in result.stderr
 
-    def test_a_default_that_was_not_passed_is_not_refused(self, tmp_path):
+    def test_a_default_that_was_not_passed_is_not_refused(self, tmp_path, planner):
         """--with alone still works: no option was given to drop."""
         maniphest = a_maniphest()
         template = _template(tmp_path)
+        plan_spec, apply_plan = planner
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
             result = runner.invoke(
@@ -282,17 +331,13 @@ class TestOptionsAlongsideTemplate:
             )
 
         assert result.exit_code == 0, result.output
-        maniphest.create_tasks_from_yaml.assert_called_once_with(
-            str(template), dry_run=False
-        )
+        plan_spec.assert_called_once()
+        apply_plan.assert_called_once()
 
-    def test_dry_run_is_honoured_not_refused(self, tmp_path):
+    def test_dry_run_is_honoured_not_refused(self, tmp_path, planner):
         maniphest = a_maniphest()
-        maniphest.create_tasks_from_yaml.return_value = {
-            "dry_run": True,
-            "tasks": [{"depth": 0, "title": "Parent"}],
-        }
         template = _template(tmp_path)
+        plan_spec, apply_plan = planner
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
             result = runner.invoke(
@@ -308,15 +353,18 @@ class TestOptionsAlongsideTemplate:
             )
 
         assert result.exit_code == 0, result.output
-        assert "- Parent" in result.stdout
-        maniphest.create_tasks_from_yaml.assert_called_once_with(
-            str(template), dry_run=True
-        )
+        assert "Parent" in result.stdout
+        plan_spec.assert_called_once()
+        # A dry run stops at the plan: nothing is written.
+        apply_plan.assert_not_called()
 
     @pytest.mark.parametrize("output_format", ["json", "yaml", "jsonl", "rich"])
-    def test_the_global_format_is_honoured_not_refused(self, tmp_path, output_format):
+    def test_the_global_format_is_honoured_not_refused(
+        self, tmp_path, output_format, planner
+    ):
         maniphest = a_maniphest()
         template = _template(tmp_path)
+        plan_spec, _ = planner
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
             result = runner.invoke(
@@ -331,9 +379,7 @@ class TestOptionsAlongsideTemplate:
             )
 
         assert result.exit_code == 0, result.output
-        maniphest.create_tasks_from_yaml.assert_called_once_with(
-            str(template), dry_run=False
-        )
+        plan_spec.assert_called_once()
 
 
 class TestRefusedOptionsAreRealOptions:

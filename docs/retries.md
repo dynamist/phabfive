@@ -85,7 +85,7 @@ A batch edit sends one `maniphest.edit` per task, back to back. Against a server
 that is already struggling, `PHAB_PACE` spaces them out:
 
 ```bash
-phabfive maniphest search --tag=migration --format=yaml |
+phabfive --format=yaml maniphest search --tag=migration |
   PHAB_PACE=1 phabfive edit --editable-by=admin --yes
 ```
 

@@ -654,7 +654,7 @@ def test_a_search_spec_s_tag_and_space_are_still_left_alone():
     A `tag:` matching nothing is a `log.error` and exit 0 today, and a
     `space:` that does not resolve is a `log.warning` and no filter at all.
     Reporting either as a problem is a change worth making and it needs its
-    own test and a line in docs/search-templates.md - it is not this.
+    own test and a line in docs/search-specs.md - it is not this.
     """
     spec = Spec.from_data(
         {

@@ -36,7 +36,7 @@ the legacy ``passphrase.query``, which takes no constraints at all: both the
 name and the type filter are applied in Python, and ``limit`` is counted
 locally. So a passphrase search costs a walk of every credential the token can
 see, and a small ``limit`` only shortens the walk once enough have matched.
-That is documented rather than hidden - see ``docs/search-templates.md`` - and
+That is documented rather than hidden - see ``docs/search-specs.md`` - and
 it is why a spec cannot ask a passphrase search for secret material: the walk
 would fetch the secret of every credential on the instance, not of the ones
 that matched.
