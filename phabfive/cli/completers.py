@@ -938,10 +938,10 @@ def complete_user(incomplete: str) -> list[str | tuple[str, str]]:
 def complete_user_list(incomplete: str) -> list[str | tuple[str, str]]:
     """Complete usernames for an option that adds a comma-separated list.
 
-    Used by --subscribe, where "@me,alice" adds both. Like complete_user this
-    leaves disabled accounts out. Only the name after the last comma is
-    completed, and the names before it are kept in the offered value, since
-    the shell replaces the whole word.
+    Used by --subscribe and --unsubscribe, where "@me,alice" names both.
+    Like complete_user this leaves disabled accounts out. Only the name after
+    the last comma is completed, and the names before it are kept in the
+    offered value, since the shell replaces the whole word.
 
     Parameters
     ----------

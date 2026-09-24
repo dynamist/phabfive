@@ -327,6 +327,16 @@ An option that adds several values - `--tag` and `--subscribe` on `maniphest cre
 `--tag=Backend,QA` is `--tag=Backend --tag=QA`. Use `,`, not `+`, which is deprecated there
 and means AND only in a search filter.
 
+`maniphest edit` and `paste edit` take `--subscribe` and `--unsubscribe`, and send
+only what changes (`--add-subscriber` and `--remove-subscriber` are hidden aliases):
+
+```bash
+phabfive maniphest edit T123 --subscribe=@bob --unsubscribe=@me
+```
+
+Watching a project cannot be changed from phabfive: Conduit's `project.edit` has no watchers
+transaction, so it is done in the web UI. `project search --watcher` only filters by it.
+
 `--visible-to` and `--editable-by` set who can see and who can edit a task, named after
 the labels Phorge's own form uses. Each takes
 
@@ -580,7 +590,7 @@ phabfive --format=jsonl project search --status=any --space='*' --show-policy -l
 phabfive project create "Platform" --icon=infrastructure --member=@me,@alice --dry-run
 phabfive project create "Backend" --parent='#platform' --dry-run
 phabfive project create "Sprint 2" --milestone-of='#platform' --dry-run
-phabfive project edit '#platform' --add-member=@bob --remove-member=@alice --dry-run
+phabfive project edit '#platform' --join=@bob --leave=@alice --dry-run
 phabfive project edit '#platform' --add-slug=plat --editable-by='#platform' --dry-run
 ```
 
@@ -621,8 +631,8 @@ listing, not one per project.
 `--space` and the three policies, and `--parent` for a subproject or `--milestone-of`
 for a milestone, which takes no `--icon`, `--color` or `--slug` (`edit` refuses those
 on a milestone too). `project edit` takes `--name`,
-`--description`, `--icon`, `--color`, `--add-slug`, `--add-member`, `--remove-member`,
-`--space` and the three policies; anything already at its target is left out, and
+`--description`, `--icon`, `--color`, `--add-slug`, `--join`, `--leave` (hidden aliases
+`--add-member`, `--remove-member`), `--space` and the three policies; anything already at its target is left out, and
 adding a hashtag keeps the ones already there. A name whose hashtag another project
 has is refused before anything is sent. The list options are repeatable and
 comma-separated: `--member=@a,@b --member=@c`.

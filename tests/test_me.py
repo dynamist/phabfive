@@ -196,7 +196,7 @@ class TestManiphestEdit:
 class TestProjectMembers:
     def test_a_user_called_me_does_not_take_the_keyword(self):
         assert resolve_user_phids(
-            _phab(user_called_me=True), ["@me"], option="--add-member"
+            _phab(user_called_me=True), ["@me"], option="--join"
         ) == {"@me": ("PHID-USER-caller", "caller")}
 
     def test_both_spellings_in_one_call_are_two_people(self):

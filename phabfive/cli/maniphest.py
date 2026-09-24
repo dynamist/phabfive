@@ -96,6 +96,7 @@ _CREATE_OPTIONS_IGNORED_BY_TEMPLATE = {
     "assign": "--assign",
     "status": "--status",
     "priority": "--priority",
+    "add_subscriber": "--add-subscriber",
     "subscribe": "--subscribe",
     "space": "--space",
     "visible_to": "--visible-to",
@@ -383,7 +384,14 @@ def create(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
+        help="Add a subscriber (username, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list,
+    ),
+    add_subscriber: Optional[List[str]] = typer.Option(
+        None,
+        "--add-subscriber",
+        hidden=True,
+        help="Alias for --subscribe",
         autocompletion=complete_user_list,
     ),
     space: Optional[str] = typer.Option(
@@ -536,7 +544,9 @@ def create(
                     raise typer.Exit(0)
 
         tags = _split_values_to_add(tag, "--tag")
-        subscribers = _split_values_to_add(subscribe, "--subscribe")
+        subscribers = _split_values_to_add(
+            [*(subscribe or []), *(add_subscriber or [])], "--subscribe"
+        )
 
         # Validate --column requires --tag
         if column and not tags:
@@ -1034,7 +1044,27 @@ def edit(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
+        help="Add a subscriber (username, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list,
+    ),
+    add_subscriber: Optional[List[str]] = typer.Option(
+        None,
+        "--add-subscriber",
+        hidden=True,
+        help="Alias for --subscribe",
+        autocompletion=complete_user_list,
+    ),
+    unsubscribe: Optional[List[str]] = typer.Option(
+        None,
+        "--unsubscribe",
+        help="Remove a subscriber (username, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list,
+    ),
+    remove_subscriber: Optional[List[str]] = typer.Option(
+        None,
+        "--remove-subscriber",
+        hidden=True,
+        help="Alias for --unsubscribe",
         autocompletion=complete_user_list,
     ),
     comment_text: Optional[str] = typer.Option(
@@ -1096,6 +1126,7 @@ def edit(
         phabfive maniphest edit T123 T124 "New Title"
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
         phabfive maniphest edit T123 --space=S3
+        phabfive maniphest edit T123 --subscribe=@me --unsubscribe=alice
         phabfive maniphest edit T123 --visible-to=public --editable-by='#infra'
     """
     # Greedy monogram parsing: leading args that are task monograms (or
@@ -1154,7 +1185,8 @@ def edit(
         column=column,
         assign=assign,
         description=description,
-        subscribe=subscribe,
+        subscribe=[*(subscribe or []), *(add_subscriber or [])],
+        unsubscribe=[*(unsubscribe or []), *(remove_subscriber or [])],
         comment=comment_text,
         space=space,
         visible_to=visible_to,

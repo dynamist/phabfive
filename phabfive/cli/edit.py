@@ -73,7 +73,27 @@ def edit_command(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
+        help="Add a subscriber (username, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list,
+    ),
+    add_subscriber: Optional[List[str]] = typer.Option(
+        None,
+        "--add-subscriber",
+        hidden=True,
+        help="Alias for --subscribe",
+        autocompletion=complete_user_list,
+    ),
+    unsubscribe: Optional[List[str]] = typer.Option(
+        None,
+        "--unsubscribe",
+        help="Remove a subscriber (username, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list,
+    ),
+    remove_subscriber: Optional[List[str]] = typer.Option(
+        None,
+        "--remove-subscriber",
+        hidden=True,
+        help="Alias for --unsubscribe",
         autocompletion=complete_user_list,
     ),
     comment: Optional[str] = typer.Option(
@@ -162,7 +182,8 @@ def edit_command(
         column=column,
         assign=assign,
         description=description,
-        subscribe=subscribe,
+        subscribe=[*(subscribe or []), *(add_subscriber or [])],
+        unsubscribe=[*(unsubscribe or []), *(remove_subscriber or [])],
         comment=comment,
         space=space,
         visible_to=visible_to,

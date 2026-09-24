@@ -149,6 +149,11 @@ Subprojects and milestones are included.
 | `--limit`, `-l` | This many at most; `0` for all. Defaults to 100 |
 | `--with` | Reads the searches from a YAML search spec |
 
+Watching can only be searched on. Conduit's `project.edit` has no watchers
+transaction, so a project is watched and unwatched in the web UI, with the
+Watch Project button on its page. Membership is what `project edit --join`
+and `--leave` change.
+
 `--status=any` is the same word `maniphest search` uses. `--all` is a
 deprecated alias for it and prints a warning on stderr.
 
@@ -335,8 +340,8 @@ up under a color it is never shown in. phabfive refuses all three.
 ## Editing a project
 
 ```bash
-phabfive project edit '#development' --add-member=@admin,@mikael.wallin \
-    --remove-member=@viola.larsson --add-slug=dev --dry-run
+phabfive project edit '#development' --join=@admin,@mikael.wallin \
+    --leave=@viola.larsson --add-slug=dev --dry-run
 ```
 
 ```
@@ -354,7 +359,7 @@ send reports `No changes (already at target state)`.
 | `--name` | The name. Phorge keeps the old hashtag as an additional one |
 | `--description`, `--icon`, `--color` | Those fields |
 | `--add-slug` | Adds hashtags and keeps the existing ones |
-| `--add-member`, `--remove-member` | Membership |
+| `--join`, `--leave` | Membership: adds or removes any user, not only you. `--add-member` and `--remove-member` are other names for them |
 | `--space` | Moves it to another Space |
 | `--visible-to`, `--editable-by`, `--joinable-by` | Its policies |
 

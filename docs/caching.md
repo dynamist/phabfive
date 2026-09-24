@@ -14,7 +14,7 @@ Only the lookups that shell completion makes:
 
 | Lookup | Offered on |
 |---|---|
-| Usernames | `--assign`, `--assigned`, `--subscribe`, `--author` |
+| Usernames | `--assign`, `--assigned`, `--subscribe`, `--unsubscribe`, `--author` |
 | Project names | `--tag`, in `maniphest`, `paste` and `edit` |
 | Spaces | `--space`, in `maniphest create`, `edit` and `search` |
 | Priority names | `--priority` and the priority filters |

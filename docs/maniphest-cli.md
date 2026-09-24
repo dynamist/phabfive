@@ -80,8 +80,8 @@ policy change with no terminal to review it on are all in
 
 ### Create a Task
 
-`--tag` and `--subscribe` are repeatable and comma-separated, like every option
-that adds values, so these two are the same:
+`--tag` and `--subscribe` are repeatable and comma-separated, like every
+option that adds values, so these two are the same:
 
 ```bash
 phabfive maniphest create "Fix the importer" --tag=Backend,QA --subscribe=@alice,@bob
@@ -92,6 +92,27 @@ phabfive maniphest create "Fix the importer" --tag=Backend --tag=QA --subscribe=
 values (`--tag=Backend+QA`) still works but is deprecated and warns: in a search
 filter `+` means AND, which a list of values to add has no use for. The search
 filters below keep that grammar, where `,` is OR.
+
+### Subscribers
+
+`maniphest edit` (and `phabfive edit`) adds subscribers with `--subscribe` and
+removes them with `--unsubscribe`. Both are repeatable and comma-separated,
+and both may be given in one edit:
+
+```bash
+phabfive maniphest edit T123 --subscribe=@alice,@bob
+phabfive maniphest edit T123 T124 --unsubscribe=@me
+phabfive maniphest edit T123 --subscribe=@bob --unsubscribe=@alice
+```
+
+Only what changes is sent: a user already subscribed is not added again, and one
+who is not subscribed is not removed, so an edit that changes nothing says so and
+sends nothing. The same user in both options is refused, however each was spelled.
+`--add-subscriber` and `--remove-subscriber` are accepted as other names for the two options.
+
+Creating a task subscribes its author, who can leave with
+`--unsubscribe=@me`. The owner of a task is notified by Phorge whether
+subscribed or not.
 
 ### Add Comments
 
@@ -291,8 +312,8 @@ phabfive maniphest search "migration" --tag "Database" --column="in:In Progress"
 
 ### Naming Users
 
-Every option that takes a user - `--assigned`, `--author`, `--assign` and
-`--subscribe` here, and the same options on `paste` and `project` - takes any of:
+Every option that takes a user - `--assigned`, `--author`, `--assign`,
+`--subscribe` and `--unsubscribe` here, and the same options on `paste` and `project` - takes any of:
 
 | Spelling | Names |
 |---|---|

@@ -17,7 +17,7 @@ bare word there is a policy keyword - see phabfive.policy.
 """
 
 # phabfive imports
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import PhabfiveDataException, PhabfiveInputException
 from phabfive.me import is_me, whoami_me
 
 USER_PHID_PREFIX = "PHID-USER-"
@@ -136,8 +136,77 @@ def resolve_user_phid(phab, value, option=None):
     return resolve_user_phids(phab, [value], option=option)[value]
 
 
+def user_list_edit(kind, field, current, added=None, removed=None):
+    """The transactions that add and remove users on a list, e.g. subscribers.
+
+    Only a change is sent: a user already on the list is not added again, and
+    one who is not on it is not removed, so an edit that changes nothing sends
+    nothing.
+
+    Parameters
+    ----------
+    kind : str
+        The transaction's prefix, e.g. "subscribers" for ``subscribers.add``
+        and ``subscribers.remove``
+    field : str
+        The field the changes are listed under, e.g. "Subscribers"
+    current : iterable
+        The PHIDs on the list now
+    added, removed : dict, optional
+        What ``resolve_user_phids`` returned for the users to add and remove
+
+    Returns
+    -------
+    tuple
+        (transactions, changes)
+
+    Raises
+    ------
+    PhabfiveInputException
+        If a user is both added and removed, however each was spelled
+    """
+    added = added or {}
+    removed = removed or {}
+    current = set(current)
+
+    both = {phid for phid, _ in added.values()} & {phid for phid, _ in removed.values()}
+    if both:
+        names = [
+            username or value
+            for value, (phid, username) in added.items()
+            if phid in both
+        ]
+        raise PhabfiveInputException(
+            f"Cannot both add and remove {', '.join(dict.fromkeys(names))}"
+        )
+
+    transactions = []
+    changes = []
+    for users, verb, suffix, wanted in (
+        (added, "Added", "add", False),
+        (removed, "Removed", "remove", True),
+    ):
+        picked = {}
+        for value, (phid, username) in users.items():
+            if (phid in current) == wanted:
+                picked.setdefault(phid, username or value)
+
+        if picked:
+            transactions.append({"type": f"{kind}.{suffix}", "value": list(picked)})
+            changes.append(
+                {
+                    "field": field,
+                    "old": None,
+                    "new": f"{verb}: {', '.join(picked.values())}",
+                }
+            )
+
+    return transactions, changes
+
+
 __all__ = [
     "USER_PHID_PREFIX",
     "resolve_user_phid",
     "resolve_user_phids",
+    "user_list_edit",
 ]
