@@ -85,6 +85,12 @@ STALE_PATTERNS = (
 #: This file writes the stale spellings down in order to look for them.
 SELF = Path(__file__).name
 
+#: A changelog is a record of what changed, so an upgrade note has to be able
+#: to say what a path was renamed *from*. "The corpus moved to specs/" helps
+#: nobody who is looking for `templates/` because that is what their script
+#: still says. Exempt here rather than reworded there.
+HISTORICAL = {"CHANGELOG.md"}
+
 
 def _text_files():
     """Every text file in the tree, skipping the generated directories."""
@@ -126,7 +132,7 @@ def test_no_file_names_the_old_corpus():
     offences = []
 
     for path in TEXT_FILES:
-        if path.name == SELF:
+        if path.name == SELF or path.name in HISTORICAL:
             continue
 
         text = _read(path)
