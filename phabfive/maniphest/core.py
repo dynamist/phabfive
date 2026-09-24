@@ -64,7 +64,11 @@ from phabfive.pagination import iter_pages, search_all_pages
 from phabfive.spec.registry import constraint_for, field_by_name, fields_for
 from phabfive.spec.times import parse_time_with_unit
 from phabfive.ordering import parse_order
-from phabfive.maniphest.validators import validate_priority, validate_status
+from phabfive.maniphest.validators import (
+    validate_assignment,
+    validate_priority,
+    validate_status,
+)
 from phabfive.me import is_me
 from phabfive.options import split_list_option, value_list
 from phabfive.policy import (
@@ -2704,6 +2708,7 @@ class Maniphest(Phabfive):
         editable_by=None,
         unsubscribe=None,
         detach=None,
+        unassign=False,
     ):
         """Compute the transactions for a task edit, without applying them.
 
@@ -2746,6 +2751,8 @@ class Maniphest(Phabfive):
             Users to remove from the subscribers (@me for current user)
         detach : list, optional
             Commits to detach, spelled as for `attach`
+        unassign : bool, optional
+            Remove the assignee. Cannot be combined with `assign`.
 
         Returns
         -------
@@ -2764,6 +2771,8 @@ class Maniphest(Phabfive):
         PhabfiveDataException
             If a policy names a project or user that does not exist
         """
+        validate_assignment(assign, unassign)
+
         # Fetch current task state unless the caller already has it
         if task_data is None:
             task_data = self._get_task_data(task_id)
@@ -2917,24 +2926,23 @@ class Maniphest(Phabfive):
             current_owner = task_data["fields"]["ownerPHID"]
             if user_phid != current_owner:
                 transactions.append({"type": "owner", "value": user_phid})
-                # Get current owner username
-                current_username = None
-                if current_owner:
-                    try:
-                        result = self.phab.user.search(
-                            constraints={"phids": [current_owner]}
-                        )
-                        if result.get("data"):
-                            current_username = result["data"][0]["fields"].get(
-                                "username"
-                            )
-                    except Exception:
-                        pass
                 changes.append(
                     {
                         "field": "Assignee",
-                        "old": current_username or "(none)",
+                        "old": self._owner_username(current_owner) or "(none)",
                         "new": new_username,
+                    }
+                )
+        elif unassign:
+            # A null owner is how maniphest.edit clears the assignee
+            current_owner = task_data["fields"]["ownerPHID"]
+            if current_owner:
+                transactions.append({"type": "owner", "value": None})
+                changes.append(
+                    {
+                        "field": "Assignee",
+                        "old": self._owner_username(current_owner) or "(none)",
+                        "new": "(none)",
                     }
                 )
 
@@ -3109,6 +3117,7 @@ class Maniphest(Phabfive):
         editable_by=None,
         dry_run=False,
         task_data=None,
+        unassign=False,
     ):
         """Edit a task by ID.
 
@@ -3156,6 +3165,7 @@ class Maniphest(Phabfive):
             space=space,
             visible_to=visible_to,
             editable_by=editable_by,
+            unassign=unassign,
         )
 
         if not transactions:
@@ -3198,6 +3208,21 @@ class Maniphest(Phabfive):
                 )
         except PhabfiveAPIException as e:
             raise PhabfiveDataException(policy_lockout_message(e) or str(e))
+
+    def _owner_username(self, owner_phid):
+        """The username of `owner_phid`, or None when there is none to show.
+
+        Only labels a change, so a lookup that fails is not an error.
+        """
+        if not owner_phid:
+            return None
+        try:
+            result = self.phab.user.search(constraints={"phids": [owner_phid]})
+        except Exception:
+            return None
+        if result.get("data"):
+            return result["data"][0]["fields"].get("username")
+        return None
 
     def _format_description_preview(self, text):
         """Format description for change display.

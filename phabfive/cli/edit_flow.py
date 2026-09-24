@@ -22,6 +22,7 @@ from phabfive.constants import is_machine_format
 from phabfive.edit.formatters import generate_partition_suggestions
 from phabfive.edit.plan import EditFailure, plan_task_edits
 from phabfive.exceptions import PhabfiveValidationException
+from phabfive.maniphest.validators import validate_assignment
 from phabfive.policy import validate_policy_value
 from phabfive.retry import Pacer
 from phabfive.yaml_utils import group_objects_by_type, parse_yaml_from_stdin
@@ -57,6 +58,7 @@ def run_edit(
     tag=None,
     column=None,
     assign=None,
+    unassign=False,
     description=None,
     subscribe=None,
     unsubscribe=None,
@@ -87,6 +89,7 @@ def run_edit(
         tag (str): Board name for column context
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
+        unassign (bool): Remove the assignee
         description (str): Description text, or "" to open $EDITOR
         subscribe (list): Users to add as subscribers
         unsubscribe (list): Users to remove from the subscribers
@@ -115,6 +118,7 @@ def run_edit(
             status,
             column,
             assign,
+            unassign,
             description is not None,
             subscribe,
             unsubscribe,
@@ -136,6 +140,7 @@ def run_edit(
         # self-lockout error.
         validate_policy_value(visible_to, option="--visible-to")
         validate_policy_value(editable_by, option="--editable-by")
+        validate_assignment(assign, unassign)
 
         # Auto-detect piped input
         has_piped_input = not sys.stdin.isatty()
@@ -158,6 +163,7 @@ def run_edit(
                         tag=tag,
                         column=column,
                         assign=assign,
+                        unassign=unassign,
                         description=description,
                         subscribe=subscribe,
                         unsubscribe=unsubscribe,
@@ -206,6 +212,7 @@ def run_edit(
                         tag=tag,
                         column=column,
                         assign=assign,
+                        unassign=unassign,
                         description=description,
                         subscribe=subscribe,
                         unsubscribe=unsubscribe,
@@ -257,6 +264,7 @@ def run_edit(
                     tag=tag,
                     column=column,
                     assign=assign,
+                    unassign=unassign,
                     description=description,
                     subscribe=subscribe,
                     unsubscribe=unsubscribe,
@@ -309,6 +317,7 @@ def _edit_task_single(
     tag=None,
     column=None,
     assign=None,
+    unassign=False,
     description=None,
     subscribe=None,
     unsubscribe=None,
@@ -334,6 +343,7 @@ def _edit_task_single(
         tag (str): Board name for column context
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
+        unassign (bool): Remove the assignee
         description (str): Description text, "" to clear, "-" to read from stdin
         subscribe (list): Users to add as subscribers
         unsubscribe (list): Users to remove from the subscribers
@@ -398,6 +408,7 @@ def _edit_task_single(
                 tag=tag,
                 column=column,
                 assign=assign,
+                unassign=unassign,
                 description=final_description,
                 subscribe=subscribe,
                 unsubscribe=unsubscribe,
@@ -422,6 +433,7 @@ def _edit_task_single(
                 tag=tag,
                 column=column,
                 assign=assign,
+                unassign=unassign,
                 description=final_description,
                 subscribe=subscribe,
                 unsubscribe=unsubscribe,
@@ -526,6 +538,7 @@ def edit_tasks_batch(
     tag=None,
     column=None,
     assign=None,
+    unassign=False,
     description=None,
     subscribe=None,
     unsubscribe=None,
@@ -554,6 +567,7 @@ def edit_tasks_batch(
         tag (str): Board name for column context
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
+        unassign (bool): Remove the assignee
         description (str): Description text to set
         subscribe (list): Users to add as subscribers
         unsubscribe (list): Users to remove from the subscribers
@@ -591,6 +605,7 @@ def edit_tasks_batch(
             tag=tag,
             column=column,
             assign=assign,
+            unassign=unassign,
             description=description,
             subscribe=subscribe,
             unsubscribe=unsubscribe,

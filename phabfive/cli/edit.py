@@ -66,6 +66,11 @@ def edit_command(
         help="Set assignee (username, @me for yourself, or a user PHID)",
         autocompletion=complete_user,
     ),
+    unassign: bool = typer.Option(
+        False,
+        "--unassign",
+        help="Remove the assignee",
+    ),
     description: Optional[str] = typer.Option(
         None,
         "--description",
@@ -180,6 +185,7 @@ def edit_command(
         phabfive maniphest search --tag "Backend" | phabfive edit --column=Done
         phabfive edit T123 --tag="Sprint" --column=forward --comment="Moving forward"
         phabfive edit T123 T124 --space=Archive
+        phabfive edit T123 --unassign
         phabfive edit T123 --visible-to=public --editable-by='#infra'
     """
     try:
@@ -204,6 +210,7 @@ def edit_command(
         tag=tag,
         column=column,
         assign=assign,
+        unassign=unassign,
         description=description,
         subscribe=[*(subscribe or []), *(add_subscriber or [])],
         unsubscribe=[*(unsubscribe or []), *(remove_subscriber or [])],

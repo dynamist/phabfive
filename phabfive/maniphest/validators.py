@@ -4,9 +4,29 @@
 
 import logging
 
-from phabfive.exceptions import PhabfiveConfigException
+from phabfive.exceptions import PhabfiveConfigException, PhabfiveInputException
 
 log = logging.getLogger(__name__)
+
+
+def validate_assignment(assign, unassign):
+    """
+    Refuse an edit that both sets and removes the assignee.
+
+    Parameters
+    ----------
+    assign : str or None
+        The user to assign
+    unassign : bool
+        Whether to remove the assignee
+
+    Raises
+    ------
+    PhabfiveInputException
+        If both are given
+    """
+    if assign and unassign:
+        raise PhabfiveInputException("--assign and --unassign cannot be used together")
 
 
 def validate_priority(priority):
