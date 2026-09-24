@@ -361,12 +361,44 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: [build, verify-wheel, build-executables]
+    # The mirror of publish-pypi's condition: a candidate goes to TestPyPI and
+    # nowhere else, a final goes to PyPI and nowhere else. Without this an -rc
+    # tag published nowhere at all, so the packaging half of a candidate - the
+    # wheel, the metadata, the console script as a user installs it - was never
+    # exercised before the final tag uploaded it to PyPI irreversibly (#509).
+    #
+    # scripts/smoke.py already installs the wheel and sdist into a clean venv
+    # with plain pip, so what this adds is the upload and the resolve: name
+    # normalisation, a filename already taken, a dependency that will not
+    # resolve from an index. None of those are visible to a local install.
+    if: ${{ contains(github.ref_name, '-rc') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/phabfive
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
   github-release:
     name: Create GitHub Release
-    needs: [check-version, build, verify-wheel, publish-pypi, build-executables]
+    needs: [check-version, build, verify-wheel, publish-pypi, publish-testpypi, build-executables]
     # always() means an unlisted job is not a gate at all -- every job this
     # release depends on has to be named here explicitly.
-    if: ${{ always() && needs.check-version.result == 'success' && needs.build.result == 'success' && needs.verify-wheel.result == 'success' && needs.build-executables.result == 'success' && (needs.publish-pypi.result == 'success' || needs.publish-pypi.result == 'skipped') }}
+    if: ${{ always() && needs.check-version.result == 'success' && needs.build.result == 'success' && needs.verify-wheel.result == 'success' && needs.build-executables.result == 'success' && (needs.publish-pypi.result == 'success' || needs.publish-pypi.result == 'skipped') && (needs.publish-testpypi.result == 'success' || needs.publish-testpypi.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
