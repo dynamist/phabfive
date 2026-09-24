@@ -606,16 +606,30 @@ def project_edit(
         "--add-slug",
         help="Add a hashtag (repeatable, or comma-separated)",
     ),
+    join: Optional[List[str]] = typer.Option(
+        None,
+        "--join",
+        help="Add a member (@user, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list_filter,
+    ),
     add_member: Optional[List[str]] = typer.Option(
         None,
         "--add-member",
-        help="Add a member (@user, @me or user PHID; repeatable, or comma-separated)",
+        hidden=True,
+        help="Alias for --join",
+        autocompletion=complete_user_list_filter,
+    ),
+    leave: Optional[List[str]] = typer.Option(
+        None,
+        "--leave",
+        help="Remove a member (@user, @me or user PHID; repeatable, or comma-separated)",
         autocompletion=complete_user_list_filter,
     ),
     remove_member: Optional[List[str]] = typer.Option(
         None,
         "--remove-member",
-        help="Remove a member (@user, @me or user PHID; repeatable, or comma-separated)",
+        hidden=True,
+        help="Alias for --leave",
         autocompletion=complete_user_list_filter,
     ),
     space: Optional[str] = typer.Option(
@@ -637,7 +651,7 @@ def project_edit(
 ) -> None:
     """Edit a project.
 
-    Only what would change is sent and listed: adding a member who is
+    Only what would change is sent and listed: joining a member who is
     already in, or setting a policy the project already has, is no change.
     Adding a hashtag keeps every hashtag the project already has.
 
@@ -647,8 +661,8 @@ def project_edit(
     \b
     Examples:
         phabfive project edit '#platform' --name="Platform Team"
-        phabfive project edit '#platform' --add-member=@viola.larsson,@mikael.wallin
-        phabfive project edit '#platform' --remove-member=@me
+        phabfive project edit '#platform' --join=@viola.larsson,@mikael.wallin
+        phabfive project edit '#platform' --leave=@me
         phabfive project edit '#platform' --add-slug=plat --color=green
         phabfive project edit '#humans' --editable-by='#humans' --dry-run
     """
@@ -660,7 +674,9 @@ def project_edit(
         icon,
         color,
         add_slug,
+        join,
         add_member,
+        leave,
         remove_member,
         space,
         visible_to,
@@ -697,8 +713,8 @@ def project_edit(
             icon=icon,
             color=color,
             add_slugs=split_list_option(add_slug),
-            add_members=split_list_option(add_member),
-            remove_members=split_list_option(remove_member),
+            add_members=split_list_option([*(join or []), *(add_member or [])]),
+            remove_members=split_list_option([*(leave or []), *(remove_member or [])]),
             space=space,
             visible_to=visible_to,
             editable_by=editable_by,

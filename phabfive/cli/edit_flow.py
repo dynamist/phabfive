@@ -59,6 +59,7 @@ def run_edit(
     assign=None,
     description=None,
     subscribe=None,
+    unsubscribe=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -85,7 +86,8 @@ def run_edit(
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
         description (str): Description text, or "" to open $EDITOR
-        subscribe (list): Usernames to add as subscribers
+        subscribe (list): Users to add as subscribers
+        unsubscribe (list): Users to remove from the subscribers
         comment (str): Comment to add
         space (str): Space to move the object to
         visible_to (str): Who can see it, the --visible-to policy
@@ -111,6 +113,7 @@ def run_edit(
             assign,
             description is not None,
             subscribe,
+            unsubscribe,
             comment,
             space,
             visible_to,
@@ -151,6 +154,7 @@ def run_edit(
                         assign=assign,
                         description=description,
                         subscribe=subscribe,
+                        unsubscribe=unsubscribe,
                         comment=comment,
                         space=space,
                         visible_to=visible_to,
@@ -196,6 +200,7 @@ def run_edit(
                         assign=assign,
                         description=description,
                         subscribe=subscribe,
+                        unsubscribe=unsubscribe,
                         comment=comment,
                         space=space,
                         visible_to=visible_to,
@@ -244,6 +249,7 @@ def run_edit(
                     assign=assign,
                     description=description,
                     subscribe=subscribe,
+                    unsubscribe=unsubscribe,
                     comment=comment,
                     space=space,
                     visible_to=visible_to,
@@ -293,6 +299,7 @@ def _edit_task_single(
     assign=None,
     description=None,
     subscribe=None,
+    unsubscribe=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -314,7 +321,8 @@ def _edit_task_single(
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
         description (str): Description text, "" to clear, "-" to read from stdin
-        subscribe (list): Usernames to add as subscribers
+        subscribe (list): Users to add as subscribers
+        unsubscribe (list): Users to remove from the subscribers
         comment (str): Comment to add
         space (str): Space to move the task to
         visible_to (str): Who can see it, the --visible-to policy
@@ -376,6 +384,7 @@ def _edit_task_single(
                 assign=assign,
                 description=final_description,
                 subscribe=subscribe,
+                unsubscribe=unsubscribe,
                 comment=comment,
                 space=space,
                 visible_to=visible_to,
@@ -397,6 +406,7 @@ def _edit_task_single(
                 assign=assign,
                 description=final_description,
                 subscribe=subscribe,
+                unsubscribe=unsubscribe,
                 comment=comment,
                 space=space,
                 visible_to=visible_to,
@@ -498,6 +508,7 @@ def edit_tasks_batch(
     assign=None,
     description=None,
     subscribe=None,
+    unsubscribe=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -522,7 +533,8 @@ def edit_tasks_batch(
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
         description (str): Description text to set
-        subscribe (list): Usernames to add as subscribers
+        subscribe (list): Users to add as subscribers
+        unsubscribe (list): Users to remove from the subscribers
         comment (str): Comment to add
         space (str): Space to move the tasks to
         visible_to (str): Who can see it, the --visible-to policy
@@ -557,6 +569,7 @@ def edit_tasks_batch(
             assign=assign,
             description=description,
             subscribe=subscribe,
+            unsubscribe=unsubscribe,
             comment=comment,
             space=space,
             visible_to=visible_to,

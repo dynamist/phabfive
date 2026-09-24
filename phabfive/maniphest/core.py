@@ -74,7 +74,7 @@ from phabfive.policy import (
 )
 from phabfive.project_filters import parse_project_patterns
 from phabfive.retry import idempotent_writes, is_idempotent_edit
-from phabfive.users import resolve_user_phids as resolve_users
+from phabfive.users import resolve_user_phids as resolve_users, user_list_edit
 
 log = logging.getLogger(__name__)
 
@@ -2643,6 +2643,7 @@ class Maniphest(Phabfive):
         space=None,
         visible_to=None,
         editable_by=None,
+        unsubscribe=None,
     ):
         """Compute the transactions for a task edit, without applying them.
 
@@ -2668,7 +2669,7 @@ class Maniphest(Phabfive):
         description : str, optional
             Description text to set
         subscribe : list, optional
-            Usernames to add as subscribers (@me for current user)
+            Users to add as subscribers (@me for current user)
         comment : str, optional
             Comment to add
         space : str, optional
@@ -2679,6 +2680,8 @@ class Maniphest(Phabfive):
         editable_by : str, optional
             New edit policy. Both are named after the labels Phorge's own
             form uses.
+        unsubscribe : list, optional
+            Users to remove from the subscribers (@me for current user)
 
         Returns
         -------
@@ -2890,39 +2893,22 @@ class Maniphest(Phabfive):
             changes.append({"field": "Comment", "old": None, "new": "Added"})
 
         # Handle subscribers
-        if subscribe:
-            # Get current subscribers
-            current_subscribers = set(
+        if subscribe or unsubscribe:
+            sub_transactions, sub_changes = user_list_edit(
+                "subscribers",
+                "Subscribers",
                 task_data.get("attachments", {})
                 .get("subscribers", {})
-                .get("subscriberPHIDs", [])
+                .get("subscriberPHIDs", []),
+                added=self._resolve_users(
+                    split_list_option(subscribe), option="--subscribe"
+                ),
+                removed=self._resolve_users(
+                    split_list_option(unsubscribe), option="--unsubscribe"
+                ),
             )
-
-            subscriber_phids = []
-            subscriber_names = []
-            users = self._resolve_users(
-                split_list_option(subscribe), option="--subscribe"
-            )
-            for value, (user_phid, username) in users.items():
-                # Only add if not already subscribed
-                if (
-                    user_phid not in current_subscribers
-                    and user_phid not in subscriber_phids
-                ):
-                    subscriber_phids.append(user_phid)
-                    subscriber_names.append(username or value)
-
-            if subscriber_phids:
-                transactions.append(
-                    {"type": "subscribers.add", "value": subscriber_phids}
-                )
-                changes.append(
-                    {
-                        "field": "Subscribers",
-                        "old": None,
-                        "new": f"Added: {', '.join(subscriber_names)}",
-                    }
-                )
+            transactions.extend(sub_transactions)
+            changes.extend(sub_changes)
 
         # Handle space
         if space:

@@ -1317,8 +1317,8 @@ class Project(Phabfive):
         current_members = set(project_member_phids(project))
 
         for values, kind, verb, wanted, option in (
-            (add_members, "members.add", "Added", False, "--add-member"),
-            (remove_members, "members.remove", "Removed", True, "--remove-member"),
+            (add_members, "members.add", "Added", False, "--join"),
+            (remove_members, "members.remove", "Removed", True, "--leave"),
         ):
             if not values:
                 continue

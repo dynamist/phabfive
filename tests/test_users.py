@@ -9,9 +9,9 @@ import pytest
 from typer.testing import CliRunner
 
 from phabfive.cli.paste import paste_app
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import PhabfiveDataException, PhabfiveInputException
 from phabfive.maniphest.core import Maniphest
-from phabfive.users import resolve_user_phid, resolve_user_phids
+from phabfive.users import resolve_user_phid, resolve_user_phids, user_list_edit
 
 runner = CliRunner()
 
@@ -170,3 +170,169 @@ class TestPaste:
         assert result.exit_code == 0, result.output
         kwargs = instance.create_paste_from_content.call_args.kwargs
         assert kwargs["subscribers"] == ["alice", "bob"]
+
+
+def _task(subscribers):
+    return {
+        "id": 42,
+        "phid": "PHID-TASK-42",
+        "fields": {
+            "name": "A task",
+            "status": {"name": "Open", "value": "open"},
+            "priority": {"name": "High", "value": 80},
+            "description": {"raw": ""},
+            "ownerPHID": None,
+        },
+        "attachments": {
+            "columns": {"boards": {}},
+            "projects": {"projectPHIDs": []},
+            "subscribers": {"subscriberPHIDs": list(subscribers)},
+        },
+    }
+
+
+class TestUserListEdit:
+    """Adding and removing users on a list sends only what changes."""
+
+    def _edit(self, current, add=(), remove=()):
+        phab = _phab()
+        return user_list_edit(
+            "subscribers",
+            "Subscribers",
+            current,
+            added=resolve_user_phids(phab, list(add)),
+            removed=resolve_user_phids(phab, list(remove)),
+        )
+
+    def test_nothing_asked_is_nothing_sent(self):
+        assert self._edit(["PHID-USER-alice"]) == ([], [])
+
+    def test_only_a_subscriber_is_removed(self):
+        transactions, changes = self._edit(["PHID-USER-alice"], remove=["alice", "bob"])
+
+        assert transactions == [
+            {"type": "subscribers.remove", "value": ["PHID-USER-alice"]}
+        ]
+        assert changes == [
+            {"field": "Subscribers", "old": None, "new": "Removed: alice"}
+        ]
+
+    def test_only_a_non_subscriber_is_added(self):
+        transactions, _ = self._edit(["PHID-USER-alice"], add=["alice", "@bob"])
+
+        assert transactions == [{"type": "subscribers.add", "value": ["PHID-USER-bob"]}]
+
+    def test_add_and_remove_in_one_edit(self):
+        transactions, changes = self._edit(
+            ["PHID-USER-alice"], add=["bob"], remove=["alice"]
+        )
+
+        assert transactions == [
+            {"type": "subscribers.add", "value": ["PHID-USER-bob"]},
+            {"type": "subscribers.remove", "value": ["PHID-USER-alice"]},
+        ]
+        assert [change["new"] for change in changes] == [
+            "Added: bob",
+            "Removed: alice",
+        ]
+
+    def test_two_spellings_of_one_user_are_sent_once(self):
+        transactions, _ = self._edit([], add=["alice", "PHID-USER-alice", "@alice"])
+
+        assert transactions == [
+            {"type": "subscribers.add", "value": ["PHID-USER-alice"]}
+        ]
+
+    def test_the_same_user_added_and_removed_is_refused(self):
+        """However each was spelled: a name and a PHID are one user."""
+        with pytest.raises(PhabfiveInputException, match="Cannot both add and remove"):
+            self._edit([], add=["alice"], remove=["PHID-USER-alice"])
+
+
+class TestTaskSubscribers:
+    def test_remove(self):
+        maniphest = _maniphest(_phab())
+
+        transactions, changes = maniphest.build_task_edit(
+            "42",
+            _task(["PHID-USER-alice", "PHID-USER-caller"]),
+            unsubscribe="@me,bob",
+        )
+
+        assert transactions == [
+            {"type": "subscribers.remove", "value": ["PHID-USER-caller"]}
+        ]
+        assert changes[-1]["new"] == "Removed: caller"
+
+    def test_removing_a_non_subscriber_changes_nothing(self):
+        maniphest = _maniphest(_phab())
+
+        transactions, _ = maniphest.build_task_edit(
+            "42", _task([]), unsubscribe=["alice"]
+        )
+
+        assert transactions == []
+
+    def test_add_and_remove_the_same_user_is_refused(self):
+        maniphest = _maniphest(_phab())
+
+        with pytest.raises(PhabfiveInputException):
+            maniphest.build_task_edit(
+                "42", _task([]), subscribe=["alice"], unsubscribe=["@alice"]
+            )
+
+
+class TestPasteSubscribers:
+    def _paste(self, subscribers):
+        from phabfive.paste import Paste
+
+        with patch("phabfive.paste.core.Phabfive.__init__", return_value=None):
+            paste = Paste()
+        paste.phab = _phab()
+        paste.phab.paste.search.return_value = {
+            "data": [
+                {
+                    "id": 7,
+                    "phid": "PHID-PSTE-7",
+                    "fields": {"title": "Notes", "language": "text"},
+                    "attachments": {
+                        "content": {"content": "hello"},
+                        "subscribers": {"subscriberPHIDs": list(subscribers)},
+                    },
+                }
+            ],
+            "cursor": {"after": None},
+        }
+        return paste
+
+    def test_an_edit_that_changes_nothing_sends_nothing(self):
+        paste = self._paste(["PHID-USER-alice"])
+
+        paste.edit_paste(7, subscribers=["@alice"], unsubscribers=["bob"])
+
+        paste.phab.paste.edit.assert_not_called()
+
+    def test_edit_diffs_against_the_current_subscribers(self):
+        paste = self._paste(["PHID-USER-alice"])
+
+        result = paste.edit_paste(7, subscribers=["bob"], unsubscribers=["alice"])
+
+        paste.phab.paste.edit.assert_called_once_with(
+            objectIdentifier="P7",
+            transactions=[
+                {"type": "subscribers.add", "value": ["PHID-USER-bob"]},
+                {"type": "subscribers.remove", "value": ["PHID-USER-alice"]},
+            ],
+        )
+        assert [change["new"] for change in result["changes"]] == [
+            "Added: bob",
+            "Removed: alice",
+        ]
+
+    def test_nothing_to_change_says_so(self):
+        paste = self._paste([])
+
+        result = paste.edit_paste(7, unsubscribers=["alice"], dry_run=True)
+
+        assert result["changes"] == []
+        assert result["message"] == "No changes (already at target state)"

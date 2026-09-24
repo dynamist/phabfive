@@ -211,6 +211,7 @@ class TestOptionsAlongsideTemplate:
             (["--assign", "alice"], "--assign"),
             (["--status", "resolved"], "--status"),
             (["--priority", "high"], "--priority"),
+            (["--add-subscriber", "alice"], "--add-subscriber"),
             (["--subscribe", "alice"], "--subscribe"),
             (["--space", "S3"], "--space"),
             (["--visible-to", "admin"], "--visible-to"),

@@ -298,7 +298,14 @@ def create(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
+        help="Add a subscriber (username, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list,
+    ),
+    add_subscriber: Optional[List[str]] = typer.Option(
+        None,
+        "--add-subscriber",
+        hidden=True,
+        help="Alias for --subscribe",
         autocompletion=complete_user_list,
     ),
     visible_to: Optional[str] = typer.Option(
@@ -437,6 +444,7 @@ def create(
 
     # Usernames, @usernames, @me or user PHIDs, sent as the usernames they
     # name - which is also what the preview shows
+    subscribe = [*(subscribe or []), *(add_subscriber or [])]
     subscriber_names = []
     if subscribe:
         users = resolve_user_phids(
@@ -588,7 +596,27 @@ def edit(
     subscribe: Optional[List[str]] = typer.Option(
         None,
         "--subscribe",
-        help="Add subscriber (username, @me or user PHID, repeatable, comma-separated)",
+        help="Add a subscriber (username, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list,
+    ),
+    add_subscriber: Optional[List[str]] = typer.Option(
+        None,
+        "--add-subscriber",
+        hidden=True,
+        help="Alias for --subscribe",
+        autocompletion=complete_user_list,
+    ),
+    unsubscribe: Optional[List[str]] = typer.Option(
+        None,
+        "--unsubscribe",
+        help="Remove a subscriber (username, @me or user PHID; repeatable, or comma-separated)",
+        autocompletion=complete_user_list,
+    ),
+    remove_subscriber: Optional[List[str]] = typer.Option(
+        None,
+        "--remove-subscriber",
+        hidden=True,
+        help="Alias for --unsubscribe",
         autocompletion=complete_user_list,
     ),
     dry_run: bool = typer.Option(
@@ -617,6 +645,7 @@ def edit(
         echo "new content" | phabfive paste edit P1 --content=-
         phabfive paste edit P1 --content  # opens $EDITOR with current content
         phabfive paste edit P1 --subscribe=@me --tag=project
+        phabfive paste edit P1 --unsubscribe=@me
         phabfive paste edit P1 "Test" --dry-run
     """
     from phabfive.cli.editor import confirm_text_change, edit_text
@@ -676,17 +705,6 @@ def edit(
     elif content is not None:
         final_content = content
 
-    # Usernames, @usernames, @me or user PHIDs, sent as the usernames they
-    # name - which is also what the preview shows
-    subscriber_names = []
-    if subscribe:
-        users = resolve_user_phids(
-            paste.phab, split_list_option(subscribe), option="--subscribe"
-        )
-        subscriber_names = list(
-            dict.fromkeys(username or phid for phid, username in users.values())
-        )
-
     # Handle tags
     tag_list = split_list_option(tag) or None
 
@@ -714,7 +732,11 @@ def edit(
         content=final_content,
         language=language,
         tags=tag_list,
-        subscribers=subscriber_names if subscriber_names else None,
+        subscribers=split_list_option([*(subscribe or []), *(add_subscriber or [])]),
+        unsubscribers=split_list_option(
+            [*(unsubscribe or []), *(remove_subscriber or [])]
+        ),
+        current_subscribers=current_paste.get("subscriberPHIDs"),
         dry_run=dry_run,
     )
 
@@ -736,7 +758,7 @@ def edit(
             else:
                 print(f"  {change['field']}: {change['new']}", file=preview)
         if not result.get("changes"):
-            print("  No changes specified", file=preview)
+            print(f"  {result.get('message', 'No changes specified')}", file=preview)
         return
 
     if result.get("changes"):

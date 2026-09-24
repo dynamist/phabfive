@@ -75,11 +75,21 @@ def _by_type(transactions):
 NOT_SPEC_FLAGS = frozenset({"--dry-run", "--interactive", "--yes", "--help"})
 
 
-def _flags(app, command):
-    """Every long flag one command actually offers."""
+def _flags(app, command, hidden=True):
+    """Every long flag one command actually offers.
+
+    `hidden=False` leaves out hidden options: an alias such as `--subscribe`
+    for `--add-subscriber` spells a key that is declared already.
+    """
     found = get_command(app).commands[command]
 
-    return {opt for param in found.params for opt in param.opts if opt.startswith("--")}
+    return {
+        opt
+        for param in found.params
+        if hidden or not getattr(param, "hidden", False)
+        for opt in param.opts
+        if opt.startswith("--")
+    }
 
 
 # --------------------------------------------------------------------------
@@ -148,7 +158,7 @@ class TestTheDeclaredKeys:
         `--dry-run` and `--yes`.
         """
         for app, object_type in ((project_app, "project"), (paste_app, "paste")):
-            offered = _flags(app, "create") - NOT_SPEC_FLAGS
+            offered = _flags(app, "create", hidden=False) - NOT_SPEC_FLAGS
 
             assert offered <= cli_flags(object_type, "create"), object_type
 
@@ -337,8 +347,8 @@ class TestProjectCreateTransactions:
     def test_a_collection_is_filled_with_add_and_never_with_set(self):
         """`slugs` is the one exception, and it is why a spec may not anchor.
 
-        `project.edit` has `members.add` and `watchers.add` but no
-        `slugs.add`: the transaction replaces the whole list. That is safe
+        `project.edit` has `members.add` but no `slugs.add`: the
+        transaction replaces the whole list. That is safe
         only on an object being created, which is exactly what this builds.
         """
         project = _project()

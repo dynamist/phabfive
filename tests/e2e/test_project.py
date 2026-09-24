@@ -102,10 +102,10 @@ def test_edit_adds_and_removes_members_and_keeps_hashtags(
         "project",
         "edit",
         hashtag,
-        "--add-member=@viola.larsson,@mikael.wallin",
+        "--join=@viola.larsson,@mikael.wallin",
         f"--add-slug={second}",
     )
-    phabfive("project", "edit", hashtag, "--remove-member=@mikael.wallin")
+    phabfive("project", "edit", hashtag, "--leave=@mikael.wallin")
 
     [shown] = phabfive("project", "show", hashtag, "--show-members", json_output=True)
     assert [member["Username"] for member in shown["Members"]] == ["viola.larsson"]

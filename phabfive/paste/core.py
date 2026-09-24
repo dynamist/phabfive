@@ -26,6 +26,7 @@ from phabfive.options import value_list
 from phabfive.ordering import parse_order, sort_records
 from phabfive.pagination import search_all_pages
 from phabfive.paste.formatters import build_paste_display_data
+from phabfive.users import resolve_user_phids, user_list_edit
 
 # 3rd party imports
 
@@ -642,7 +643,7 @@ class Paste(Phabfive):
         """
         pastes = self.get_pastes(
             constraints={"ids": [paste_id]},
-            attachments={"content": True},
+            attachments={"content": True, "subscribers": True},
         )
 
         if not pastes:
@@ -657,6 +658,9 @@ class Paste(Phabfive):
             "content": paste.get("attachments", {})
             .get("content", {})
             .get("content", ""),
+            "subscriberPHIDs": paste.get("attachments", {})
+            .get("subscribers", {})
+            .get("subscriberPHIDs", []),
         }
 
     def edit_paste(
@@ -668,6 +672,8 @@ class Paste(Phabfive):
         tags=None,
         subscribers=None,
         dry_run=False,
+        unsubscribers=None,
+        current_subscribers=None,
     ):
         """Edit an existing paste.
 
@@ -677,8 +683,13 @@ class Paste(Phabfive):
             content: New content (None to keep current)
             language: New language (None to keep current)
             tags: List of project tags to add
-            subscribers: List of subscriber usernames to add
+            subscribers: Users to subscribe: usernames, @usernames, @me or
+                user PHIDs. Only those not subscribed already are sent
             dry_run: If True, return changes without applying
+            unsubscribers: Users to unsubscribe, spelled the same way. Only
+                those subscribed now are sent
+            current_subscribers: PHIDs of the paste's subscribers, when the
+                caller has them already; fetched when needed otherwise
 
         Returns:
             dict with changes made or to be made
@@ -703,17 +714,32 @@ class Paste(Phabfive):
             transactions.append({"type": "projects.add", "value": tags})
             changes.append({"field": "Tags", "new": f"Added: {', '.join(tags)}"})
 
-        if subscribers:
-            transactions.append({"type": "subscribers.add", "value": subscribers})
-            changes.append(
-                {"field": "Subscribers", "new": f"Added: {', '.join(subscribers)}"}
+        if subscribers or unsubscribers:
+            if current_subscribers is None:
+                current_subscribers = self.get_paste_data(paste_id)["subscriberPHIDs"]
+            sub_transactions, sub_changes = user_list_edit(
+                "subscribers",
+                "Subscribers",
+                current_subscribers,
+                added=resolve_user_phids(
+                    self.phab, subscribers or [], option="--subscribe"
+                ),
+                removed=resolve_user_phids(
+                    self.phab, unsubscribers or [], option="--unsubscribe"
+                ),
             )
+            transactions.extend(sub_transactions)
+            changes.extend(sub_changes)
 
         if not transactions:
             return {
                 "paste_id": paste_id,
                 "changes": [],
-                "message": "No changes specified",
+                # Subscribers asked for but all already where they were asked
+                # to be are a change specified and found made
+                "message": "No changes (already at target state)"
+                if subscribers or unsubscribers
+                else "No changes specified",
             }
 
         if dry_run:

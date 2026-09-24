@@ -33,6 +33,40 @@ def test_edit_status(phabfive, create_task):
     assert task["Task"]["Status"] == "Resolved"
 
 
+def _subscribers(conduit, method, object_id):
+    """The usernames subscribed to one task or paste, read off Conduit."""
+    [record] = conduit(
+        method, **{"constraints[ids][0]": object_id, "attachments[subscribers]": 1}
+    )["data"]
+    phids = record["attachments"]["subscribers"]["subscriberPHIDs"]
+    if not phids:
+        return set()
+    users = conduit(
+        "user.search", **{f"constraints[phids][{i}]": p for i, p in enumerate(phids)}
+    )["data"]
+    return {user["fields"]["username"] for user in users}
+
+
+def test_edit_adds_and_removes_task_subscribers(phabfive, conduit, create_task):
+    task_id, _title = create_task("--add-subscriber=@viola.larsson")
+    number = int(task_id[1:])
+    # Creating a task subscribes its author
+    assert _subscribers(conduit, "maniphest.search", number) == {
+        "admin",
+        "viola.larsson",
+    }
+
+    phabfive(
+        "maniphest",
+        "edit",
+        task_id,
+        "--add-subscriber=@mikael.wallin",
+        "--remove-subscriber=@me,@viola.larsson",
+    )
+
+    assert _subscribers(conduit, "maniphest.search", number) == {"mikael.wallin"}
+
+
 def test_search_by_tag(phabfive, create_task):
     _task_id, title = create_task("--tag", "QA")
     tasks = phabfive("maniphest", "search", "--tag", "QA", json_output=True)
@@ -512,6 +546,30 @@ def test_paste_search_and_show_emit_the_same_record(phabfive):
     assert listed == shown
     assert shown["Paste"]["Name"] == title
     assert list(shown) == ["Link", "Paste", "Space"]
+
+
+def test_paste_edit_adds_and_removes_subscribers(phabfive, conduit):
+    [created] = phabfive(
+        "paste",
+        "create",
+        f"e2e paste {uuid.uuid4().hex[:8]}",
+        "--content=line one",
+        "--add-subscriber=@viola.larsson",
+        "--yes",
+        json_output=True,
+    )
+    monogram = urlparse(created["Link"]).path.strip("/")
+    number = int(monogram[1:])
+
+    phabfive(
+        "paste",
+        "edit",
+        monogram,
+        "--add-subscriber=@mikael.wallin",
+        "--unsubscribe=@viola.larsson",
+    )
+
+    assert _subscribers(conduit, "paste.search", number) == {"mikael.wallin"}
 
 
 # --------------------------------------------------------------------------
