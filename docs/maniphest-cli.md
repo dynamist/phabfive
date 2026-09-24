@@ -91,6 +91,18 @@ values (`--tag=Backend+QA`) still works but is deprecated and warns: in a search
 filter `+` means AND, which a list of values to add has no use for. The search
 filters below keep that grammar, where `,` is OR.
 
+### Assignee
+
+`maniphest edit` (and `phabfive edit`) sets the assignee with `--assign` and
+removes it with `--unassign`. The two cannot be combined, and unassigning a task
+that has no assignee changes nothing:
+
+```bash
+phabfive maniphest edit T123 --assign=@alice
+phabfive maniphest edit T123 T124 --unassign
+phabfive --format=yaml maniphest search --assigned=@me | phabfive edit --unassign
+```
+
 ### Subscribers
 
 `maniphest edit` (and `phabfive edit`) adds subscribers with `--subscribe` and

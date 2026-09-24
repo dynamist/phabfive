@@ -987,6 +987,11 @@ def edit(
         help="Set assignee (username, @me for yourself, or a user PHID)",
         autocompletion=complete_user,
     ),
+    unassign: bool = typer.Option(
+        False,
+        "--unassign",
+        help="Remove the assignee",
+    ),
     description: Optional[str] = typer.Option(
         None,
         "--description",
@@ -1100,6 +1105,7 @@ def edit(
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
         phabfive maniphest edit T123 --space=S3
         phabfive maniphest edit T123 --subscribe=@me --unsubscribe=alice
+        phabfive maniphest edit T123 --unassign
         phabfive maniphest edit T123 --visible-to=public --editable-by='#infra'
     """
     # Greedy monogram parsing: leading args that are task monograms (or
@@ -1157,6 +1163,7 @@ def edit(
         tag=tag,
         column=column,
         assign=assign,
+        unassign=unassign,
         description=description,
         subscribe=[*(subscribe or []), *(add_subscriber or [])],
         unsubscribe=[*(unsubscribe or []), *(remove_subscriber or [])],

@@ -68,6 +68,25 @@ def test_edit_adds_and_removes_task_subscribers(phabfive, conduit, create_task):
     assert _subscribers(conduit, "maniphest.search", number) == {"mikael.wallin"}
 
 
+def test_edit_unassigns_a_task(phabfive, conduit, create_task):
+    """maniphest.edit takes a null owner as "unassign", which a mocked client
+    would accept whatever it meant."""
+    task_id, _title = create_task("--assign=@viola.larsson")
+    number = int(task_id[1:])
+
+    def owner():
+        [record] = conduit("maniphest.search", **{"constraints[ids][0]": number})[
+            "data"
+        ]
+        return record["fields"]["ownerPHID"]
+
+    assert owner() is not None
+
+    phabfive("edit", task_id, "--unassign", "--yes")
+
+    assert owner() is None
+
+
 def test_search_by_tag(phabfive, create_task):
     _task_id, title = create_task("--tag", "QA")
     tasks = phabfive("maniphest", "search", "--tag", "QA", json_output=True)

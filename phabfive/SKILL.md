@@ -333,6 +333,9 @@ An option that adds several values - `--tag` and `--subscribe` on `maniphest cre
 `--tag=Backend,QA` is `--tag=Backend --tag=QA`. Use `,`, not `+`, which is deprecated there
 and means AND only in a search filter.
 
+`--assign` sets the assignee and `--unassign` removes it (`phabfive edit T123 --unassign`); the two
+cannot be combined.
+
 `maniphest edit` and `paste edit` take `--subscribe` and `--unsubscribe`, and send
 only what changes (`--add-subscriber` and `--remove-subscriber` are hidden aliases):
 

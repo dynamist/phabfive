@@ -22,6 +22,7 @@ from phabfive.edit.validators import (
     validate_board_column_context,
 )
 from phabfive.exceptions import PhabfiveException, PhabfiveValidationException
+from phabfive.maniphest.validators import validate_assignment
 from phabfive.policy import resolve_policy_value, validate_policy_value
 
 
@@ -223,6 +224,7 @@ def plan_task_edits(
     tag=None,
     column=None,
     assign=None,
+    unassign=False,
     description=None,
     subscribe=None,
     unsubscribe=None,
@@ -259,12 +261,15 @@ def plan_task_edits(
         When a policy value is not one phabfive understands. Checked before
         any task is fetched, because the server would read a typo as a policy
         nobody satisfies and answer with a self-lockout.
+    PhabfiveInputException
+        When `assign` and `unassign` are both given.
     PhabfiveValidationException
         When any task cannot be fetched or its board context is ambiguous.
         Nothing is planned for any task.
     """
     validate_policy_value(visible_to, option="--visible-to")
     validate_policy_value(editable_by, option="--editable-by")
+    validate_assignment(assign, unassign)
 
     validated = _validate(maniphest, task_ids, column, tag, task_data or {})
 
@@ -281,6 +286,7 @@ def plan_task_edits(
                 board_phid=task["board_phid"],
                 column=column,
                 assign=assign,
+                unassign=unassign,
                 description=description,
                 subscribe=subscribe,
                 unsubscribe=unsubscribe,
