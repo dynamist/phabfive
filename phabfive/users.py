@@ -136,7 +136,7 @@ def resolve_user_phid(phab, value, option=None):
     return resolve_user_phids(phab, [value], option=option)[value]
 
 
-def user_list_edit(kind, field, current, added=None, removed=None):
+def user_list_edit(kind, field, current, added=None, removed=None, sigil=""):
     """The transactions that add and remove users on a list, e.g. subscribers.
 
     Only a change is sent: a user already on the list is not added again, and
@@ -154,6 +154,8 @@ def user_list_edit(kind, field, current, added=None, removed=None):
         The PHIDs on the list now
     added, removed : dict, optional
         What ``resolve_user_phids`` returned for the users to add and remove
+    sigil : str, optional
+        Put before each username in the changes, e.g. "@" for "Added: @bob"
 
     Returns
     -------
@@ -172,7 +174,7 @@ def user_list_edit(kind, field, current, added=None, removed=None):
     both = {phid for phid, _ in added.values()} & {phid for phid, _ in removed.values()}
     if both:
         names = [
-            username or value
+            f"{sigil}{username}" if username else value
             for value, (phid, username) in added.items()
             if phid in both
         ]
@@ -189,7 +191,7 @@ def user_list_edit(kind, field, current, added=None, removed=None):
         picked = {}
         for value, (phid, username) in users.items():
             if (phid in current) == wanted:
-                picked.setdefault(phid, username or value)
+                picked.setdefault(phid, f"{sigil}{username}" if username else value)
 
         if picked:
             transactions.append({"type": f"{kind}.{suffix}", "value": list(picked)})

@@ -48,7 +48,7 @@ from phabfive.project.formatters import (
     project_member_phids,
 )
 from phabfive.project.resolvers import resolve_project
-from phabfive.users import resolve_user_phids
+from phabfive.users import resolve_user_phids, user_list_edit
 
 log = logging.getLogger(__name__)
 
@@ -1255,13 +1255,6 @@ class Project(Phabfive):
 
         check_project_color(color)
 
-        if add_members and remove_members:
-            both = set(add_members) & set(remove_members)
-            if both:
-                raise PhabfiveConfigException(
-                    f"Cannot both add and remove {', '.join(sorted(both))}"
-                )
-
         transactions = []
         changes = []
 
@@ -1314,34 +1307,19 @@ class Project(Phabfive):
                     }
                 )
 
-        current_members = set(project_member_phids(project))
-
-        for values, kind, verb, wanted, option in (
-            (add_members, "members.add", "Added", False, "--join"),
-            (remove_members, "members.remove", "Removed", True, "--leave"),
-        ):
-            if not values:
-                continue
-
-            users = resolve_user_phids(self.phab, values, option=option)
-            picked = {
-                phid: username
-                for phid, username in users.values()
-                if (phid in current_members) == wanted
-            }
-
-            if picked:
-                transactions.append({"type": kind, "value": list(picked)})
-                changes.append(
-                    {
-                        "field": "Members",
-                        "old": None,
-                        "new": f"{verb}: "
-                        + ", ".join(
-                            f"@{name or phid}" for phid, name in picked.items()
-                        ),
-                    }
-                )
+        if add_members or remove_members:
+            member_transactions, member_changes = user_list_edit(
+                "members",
+                "Members",
+                project_member_phids(project),
+                added=resolve_user_phids(self.phab, add_members or [], option="--join"),
+                removed=resolve_user_phids(
+                    self.phab, remove_members or [], option="--leave"
+                ),
+                sigil="@",
+            )
+            transactions.extend(member_transactions)
+            changes.extend(member_changes)
 
         if space:
             space_phid, space_shown = self._resolve_space_for_write(space)
