@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 import uuid
+import warnings
 
 # 3rd party imports
 import pytest
@@ -131,6 +132,7 @@ def create_repository(phabfive, conduit):
 
     for name in created:
         deadline = time.monotonic() + 60
+        settled = False
 
         while time.monotonic() < deadline:
             repos = conduit(
@@ -139,9 +141,30 @@ def create_repository(phabfive, conduit):
             )["data"]
 
             if not any(repo["fields"].get("isImporting") for repo in repos):
+                settled = True
                 break
 
             time.sleep(2)
+
+        if not settled:
+            # Leave it ACTIVE. Deactivating here is what the docstring above
+            # says must not happen, and the loop used to do it anyway once
+            # the deadline passed: `while ... < deadline` exits normally on a
+            # timeout, so the edit below ran either way. Every permanently
+            # importing repository on this instance was made exactly here
+            # (#500).
+            #
+            # Active is the recoverable state: the daemons keep working and
+            # the repository settles on its own, after which any later run
+            # tidies it away. Inactive is the trap, because no daemon ever
+            # touches it again and `isImporting` is frozen true for good.
+            warnings.warn(
+                f"e2e: {name} did not finish importing in 60s; left active so "
+                "the daemons can finish it. Deactivating it here would freeze "
+                "isImporting true for good (#500).",
+                stacklevel=1,
+            )
+            continue
 
         phabfive("diffusion", "repo", "edit", name, "--status=inactive", "--yes")
 
