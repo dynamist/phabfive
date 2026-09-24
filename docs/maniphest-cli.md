@@ -124,6 +124,35 @@ Creating a task subscribes its author, who can leave with
 `--unsubscribe=@me`. The owner of a task is notified by Phorge whether
 subscribed or not.
 
+### Tags
+
+`maniphest edit` (and `phabfive edit`) adds a task to projects with `--tag` and
+removes it with `--untag`. Both are repeatable and comma-separated, and both may
+be given in one edit:
+
+```bash
+phabfive maniphest edit T123 --tag=Backend,QA
+phabfive maniphest edit T123 T124 --untag=Triage
+phabfive maniphest edit T123 --tag=Backend --untag='#frontend' --dry-run
+```
+
+Like the subscriber options, only what changes is sent, and the same project in
+both options is refused, however each was spelled. Each value names exactly one
+project - a name, `#hashtag`, numeric ID or PHID - and a wildcard is refused, so
+an edit never fans out to every project a pattern matches. An unknown project
+fails the whole edit before any task is touched. With `--column`, the first
+`--tag` is also the board the column is on, and a task not yet on that board is
+added to it in the same edit. `--add-tag` and `--remove-tag` are accepted as
+other names for the two options.
+
+The dry run names the projects:
+
+```
+[DRY RUN] Would apply to T123:
+  Tags: Added: Backend
+  Tags: Removed: Frontend
+```
+
 ### Commits
 
 `maniphest edit` (and `phabfive edit`) attaches commits with `--attach` and

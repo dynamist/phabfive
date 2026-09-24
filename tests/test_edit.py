@@ -966,6 +966,9 @@ class TestBuildTaskEditColumn:
     def test_a_board_the_task_is_not_on_still_moves_and_adds(self, mock_init):
         """No current column is not the target column, and the board is joined."""
         with self._maniphest() as maniphest:
+            maniphest.phab.project.search.return_value = {
+                "data": [{"id": 7, "phid": "PHID-PROJ-qa", "fields": {"name": "QA"}}]
+            }
             transactions, changes = maniphest.build_task_edit(
                 "93",
                 self._task({}),
@@ -977,7 +980,10 @@ class TestBuildTaskEditColumn:
             {"type": "projects.add", "value": ["PHID-PROJ-qa"]},
             {"type": "column", "value": ["PHID-PCOL-qa-backlog"]},
         ]
-        assert changes == [{"field": "Column", "old": "(none)", "new": "Backlog"}]
+        assert changes == [
+            {"field": "Tags", "old": None, "new": "Added: QA"},
+            {"field": "Column", "old": "(none)", "new": "Backlog"},
+        ]
 
     def test_a_same_named_column_on_another_board_is_not_the_task_s_column(
         self, mock_init

@@ -328,7 +328,8 @@ phabfive maniphest edit T123 --visible-to='#infra' --editable-by=admin --dry-run
 phabfive --format=json maniphest edit T123 --status=resolved --dry-run
 ```
 
-An option that adds several values - `--tag` and `--subscribe` on `maniphest create` and
+An option that adds or removes several values - `--tag`/`--untag` and
+`--subscribe`/`--unsubscribe` on `maniphest create/edit`, `phabfive edit` and
 `paste create/edit`, the `project` list options - is repeatable and comma-separated:
 `--tag=Backend,QA` is `--tag=Backend --tag=QA`. Use `,`, not `+`, which is deprecated there
 and means AND only in a search filter.
@@ -341,6 +342,15 @@ only what changes (`--add-subscriber` and `--remove-subscriber` are hidden alias
 
 ```bash
 phabfive maniphest edit T123 --subscribe=@bob --unsubscribe=@me
+```
+
+`paste edit` adds and removes project tags with `--tag` and `--untag` (hidden aliases
+`--add-tag` and `--remove-tag`), again sending only what changes. Each value names exactly
+one project - a name, `#hashtag`, ID or PHID, never a wildcard - and an unknown project, or
+one both added and removed, fails the edit before anything is sent:
+
+```bash
+phabfive paste edit P42 --tag=backend --untag='#frontend' --dry-run
 ```
 
 Commits work the same way with `--attach` and `--detach` (hidden aliases `--add-commit` and
@@ -453,6 +463,21 @@ workboard column order and stay put at either end.
 
 If a task is on more than one board, `--column` without `--tag` fails and the error lists
 ready-to-run commands, one per board. Read those instead of guessing which board was meant.
+
+### Tags
+
+`phabfive edit` and `maniphest edit` add a task to projects with `--tag` and remove it with
+`--untag` (hidden aliases `--add-tag` and `--remove-tag`). Both are repeatable and
+comma-separated, and send only what changes: a tag already on the task is not added again,
+one it does not have is not removed, and an edit that changes nothing reports no change.
+Each value names exactly one project - a name, `#hashtag`, ID or PHID, never a wildcard -
+and an unknown project, or one both added and removed, fails the edit before any task is
+touched. With `--column`, the first `--tag` is also the board.
+
+```bash
+phabfive edit T123 --tag=Backend,QA --untag=Triage --dry-run
+phabfive edit T123 --tag="Sprint 42",Backend --column=Done
+```
 
 ### Batch and pipelines
 

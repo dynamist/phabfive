@@ -52,7 +52,8 @@ Arguments:
 Options:
   --priority=PRIORITY       Set priority (unbreak|high|normal|low|wish|raise|lower)
   --status=STATUS           Set status (open|resolved|wontfix|invalid|duplicate)
-  --tag=BOARD               Specify board context for --column (also adds task to board)
+  --tag=PROJECT             Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated); the first is the board for --column
+  --untag=PROJECT           Remove a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated)
   --column=COLUMN           Set column on board (or use forward/backward)
   --assign=USER             Set assignee (use @me for yourself)
   --attach=COMMIT           Attach a commit (rCALLSIGN<hash>, R1:<hash>, hash or PHID)
@@ -200,6 +201,9 @@ phabfive edit T123 --tag="Sprint 42" --column=Done
 
 # Add task to new board and set column
 phabfive edit T123 --tag="Backend Team" --column=Backlog
+
+# Several tags: the first is the board, and all of them are added
+phabfive edit T123 --tag="Backend Team",QA --column=Backlog
 ```
 
 #### Set Column by Name
@@ -252,6 +256,30 @@ phabfive edit T123 --assign=alice
 
 # Assign to yourself
 phabfive edit T123 --assign=@me
+```
+
+### Tags
+
+`--tag` adds a task to projects and `--untag` removes it. Both are repeatable
+and comma-separated, may be given in one edit, and send only what changes: a
+tag already on the task is not added again, and one it does not have is not
+removed. The same project in both is refused, however each was spelled.
+`--add-tag` and `--remove-tag` are accepted as other names for the two.
+
+Each value names exactly one project - a name, `#hashtag`, numeric ID or PHID.
+A wildcard is refused, so an edit never fans out to every project a pattern
+matches, and an unknown project fails the whole edit before any task is
+touched. With `--column`, the first `--tag` is also the board (see
+[Board/Column Context](#boardcolumn-context)).
+
+```bash
+phabfive edit T123 --tag=Backend,QA
+phabfive edit T123 T124 --untag=Triage --dry-run
+```
+
+```
+[DRY RUN] Would apply to T123:
+  Tags: Removed: Triage
 ```
 
 ### Attaching Commits
@@ -502,6 +530,7 @@ Understanding when board context is required:
 | `--column` only, task on multiple boards | ❌ Required | Error with suggestions |
 | `--tag` + `--column`, task on specified board | ✅ Explicit | Moves to column |
 | `--tag` + `--column`, task NOT on board | ✅ Explicit | Adds to board + sets column |
+| Several `--tag` + `--column` | ✅ First `--tag` | Adds every tag + sets column on the first |
 | No `--column` specified | N/A | No validation needed |
 
 ## Output Formats
