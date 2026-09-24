@@ -205,8 +205,14 @@ class TestSpecFileCompletion:
         assert [one.value for one in offered] == ["sprint-tasks.yaml"]
 
     def test_a_directory_keeps_completion_walking(self, tmp_path, monkeypatch):
-        import os
+        """Written with "/" on every platform, not with `os.sep`.
 
+        This test used to build its expectation from `os.sep`, so on Windows
+        it asserted `specs\\` - and passed, because the completer had the
+        same bug: it split and joined with `os.sep` too. A test and the code
+        under it sharing a mistaken assumption is how that survived a full
+        CI matrix.
+        """
         import click
 
         (tmp_path / "specs").mkdir()
@@ -216,12 +222,10 @@ class TestSpecFileCompletion:
         option = self._option("apply", "-f")
         context = click.Context(click.Command("apply"))
 
-        assert [one.value for one in option.shell_complete(context, "sp")] == [
-            f"specs{os.sep}"
+        assert [one.value for one in option.shell_complete(context, "sp")] == ["specs/"]
+        assert [one.value for one in option.shell_complete(context, "specs/")] == [
+            "specs/sprint.yaml"
         ]
-        assert [
-            one.value for one in option.shell_complete(context, f"specs{os.sep}")
-        ] == [f"specs{os.sep}sprint.yaml"]
 
     def test_a_leading_tilde_is_expanded_and_kept(self, tmp_path, monkeypatch):
         """`-f ~/spec<TAB>` is a path the shell has not expanded yet.
