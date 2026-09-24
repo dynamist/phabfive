@@ -37,15 +37,17 @@ def get_board_names(board_phids, phab):
         return board_phids
 
 
-def validate_board_column_context(task_id, task_data, column_arg, tag_arg, maniphest):
+def validate_board_column_context(
+    task_id, task_data, column_arg, board_phid, maniphest
+):
     """Validate board/column context for a single task.
 
     Args:
         task_id (str): Task ID (e.g., "123")
         task_data (dict): Current task data from API (with attachments)
         column_arg (str): Value of --column flag (e.g., "Done", "forward", "backward")
-        tag_arg (str): Value of --tag flag (board name) or None
-        maniphest: Maniphest instance for resolving project PHIDs
+        board_phid (str): The board --tag named, already resolved, or None
+        maniphest: Maniphest instance for naming the boards of an error
 
     Returns:
         tuple: (board_phid, error_message)
@@ -59,12 +61,8 @@ def validate_board_column_context(task_id, task_data, column_arg, tag_arg, manip
     # Get list of boards this task is on
     task_boards = get_task_boards(task_data)
 
-    if tag_arg:
-        # User specified a board, resolve it
-        board_phids = maniphest._resolve_project_phids(tag_arg)
-        if not board_phids:
-            return (None, f"Board not found: {tag_arg}")
-        board_phid = board_phids[0]
+    if board_phid:
+        # User specified a board
         return (board_phid, None)
 
     # No board specified, try to auto-detect

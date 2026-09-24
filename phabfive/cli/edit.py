@@ -12,7 +12,7 @@ from phabfive.cli.completers import (
     complete_priority_change,
     complete_space,
     complete_status,
-    complete_tag,
+    complete_tag_list,
     complete_user,
     complete_user_list,
 )
@@ -48,11 +48,31 @@ def edit_command(
         help="Set status: open, resolved, wontfix, invalid, duplicate, etc.",
         autocompletion=complete_status,
     ),
-    tag: Optional[str] = typer.Option(
+    tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Specify board context for --column (also adds task to board if needed)",
-        autocompletion=complete_tag,
+        help="Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated); the first is the board for --column",
+        autocompletion=complete_tag_list,
+    ),
+    add_tag: Optional[List[str]] = typer.Option(
+        None,
+        "--add-tag",
+        hidden=True,
+        help="Alias for --tag",
+        autocompletion=complete_tag_list,
+    ),
+    untag: Optional[List[str]] = typer.Option(
+        None,
+        "--untag",
+        help="Remove a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated)",
+        autocompletion=complete_tag_list,
+    ),
+    remove_tag: Optional[List[str]] = typer.Option(
+        None,
+        "--remove-tag",
+        hidden=True,
+        help="Alias for --untag",
+        autocompletion=complete_tag_list,
     ),
     column: Optional[str] = typer.Option(
         None,
@@ -180,10 +200,13 @@ def edit_command(
 
     For piped input, this command reads YAML from stdin.
 
+    \b
     Examples:
         phabfive edit T123 --priority=raise --status=resolved
         phabfive maniphest search --tag "Backend" | phabfive edit --column=Done
         phabfive edit T123 --tag="Sprint" --column=forward --comment="Moving forward"
+        phabfive edit T123 --tag=Backend,QA --untag=Triage
+        phabfive edit T123 T124 --untag=Sprint
         phabfive edit T123 T124 --space=Archive
         phabfive edit T123 --unassign
         phabfive edit T123 --visible-to=public --editable-by='#infra'
@@ -207,7 +230,8 @@ def edit_command(
         output_format=_get_output_format(ctx),
         priority=priority,
         status=status,
-        tag=tag,
+        tag=[*(tag or []), *(add_tag or [])],
+        untag=[*(untag or []), *(remove_tag or [])],
         column=column,
         assign=assign,
         unassign=unassign,

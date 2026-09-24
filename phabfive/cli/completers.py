@@ -361,10 +361,10 @@ def complete_status_filter(incomplete: str) -> List[str]:
 def _board_context(ctx) -> Optional[str]:
     """Get the board name given with --tag, if any.
 
-    --tag is a single value on search and edit but repeatable and
-    comma-separated on create, where the first tag is the board context -
-    the same one the command itself picks, so "--tag=Board,Other" completes
-    columns of Board.
+    --tag is a single value on search but repeatable and comma-separated on
+    create and edit, where the first tag is the board context - the same one
+    the command itself picks, so "--tag=Board,Other" completes columns of
+    Board.
     """
     from phabfive.options import split_list_option
 
@@ -668,8 +668,9 @@ def complete_tag(incomplete: str) -> list[str | tuple[str, str]]:
 def complete_tag_list(incomplete: str) -> list[str | tuple[str, str]]:
     """Complete a tag option that takes a comma-separated list.
 
-    Used by the value-adding --tag of maniphest create and paste create/edit,
-    where "Backend,QA" adds both. Only the tag after the last comma is
+    Used by the --tag of maniphest create and paste create, and the --tag and
+    --untag of maniphest edit, phabfive edit and paste edit, where
+    "Backend,QA" adds or removes both. Only the tag after the last comma is
     completed, and the ones before it are kept in the offered value, since
     the shell replaces the whole word.
 

@@ -23,7 +23,9 @@ from phabfive.edit.validators import (
 )
 from phabfive.exceptions import PhabfiveException, PhabfiveValidationException
 from phabfive.maniphest.validators import validate_assignment
+from phabfive.options import split_list_option
 from phabfive.policy import resolve_policy_value, validate_policy_value
+from phabfive.users import user_list_edit
 
 
 @dataclass(frozen=True)
@@ -125,8 +127,11 @@ class EditPlan:
         return bool(self._confirm and self._confirm())
 
 
-def _validate(maniphest, task_ids, column, tag, task_data):
+def _validate(maniphest, task_ids, column, board_phid, task_data):
     """Fetch and check every task, raising once for all that failed.
+
+    `board_phid` is the board named for `column`, if one was; otherwise each
+    task's own board is used, when it has exactly one.
 
     Returns
     -------
@@ -140,8 +145,10 @@ def _validate(maniphest, task_ids, column, tag, task_data):
         try:
             data = task_data.get(task_id) or maniphest._get_task_data(task_id)
 
-            board_phid, error = validate_board_column_context(
-                task_id, data, column, tag, maniphest
+            # Its own name: a board auto-detected for one task must not
+            # become the named board for the tasks after it
+            task_board, error = validate_board_column_context(
+                task_id, data, column, board_phid, maniphest
             )
 
             if error:
@@ -153,7 +160,7 @@ def _validate(maniphest, task_ids, column, tag, task_data):
                 problems.append(ValidationProblem(task_id, error, boards))
             else:
                 validated.append(
-                    {"task_id": task_id, "task_data": data, "board_phid": board_phid}
+                    {"task_id": task_id, "task_data": data, "board_phid": task_board}
                 )
 
         except Exception as e:
@@ -222,6 +229,7 @@ def plan_task_edits(
     priority=None,
     status=None,
     tag=None,
+    untag=None,
     column=None,
     assign=None,
     unassign=False,
@@ -249,7 +257,9 @@ def plan_task_edits(
 
     The remaining arguments are the changes, as `maniphest edit` takes them:
     `priority` and `column` also take "raise"/"lower" and
-    "forward"/"backward", and `tag` names the board a column is on.
+    "forward"/"backward". `tag` and `untag` add and remove projects, by name,
+    hashtag, ID or PHID (repeatable, or comma-separated), and the first `tag`
+    is also the board `column` is on.
 
     Returns
     -------
@@ -262,7 +272,11 @@ def plan_task_edits(
         any task is fetched, because the server would read a typo as a policy
         nobody satisfies and answer with a self-lockout.
     PhabfiveInputException
-        When `assign` and `unassign` are both given.
+        When `assign` and `unassign` are both given, a project is both
+        tagged and untagged, or a project name is a wildcard or ambiguous.
+    PhabfiveNotFoundException
+        When a project to tag or untag does not exist. Like the two above,
+        checked once for the batch before any task is fetched.
     PhabfiveValidationException
         When any task cannot be fetched or its board context is ambiguous.
         Nothing is planned for any task.
@@ -271,7 +285,19 @@ def plan_task_edits(
     validate_policy_value(editable_by, option="--editable-by")
     validate_assignment(assign, unassign)
 
-    validated = _validate(maniphest, task_ids, column, tag, task_data or {})
+    tags = split_list_option(tag)
+    added_tags = maniphest._resolve_project_tags(tags, option="--tag") if tags else {}
+    untags = split_list_option(untag)
+    removed_tags = (
+        maniphest._resolve_project_tags(untags, option="--untag") if untags else {}
+    )
+    # Refused here rather than by each task's build, which would report the
+    # same mistake once per task instead of stopping the batch
+    user_list_edit("projects", "Tags", (), added=added_tags, removed=removed_tags)
+
+    board_phid = added_tags[tags[0]][0] if column and tags else None
+
+    validated = _validate(maniphest, task_ids, column, board_phid, task_data or {})
 
     entries = []
     for task in validated:
@@ -290,6 +316,8 @@ def plan_task_edits(
                 description=description,
                 subscribe=subscribe,
                 unsubscribe=unsubscribe,
+                tag=added_tags,
+                untag=removed_tags,
                 attach=attach,
                 detach=detach,
                 comment=comment,

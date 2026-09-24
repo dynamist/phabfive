@@ -969,11 +969,31 @@ def edit(
         help="Set status: open, resolved, wontfix, invalid, duplicate, etc.",
         autocompletion=complete_status,
     ),
-    tag: Optional[str] = typer.Option(
+    tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Specify board context for --column (also adds task to board if needed)",
-        autocompletion=complete_tag,
+        help="Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated); the first is the board for --column",
+        autocompletion=complete_tag_list,
+    ),
+    add_tag: Optional[List[str]] = typer.Option(
+        None,
+        "--add-tag",
+        hidden=True,
+        help="Alias for --tag",
+        autocompletion=complete_tag_list,
+    ),
+    untag: Optional[List[str]] = typer.Option(
+        None,
+        "--untag",
+        help="Remove a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated)",
+        autocompletion=complete_tag_list,
+    ),
+    remove_tag: Optional[List[str]] = typer.Option(
+        None,
+        "--remove-tag",
+        hidden=True,
+        help="Alias for --untag",
+        autocompletion=complete_tag_list,
     ),
     column: Optional[str] = typer.Option(
         None,
@@ -1103,6 +1123,7 @@ def edit(
         phabfive maniphest edit T123,T124 --status=resolved
         phabfive maniphest edit T123 T124 "New Title"
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
+        phabfive maniphest edit T123 --tag=Backend,QA --untag=Triage
         phabfive maniphest edit T123 --space=S3
         phabfive maniphest edit T123 --subscribe=@me --unsubscribe=alice
         phabfive maniphest edit T123 --unassign
@@ -1160,7 +1181,8 @@ def edit(
         title=final_title,
         priority=priority,
         status=status,
-        tag=tag,
+        tag=[*(tag or []), *(add_tag or [])],
+        untag=[*(untag or []), *(remove_tag or [])],
         column=column,
         assign=assign,
         unassign=unassign,

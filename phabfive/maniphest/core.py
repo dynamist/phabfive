@@ -24,6 +24,7 @@ from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
     PhabfiveException,
+    PhabfiveInputException,
     PhabfiveNotFoundException,
     PhabfiveRemoteException,
 )
@@ -50,8 +51,10 @@ from phabfive.maniphest.resolvers import (
     describe_space_phid,
     fetch_all_spaces,
     is_exact_monogram,
+    fetch_projects_by_phid,
     resolve_project_phids,
     resolve_project_phids_for_create,
+    resolve_project_tags,
     resolve_space,
     resolve_space_phids,
 )
@@ -318,6 +321,10 @@ class Maniphest(Phabfive):
     def _resolve_project_phids_for_create(self, project_names):
         """Resolve project names to PHIDs and slugs for task creation."""
         return resolve_project_phids_for_create(self.phab, project_names)
+
+    def _resolve_project_tags(self, values, option=None):
+        """Resolve the projects an edit adds or removes to (PHID, name), exactly."""
+        return resolve_project_tags(self.phab, values, option=option)
 
     def _fetch_project_names_for_boards(self, tasks_data):
         """Fetch project names for all boards in the task data."""
@@ -2709,6 +2716,8 @@ class Maniphest(Phabfive):
         unsubscribe=None,
         detach=None,
         unassign=False,
+        tag=None,
+        untag=None,
     ):
         """Compute the transactions for a task edit, without applying them.
 
@@ -2753,6 +2762,12 @@ class Maniphest(Phabfive):
             Commits to detach, spelled as for `attach`
         unassign : bool, optional
             Remove the assignee. Cannot be combined with `assign`.
+        tag : list or dict, optional
+            Projects to tag the task with, by name, hashtag, ID or PHID
+            (repeatable, or comma-separated), or what `resolve_project_tags`
+            returned for them, so a batch resolves them once
+        untag : list or dict, optional
+            Projects to remove the task from, given as for `tag`
 
         Returns
         -------
@@ -2763,9 +2778,10 @@ class Maniphest(Phabfive):
         Raises
         ------
         PhabfiveInputException
-            On an argument value that cannot be used
+            On an argument value that cannot be used, a project both added
+            and removed, or the board of `column` removed
         PhabfiveNotFoundException
-            On a task, user, commit or column that does not exist
+            On a task, user, commit, project or column that does not exist
         PhabfiveConfigException
             If a policy value is outside the grammar
         PhabfiveDataException
@@ -2869,7 +2885,25 @@ class Maniphest(Phabfive):
                     }
                 )
 
-        # Handle column
+        added_tags = self._project_tags(tag, option="--tag")
+        removed_tags = self._project_tags(untag, option="--untag")
+
+        # A board found by auto-detection is never a --tag, so the refusal of
+        # a project both added and removed does not see it: moving a task on a
+        # board while taking it off that board is the same contradiction
+        if column and board_phid:
+            for value, (phid, name) in removed_tags.items():
+                if phid == board_phid:
+                    raise PhabfiveInputException(
+                        f"Cannot both remove {name or value} and move the task "
+                        f"to a column on it"
+                    )
+
+        # Handle column. Its transactions are kept aside until the tags are
+        # known, because a task going onto a board goes through the same
+        # projects.add as a --tag, and must be sent before the move.
+        column_transactions = []
+        column_changes = []
         if column and board_phid:
             column_phid = self._navigate_column(task_id, task_data, column, board_phid)
             if column_phid:
@@ -2899,23 +2933,50 @@ class Maniphest(Phabfive):
 
                 # Also need to add task to board if not already on it. This
                 # stays outside the comparison below: putting a task on a
-                # board and into a column is one edit.
+                # board and into a column is one edit. A board that is also
+                # a --tag - the first one is how it is named - is already
+                # being added, and joins the same transaction otherwise.
                 task_projects = task_data["attachments"]["projects"]["projectPHIDs"]
-                if board_phid not in task_projects:
-                    transactions.append({"type": "projects.add", "value": [board_phid]})
+                if board_phid not in task_projects and board_phid not in {
+                    phid for phid, _ in added_tags.values()
+                }:
+                    added_tags = {
+                        **added_tags,
+                        board_phid: (board_phid, self._project_name(board_phid)),
+                    }
 
                 # A task already in the target column needs no transaction,
                 # and reporting one would claim a move that never happened.
                 if column_phid != current_col_phid:
-                    transactions.append({"type": "column", "value": [column_phid]})
+                    column_transactions.append(
+                        {"type": "column", "value": [column_phid]}
+                    )
 
-                    changes.append(
+                    column_changes.append(
                         {
                             "field": "Column",
                             "old": current_column_name or "(none)",
                             "new": new_column_name,
                         }
                     )
+
+        # Handle tags, as subscribers: only a change is sent, and the board a
+        # --column puts the task on rides in the same projects.add
+        if added_tags or removed_tags:
+            tag_transactions, tag_changes = user_list_edit(
+                "projects",
+                "Tags",
+                task_data.get("attachments", {})
+                .get("projects", {})
+                .get("projectPHIDs", []),
+                added=added_tags,
+                removed=removed_tags,
+            )
+            transactions.extend(tag_transactions)
+            changes.extend(tag_changes)
+
+        transactions.extend(column_transactions)
+        changes.extend(column_changes)
 
         # Handle assignee
         if assign:
@@ -3028,6 +3089,22 @@ class Maniphest(Phabfive):
         )
 
         return transactions + policy_transactions, changes + policy_changes
+
+    def _project_tags(self, values, option=None):
+        """The projects an edit adds or removes, as {value: (PHID, name)}.
+
+        Already-resolved maps pass through, so a batch that resolved them once
+        does not look every project up again for each task.
+        """
+        if isinstance(values, dict):
+            return values
+        return self._resolve_project_tags(split_list_option(values), option=option)
+
+    def _project_name(self, phid):
+        """A project's name for a preview, or None when it cannot be read."""
+        for proj in fetch_projects_by_phid(self.phab, [phid]):
+            return proj["fields"]["name"]
+        return None
 
     def _build_policy_edit(self, policy, visible_to=None, editable_by=None):
         """The policy half of a task edit.

@@ -32,6 +32,7 @@ from phabfive.constants import (
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
+    PhabfiveException,
 )
 from phabfive.users import resolve_user_phid, resolve_user_phids
 from phabfive.cli.completers import complete_policy
@@ -312,7 +313,7 @@ def create(
     tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Add to project (repeatable, comma-separated)",
+        help="Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated)",
         autocompletion=complete_tag_list,
     ),
     subscribe: Optional[List[str]] = typer.Option(
@@ -627,7 +628,27 @@ def edit(
     tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Add to project (repeatable, comma-separated)",
+        help="Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated)",
+        autocompletion=complete_tag_list,
+    ),
+    add_tag: Optional[List[str]] = typer.Option(
+        None,
+        "--add-tag",
+        hidden=True,
+        help="Alias for --tag",
+        autocompletion=complete_tag_list,
+    ),
+    untag: Optional[List[str]] = typer.Option(
+        None,
+        "--untag",
+        help="Remove a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated)",
+        autocompletion=complete_tag_list,
+    ),
+    remove_tag: Optional[List[str]] = typer.Option(
+        None,
+        "--remove-tag",
+        hidden=True,
+        help="Alias for --untag",
         autocompletion=complete_tag_list,
     ),
     subscribe: Optional[List[str]] = typer.Option(
@@ -683,6 +704,7 @@ def edit(
         phabfive paste edit P1 --content  # opens $EDITOR with current content
         phabfive paste edit P1 --subscribe=@me --tag=project
         phabfive paste edit P1 --unsubscribe=@me
+        phabfive paste edit P1 --tag=backend --untag=frontend
         phabfive paste edit P1 "Test" --dry-run
     """
     from phabfive.cli.editor import confirm_text_change, edit_text
@@ -720,6 +742,19 @@ def edit(
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
 
+    # Project names, hashtags, IDs or PHIDs, resolved before $EDITOR or any
+    # confirmation, so a typo or a project both added and removed is reported
+    # before the user is asked anything. edit_paste compares them against the
+    # paste's current tags.
+    tag_list = split_list_option([*(tag or []), *(add_tag or [])])
+    untag_list = split_list_option([*(untag or []), *(remove_tag or [])])
+    if tag_list or untag_list:
+        try:
+            tag_list, untag_list = paste.resolve_tag_edit(tag_list, untag_list)
+        except PhabfiveException as e:
+            sys.stderr.write(f"Error: {e}\n")
+            raise typer.Exit(1)
+
     # Handle content editing
     final_content = None
     if content == "-":
@@ -742,9 +777,6 @@ def edit(
     elif content is not None:
         final_content = content
 
-    # Handle tags
-    tag_list = split_list_option(tag) or None
-
     # A single object applies directly; --interactive asks first.
     if final_content is not None and not dry_run and interactive:
         confirmed, return_code = confirm_text_change(
@@ -762,20 +794,29 @@ def edit(
             if not confirmed:
                 raise typer.Exit(return_code or 0)
 
-    # Perform edit
-    result = paste.edit_paste(
-        paste_id=numeric_id,
-        title=final_title,
-        content=final_content,
-        language=language,
-        tags=tag_list,
-        subscribers=split_list_option([*(subscribe or []), *(add_subscriber or [])]),
-        unsubscribers=split_list_option(
-            [*(unsubscribe or []), *(remove_subscriber or [])]
-        ),
-        current_subscribers=current_paste.get("subscriberPHIDs"),
-        dry_run=dry_run,
-    )
+    # Perform edit. A project or user that does not resolve, or is both
+    # added and removed, fails here with nothing sent
+    try:
+        result = paste.edit_paste(
+            paste_id=numeric_id,
+            title=final_title,
+            content=final_content,
+            language=language,
+            tags=tag_list,
+            untags=untag_list,
+            subscribers=split_list_option(
+                [*(subscribe or []), *(add_subscriber or [])]
+            ),
+            unsubscribers=split_list_option(
+                [*(unsubscribe or []), *(remove_subscriber or [])]
+            ),
+            current_subscribers=current_paste.get("subscriberPHIDs"),
+            current_projects=current_paste.get("projectPHIDs"),
+            dry_run=dry_run,
+        )
+    except PhabfiveException as e:
+        sys.stderr.write(f"Error: {e}\n")
+        raise typer.Exit(1)
 
     # Output result
     if dry_run:

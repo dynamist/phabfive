@@ -21,6 +21,7 @@ from phabfive.exceptions import (
     PhabfiveDataException,
     PhabfiveInputException,
 )
+from phabfive.maniphest.resolvers import resolve_project_tags
 from phabfive.maniphest.utils import time_constraint
 from phabfive.options import value_list
 from phabfive.ordering import parse_order, sort_records
@@ -659,7 +660,7 @@ class Paste(Phabfive):
         """
         pastes = self.get_pastes(
             constraints={"ids": [paste_id]},
-            attachments={"content": True, "subscribers": True},
+            attachments={"content": True, "subscribers": True, "projects": True},
         )
 
         if not pastes:
@@ -677,7 +678,40 @@ class Paste(Phabfive):
             "subscriberPHIDs": paste.get("attachments", {})
             .get("subscribers", {})
             .get("subscriberPHIDs", []),
+            "projectPHIDs": paste.get("attachments", {})
+            .get("projects", {})
+            .get("projectPHIDs", []),
         }
+
+    def resolve_tag_edit(self, tags=None, untags=None):
+        """Resolve the projects an edit adds and removes, exactly.
+
+        Either may already be what this returned, which passes through, so a
+        caller that resolved them up front can hand the result to
+        `edit_paste` without a second lookup.
+
+        Returns:
+            tuple: ({value: (PHID, name)} to add, the same to remove)
+
+        Raises:
+            PhabfiveInputException: If a project is both added and removed,
+                however each was spelled, or a name is a wildcard or matches
+                several projects
+            PhabfiveNotFoundException: If a project does not exist
+        """
+        added = (
+            tags
+            if isinstance(tags, dict)
+            else resolve_project_tags(self.phab, tags, option="--tag")
+        )
+        removed = (
+            untags
+            if isinstance(untags, dict)
+            else resolve_project_tags(self.phab, untags, option="--untag")
+        )
+        # Refuses a project in both, before anything is shown or sent
+        user_list_edit("projects", "Tags", (), added=added, removed=removed)
+        return added, removed
 
     def edit_paste(
         self,
@@ -690,6 +724,8 @@ class Paste(Phabfive):
         dry_run=False,
         unsubscribers=None,
         current_subscribers=None,
+        untags=None,
+        current_projects=None,
     ):
         """Edit an existing paste.
 
@@ -698,7 +734,10 @@ class Paste(Phabfive):
             title: New title (None to keep current)
             content: New content (None to keep current)
             language: New language (None to keep current)
-            tags: List of project tags to add
+            tags: Projects to tag the paste with: names, hashtags, IDs or
+                PHIDs, each naming exactly one project, or what
+                `resolve_tag_edit` returned for them. Only those the paste is
+                not tagged with already are sent
             subscribers: Users to subscribe: usernames, @usernames, @me or
                 user PHIDs. Only those not subscribed already are sent
             dry_run: If True, return changes without applying
@@ -706,9 +745,19 @@ class Paste(Phabfive):
                 those subscribed now are sent
             current_subscribers: PHIDs of the paste's subscribers, when the
                 caller has them already; fetched when needed otherwise
+            untags: Projects to remove the paste from, spelled the same way
+                as tags. Only those it is tagged with now are sent
+            current_projects: PHIDs of the paste's projects, when the caller
+                has them already; fetched when needed otherwise
 
         Returns:
             dict with changes made or to be made
+
+        Raises:
+            PhabfiveInputException: If a project or user is both added and
+                removed, however each was spelled, or a project name is a
+                wildcard or matches several projects
+            PhabfiveNotFoundException: If a project does not exist
         """
         # Build transactions
         transactions = []
@@ -726,13 +775,30 @@ class Paste(Phabfive):
             transactions.append({"type": "language", "value": language})
             changes.append({"field": "Language", "new": language})
 
-        if tags:
-            transactions.append({"type": "projects.add", "value": tags})
-            changes.append({"field": "Tags", "new": f"Added: {', '.join(tags)}"})
+        # The paste as it is now, fetched once and only if a list edit needs
+        # it and the caller did not already have it
+        if (current_subscribers is None and (subscribers or unsubscribers)) or (
+            current_projects is None and (tags or untags)
+        ):
+            current = self.get_paste_data(paste_id)
+            if current_subscribers is None:
+                current_subscribers = current["subscriberPHIDs"]
+            if current_projects is None:
+                current_projects = current["projectPHIDs"]
+
+        if tags or untags:
+            added, removed = self.resolve_tag_edit(tags, untags)
+            tag_transactions, tag_changes = user_list_edit(
+                "projects",
+                "Tags",
+                current_projects,
+                added=added,
+                removed=removed,
+            )
+            transactions.extend(tag_transactions)
+            changes.extend(tag_changes)
 
         if subscribers or unsubscribers:
-            if current_subscribers is None:
-                current_subscribers = self.get_paste_data(paste_id)["subscriberPHIDs"]
             sub_transactions, sub_changes = user_list_edit(
                 "subscribers",
                 "Subscribers",
@@ -751,10 +817,10 @@ class Paste(Phabfive):
             return {
                 "paste_id": paste_id,
                 "changes": [],
-                # Subscribers asked for but all already where they were asked
-                # to be are a change specified and found made
+                # Subscribers or tags asked for but all already where they
+                # were asked to be are a change specified and found made
                 "message": "No changes (already at target state)"
-                if subscribers or unsubscribers
+                if subscribers or unsubscribers or tags or untags
                 else "No changes specified",
             }
 

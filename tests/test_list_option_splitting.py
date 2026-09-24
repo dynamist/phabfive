@@ -140,6 +140,8 @@ def _a_paste():
         "language": "text",
     }
     instance.edit_paste.return_value = {"success": True, "changes": []}
+    # The tags as split, passed through unresolved
+    instance.resolve_tag_edit.side_effect = lambda tags, untags: (tags, untags)
     instance.phab.user.whoami.return_value = {
         "phid": "PHID-USER-caller",
         "userName": "caller",

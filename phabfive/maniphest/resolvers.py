@@ -9,6 +9,8 @@ import re
 
 from phabfive.exceptions import (
     PhabfiveConfigException,
+    PhabfiveInputException,
+    PhabfiveNotFoundException,
     PhabfiveRemoteException,
 )
 
@@ -613,6 +615,83 @@ def resolve_project_phids_for_create(phab, project_names):
         raise PhabfiveConfigException(f"Project(s) not found: {', '.join(not_found)}")
 
     return {"phids": phids, "slugs": slugs}
+
+
+def resolve_project_tags(phab, values, option=None):
+    """
+    Resolve the projects an edit adds or removes, exactly, to PHIDs and names.
+
+    Strict like resolve_project_phids_for_create, and for the same reason: an
+    edit must not fan out to every project a pattern happens to match. The
+    answer has the shape phabfive.users.user_list_edit takes, so a project
+    list is edited the way a subscriber list is.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    values : list
+        Project names, hashtags (the ``#`` is optional), numeric IDs or PHIDs
+    option : str, optional
+        The option the values came from, named in any error
+
+    Returns
+    -------
+    dict
+        What was typed to (PHID, project name), in the order given
+
+    Raises
+    ------
+    PhabfiveInputException
+        On a wildcard, or a name several projects share
+    PhabfiveNotFoundException
+        Naming every value that is not a project, so nothing is half done
+    """
+    if not values:
+        return {}
+
+    named = f"{option} " if option else ""
+    for value in values:
+        if "*" in value:
+            raise PhabfiveInputException(
+                f"Wildcards are not allowed in {named}project names: '{value}'"
+            )
+
+    name_to_phid, _, ambiguous_names = fetch_project_lookup_maps(phab)
+
+    resolved = {}
+    not_found = []
+
+    for value in values:
+        key = (value[1:] if value.startswith("#") else value).lower()
+        if key in name_to_phid:
+            resolved[value] = name_to_phid[key]
+            continue
+
+        if key in ambiguous_names:
+            matches = ambiguous_names[key]
+            raise PhabfiveInputException(
+                ambiguous_project_message(
+                    value, fetch_projects_by_phid(phab, matches) or matches
+                )
+            )
+
+        proj = lookup_project_by_id(phab, value)
+        if proj:
+            resolved[value] = proj["phid"]
+        else:
+            not_found.append(value)
+
+    if not_found:
+        raise PhabfiveNotFoundException(f"Project(s) not found: {', '.join(not_found)}")
+
+    # Named for the preview, which says "Added: Backend" rather than a PHID
+    names = {
+        proj["phid"]: proj["fields"]["name"]
+        for proj in fetch_projects_by_phid(phab, set(resolved.values()))
+    }
+
+    return {value: (phid, names.get(phid)) for value, phid in resolved.items()}
 
 
 def is_exact_monogram(space: str) -> bool:

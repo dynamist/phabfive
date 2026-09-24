@@ -33,6 +33,7 @@ class Edit(Phabfive):
         priority=None,
         status=None,
         tag=None,
+        untag=None,
         column=None,
         assign=None,
         unassign=False,
@@ -56,7 +57,9 @@ class Edit(Phabfive):
 
         The changes are keyword arguments, as `maniphest edit` takes them:
         `priority` also takes "raise"/"lower", `column` also takes
-        "forward"/"backward", and `tag` names the board `column` is on.
+        "forward"/"backward". `tag` and `untag` add and remove projects,
+        by name, hashtag, ID or PHID, and the first `tag` is also the board
+        `column` is on.
 
         Returns
         -------
@@ -66,7 +69,10 @@ class Edit(Phabfive):
         Raises
         ------
         PhabfiveInputException
-            When an ID is not a task's.
+            When an ID is not a task's, or a project is both tagged and
+            untagged.
+        PhabfiveNotFoundException
+            When a project to tag or untag does not exist.
         PhabfiveValidationException
             When any task cannot be fetched, or its board is ambiguous. No
             edit is planned for any of them.
@@ -78,6 +84,7 @@ class Edit(Phabfive):
             priority=priority,
             status=status,
             tag=tag,
+            untag=untag,
             column=column,
             assign=assign,
             unassign=unassign,

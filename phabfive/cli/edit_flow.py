@@ -56,6 +56,7 @@ def run_edit(
     priority=None,
     status=None,
     tag=None,
+    untag=None,
     column=None,
     assign=None,
     unassign=False,
@@ -86,7 +87,8 @@ def run_edit(
         title (str): New title for the object
         priority (str): Priority to set (or "raise"/"lower")
         status (str): Status to set
-        tag (str): Board name for column context
+        tag (list): Projects to add; the first is the board for column
+        untag (list): Projects to remove
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
         unassign (bool): Remove the assignee
@@ -116,6 +118,8 @@ def run_edit(
             title,
             priority,
             status,
+            tag,
+            untag,
             column,
             assign,
             unassign,
@@ -161,6 +165,7 @@ def run_edit(
                         priority=priority,
                         status=status,
                         tag=tag,
+                        untag=untag,
                         column=column,
                         assign=assign,
                         unassign=unassign,
@@ -210,6 +215,7 @@ def run_edit(
                         priority=priority,
                         status=status,
                         tag=tag,
+                        untag=untag,
                         column=column,
                         assign=assign,
                         unassign=unassign,
@@ -262,6 +268,7 @@ def run_edit(
                     priority=priority,
                     status=status,
                     tag=tag,
+                    untag=untag,
                     column=column,
                     assign=assign,
                     unassign=unassign,
@@ -315,6 +322,7 @@ def _edit_task_single(
     priority=None,
     status=None,
     tag=None,
+    untag=None,
     column=None,
     assign=None,
     unassign=False,
@@ -340,7 +348,8 @@ def _edit_task_single(
         title (str): New title for the task
         priority (str): Priority to set (or "raise"/"lower")
         status (str): Status to set
-        tag (str): Board name for column context
+        tag (list): Projects to add; the first is the board for column
+        untag (list): Projects to remove
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
         unassign (bool): Remove the assignee
@@ -406,6 +415,7 @@ def _edit_task_single(
                 priority=priority,
                 status=status,
                 tag=tag,
+                untag=untag,
                 column=column,
                 assign=assign,
                 unassign=unassign,
@@ -431,6 +441,7 @@ def _edit_task_single(
                 priority=priority,
                 status=status,
                 tag=tag,
+                untag=untag,
                 column=column,
                 assign=assign,
                 unassign=unassign,
@@ -536,6 +547,7 @@ def edit_tasks_batch(
     priority=None,
     status=None,
     tag=None,
+    untag=None,
     column=None,
     assign=None,
     unassign=False,
@@ -564,7 +576,8 @@ def edit_tasks_batch(
         title (str): New title for the tasks
         priority (str): Priority to set (or "raise"/"lower")
         status (str): Status to set
-        tag (str): Board name for column context
+        tag (list): Projects to add; the first is the board for column
+        untag (list): Projects to remove
         column (str): Column name (or "forward"/"backward")
         assign (str): Username to assign
         unassign (bool): Remove the assignee
@@ -603,6 +616,7 @@ def edit_tasks_batch(
             priority=priority,
             status=status,
             tag=tag,
+            untag=untag,
             column=column,
             assign=assign,
             unassign=unassign,
