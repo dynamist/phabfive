@@ -104,11 +104,25 @@ way anyone else would, which is the half of a release a local build cannot check
 
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ 'phabfive==0.11.0rc1'
+  --extra-index-url https://pypi.org/simple/ 'phabfive==0.11.0rc2'
 ```
 
 The extra index is not optional: phabfive's dependencies are not on TestPyPI, so
 resolution fails without somewhere real to find them.
+
+`uv pip` needs one flag more, and refuses without it:
+
+```bash
+uv pip install --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  --index-strategy unsafe-best-match 'phabfive==0.11.0rc2'
+```
+
+By default uv considers only the first index that carries a package at all, so that a
+package on a private index cannot be shadowed by a public one. phabfive is on real PyPI,
+so uv stops there and reports the candidate as unsatisfiable. The flag tells it to look
+across both, which is what is wanted here and worth understanding before using it
+anywhere less deliberate.
 
 This triggers the GitHub Actions workflow which will:
 
