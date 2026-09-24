@@ -344,6 +344,31 @@ several is an error listing them) or a `PHID-CMIT-...`. `maniphest show` lists t
 phabfive maniphest edit T123 --attach=7d7fc2c --detach=rGUNNAR3ce278cd9912
 ```
 
+To connect a commit to a task, **attach it** - do not paste its URL, or its hash, into a
+comment or the description. Text only links: the commit is not listed under `Commits` in
+`maniphest show`, and the task does not appear on the commit's page. If a comment should
+also say what the commit did, attach it and reference it in the same edit:
+
+```bash
+phabfive maniphest edit T123 --attach=7d7fc2c --comment='Fixed in {rGUNNAR7d7fc2c3e002}' --yes
+```
+
+### Referencing objects in text
+
+Comments, descriptions and titles are Remarkup. Write a monogram instead of a URL:
+
+| Written | Renders as |
+| --- | --- |
+| `T123` | a link reading `T123` |
+| `{T123}` | a link reading `T123: <the task's title>` |
+| `rGUNNAR7d7fc2c3e002`, `7d7fc2c` | a link to the commit, reading what was written |
+| `{rGUNNAR7d7fc2c3e002}` | a link reading `rGUNNAR7d7fc2c3e002: <the commit's summary>` |
+
+Use the braces when the reader needs context - a list of related work, a summary, a
+hand-over - so that `{T45}` says what T45 is without anyone opening it. Use the plain
+form where the title would only repeat what the sentence already says. The title is
+fetched when the text is shown, so it stays current if the task is renamed.
+
 Watching a project cannot be changed from phabfive: Conduit's `project.edit` has no watchers
 transaction, so it is done in the web UI. `project search --watcher` only filters by it.
 
@@ -733,6 +758,8 @@ touches the server.
 - Read with `maniphest show`, never with the bare-monogram form, which comments when a
   word follows it.
 - Pass `--show-comments` before concluding anything about a task's discussion or decisions.
+- Attach commits to tasks with `--attach`, never by pasting a URL or hash into a comment.
+  In text, write `{T123}` rather than `T123` or a URL where the title gives useful context.
 - Pass `--format=json`, `--format=jsonl` or `--format=yaml` before parsing, and put it
   before the subcommand.
 - Add `--space='*'` before reporting that a task or project does not exist.
