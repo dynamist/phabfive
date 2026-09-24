@@ -715,6 +715,12 @@ class TestEdit:
         with pytest.raises(PhabfiveConfigException, match="both add and remove"):
             self._build(phab, add_members=["@admin"], remove_members=["@admin"])
 
+    def test_the_same_member_spelled_two_ways_is_refused(self, phab):
+        """Compared by PHID, not by what was typed: `admin` and `@admin` are
+        one user, as are a username and its PHID."""
+        with pytest.raises(PhabfiveConfigException, match="both add and remove @admin"):
+            self._build(phab, add_members=["admin"], remove_members=["PHID-USER-admin"])
+
     def test_adding_a_hashtag_keeps_the_ones_already_there(self, phab):
         """The slugs transaction replaces the list, so the list is sent whole."""
         phab.slugs["PHID-PROJ-20"] = ["people"]
