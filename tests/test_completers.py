@@ -239,6 +239,34 @@ class TestSpecFileCompletion:
 
         assert completers.complete_spec_file("~/specs/") == ["~/specs/sprint.yaml"]
 
+    def test_it_splits_on_the_separator_that_was_typed(self, tmp_path, monkeypatch):
+        """Not on `os.sep`, which is what broke this on Windows only.
+
+        A shell hands over what the user typed, and a path typed with "/" is
+        valid on Windows too. Splitting on `os.sep` alone meant a path with
+        forward slashes had no separator there, so the base fell back to "."
+        and TAB offered nothing - green on Linux and macOS, red on Windows,
+        which is the shape of defect this suite cannot catch by running
+        where it is written.
+        """
+        (tmp_path / "specs").mkdir()
+        (tmp_path / "specs" / "sprint.yaml").touch()
+        monkeypatch.chdir(tmp_path)
+
+        assert completers.complete_spec_file("specs/") == ["specs/sprint.yaml"]
+        assert completers.complete_spec_file("specs\\") == ["specs\\sprint.yaml"]
+
+    def test_a_directory_is_offered_with_the_separator_that_was_typed(
+        self, tmp_path, monkeypatch
+    ):
+        """And with "/" when none has been typed yet, on every platform."""
+        (tmp_path / "outer" / "inner").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+
+        assert completers.complete_spec_file("out") == ["outer/"]
+        assert completers.complete_spec_file("outer/") == ["outer/inner/"]
+        assert completers.complete_spec_file("outer\\") == ["outer\\inner\\"]
+
 
 class TestSpecFileCompletionInEveryShell:
     """The same TAB, through each shell's own class, end to end.

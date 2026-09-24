@@ -1387,14 +1387,25 @@ def complete_spec_file(incomplete: str) -> List[str]:
     list
         Matching paths, directories first-class and files filtered by suffix
     """
-    import os
     from pathlib import Path
 
-    directory, separator, prefix = incomplete.rpartition(os.sep)
+    # Split on whichever separator the user typed, not on os.sep. A shell
+    # hands over what was typed, and a path typed with "/" is valid on
+    # Windows too - pathlib reads it, and every shell that completes here
+    # accepts it. Splitting on os.sep alone meant "~/specs/" had no
+    # separator on Windows, so the base fell back to "." and TAB offered
+    # nothing at all.
+    cut = max(incomplete.rfind("/"), incomplete.rfind("\\"))
 
-    if separator:
-        base = Path(directory or os.sep).expanduser()
+    if cut >= 0:
+        directory, separator, prefix = (
+            incomplete[:cut],
+            incomplete[cut],
+            incomplete[cut + 1 :],
+        )
+        base = Path(directory or separator).expanduser()
     else:
+        directory, separator, prefix = "", "", incomplete
         base = Path(".")
 
     try:
@@ -1422,7 +1433,11 @@ def complete_spec_file(incomplete: str) -> List[str]:
             continue
 
         if is_directory:
-            matches.append(shown + os.sep)
+            # The separator the user typed, so completion keeps walking down
+            # in the spelling they started with; "/" when they have typed no
+            # separator yet, because that is what works in every shell this
+            # completes for, Windows included.
+            matches.append(shown + (separator or "/"))
         elif entry.suffix.lower().lstrip(".") in SPEC_FILE_EXTENSIONS:
             matches.append(shown)
 
