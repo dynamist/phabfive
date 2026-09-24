@@ -119,15 +119,41 @@ def load_search_spec(path: str):
     Variables are rendered here, because a value still holding ``{{ who }}``
     names nothing an instance could be asked about. A spec that declares one
     nothing supplies is an error, not a search.
+
+    **The kind is not handed to the loader.** It used to be, and an explicit
+    kind beats both a declared ``kind:`` and inference - so a create spec
+    given to ``project|paste|passphrase search --with`` was not refused, it
+    was reinterpreted, down to an invented empty search item that ran
+    unconstrained. It is loaded for what it is and refused by name (#486).
+
+    Every command that reaches this function reached it through ``--with``,
+    which is why the deprecation warning is here: three call sites cannot
+    drift on the sentence if there is one place that says it.
     """
-    from phabfive.spec import load_spec
+    from phabfive.cli.spec_flags import (
+        dispatch_kind,
+        load_of_kind,
+        warn_with_deprecated,
+    )
+
+    warn_with_deprecated("phabfive search -f FILE")
 
     try:
-        spec = load_spec(path, kind="search")
-
-        return spec.render() if spec.variables else spec
+        spec = load_of_kind(path, "search")
     # PhabfiveInputException is a PhabfiveConfigException; see
     # phabfive/exceptions.py.
+    except (PhabfiveConfigException, PhabfiveDataException) as e:
+        typer.echo(f"ERROR: Failed to load template file: {e}", err=True)
+        raise typer.Exit(1)
+
+    dispatch_kind(spec, "search", path)
+
+    # Inside the same handler as the load: a variable that does not resolve is
+    # as much "this file could not be read" as a parse error, and answering it
+    # with `cli_entrypoint`'s generic line instead would make the deprecated
+    # path say two different things about one file.
+    try:
+        return spec.render() if spec.variables else spec
     except (PhabfiveConfigException, PhabfiveDataException) as e:
         typer.echo(f"ERROR: Failed to load template file: {e}", err=True)
         raise typer.Exit(1)
@@ -202,6 +228,7 @@ def run_search_spec(
     spec,
     *,
     overrides: Optional[Mapping[str, Any]] = None,
+    online_exit: int = 1,
 ) -> None:
     """Run every search a spec holds and print each one's results.
 
@@ -223,12 +250,21 @@ def run_search_spec(
     overrides : mapping, optional
         What the command line carried, keyed as a spec spells it. A value of
         None counts as not supplied.
+    online_exit : int, optional
+        The status to leave with when the *instance* is what refused: a
+        reference that does not resolve, a search Conduit would not run.
+        Defaults to 1, which is what the deprecated ``--with`` path has
+        always answered with and is frozen at. ``phabfive search -f`` passes
+        2, because it has already run the offline layer itself and so can
+        tell a file that is wrong from an instance that said no - which is
+        the one behavioural difference between the two entry points.
 
     Raises
     ------
     typer.Exit
-        Status 1 for a spec that cannot be planned or a search the instance
-        refused.
+        Status 1 for a spec that cannot be planned - a search item with no
+        filter at all, or one the planner refuses by shape - and
+        ``online_exit`` for what the instance refused.
     """
     output_format = _get_output_format(ctx)
     items = spec.items("search")
@@ -257,11 +293,15 @@ def run_search_spec(
                 source=spec.source,
             )
         except SearchPlanError as e:
+            # The document's own fault: a key this object type has no filter
+            # for, a pattern that does not parse. No instance was involved.
             typer.echo(f"ERROR: {e}", err=True)
             raise typer.Exit(1)
         except (PhabfiveConfigException, PhabfiveDataException) as e:
+            # Planning is also where every name is resolved, so this is the
+            # instance answering: a user nobody has, a column no board has.
             typer.echo(f"ERROR: {e}", err=True)
-            raise typer.Exit(1)
+            raise typer.Exit(online_exit)
 
         if not has_criteria(plan):
             typer.echo(
@@ -269,6 +309,8 @@ def run_search_spec(
                 f"{_NO_CRITERIA.get(object_type, _NO_CRITERIA_DEFAULT)}",
                 err=True,
             )
+            # Also the document's fault: an item that names no filter at all
+            # would search the whole instance.
             raise typer.Exit(1)
 
         _before_run(app, plan)
@@ -281,7 +323,7 @@ def run_search_spec(
             PhabfiveRemoteException,
         ) as e:
             typer.echo(f"ERROR: {e}", err=True)
-            raise typer.Exit(1)
+            raise typer.Exit(online_exit)
 
         _display(result, output_format, app)
 

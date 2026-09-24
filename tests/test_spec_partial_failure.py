@@ -4,7 +4,7 @@
 
 Conduit has no transactions and creation is one call per object, so a spec
 creating seventy objects that is refused on the fiftieth has left forty-nine
-real objects behind. `templates/task-create/mega-2024-simulation.yml` is
+real objects behind. `specs/create/large-programme.yaml` is
 exactly that shape. Answering with the server's exception - which is what
 the old recursion did - throws away the one thing the caller needs: which
 of them exist.
@@ -432,26 +432,36 @@ def restore_output_format():
         Phabfive._output_format = original
 
 
-def _cli_maniphest(report):
-    """A Maniphest whose template create failed partway through."""
-    instance = MagicMock()
-    instance.create_tasks_from_yaml.side_effect = CreateFailed(report)
-
-    return instance
-
-
 def _invoke(tmp_path, report, *options):
+    """One `maniphest create --with` run whose apply produced `report`.
+
+    `--with` is `phabfive apply -f` under its old name since the three
+    `create --with` commands were unified (`phabfive.cli.create_spec`), so
+    what a person meets this through is `phabfive.create.apply_plan`
+    yielding the records one at a time. The report's own records are what
+    it yields, so this exercises the *reporting* and not the applying,
+    which `TestTheReportOfAPartialRun` above covers.
+    """
+    import phabfive.create
+    from phabfive.spec.create import CreatePlan
+
     template = tmp_path / "tasks.yaml"
-    template.write_text("tasks:\n")
+    template.write_text(
+        "spec: phorge/v1alpha1\nkind: create\ntasks:\n  - title: Sprint kickoff\n"
+    )
 
     with patch(
         "phabfive.cli.maniphest._get_maniphest_app",
-        return_value=_cli_maniphest(report),
+        return_value=MagicMock(),
     ):
-        return runner.invoke(
-            app,
-            [*options, "maniphest", "create", "--with", str(template)],
-        )
+        with patch.object(phabfive.create, "plan_spec", return_value=CreatePlan()):
+            with patch.object(
+                phabfive.create, "apply_plan", return_value=iter(report.records)
+            ):
+                return runner.invoke(
+                    app,
+                    [*options, "maniphest", "create", "--with", str(template)],
+                )
 
 
 class TestTheCommandReportsIt:
@@ -493,17 +503,26 @@ class TestTheCommandReportsIt:
         assert len(lines) == 5
         assert lines[3]["reason"] == REFUSED
 
-    def test_a_human_format_lists_what_exists_on_stderr(
+    def test_a_human_format_lists_what_exists_as_it_happens(
         self, tmp_path, restore_output_format
     ):
+        """The running commentary, one line per object, as `apply -f` prints it.
+
+        It goes to **stdout**, which is the one thing that changed when the
+        three `create --with` commands were unified: the old template path
+        wrote the whole report to stderr on the grounds that a real run had
+        never printed anything at all. A run that says what it created as
+        it creates it is the point of the record stream, and the sentence
+        about a failure still goes to stderr.
+        """
         _, report = _run()
 
         result = _invoke(tmp_path, report, "--format=rich")
 
-        assert result.stdout.strip() == ""
-        assert "created  project $platform 'Platform' #platform" in result.stderr
-        assert f"failed   task {FOURTH!r}: {REFUSED}" in result.stderr
-        assert "skipped  task 'Follow-up'" in result.stderr
+        assert "created  project $platform #platform 'Platform'" in result.stdout
+        assert f"failed   task {FOURTH!r}: {REFUSED}" in result.stdout
+        assert "skipped  task 'Follow-up'" in result.stdout
+        assert "3 of 5 objects created" in result.stderr
         assert result.exit_code == 1
 
     def test_yaml_writes_the_records_as_yaml(self, tmp_path, restore_output_format):

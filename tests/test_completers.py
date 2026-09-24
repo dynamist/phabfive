@@ -140,3 +140,183 @@ class TestColumnCompletion:
         result = complete_column_filter(_ctx(tag=None), [], "")
         assert "*" in result
         board_columns.assert_not_called()
+
+
+class TestSpecFileCompletion:
+    """`-f`/`--spec` completes a path, filtered to the formats that load.
+
+    `--with`, the deprecated spelling of the same files, never had a
+    completer: it was the one file-taking option in the tree with none, and
+    TAB on it offered every file in the directory, a .png as readily as a
+    spec. `-f` is what replaces it, so `-f` is what gets the behaviour
+    (#491).
+
+    The shells are driven one at a time rather than trusted to share a code
+    path, because they do not: each of Typer's completion classes parses its
+    own environment and formats its own output, and phabfive replaces bash's
+    formatter to escape spaces. A completer that works in-process can still
+    be unusable in one shell.
+    """
+
+    def _command(self, name):
+        from typer.main import get_command
+
+        from phabfive.cli import app
+
+        return get_command(app).commands[name]
+
+    def _option(self, command_name, spelling):
+        command = self._command(command_name)
+        [option] = [one for one in command.params if spelling in one.opts]
+        return option
+
+    @pytest.mark.parametrize("command_name", ["apply", "search"])
+    @pytest.mark.parametrize("spelling", ["-f", "--spec"])
+    def test_the_option_carries_the_completer(self, command_name, spelling):
+        """`shell_complete is not None` would be vacuously true.
+
+        It is a bound method on every click Parameter, so an option with no
+        completer at all satisfies that assertion too. A custom completer
+        lands in `_custom_shell_complete`.
+        """
+        option = self._option(command_name, spelling)
+
+        # Typer wraps the callable in a compatibility shim, so what is
+        # asserted is that a custom completer is wired at all; that it is
+        # *this* one is asserted below by driving it and getting spec files
+        # back.
+        assert option._custom_shell_complete is not None
+
+    @pytest.mark.parametrize("command_name", ["apply", "search"])
+    def test_tab_on_the_option_offers_spec_files_only(
+        self, command_name, tmp_path, monkeypatch
+    ):
+        import click
+
+        (tmp_path / "sprint-tasks.yaml").touch()
+        (tmp_path / "notes.md").touch()
+        monkeypatch.chdir(tmp_path)
+
+        option = self._option(command_name, "-f")
+        context = click.Context(click.Command(command_name))
+
+        offered = option.shell_complete(context, "s")
+
+        assert [one.value for one in offered] == ["sprint-tasks.yaml"]
+
+    def test_a_directory_keeps_completion_walking(self, tmp_path, monkeypatch):
+        import os
+
+        import click
+
+        (tmp_path / "specs").mkdir()
+        (tmp_path / "specs" / "sprint.yaml").touch()
+        monkeypatch.chdir(tmp_path)
+
+        option = self._option("apply", "-f")
+        context = click.Context(click.Command("apply"))
+
+        assert [one.value for one in option.shell_complete(context, "sp")] == [
+            f"specs{os.sep}"
+        ]
+        assert [
+            one.value for one in option.shell_complete(context, f"specs{os.sep}")
+        ] == [f"specs{os.sep}sprint.yaml"]
+
+    def test_a_leading_tilde_is_expanded_and_kept(self, tmp_path, monkeypatch):
+        """`-f ~/spec<TAB>` is a path the shell has not expanded yet.
+
+        bash hands the word over with the tilde still on it, so a completer
+        that stats it verbatim finds nothing. It is expanded to read the
+        directory and written back unexpanded, because the shell expands it
+        again when the command runs.
+        """
+        home = tmp_path / "home"
+        (home / "specs").mkdir(parents=True)
+        (home / "specs" / "sprint.yaml").touch()
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("USERPROFILE", str(home))
+
+        assert completers.complete_spec_file("~/specs/") == ["~/specs/sprint.yaml"]
+
+
+class TestSpecFileCompletionInEveryShell:
+    """The same TAB, through each shell's own class, end to end.
+
+    `complete()` is the whole path a shell runs: read the environment the
+    completion script exports, resolve the command, run the completer, format
+    every item the way that shell parses. Nothing here is mocked but the
+    directory the shell is standing in.
+    """
+
+    def _complete(self, shell, monkeypatch, line, tmp_path):
+        import click
+        import typer
+
+        from phabfive.cli import app
+
+        words = line.split(" ")
+
+        if shell == "bash":
+            # bash exports the words and the index of the one being typed
+            monkeypatch.setenv("COMP_WORDS", "\n".join(words))
+            monkeypatch.setenv("COMP_CWORD", str(len(words) - 1))
+        else:
+            # Typer's own zsh and fish scripts export the command line
+            # instead, and split the last word off it unless it ends in a
+            # space. This is what those two shells actually run, which is why
+            # it is written out rather than shared with bash.
+            monkeypatch.setenv("_TYPER_COMPLETE_ARGS", line)
+
+        if shell == "fish":
+            # Fish asks twice: once whether there is anything to offer, then
+            # for the values. "get-args" is the second call, and the only one
+            # that returns text rather than an exit status.
+            monkeypatch.setenv("_TYPER_COMPLETE_FISH_ACTION", "get-args")
+
+        monkeypatch.chdir(tmp_path)
+
+        command = typer.main.get_command(app)  # registers the classes
+        completion_class = click.shell_completion.get_completion_class(shell)
+        completion = completion_class(command, {}, "phabfive", "_PHABFIVE_COMPLETE")
+
+        return completion.complete()
+
+    @pytest.fixture
+    def corpus(self, tmp_path):
+        (tmp_path / "sprint-tasks.yaml").touch()
+        (tmp_path / "audit.toml").touch()
+        (tmp_path / "notes.md").touch()
+        return tmp_path
+
+    @pytest.mark.parametrize("shell", ["bash", "zsh", "fish"])
+    @pytest.mark.parametrize("command_name", ["apply", "search"])
+    def test_the_spec_files_are_offered(self, shell, command_name, corpus, monkeypatch):
+        output = self._complete(
+            shell, monkeypatch, f"phabfive {command_name} -f ", corpus
+        )
+
+        assert "sprint-tasks.yaml" in output
+        assert "audit.toml" in output
+        assert "notes.md" not in output
+
+    @pytest.mark.parametrize("shell", ["bash", "zsh", "fish"])
+    def test_a_typed_prefix_narrows_the_offer(self, shell, corpus, monkeypatch):
+        output = self._complete(shell, monkeypatch, "phabfive apply -f spr", corpus)
+
+        assert "sprint-tasks.yaml" in output
+        assert "audit.toml" not in output
+
+    @pytest.mark.parametrize("shell", ["bash", "zsh", "fish"])
+    def test_the_long_spelling_completes_too(self, shell, corpus, monkeypatch):
+        output = self._complete(shell, monkeypatch, "phabfive search --spec ", corpus)
+
+        assert "sprint-tasks.yaml" in output
+
+    def test_bash_escapes_a_path_with_a_space(self, tmp_path, monkeypatch):
+        """bash would otherwise insert `my specs/` as two words."""
+        (tmp_path / "my specs").mkdir()
+
+        output = self._complete("bash", monkeypatch, "phabfive apply -f my", tmp_path)
+
+        assert output.splitlines() == [r"my\ specs/"]

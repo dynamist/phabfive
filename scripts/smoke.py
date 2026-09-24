@@ -401,7 +401,7 @@ def check_completion(executable, home, timeout):
 
 
 def check_spec_validate_offline(executable, home, timeout):
-    """`spec validate --offline` on a shipped template, with no configuration.
+    """`spec validate --offline` on a shipped spec, with no configuration.
 
     The only check that reaches phabfive/spec/ in a frozen build. Every
     other command imports its app module, which PyInstaller follows; the
@@ -412,24 +412,25 @@ def check_spec_validate_offline(executable, home, timeout):
     It also pins the promise the subpackage is built on: no token, no URL,
     no ~/.arcrc and no network, on a HOME that has nothing in it.
     """
-    template = REPOSITORY / "templates" / "task-search" / "blocked-tasks.yaml"
+    spec_file = REPOSITORY / "specs" / "search" / "blocked-tasks.yaml"
 
-    if not template.exists():  # pragma: no cover - a corpus that moved
-        raise Failure(f"no template to validate at {template}")
+    if not spec_file.exists():  # pragma: no cover - a corpus that moved
+        raise Failure(f"no spec to validate at {spec_file}")
 
-    code, output = run(executable, ["spec", "validate", str(template), "--offline"],
-                       home, timeout)
+    code, output = run(
+        executable, ["spec", "validate", str(spec_file), "--offline"], home, timeout
+    )
 
     for marker in IMPORT_FAILURES:
         if marker in output:
             raise Failure(f"broke on an import\n{indent(output)}")
 
     if code != 0:
-        raise Failure(f"exit {code} on a shipped template\n{indent(output)}")
+        raise Failure(f"exit {code} on a shipped spec\n{indent(output)}")
     if "no problems found" not in output:
         raise Failure(f"no clean report\n{indent(output)}")
 
-    return "shipped template validates clean"
+    return "shipped spec validates clean"
 
 
 def check_offline_command(executable, arguments, home, timeout):

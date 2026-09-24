@@ -1,29 +1,33 @@
 # -*- coding: utf-8 -*-
-"""The keys a search template may use are exactly the keys the CLI reads.
+"""The keys a search spec may use are exactly the keys the CLI reads.
 
 _load_search_config refuses any key `spec_keys("task", "search")` does not
 name, which the registry answers from one Field declaration per key. The CLI
-reads each template key with
-get_param(..., yaml_params, "key") and offers the same value as a flag. The
-two once drifted apart - created-before, updated-before, space, limit,
-show-policy and all were documented and read, yet a template using them failed
-to load (#295).
+reads each key with get_param(..., yaml_params, "key") and offers the same
+value as a flag. The two once drifted apart - created-before, updated-before,
+space, limit, show-policy and all were documented and read, yet a file using
+them failed to load (#295).
 
 This used to be guarded by a regex over phabfive/cli/maniphest.py's source,
 which is what you write when there is no single declaration to compare
 against. There is one now, so the parity check compares declarations: every
 field claiming a flag has one, and every flag on the command is a declared
 field.
-"""
 
-from pathlib import Path
+The third leg - that every declared key is also written down where somebody
+can find it - used to be here as well, reading a bullet list out of
+the old search-template page. It now lives in tests/test_spec_docs.py, against
+the generated tables of docs/phorge-spec.md and over all eight (object type,
+verb) pairs rather than task/search alone. The key set is one fact, and a
+prose list of it was the other half of the drift #295 was.
+"""
 
 import pytest
 from typer.main import get_command
 
 from phabfive.cli.maniphest import maniphest_app
 from phabfive.maniphest import Maniphest
-from phabfive.spec.registry import FieldKind, cli_flags, fields_for, spec_keys
+from phabfive.spec.registry import FieldKind, cli_flags, fields_for
 
 # Flags on "maniphest search" that are deliberately not spec keys.
 # --with names the template file itself, so it cannot be a key inside one,
@@ -91,37 +95,3 @@ def test_template_with_key_loads(tmp_path, field):
     configs = maniphest._load_search_config(str(template))
 
     assert field.name in configs[0]["search"]
-
-
-def _documented_keys():
-    """The keys docs/search-templates.md lists, read off its bullet list.
-
-    The "Supported Parameters" section is the reference a template author
-    reads. A key declared in the registry, accepted by the loader and
-    offered as a flag is still undiscoverable if nothing writes it down -
-    which is the fourth leg of #470's "one declaration, four consequences".
-    """
-    import re
-
-    text = (
-        Path(__file__).resolve().parent.parent / "docs" / "search-templates.md"
-    ).read_text(encoding="utf-8")
-    section = text.split("## Supported Parameters", 1)[1].split(
-        "**Time Unit Support:**", 1
-    )[0]
-
-    keys = set()
-    for line in section.splitlines():
-        match = re.match(r"^- (`[^`]+`(?:, `[^`]+`)*):", line)
-        if match:
-            keys |= set(re.findall(r"`([^`]+)`", match.group(1)))
-
-    return keys
-
-
-def test_the_documentation_lists_every_declared_key():
-    """A key nobody can find out about might as well not be declared."""
-    documented = _documented_keys()
-
-    assert documented, "the Supported Parameters list was not found"
-    assert documented == set(spec_keys("task", "search"))

@@ -9,9 +9,11 @@ Phabfive currently supports the following Phabricator/Phorge applications:
 - **Passphrase** - Search, list, and retrieve secrets (passwords, tokens, SSH keys, notes)
 - **Diffusion** - List and show repositories, their branches and tags, clone URIs, add repositories, manage URIs and policies
 - **Paste** - List, get, and add code pastes
+- **Project** - Show, search, create and edit projects, their members, subprojects, milestones and policies
 - **User** - Get information about the logged-in user
-- **Maniphest** - Add comments, show task details, create tasks from templates, and search with advanced project filtering and transition filtering
+- **Maniphest** - Add comments, show task details, create tasks, and search with advanced project filtering and transition filtering
 - **Edit** - Unified editing interface with auto-detection, batch operations, and smart column/priority navigation
+- **Specs** - Create or search whatever a single file describes, across applications, with `phabfive apply -f` and `phabfive search -f`
 
 ## Getting Started
 
@@ -59,6 +61,14 @@ phabfive paste search "deploy"
 
 # Search Maniphest tasks
 phabfive maniphest search myproject
+
+# Show and search projects
+phabfive project show '#development'
+phabfive project search --member=@me
+
+# Run a whole file: create everything it describes, or run every search in it
+phabfive apply -f specs/create/platform-bootstrap.yaml --dry-run
+phabfive search -f specs/search/release-readiness.yaml
 ```
 
 For detailed setup instructions, see the [README](https://github.com/dynamist/phabfive/blob/main/README.md).
@@ -67,10 +77,24 @@ For detailed setup instructions, see the [README](https://github.com/dynamist/ph
 
 ### CLI Reference
 
-- **[Edit CLI](edit-cli.md)** - Unified editing with auto-detection, batch operations, and smart navigation
 - **[Maniphest CLI](maniphest-cli.md)** - Complete guide to task management, including advanced transition filtering
+- **[Project CLI](project-cli.md)** - Show, search, create and edit projects, subprojects and milestones
+- **[Edit CLI](edit-cli.md)** - Unified editing with auto-detection, batch operations, and smart navigation
 - **[Diffusion URIs](diffusion-uri.md)** - How a repository's URIs work: origin, I/O, display and disabled
 - **[Policies](policies.md)** - Who can see, edit, push to or comment on repositories and tasks
+
+### Specs
+
+A spec is one file that says what should exist, or what to look for, across applications.
+
+- **[The Phorge spec format](phorge-spec.md)** - The normative definition: the envelope, every key, the reference grammar, the variables, the serializations and the two validation layers
+- **[Creating with Specs](create-specs.md)** - Writing a create spec, previewing it with `--dry-run`, and fixing what it reports
+- **[Searching with Specs](search-specs.md)** - Writing a search spec, running several searches and several applications from one file
+
+### Behaviour
+
+- **[Caching](caching.md)** - What shell completion caches, where, for how long, and how to clear it
+- **[Retries](retries.md)** - Which Conduit calls are retried, how long they wait, and what is never retried
 
 ### Development
 

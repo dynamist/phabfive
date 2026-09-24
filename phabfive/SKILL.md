@@ -113,12 +113,18 @@ the target state" is an answer about it, not an absence of one. Under `rich`, `t
 `table` and `value` these commands print what they always have - a URL for `create`, a
 change list for `edit`.
 
-`--dry-run` wrote nothing, so there is no record to give: it puts its preview on stderr
-and leaves stdout empty under a machine-readable format. Check the exit code, not the
-output, to tell a dry run from a refusal.
+`--dry-run` on a write command wrote nothing, so there is no record to give: it puts its
+preview on stderr and leaves stdout empty under a machine-readable format. Check the exit
+code, not the output, to tell a dry run from a refusal. `apply --dry-run` is the one
+exception, and deliberately so: it prints the plan itself on stdout, one record per
+object it would create, because the plan is the thing you asked for.
 
-`maniphest create --with=TEMPLATE` answers with one record per task the template
-created, parents and children alike, in the order they were created.
+`apply -f SPEC` answers with one record per object the spec created, parents and
+children alike, in the order they were created - `status`, `monogram`, `phid` and the
+`path` in the file that asked for it. A run that stopped partway still answers with the
+whole list, the objects that were not reached marked `skipped`, and exits 4.
+`maniphest create --with=SPEC`, the deprecated spelling, answers with one `show` record
+per task instead.
 
 `cache clear` is the one write with no Phorge object behind it, so it has no `show`
 record to give. It answers with what it did instead, in `cache info`'s vocabulary:
@@ -722,20 +728,94 @@ Credentials must be edited in the web UI.` - not pending work: Phorge exposes
 answer. Both exit 1. A create spec's `passphrases:` section is refused offline for the
 same reason.
 
-## Templates
+## Specs
 
-Repeatable searches and bulk creation live in YAML, used with `--with`:
+A repeatable search or a bulk creation lives in a **spec file**: one document that says
+what it is, and then says it.
 
-```bash
-phabfive --format=json maniphest search --with templates/task-search/blocked-tasks.yaml
-phabfive maniphest create --with templates/task-create/sprint.yaml --dry-run
+```yaml
+spec: phorge/v1alpha1
+kind: create            # or: search
+metadata:
+  name: sprint-tasks
+  description: The plan, the work and the review
+  version: "1"
+  author: phabfive
+variables:
+  sprint: 12
+tasks:
+  - title: "Plan sprint {{ sprint }}"
+    projects:
+      - Development
 ```
 
-The two differ. A search template may hold several documents separated by `---`, and a
-command line option overrides what the template sets. A create template is a single
-document, and `maniphest create --with` takes no option it would have to merge: one it
-cannot honour is refused rather than quietly dropped. See `docs/search-templates.md` and
-`docs/create-templates.md`.
+Two commands run one:
+
+```bash
+phabfive apply -f specs/create/sprint-tasks.yaml --dry-run
+phabfive apply -f specs/create/sprint-tasks.yaml --set sprint=13
+phabfive search -f specs/search/blocked-tasks.yaml
+phabfive --format=json apply -f specs/create/platform-bootstrap.yaml --dry-run
+```
+
+`apply` creates everything a `kind: create` spec holds - tasks, projects, milestones,
+linked to each other by the `$local-id`s the file gives them. `search` runs every search
+a `kind: search` spec holds, in document order, through one client. Handed the other
+kind, each refuses by name and prints the command that does run it, exit 1.
+
+`apply -f` and `search -f` read YAML, JSON, JSONL and TOML, chosen by extension:
+`.yaml`/`.yml`, `.json`, `.jsonl`/`.ndjson`, `.toml`. Several `---` documents in one file are folded into one
+spec, whichever kind it is, so a search spec's items and a `searches:` list are the same
+thing written two ways.
+
+Every string is rendered with Jinja2. A `{{ name }}` the file does not declare under
+`variables:` and no `--set NAME=VALUE` supplies is an error before anything runs, not an
+empty string. `--set` is repeatable and beats the file's own default.
+
+Check a file without running it:
+
+```bash
+phabfive spec validate specs/create/sprint-tasks.yaml --offline
+phabfive --format=json spec validate specs/create/sprint-tasks.yaml
+```
+
+There are two layers and both commands run both before writing or asking anything. The
+**offline** layer needs no token, no `PHAB_URL` and no network - shapes, keys, variables,
+`$local-id` links - and is all `--offline` runs. The **online** layer resolves the names
+the file uses against the instance: users, projects, Spaces, workboard columns. So a
+spec whose tenth task names a user who does not exist creates nothing at all. Under
+`--format=json` each problem is a record carrying `code`, `layer` (`offline` or
+`online`), `severity`, the `object` and the `field`.
+
+`--dry-run` on `apply` plans and prints and writes nothing; under a machine-readable
+format it emits one planned-item record per object. A real run emits one result record
+per object instead, each with `status` (`created`, `failed` or `skipped`), `monogram`
+and `phid` - which is what makes a partial failure readable: exit 4 means it stopped
+partway and the records say which objects exist.
+
+Branch on the exit status, not on the output. `apply`: `0` created, or planned cleanly
+under `--dry-run`; `1` the file could not be read, is the wrong kind, or failed the
+offline layer; `2` the online layer failed - a name does not resolve, or the instance
+refused what was asked; `3` there is no instance to ask; `4` it stopped partway and some
+objects exist. `search` is the same without `4`, and adds a search item that names no
+filter at all to `1`. `spec validate` is the same without `4` too. A usage mistake - a
+missing `-f`, an unknown flag - is click's own exit 2, so a `2` from any of the three is
+not always an online failure; the message says which.
+
+`--with` is the deprecated spelling, on seven commands: `maniphest`, `project` and
+`paste create`, and `maniphest`, `project`, `paste` and `passphrase search`. It is the
+same reader as `-f`, so all four serializations load at every one of them, and it warns
+once naming `apply -f` or `search -f`. Two differences from `-f` are worth knowing:
+a `create --with` **refuses** any other option on the line rather than dropping it,
+because a create spec is applied as it stands; a `search --with` lets the options beside
+it override what the spec says. `maniphest search` runs task searches only, so a spec
+holding a project, paste or passphrase search is refused by name there — every other
+`search --with` runs all of them. Prefer `apply -f` and `search -f`.
+
+`specs/` in the repository holds runnable examples of both kinds and of all four
+serializations; `specs/broken/` holds files that are wrong on purpose, each named after
+the code it produces. `docs/phorge-spec.md` defines the format itself;
+`docs/create-specs.md` and `docs/search-specs.md` are the guides.
 
 ## Caching
 
@@ -752,6 +832,11 @@ touches the server.
 - `2` a group or the root command was invoked without a subcommand; the help was written
   to stderr.
 - `130` interrupted.
+
+`apply`, `search` and `spec validate` are the exception and share their own table,
+above: they use `2` for an online failure, `3` for no instance, and `apply` uses `4` for
+a run that stopped partway. Their `2` is therefore not always a usage mistake, and the
+message says which.
 
 ## Rules
 

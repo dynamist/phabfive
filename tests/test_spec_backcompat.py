@@ -17,7 +17,7 @@ a caller can read at - `load_documents`, `Spec.items("search")` and
 `_load_search_config` - because those three are what would drift apart.
 
 The number of searches per file is the part that matters most: three of the
-shipped templates are multi-document, and a reader that folded documents away
+shipped files hold four searches each, and a reader that dropped one of them
 - or one that stopped folding a `searches:` list into several - would still
 answer something plausible for every other assertion here.
 
@@ -33,13 +33,13 @@ from phabfive.maniphest import Maniphest
 from phabfive.spec import load_spec, parse_spec
 from phabfive.spec.loader import load_documents
 
-TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
+SPEC_ROOT = Path(__file__).resolve().parent.parent / "specs"
 
-SEARCH_TEMPLATES = sorted((TEMPLATES / "task-search").glob("*.yaml"))
-CREATE_TEMPLATES = sorted(
+SEARCH_SPECS = sorted((SPEC_ROOT / "search").glob("*.yaml"))
+CREATE_SPECS = sorted(
     path
     for pattern in ("*.yaml", "*.yml")
-    for path in (TEMPLATES / "task-create").glob(pattern)
+    for path in (SPEC_ROOT / "create").glob(pattern)
 )
 
 
@@ -59,7 +59,7 @@ CREATE_TEMPLATES = sorted(
 EXPECTED_SEARCHES = {
     "blocked-tasks.yaml": (
         {
-            "title": None,
+            "title": "🚫 Blocked or Previously Blocked",
             "described": True,
             "search": {
                 "column": "in:Blocked,been:Waiting,been:Blocked",
@@ -108,7 +108,7 @@ EXPECTED_SEARCHES = {
     ),
     "escalated-priorities.yaml": (
         {
-            "title": None,
+            "title": "📈 Priority Escalations",
             "described": True,
             "search": {
                 "priority": "raised",
@@ -118,15 +118,20 @@ EXPECTED_SEARCHES = {
             },
         },
     ),
+    # `updated-after` is the one filter in the corpus written as a variable,
+    # `stale_days: {default: 14}`, so it is the one frozen value that differs
+    # between the layers below: the bytes and the `Spec` carry the template,
+    # and what the command loops over carries what it rendered to. Both are
+    # frozen, in this table and in RENDERED_SEARCHES.
     "high-priority-stale-tasks.yaml": (
         {
-            "title": None,
+            "title": "🔥 Stale High Priority Tasks",
             "described": True,
             "search": {
                 "priority": "in:High,in:Unbreak Now!,in:Triage",
                 "show-history": True,
                 "show-metadata": True,
-                "updated-after": 14,
+                "updated-after": "{{ stale_days }}",
             },
         },
     ),
@@ -174,7 +179,7 @@ EXPECTED_SEARCHES = {
     ),
     "recently-moved-to-review.yaml": (
         {
-            "title": None,
+            "title": "🔄 Recently Moved to Review",
             "described": True,
             "search": {
                 "column": "to:Review,to:Code Review,to:QA",
@@ -185,7 +190,7 @@ EXPECTED_SEARCHES = {
     ),
     "tasks-resolved-but-not-in-done.yaml": (
         {
-            "title": None,
+            "title": "🏁 Resolved But Not in Done",
             "described": True,
             "search": {
                 "column": "not:in:Done",
@@ -239,6 +244,14 @@ EXPECTED_SEARCHES = {
 }
 
 
+#: The eight files the record above freezes: the search templates that
+#: predate the spec format and were migrated into it by #489. The four
+#: written for the format itself (#490) are deliberately not here - this
+#: file pins a *migration*, not the corpus, and every shipped spec is loaded
+#: and validated by tests/test_spec_corpus.py whether or not it has an entry.
+FROZEN_SEARCHES = [path for path in SEARCH_SPECS if path.name in EXPECTED_SEARCHES]
+
+
 def _summary(searches):
     """The frozen shape, from a list of per-search mappings.
 
@@ -262,22 +275,49 @@ def _summary(searches):
 
 def test_the_corpus_is_there():
     """Guard the guard: an empty glob would make everything below vacuous."""
-    assert len(SEARCH_TEMPLATES) >= 8
-    assert len(CREATE_TEMPLATES) >= 3
+    assert len(SEARCH_SPECS) >= 8
+    assert len(CREATE_SPECS) >= 3
+    assert len(FROZEN_SEARCHES) >= 8
 
 
-def test_the_frozen_record_names_every_shipped_template():
-    """A new template added with no expectation would be tested by nothing."""
-    assert {path.name for path in SEARCH_TEMPLATES} == set(EXPECTED_SEARCHES)
+def test_every_frozen_name_is_a_file_on_disk():
+    """A record entry naming nothing would be asserted against nothing.
+
+    The other direction is not asserted: a search spec written *for* the
+    format needs no entry here, and requiring one would mean typing a frozen
+    record for every example added from now on. What must not happen is an
+    entry going stale - a file renamed or removed while its expectation sits
+    here looking like coverage - and that is what this catches.
+    """
+    missing = sorted(set(EXPECTED_SEARCHES) - {path.name for path in SEARCH_SPECS})
+
+    assert missing == [], f"frozen record names files that are gone: {missing}"
+    assert len(FROZEN_SEARCHES) == len(EXPECTED_SEARCHES)
 
 
-@pytest.mark.parametrize("path", SEARCH_TEMPLATES, ids=lambda path: path.name)
+@pytest.mark.parametrize("path", FROZEN_SEARCHES, ids=lambda path: path.name)
 def test_the_document_loader_reads_the_frozen_corpus(path):
-    """The bottom layer: one mapping per document, nothing interpreted."""
-    assert _summary(load_documents(path)) == list(EXPECTED_SEARCHES[path.name])
+    """The bottom layer: the bytes on disk, with nothing interpreted.
+
+    Every shipped file is one document now - #489 folded the `---`-separated
+    ones into a `searches:` list - so what this asserts is that the raw
+    document carries the envelope and the same searches in the same order,
+    before any envelope splitting or kind inference has run. A loader that
+    reordered the list, or dropped the item a `---` used to separate, would
+    be caught here rather than one layer up where `Spec` could paper over it.
+    """
+    documents = load_documents(path)
+
+    assert len(documents) == 1
+
+    document = documents[0]
+
+    assert document["spec"] == "phorge/v1alpha1"
+    assert document["kind"] == "search"
+    assert _summary(document["searches"]) == list(EXPECTED_SEARCHES[path.name])
 
 
-@pytest.mark.parametrize("path", SEARCH_TEMPLATES, ids=lambda path: path.name)
+@pytest.mark.parametrize("path", FROZEN_SEARCHES, ids=lambda path: path.name)
 def test_the_spec_reads_the_frozen_corpus(path):
     """The object every later pass holds.
 
@@ -290,7 +330,27 @@ def test_the_spec_reads_the_frozen_corpus(path):
     assert _summary(spec.items("search")) == list(EXPECTED_SEARCHES[path.name])
 
 
-@pytest.mark.parametrize("path", SEARCH_TEMPLATES, ids=lambda path: path.name)
+#: What the third layer sees where it differs from the two below it: the
+#: command renders a spec's variables before it reads the filters, the same
+#: way `phabfive.cli.search_spec.load_search_spec` does for the other four
+#: `--with` sites. A file not named here renders to itself.
+RENDERED_SEARCHES = {
+    "high-priority-stale-tasks.yaml": (
+        {
+            "title": "🔥 Stale High Priority Tasks",
+            "described": True,
+            "search": {
+                "priority": "in:High,in:Unbreak Now!,in:Triage",
+                "show-history": True,
+                "show-metadata": True,
+                "updated-after": "14",
+            },
+        },
+    ),
+}
+
+
+@pytest.mark.parametrize("path", FROZEN_SEARCHES, ids=lambda path: path.name)
 def test_the_command_is_handed_the_frozen_corpus(path):
     """What `maniphest search --with` actually loops over.
 
@@ -300,8 +360,9 @@ def test_the_command_is_handed_the_frozen_corpus(path):
     down.
     """
     configs = Maniphest.__new__(Maniphest)._load_search_config(str(path))
+    expected = RENDERED_SEARCHES.get(path.name, EXPECTED_SEARCHES[path.name])
 
-    assert _summary(configs) == list(EXPECTED_SEARCHES[path.name])
+    assert _summary(configs) == list(expected)
     # `type` is in the projection: without it `plan_search` sees None, falls
     # back to "task" and runs a `type: paste` item as a task search.
     assert all(
@@ -309,11 +370,11 @@ def test_the_command_is_handed_the_frozen_corpus(path):
     )
 
 
-@pytest.mark.parametrize("path", CREATE_TEMPLATES, ids=lambda path: path.name)
+@pytest.mark.parametrize("path", CREATE_SPECS, ids=lambda path: path.name)
 def test_the_loader_matches_the_create_reader(path):
-    """Every shipped create template parses to what create_tasks_from_yaml sees.
+    """Every shipped create spec parses to what create_tasks_from_yaml sees.
 
-    templates/task-create/test-template-v2.yml is the one that matters:
+    specs/create/feature-epic.yaml is the one that matters:
     it uses YAML anchors (&WORKGROUP / *WORKGROUP), which resolve only
     because ruamel is still the YAML reader. Routing YAML through anything
     else would break this and nothing else would notice.
@@ -331,12 +392,12 @@ def test_the_loader_matches_the_create_reader(path):
 
 def test_yaml_anchors_still_resolve():
     """Named separately, because the assertion above would pass on two Nones."""
-    path = TEMPLATES / "task-create" / "test-template-v2.yml"
+    path = SPEC_ROOT / "create" / "feature-epic.yaml"
 
     document = load_documents(path)[0]
 
     anchored = document["variables"]["workgroup"]
-    assert anchored == ["hholm", "grok"]
+    assert anchored == ["gabriel.blomqvist", "sebastian.soderberg"]
 
     # The alias, not the anchor: a reader that dropped alias support would
     # leave a string or a None here, and every other assertion would pass

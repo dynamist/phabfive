@@ -1,0 +1,22 @@
+# Resolved tasks that are still sitting on an active board column.
+#
+#   phabfive search -f specs/search/tasks-resolved-but-not-in-done.yaml
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: tasks-resolved-but-not-in-done
+  description: >-
+    Board cleanup: tasks closed as Resolved or Duplicate that were never
+    moved to a Done column, so they still count as work in progress on
+    whatever board they are on.
+  version: "1"
+  author: phabfive
+searches:
+  - type: task
+    title: "🏁 Resolved But Not in Done"
+    description: "Closed work still on an active board"
+    search:
+      tag: "*"
+      status: "closed+in:Resolved,closed+in:Duplicate"
+      column: "not:in:Done"
+      show-history: true

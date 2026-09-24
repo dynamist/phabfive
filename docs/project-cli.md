@@ -182,7 +182,7 @@ credentials - and they run in the order they are written. Run a mixed document
 from `project search`, `paste search` or `passphrase search`: `maniphest
 search --with` runs task searches only, and refuses an item of another type by
 name rather than running it as one. See
-[Search Templates](search-templates.md#searching-other-objects).
+[Searching with Specs](search-specs.md#several-applications-in-one-file).
 
 ### Ordering
 
@@ -410,4 +410,4 @@ renamed project completes straight away. See [Caching](caching.md).
 - [Policies](policies.md): the policy grammar and how policies are displayed
 - [Maniphest CLI](maniphest-cli.md): filing tasks under projects with `--tag`
 - [Caching](caching.md): the `projects` and `project-icons` caches
-- [Search Templates](search-templates.md): saving a search as a spec, and `--with`
+- [Searching with Specs](search-specs.md): saving a search as a spec, and `--with`

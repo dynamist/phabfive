@@ -8,6 +8,7 @@ any case - and asks the instance only about the users the template names, all
 of them before any task is created.
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -305,44 +306,81 @@ class TestDryRun:
         ]
         phab.maniphest.edit.assert_not_called()
 
-    def test_the_cli_prints_them(self, tmp_path):
+    def test_the_cli_answers_with_the_plan(self, tmp_path):
+        """What `--with --dry-run` shows, now that it is `apply -f`.
+
+        The human preview is one line per object - the tree
+        `phabfive.cli.spec_run._item_line` prints - and it names the object
+        type, which the old flat list did not: a spec creating a project
+        and two tasks used to preview as three indistinguishable bullets.
+
+        **What it no longer prints are the `Assignee:` and `Subscribers:`
+        sub-lines.** That is a deliberate trade for one preview across the
+        three `create --with` commands and `apply -f`, and the information
+        is not lost: it is on the item's `display` in every machine format,
+        which is what a dry run is for reading with. Asserted here, both
+        ways round, so neither half can go quietly.
+        """
+        import phabfive.create
+        from phabfive.spec.create import CreateItem, CreatePlan
+
         maniphest = MagicMock()
-        maniphest.create_tasks_from_yaml.return_value = {
-            "dry_run": True,
-            "tasks": [
-                {
-                    "depth": 0,
-                    "title": "Parent",
-                    "assignee": "alice",
-                    "subscribers": ["bob", "carol"],
-                },
-                {"depth": 1, "title": "Child", "assignee": None, "subscribers": []},
-            ],
-        }
-        template = tmp_path / "tasks.yaml"
-        template.write_text("tasks:\n")
-
-        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
-            result = runner.invoke(
-                app,
-                [
-                    "--format=rich",
-                    "maniphest",
-                    "create",
-                    "--with",
-                    str(template),
-                    "--dry-run",
-                ],
+        plan = CreatePlan(
+            items=(
+                CreateItem(
+                    object_type="task",
+                    path="tasks[0]",
+                    display={
+                        "title": "Parent",
+                        "assignee": "alice",
+                        "subscribers": ["bob", "carol"],
+                    },
+                ),
+                CreateItem(
+                    object_type="task",
+                    path="tasks[0].tasks[0]",
+                    depth=1,
+                    parent_path="tasks[0]",
+                    display={"title": "Child", "assignee": None, "subscribers": []},
+                ),
             )
+        )
+        template = tmp_path / "tasks.yaml"
+        template.write_text(
+            "spec: phorge/v1alpha1\nkind: create\ntasks:\n  - title: Parent\n"
+        )
 
-        assert result.exit_code == 0, result.output
-        # The banner is the command's since #480: the library builds a plan
-        # and says nothing, where a log.warning inside it used to be the
-        # only thing telling a person nothing would be created
-        assert result.stdout.splitlines() == [
-            "[DRY RUN] Would create:",
-            "- Parent",
-            "  Assignee: alice",
-            "  Subscribers: bob, carol",
-            "  - Child",
+        def run(output_format):
+            with patch(
+                "phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest
+            ):
+                with patch.object(phabfive.create, "plan_spec", return_value=plan):
+                    return runner.invoke(
+                        app,
+                        [
+                            f"--format={output_format}",
+                            "maniphest",
+                            "create",
+                            "--with",
+                            str(template),
+                            "--dry-run",
+                        ],
+                    )
+
+        human = run("rich")
+
+        assert human.exit_code == 0, human.output
+        assert human.stdout.splitlines() == [
+            f"[DRY RUN] {template}: would create 2 tasks.",
+            "  - task 'Parent'",
+            "    - task 'Child'",
         ]
+
+        machine = run("json")
+
+        assert machine.exit_code == 0, machine.output
+
+        records = json.loads(machine.stdout)
+
+        assert records[0]["display"]["assignee"] == "alice"
+        assert records[0]["display"]["subscribers"] == ["bob", "carol"]

@@ -98,14 +98,19 @@ __all__ = [
 
 
 #: The object types this module plans. Widened as each app's builder lands;
-#: a `pastes:` section in a spec is refused by name until then rather than
-#: planned as something it is not.
+#: an object type nothing creates is refused by name rather than planned as
+#: something it is not.
 #:
 #: `project` is here because it is what a local reference is *for*: a task
 #: tagged into a project the same document creates needs a PHID that does
 #: not exist until apply time, and a spec that could only create tasks had
 #: nothing to point `$platform` at (#483).
-CREATABLE_TYPES: frozenset[str] = frozenset({"task", "project"})
+#:
+#: `paste` is the second half of #481. The same three things a project
+#: needed are in place for it: `Paste.paste_create_transactions` is the
+#: builder, `phabfive.spec.references` walks its four reference keys, and
+#: `EDIT_ENDPOINTS` sends its transactions to `paste.edit`.
+CREATABLE_TYPES: frozenset[str] = frozenset({"task", "project", "paste"})
 
 #: Which Conduit application creates each object type. One row per type, so
 #: a new creator is a row rather than a branch.
@@ -652,14 +657,17 @@ def plan_create(
         # worth asking the instance about. The raise below happens next.
         answers = Resolution()
 
-    # One `Project` sibling for the whole document, built only for a spec
-    # that names a project: the module does each thing once per document,
-    # and two siblings for one plan would be two of the same thing.
-    builder = (
-        _project_app(app)
-        if any(entry.object_type == "project" for entry in walked)
-        else None
-    )
+    # One sibling per object type whose builder is another app's, built only
+    # for a spec that names that type: the module does each thing once per
+    # document, and two siblings for one plan would be two of the same thing.
+    # A spec of nothing but tasks builds neither, so it imports neither.
+    written = {entry.object_type for entry in walked}
+    builders = {
+        object_type: _builder_app(object_type, app)
+        for object_type in ("project", "paste")
+        if object_type in written
+    }
+    builder = builders.get("project")
 
     if validate and builder is not None and not _errors(problems):
         problems += _hashtag_problems(builder, walked)
@@ -682,26 +690,41 @@ def plan_create(
 
     policies: dict[str, Any] = {}
 
-    items = tuple(
-        _task_item(
-            entry,
-            resolution=answers,
-            priority=priorities[entry.path],
-            status=statuses.get(entry.path),
-            column=columns.get(entry.path),
-            users=users[entry.path],
-            projects=projects[entry.path],
-            policies=_policies(app, entry, policies),
-        )
-        if entry.object_type == "task"
-        else _project_item(
+    def _item(entry: _Entry) -> CreateItem:
+        """One item, built by the builder its object type owns.
+
+        A dispatch rather than a conditional expression: three object types
+        is where a chain of `if`/`else` stops reading as one thing, and a
+        fourth is a row here.
+        """
+        if entry.object_type == "task":
+            return _task_item(
+                entry,
+                resolution=answers,
+                priority=priorities[entry.path],
+                status=statuses.get(entry.path),
+                column=columns.get(entry.path),
+                users=users[entry.path],
+                projects=projects[entry.path],
+                policies=_policies(app, entry, policies),
+            )
+
+        if entry.object_type == "paste":
+            return _paste_item(
+                entry,
+                resolution=answers,
+                builder=builders["paste"],
+                policies=_policies(app, entry, policies),
+            )
+
+        return _project_item(
             entry,
             resolution=answers,
             builder=builder,
             policies=_policies(app, entry, policies),
         )
-        for entry in walked
-    )
+
+    items = tuple(_item(entry) for entry in walked)
 
     return CreatePlan(
         items=_ordered(_linked(items)),
@@ -1309,19 +1332,23 @@ def _task_item(
     )
 
 
-def _project_app(app: Any) -> Any:
-    """The app whose builder makes a project's transactions.
+def _builder_app(object_type: str, app: Any) -> Any:
+    """The app whose builder makes this object type's transactions.
 
     `phabfive.spec` may not import an app class - that is the whole reason
     `phabfive.create` exists - so the runner is asked for one, at call time
-    and only for a spec that actually names a project. `app_for` hands back
-    a sibling built with `Phabfive._from_parent`, so the second app shares
-    the first's configuration and client rather than discovering and
-    connecting again.
+    and only for a spec that actually names that object type. `app_for`
+    hands back a sibling built with `Phabfive._from_parent`, so the second
+    app shares the first's configuration and client rather than discovering
+    and connecting again.
+
+    One function rather than one per type: a project's builder and a
+    paste's differ only in which row of `phabfive.create.dispatch.CREATE_APPS`
+    answers, so the next creator is a row there and not a function here.
     """
     from phabfive.create.dispatch import app_for
 
-    return app_for("project", app)
+    return app_for(object_type, app)
 
 
 def _hashtag_problems(builder: Any, entries: Sequence[_Entry]) -> list[Problem]:
@@ -1516,6 +1543,87 @@ def _project_item(
             # never with the slug Phorge derived, and deriving one here
             # would be phabfive guessing at rules it does not own.
             "hashtag": f"#{slugs[0]}" if slugs else None,
+            "changes": list(changes),
+        },
+        depth=entry.depth,
+    )
+
+
+def _paste_item(
+    entry: _Entry,
+    *,
+    resolution: Resolution,
+    builder: Any,
+    policies: Mapping[str, tuple[Any, str]],
+) -> CreateItem:
+    """One paste item: its transactions, what it waits for, and its preview.
+
+    The second half of #481, and the same shape as :func:`_project_item`:
+    the transactions are `Paste.paste_create_transactions`', so `paste
+    create` and a create spec end at the same builder and neither can grow a
+    field the other does not send.
+
+    A paste is a leaf. Nothing nests under one, it has no parent and no
+    subtasks, and `paste.edit` has no space transaction - so the four keys
+    `phabfive.spec.references` walks for it are all there is, and the only
+    thing this has to wait for is a `$local-id` among them. That is what a
+    `projects: ["$platform"]` on a paste is: the release notes are tagged
+    into the project the same document creates.
+
+    `title:` is the spec's spelling because `paste.edit` names the
+    transaction ``title``; the web UI labels it "Name", and so does the
+    preview, which is `paste_create_transactions`' own change record.
+    """
+    data = entry.data
+    declared = data.get(LOCAL_ID_KEY)
+    name = declared if isinstance(declared, str) else None
+
+    tags = [
+        (phid, resolution.label_for("paste", "projects", written))
+        for written, phid in (
+            (written, _reference(resolution, "paste", "projects", written))
+            for written in _strings(entry, "projects")
+        )
+        if phid
+    ]
+    subscribers = [
+        (phid, resolution.label_for("paste", "subscribers", written))
+        for written, phid in (
+            (written, _reference(resolution, "paste", "subscribers", written))
+            for written in _strings(entry, "subscribers")
+        )
+        if phid
+    ]
+
+    # `or None` rather than the empty list: `paste_create_transactions`
+    # sends an empty `.add` for a list it was handed, and a plan whose every
+    # paste carried two empty arrays would read differently from a task's,
+    # which only carries the keys the spec wrote. An empty `.add` is a no-op
+    # on the wire either way, so this is about what a `--dry-run` shows.
+    transactions, changes = builder.paste_create_transactions(
+        data["title"],
+        content=data.get("content"),
+        language=data.get("language"),
+        tags=tags or None,
+        subscribers=subscribers or None,
+        policies=policies,
+    )
+
+    waits_for = [
+        value
+        for transaction in transactions
+        for value in _values(transaction["value"])
+        if local_id(value) is not None
+    ]
+
+    return CreateItem(
+        object_type="paste",
+        path=entry.path,
+        local_id=name,
+        transactions=tuple(dict(one) for one in transactions),
+        depends_on=tuple(dict.fromkeys(waits_for)),
+        display={
+            "title": data["title"],
             "changes": list(changes),
         },
         depth=entry.depth,

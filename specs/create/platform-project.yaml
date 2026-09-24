@@ -1,0 +1,37 @@
+# A project on its own - the smallest create spec that creates no task.
+#
+#   phabfive apply -f specs/create/platform-project.yaml --dry-run
+#
+# Every name in it exists on the seeded development instance, so the whole
+# file resolves against it; the project itself deliberately does not, since
+# a hashtag can only be taken once.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: platform-project
+  description: One project, with its hashtags, members, icon and policies.
+  version: "1"
+  author: phabfive
+
+projects:
+  - name: Platform Engineering
+    description: |
+      The team that owns the build, the deploy pipeline and the runtime.
+
+      A project's description is remarkup, the same as a task's.
+    # The hashtag Phorge derives from the name is kept whatever `slugs:`
+    # says; these are the additional ones it also answers to.
+    slugs:
+      - platform
+      - platform-eng
+    # Instance configuration decides the icon set, so an icon phabfive does
+    # not recognise is a warning and never an error. Colours are fixed in
+    # Phorge's own source and are checked offline.
+    icon: project
+    color: blue
+    members:
+      - mikael.wallin
+      - "@viola.larsson"
+    visible-to: users
+    editable-by: admin
+    joinable-by: users

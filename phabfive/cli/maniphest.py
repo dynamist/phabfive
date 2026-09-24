@@ -34,10 +34,15 @@ from phabfive.cli.output import (
     _setup_output_options,
     is_machine_format,
 )
+from phabfive.cli.spec_flags import with_spec_option
 from phabfive.commits import COMMIT_GRAMMAR
 from phabfive.constants import MONOGRAMS
 from phabfive.cli.editor import resolve_assume_yes
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveException,
+)
 from phabfive.options import split_list_option
 from phabfive.policy import POLICY_GRAMMAR
 
@@ -83,11 +88,12 @@ def _split_values_to_add(values, option):
     return split_list_option(values)
 
 
-# Every option of `maniphest create` that the template path cannot honour: the
-# template is applied as it stands, so a value given alongside --with would be
-# dropped without a word. Threading them through is #481; until then they are
-# refused rather than ignored (#465). Keyed by the command's parameter name,
-# valued with the option as it is typed.
+# Every option of `maniphest create` that the spec path cannot honour: a
+# spec is applied as it stands, so a value given alongside --with would be
+# dropped without a word, and it is refused rather than ignored (#465).
+# Keyed by the command's parameter name, valued with the option as it is
+# typed. `project create` and `paste create` have tables of their own, read
+# by the same `refuse_unspecced_create`.
 _CREATE_OPTIONS_IGNORED_BY_TEMPLATE = {
     "title": "TITLE",
     "title_opt": "--title",
@@ -108,34 +114,6 @@ _CREATE_OPTIONS_IGNORED_BY_TEMPLATE = {
     "interactive": "--interactive",
     "force": "--force",
 }
-
-
-def _options_given(ctx, options):
-    """Which of ``options`` the command line actually carried.
-
-    Typer has no unset sentinel - an option left out and one passed the value
-    it defaults to look exactly alike - so click's record of where each value
-    came from is what answers "was this passed".
-
-    Parameters
-    ----------
-    ctx : typer.Context
-        The command context
-    options : dict
-        Parameter name to the option as it is typed
-
-    Returns
-    -------
-    list
-        The options given, in the order ``options`` lists them
-    """
-    from click.core import ParameterSource
-
-    return [
-        option
-        for name, option in options.items()
-        if ctx.get_parameter_source(name) not in (None, ParameterSource.DEFAULT)
-    ]
 
 
 def _display_tasks(
@@ -177,61 +155,6 @@ def _show_tasks_after_write(ctx, maniphest_instance, task_ids):
     """
     result = maniphest_instance.task_show([int(task_id) for task_id in task_ids])
     _display_tasks(result, _get_output_format(ctx), maniphest_instance)
-
-
-def _report_partial_create(report, output_format):
-    """Say what exists after a create spec failed partway through.
-
-    Creation is one call per object and Conduit has no transactions, so
-    "it failed" is not an answer when the objects before the failure are
-    still there. Every object gets a record - ``created``, ``failed`` or
-    ``skipped`` - so the run can be cleaned up or resumed by name rather
-    than by reading back the log (#485).
-
-    A machine format puts the records on stdout and the sentence about
-    them on stderr, the way every other command that writes does (#344),
-    so a reader piping stdout into ``jq`` sees records and nothing else.
-    A human format writes the lot to stderr: this is what went wrong, and
-    a real run has never printed anything to stdout.
-
-    Parameters
-    ----------
-    report : phabfive.spec.create.CreateReport
-        Every record of the run, in the order the objects were attempted
-    output_format : str
-        The format the caller asked for
-    """
-    if is_machine_format(output_format):
-        records = report.as_records()
-
-        if output_format == "yaml":
-            from io import StringIO
-
-            from ruamel.yaml import YAML
-
-            yaml = YAML()
-            yaml.default_flow_style = False
-            stream = StringIO()
-            yaml.dump(records, stream)
-            print(stream.getvalue(), end="")
-        else:
-            from phabfive.json_output import emit_records
-
-            emit_records(records, output_format)
-
-        sys.stderr.write(f"Error: {report.summary}\n")
-        return
-
-    sys.stderr.write(f"Error: {report.summary}\n")
-
-    for record in report.records:
-        shown = record.monogram or record.phid
-        suffix = f" {shown}" if shown else ""
-
-        if record.reason and record.status == "failed":
-            suffix = f"{suffix}: {record.reason}"
-
-        sys.stderr.write(f"  {record.status:<8} {record.label}{suffix}\n")
 
 
 @maniphest_app.command()
@@ -345,9 +268,7 @@ def create(
         hidden=True,
         help="Task title (hidden, use positional argument instead)",
     ),
-    with_template: Optional[str] = typer.Option(
-        None, "--with", help="Load task creation template from YAML file"
-    ),
+    with_template: Optional[str] = with_spec_option("create"),
     description: Optional[str] = typer.Option(
         None,
         "--description",
@@ -461,20 +382,15 @@ def create(
         phabfive maniphest create "Task" --visible-to='#infra' --editable-by=admin
         echo "Description" | phabfive maniphest create "Task" --description=-
     """
-    # A template is applied as it stands, so every value the template path
-    # cannot honour used to be accepted and then dropped in silence. Refuse it
+    # A spec is applied as it stands, so every value the spec path cannot
+    # honour used to be accepted and then dropped in silence. Refuse it
     # instead, and before anything is constructed or connected: nothing a
-    # caller asked for should go missing without a word (#465).
+    # caller asked for should go missing without a word (#465). One helper
+    # for all three `create --with` sites, so they cannot drift.
     if with_template:
-        ignored = _options_given(ctx, _CREATE_OPTIONS_IGNORED_BY_TEMPLATE)
+        from phabfive.cli.create_spec import refuse_unspecced_create
 
-        if ignored:
-            sys.stderr.write(
-                f"Error: --with cannot be combined with {', '.join(ignored)}; "
-                "a creation template is applied as it stands. Put the values "
-                "in the template, or create the task without --with.\n"
-            )
-            raise typer.Exit(1)
+        refuse_unspecced_create(ctx, with_template, _CREATE_OPTIONS_IGNORED_BY_TEMPLATE)
 
     try:
         force = resolve_assume_yes(yes, force, interactive)
@@ -497,43 +413,19 @@ def create(
     final_title = title or title_opt
 
     if with_template:
-        # Template mode. Imported here rather than at module level so that
-        # `phabfive T123` does not pay for the spec engine, and statically
-        # enough for PyInstaller to follow - `_LAZY` is what it cannot see.
-        from phabfive.spec.create import CreateFailed
+        # Spec mode, which is `phabfive apply -f` under its old name.
+        # Imported here rather than at module level so that `phabfive T123`
+        # does not pay for the spec engine, and statically enough for
+        # PyInstaller to follow - `_LAZY` is what it cannot see.
+        #
+        # The three `create --with` sites share this, so a file that holds a
+        # project and three tasks creates all four here, names each of them
+        # by object type, and reports what exists after a failure halfway
+        # through (#485) - whichever of the three was typed.
+        from phabfive.cli.create_spec import load_create_spec, run_create_spec
 
-        try:
-            result = maniphest.create_tasks_from_yaml(with_template, dry_run=dry_run)
-        except CreateFailed as partial:
-            # Conduit has no transactions, so a template that failed on its
-            # fiftieth object left forty-nine behind. Answering with one
-            # sentence would leave the caller to find out which from the
-            # log; the records say it per object (#485).
-            _report_partial_create(partial.report, output_format)
-            raise typer.Exit(1)
-        except (PhabfiveConfigException, PhabfiveDataException) as e:
-            sys.stderr.write(f"Error: {e}\n")
-            raise typer.Exit(1)
-        if result and result.get("dry_run"):
-            # The command says so, not the library: `phabfive.spec.create`
-            # builds a plan and never writes, and a log.warning from inside
-            # it was a user message in the wrong place
-            print("[DRY RUN] Would create:", file=preview)
-            for task in result["tasks"]:
-                indent = "  " * task["depth"]
-                print(f"{indent}- {task['title']}", file=preview)
-                if task.get("assignee"):
-                    print(f"{indent}  Assignee: {task['assignee']}", file=preview)
-                if task.get("subscribers"):
-                    subscribers = ", ".join(task["subscribers"])
-                    print(f"{indent}  Subscribers: {subscribers}", file=preview)
-                if task.get("commits"):
-                    commits = ", ".join(task["commits"])
-                    print(f"{indent}  Commits: {commits}", file=preview)
-        elif machine and result and result.get("task_ids"):
-            # One query for the whole template, and the same records
-            # `maniphest show` gives - a tree of tasks is still just tasks.
-            _show_tasks_after_write(ctx, maniphest, result["task_ids"])
+        spec = load_create_spec(with_template)
+        run_create_spec(ctx, maniphest, spec, with_template, dry_run=dry_run)
     elif final_title:
         # CLI mode - handle description input modes
         final_description = description
@@ -661,9 +553,7 @@ def search(
     text_query: Optional[str] = typer.Argument(
         None, help="Free-text search in task title/description"
     ),
-    with_template: Optional[str] = typer.Option(
-        None, "--with", help="Load search parameters from a YAML template file"
-    ),
+    with_template: Optional[str] = with_spec_option("search"),
     tag: Optional[str] = typer.Option(
         None,
         "--tag",
@@ -841,6 +731,36 @@ def search(
     maniphest = _get_maniphest_app()
 
     if with_template:
+        # `maniphest search --with` reads the spec through the pre-spec
+        # loader rather than `load_search_spec`, so it says this for itself -
+        # both the deprecation and the refusal of the other kind. That loader
+        # passes `kind="search"`, which *reinterprets* a create spec into an
+        # empty search rather than refusing it (see
+        # `phabfive.cli.spec_flags`), so the kind is settled here first, the
+        # way the other four `--with` sites settle it inside
+        # `load_search_spec`. One extra parse on a deprecated path, against a
+        # wrong answer given with a straight face.
+        from phabfive.cli.spec_flags import (
+            dispatch_kind,
+            load_of_kind,
+            warn_with_deprecated,
+        )
+
+        warn_with_deprecated("phabfive search -f FILE")
+
+        try:
+            settled = load_of_kind(with_template, "search")
+        except PhabfiveException:
+            # Whatever is wrong with the file, `_load_search_config` below
+            # reads it again and is the one that reports it: this pass exists
+            # only to refuse a file that reads perfectly well and is the
+            # other kind, and it must not take over the message for anything
+            # else.
+            settled = None
+
+        if settled is not None:
+            dispatch_kind(settled, "search", with_template)
+
         try:
             search_items = maniphest._load_search_config(with_template)
         except Exception as e:
@@ -941,11 +861,18 @@ def search(
                 # `maniphest search` searches tasks. A spec item naming
                 # another object type is refused rather than run as a task
                 # search, and the sentence names a command that does run it.
+                #
+                # That command is `phabfive search -f`, not another app's
+                # `--with`: this line is printed immediately under the
+                # deprecation warning that sends the reader to exactly that
+                # spelling, and answering a deprecated flag by naming a
+                # second deprecated flag is how a reader ends up migrating
+                # twice.
                 typer.echo(
                     f"ERROR: {banner_title(item['title'], index)}: "
                     f"'maniphest search' runs a task search, and this one is "
-                    f"a {e.object_type!r} search. Run the spec from "
-                    f"'phabfive {e.object_type} search --with' instead, "
+                    f"a {e.object_type!r} search. Run the spec with "
+                    f"'phabfive search -f FILE' instead, "
                     f"which runs every type a spec holds.",
                     err=True,
                 )

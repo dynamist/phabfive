@@ -36,8 +36,8 @@ import pytest
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 
-SEARCH_TEMPLATE = REPOSITORY / "templates" / "task-search" / "blocked-tasks.yaml"
-CREATE_TEMPLATE = REPOSITORY / "templates" / "task-create" / "test-template.yaml"
+SEARCH_TEMPLATE = REPOSITORY / "specs" / "search" / "blocked-tasks.yaml"
+CREATE_TEMPLATE = REPOSITORY / "specs" / "create" / "sprint-tasks.yaml"
 
 # Every module under phabfive/spec/, so test 2 pins the whole subpackage
 # rather than only the two files this issue owns.

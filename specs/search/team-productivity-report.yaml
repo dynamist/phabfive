@@ -1,0 +1,49 @@
+# Work in, work out, and what is still open: a weekly throughput report.
+#
+#   phabfive search -f specs/search/team-productivity-report.yaml
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: team-productivity-report
+  description: >-
+    Four views of one week: what arrived, what was completed, how the
+    high-priority load is spread, and what has been open long enough to be
+    worth a question. Written for a report rather than for triage, so every
+    search asks for metadata rather than history.
+  version: "1"
+  author: phabfive
+searches:
+  - type: task
+    title: "📊 Work Created This Week"
+    description: "New tasks and incoming work volume"
+    search:
+      created-after: 7
+      tag: "*"
+      show-metadata: true
+
+  - type: task
+    title: "🎯 Work Completed This Week"
+    description: "Task completion and throughput"
+    search:
+      status: "closed+in:Resolved"
+      updated-after: 7
+      tag: "*"
+      show-history: false
+
+  - type: task
+    title: "🔥 High Priority Workload"
+    description: "Current high-priority task distribution"
+    search:
+      priority: "in:High,in:Unbreak Now!,in:Triage"
+      status: "in:Open"
+      tag: "*"
+      show-metadata: true
+
+  - type: task
+    title: "⌛ Long-Running Tasks"
+    description: "Tasks that have been open for a while"
+    search:
+      created-after: 60
+      status: "in:Open"
+      tag: "*"
+      show-metadata: true

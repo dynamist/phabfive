@@ -7,8 +7,8 @@ The Maniphest CLI provides powerful commands for managing tasks in Phabricator/P
 Maniphest is Phabricator's task tracking application. The phabfive CLI allows you to:
 
 - Search and filter tasks with advanced filtering
-- Use [task search templates](./search-templates.md) for complex, reusable queries
-- Use [task creation templates](./create-templates.md) for bulk task creation with relationships
+- Use [search specs](./search-specs.md) for complex, reusable queries
+- Use [create specs](./create-specs.md) for bulk task creation with relationships
 - Add comments to tasks
 - Track and filter tasks by their workboard column transitions
 - Track and filter tasks by their priority transitions
@@ -27,23 +27,21 @@ phabfive maniphest show T123
 phabfive maniphest show T123 T456
 phabfive maniphest show T123,T456
 
-# Show all fields including workboard transition history
-phabfive maniphest show T123 --all
-
-# Pretty-print all fields
-phabfive maniphest show T123 --pp
+# Show the optional sections: transition history, metadata, comments, policies
+phabfive maniphest show T123 --show-history --show-metadata
+phabfive maniphest show T123 -H -M -C -P
 
 # Machine-readable: one JSON array, or one object per line
 phabfive --format=json maniphest show T123 T456
 phabfive --format=jsonl maniphest show T123 T456 | jq -c '.Task.Name'
 ```
 
-When using `--all`, the output includes complete workboard transition history showing:
+When using `--show-history`, the output includes complete workboard transition history showing:
 - All column movements across all workboards
 - Timestamps for each transition
 - Direction indicators (forward/backward)
 
-Example output with `--all`:
+Example output with `--show-history`:
 ```
 Ticket ID:      123
 phid:           PHID-TASK-abc123
@@ -150,84 +148,72 @@ see [Attaching Commits](edit-cli.md#attaching-commits).
 Add a comment to a task:
 
 ```bash
-phabfive maniphest comment add T123 "This is my comment"
+phabfive maniphest comment T123 "This is my comment"
 ```
 
 The command will output the task URI after successfully adding the comment.
 
-### Create Tasks from Templates
+### Create Tasks from a Spec
 
-Create multiple related tasks in bulk using YAML configuration files. Task creation templates support:
-
-- **Hierarchical structures**: Create epics with subtasks automatically linked
-- **Variable substitution**: Use Jinja2 templating for dynamic content
-- **Task relationships**: Attach tasks to existing parents and subtasks by monogram, and commits by monogram or hash
-- **Team assignments**: Assign tasks to users and add subscribers
-- **Project association**: Automatically tag tasks with relevant projects
+Several related tasks come from one file rather than from one command per task. The command
+is `phabfive apply`, at the top level, because a file may create projects as well as tasks:
 
 ```bash
-# Always preview first (recommended)
-phabfive maniphest create --with templates/task-create/project-setup.yaml --dry-run
+# Always preview first
+phabfive apply -f specs/create/sprint-tasks.yaml --dry-run
 
-# Create tasks for real
-phabfive maniphest create --with templates/task-create/project-setup.yaml
+# Create them for real
+phabfive apply -f specs/create/sprint-tasks.yaml
 
-# Debug complex templates
-phabfive -vv maniphest create --with templates/task-create/sprint-planning.yaml --dry-run
+# Supply a variable the file declares
+phabfive apply -f specs/create/sprint-tasks.yaml --set sprint=13
 ```
 
-**Example template structure:**
-```yaml
-variables:
-  project: "Mobile Redesign"
-  tech_lead: "alice"
-
-tasks:
-  - title: "[EPIC] {{ project }}"
-    description: "Main epic for {{ project }} project"
-    projects: ["{{ project }}", "Design Team"]
-    assignment: "{{ tech_lead }}"
-
-    tasks:  # Nested subtasks
-      - title: "User research"
-        description: "Conduct user interviews"
-        projects: ["{{ project }}", "UX Research"]
+```console
+$ phabfive apply -f specs/create/sprint-tasks.yaml --dry-run
+[DRY RUN] specs/create/sprint-tasks.yaml: would create 3 tasks.
+  - task 'Plan sprint 12'
+  - task 'Build release 2024.4'
+  - task 'Review release 2024.4 against the security checklist'
 ```
 
-**Benefits of creation templates:**
-- **Reproducible**: Same task structure every time
-- **Relationship management**: Automatic linking of related tasks
-- **Team coordination**: Consistent assignments and project tagging
-- **Scalable**: Handle complex project hierarchies easily
+A create spec gives you nested subtasks linked to their parent, links onto tasks that already
+exist, Jinja2 variables, assignments, subscribers, Spaces and per-task projects. See
+[Creating with Specs](create-specs.md) for the guide and
+[the format page](phorge-spec.md) for every key.
 
-For complete documentation on creating and using task templates, see [Task Creation Templates](create-templates.md).
+`phabfive maniphest create --with FILE` still reads the same file and still works, but warns
+that `phabfive apply -f FILE` replaces it. `project create` and `paste create` take `--with`
+too, and all three read every spec a create spec may be, whatever it creates.
 
 ## Task Search
 
 Search for tasks using free-text queries and various filtering options, including advanced project pattern matching with AND/OR logic.
 
-### Using Search Templates
+### Using a Search Spec
 
-For complex or frequently-used searches, you can use YAML templates that pre-define search parameters:
+A complex or frequently-used search belongs in a file. `phabfive search` runs every search in
+one, whatever applications they ask:
 
 ```bash
-# Use a search template
-phabfive maniphest search --with templates/task-search/high-priority-stale-tasks.yaml
+# One search
+phabfive search -f specs/search/high-priority-stale-tasks.yaml
 
-# Use multi-document templates for comprehensive reports
-phabfive maniphest search --with templates/task-search/project-status-overview.yaml
+# Four searches in one file, each with its own banner
+phabfive search -f specs/search/project-status-overview.yaml
 
-# Override template parameters from command line
-phabfive maniphest search --with templates/task-search/blocked-tasks.yaml --tag "my-project"
+# Machine-readable, one record per line
+phabfive --format=jsonl search -f specs/search/blocked-tasks.yaml
 ```
 
-**Benefits of search templates:**
-- **Reusable**: Save complex search patterns for repeated use
-- **Shareable**: Team members can use the same search criteria
-- **Multi-document**: Run multiple related searches in sequence
-- **Override-friendly**: Command-line parameters override template values
+Everything inside a spec's `search:` block is the same vocabulary as the flags below:
+`column:` is `--column`, `show-history:` is `--show-history`. See
+[Searching with Specs](search-specs.md) for the guide and [the format page](phorge-spec.md)
+for every key.
 
-For complete documentation on search templates, see [Search Templates](search-templates.md).
+`phabfive maniphest search --with FILE` still works and still lets command-line flags override
+what the file says, but warns that `phabfive search -f FILE` replaces it - and unlike
+`--with`, `search -f` runs project, paste and passphrase items too.
 
 ### Free-Text Search
 
@@ -414,7 +400,7 @@ refused by name.
 
 `--has-parents` and `--has-subtasks` are tri-state: not given sends nothing,
 and the flags set them true. The false half - "tasks with no parent at all" - is
-written in a [search template](search-templates.md) as `has-parents: false`.
+written in a [search spec](search-specs.md) as `has-parents: false`.
 
 ### Listing Every Task
 
@@ -488,7 +474,7 @@ phabfive maniphest search --include T2069,T2257
   matches. Excluded IDs that didn't match anything are silently ignored.
   `--limit` keeps the top N of the [result ordering](#result-ordering).
 - Passing the same task to both `--include` and `--exclude` is an error.
-- Both are supported in [search templates](search-templates.md) as a
+- Both are supported in [search specs](search-specs.md) as a
   comma-separated string (`include: "T2069,T2257"`) or a YAML list:
 
   ```yaml
@@ -541,7 +527,7 @@ field:
   anything alongside a text query. It is the one order phabfive cannot re-sort
   locally, so when a tag spans several projects those results stay grouped by
   project (deterministically, but grouped).
-- `order` is supported in [search templates](search-templates.md):
+- `order` is supported in [search specs](search-specs.md):
 
   ```yaml
   search:
@@ -1309,8 +1295,8 @@ $ phabfive maniphest edit T123 --space='*rch*' --dry-run
 
 `PHAB_SPACE` is a search filter and nothing more. A create with no `--space`
 lands wherever the server puts it, which is the instance's own default Space,
-so set it explicitly when it matters. Templates take a `space` field per task -
-see [Task Creation Templates](create-templates.md).
+so set it explicitly when it matters. A create spec takes a `space` field per
+task - see [Creating with Specs](create-specs.md).
 
 Monograms and names complete with TAB, from a list kept for a day - see
 [Caching](caching.md).
@@ -1344,12 +1330,13 @@ This helps you understand exactly why a task appeared in your search results.
 
 ## Real-World Workflows
 
-**💡 Tip**: Many of these common workflows are available as pre-built search templates in `templates/task-search/`. For example:
+**💡 Tip**: Many of these common workflows already ship as search specs under `specs/search/`:
 - `project-status-overview.yaml` - Comprehensive project health check
 - `development-workflow-audit.yaml` - Development process analysis
 - `blocked-tasks.yaml` - Find workflow bottlenecks
 
-See [Search Templates](search-templates.md) for the complete list.
+Run one with `phabfive search -f specs/search/blocked-tasks.yaml`. See
+[Searching with Specs](search-specs.md) for the complete list.
 
 ### Finding Tasks That Got Stuck
 
@@ -1457,28 +1444,29 @@ direction, `-q` reports only errors and `-qq` only critical failures:
 Repeats past either end hold there, so `-vvv` is the same as `-vv`. Opposing
 flags cancel, so `-v -q` lands back on the default.
 
-### Using Search Templates for Complex Queries
+### Using Search Specs for Complex Queries
 
-For frequently-used complex searches, consider creating YAML search templates:
+For frequently-used complex searches, write a spec and keep it in version control:
 
 ```bash
-# Save complex searches in templates/task-search/ for reuse
-phabfive maniphest search --with templates/task-search/project-status-overview.yaml
+# Four searches in one file
+phabfive search -f specs/search/project-status-overview.yaml
 
-# Team members can share the same search criteria
-phabfive maniphest search --with templates/task-search/development-workflow-audit.yaml
+# Team members run the same file
+phabfive search -f specs/search/development-workflow-audit.yaml
 
-# Override specific parameters while keeping the rest
-phabfive maniphest search --with templates/task-search/blocked-tasks.yaml --tag "urgent-project"
+# Vary one value without editing the file, where the file declares it
+phabfive search -f my-searches.yaml --set team=core
 ```
 
 **Advantages:**
 - **Reproducible**: Same results every time
 - **Shareable**: Team-wide standardized searches
-- **Documentable**: Include descriptions explaining what each search does
-- **Multi-query**: Run several related searches in sequence
+- **Documentable**: `metadata.description` and a per-search `description:` say what each is for
+- **Multi-query**: Run several related searches, across several applications, in sequence
+- **Checkable**: `phabfive spec validate --offline FILE` needs no token and no network
 
-For details on creating and using search templates, see [Search Templates](search-templates.md).
+For details, see [Searching with Specs](search-specs.md).
 
 ### Common Pattern Combinations
 
@@ -1516,7 +1504,8 @@ The search returned no results. Try:
 ## See Also
 
 - [Policies](policies.md) - Who can see, edit and interact with a task
-- [Search Templates](search-templates.md) - Complete guide to YAML search templates
-- [Creation Templates](create-templates.md) - Complete guide to YAML task creation templates
+- [Searching with Specs](search-specs.md) - Running one file's worth of searches with `phabfive search -f`
+- [Creating with Specs](create-specs.md) - Creating one file's worth of objects with `phabfive apply -f`
+- [The Phorge spec format](phorge-spec.md) - The normative definition of both
 - [Development Guide](development.md) - Set up a local development environment
 - [Phorge Setup](phorge-setup.md) - Run a local Phorge instance for testing

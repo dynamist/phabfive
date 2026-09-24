@@ -1,0 +1,21 @@
+# Tasks that were moved into a review column in the past week.
+#
+#   phabfive search -f specs/search/recently-moved-to-review.yaml
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: recently-moved-to-review
+  description: >-
+    What needs review attention: tasks moved to Review, Code Review or QA
+    recently, with the column history that shows where they came from. Raise
+    `created-after` to look further back.
+  version: "1"
+  author: phabfive
+searches:
+  - type: task
+    title: "🔄 Recently Moved to Review"
+    description: "Work that arrived in a review column this week"
+    search:
+      column: "to:Review,to:Code Review,to:QA"
+      created-after: 7
+      show-history: true

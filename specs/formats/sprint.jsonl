@@ -1,0 +1,3 @@
+{"spec": "phorge/v1alpha1", "kind": "create", "metadata": {"name": "sprint", "description": "The same create spec in YAML, JSON, JSONL and TOML.", "version": "1", "author": "phabfive"}, "variables": {"sprint": "Sprint 1", "owner": "mikael.wallin"}}
+{"tasks": [{"title": "{{ sprint }}: write the release checklist", "description": "Every step the release needs, in the order it needs them.", "priority": "high", "assignment": "{{ owner }}", "projects": ["Development", "QA"]}]}
+{"tasks": [{"title": "{{ sprint }}: rehearse the rollback", "description": "Restore last week's backup onto the staging host and time it.", "priority": "normal", "assignment": "ove.pettersson", "projects": ["Infrastructure"]}]}

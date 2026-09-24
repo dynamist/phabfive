@@ -1,0 +1,43 @@
+# A paste, which is how a spec ships a file rather than a work item.
+#
+#   phabfive spec validate specs/create/release-notes-paste.yaml
+#   phabfive apply -f specs/create/release-notes-paste.yaml --dry-run
+#
+# The web UI labels a paste's title "Name", and so does phabfive; `title:`
+# is what the spec spells it, because `paste.edit` names the transaction
+# "title". A paste carries no status, no priority and no assignee, and it
+# holds nothing: nothing nests under a paste the way tasks nest under a
+# task.
+#
+# `projects:` and `subscribers:` are the same two keys a task takes and are
+# read the same way, so a paste may be tagged into a project the same
+# document creates by naming its `$local-id`.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: release-notes-paste
+  description: One paste, tagged into a project and subscribed to.
+  version: "1"
+  author: phabfive
+
+variables:
+  release: "2025.10"
+
+pastes:
+  - title: Release notes {{ release }}
+    # Syntax highlighting only; the content is stored verbatim either way.
+    language: markdown
+    content: |
+      # Release {{ release }}
+
+      - The deploy pipeline retries a failed upload.
+      - The nightly job runs at 02:00 UTC rather than 03:00.
+      - Two long-standing SharePoint import bugs are fixed.
+    projects:
+      - Development
+      - QA
+    subscribers:
+      - viola.larsson
+      - "@daniel.lindgren"
+    visible-to: users
+    editable-by: users

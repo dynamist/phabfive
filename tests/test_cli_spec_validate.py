@@ -50,7 +50,7 @@ REAL_ONLINE_APP = cli_spec._online_app
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 
-SHIPPED_SEARCH = REPOSITORY / "templates" / "task-search" / "blocked-tasks.yaml"
+SHIPPED_SEARCH = REPOSITORY / "specs" / "search" / "blocked-tasks.yaml"
 
 # A search spec with three independent mistakes: a misspelled key, a value of
 # the wrong type and a time that does not parse. Three, so "names every

@@ -580,7 +580,8 @@ class TestTheCommandsIngestion:
             )
 
         assert result.exit_code == 0, result.output
-        emitted = json.loads(result.output)
+        # stdout, not `output`: `--with` warns on stderr since #486
+        emitted = json.loads(result.stdout)
         assert [record["Project"] for record in emitted] == [
             project_record()["Project"]
         ]
@@ -608,7 +609,8 @@ class TestTheCommandsIngestion:
             )
 
         assert result.exit_code == 0, result.output
-        emitted = [json.loads(line) for line in result.output.splitlines() if line]
+        # stdout, not `output`: `--with` warns on stderr since #486
+        emitted = [json.loads(line) for line in result.stdout.splitlines() if line]
         # Each record names what it is, in the section the app's own `show`
         # command publishes it under
         sections = [next(key for key in record if key != "Link") for record in emitted]
@@ -760,7 +762,7 @@ class TestWhatThePassphraseWalkCosts:
     """It is documented rather than hidden, which is the acceptance."""
 
     def _documentation(self):
-        return (REPOSITORY / "docs" / "search-templates.md").read_text(encoding="utf-8")
+        return (REPOSITORY / "docs" / "search-specs.md").read_text(encoding="utf-8")
 
     def test_the_documentation_says_the_filters_are_applied_here(self):
         text = self._documentation().lower()

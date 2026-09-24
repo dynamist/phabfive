@@ -920,72 +920,138 @@ class TestDiffusionUriWrites:
         diffusion.apply_uri_edit.assert_not_called()
 
 
-class TestManiphestCreateFromTemplate:
-    """`maniphest create --with` answers with every task it created.
+class TestManiphestCreateFromSpec:
+    """`maniphest create --with` answers with every object it created.
 
     It used to answer with nothing at all on a real run:
     `create_tasks_from_yaml` returned None and its recursion kept no list of
     what it had made, so there was nothing for the CLI to report (#344).
+
+    It answers with `phabfive apply -f`'s records now, because `--with` *is*
+    `apply -f` under its old name - `phabfive.cli.create_spec` is the one
+    runner behind all three `create --with` commands. The records that used
+    to come back were `maniphest show`'s, which could only ever describe
+    tasks: a spec that created a project reported it nowhere.
     """
 
-    def test_emits_a_record_per_created_task(self, tmp_path):
+    def _spec(self, tmp_path):
+        spec = tmp_path / "tasks.yaml"
+        spec.write_text(
+            "spec: phorge/v1alpha1\nkind: create\ntasks:\n  - title: parent\n"
+        )
+        return spec
+
+    def _planned(self, *titles):
+        from phabfive.spec.create import CreateItem, CreatePlan
+
+        return CreatePlan(
+            items=tuple(
+                CreateItem(
+                    object_type="task",
+                    path=f"tasks[{index}]",
+                    display={"title": title},
+                )
+                for index, title in enumerate(titles)
+            )
+        )
+
+    def _records(self, *titles):
+        from phabfive.spec.create import CreateRecord
+
+        return [
+            CreateRecord(
+                object_type="task",
+                path=f"tasks[{index}]",
+                status="created",
+                id=7 + index,
+                monogram=f"T{7 + index}",
+                title=title,
+            )
+            for index, title in enumerate(titles)
+        ]
+
+    def test_emits_a_record_per_created_object(self, tmp_path):
+        import phabfive.create
+
         maniphest = a_maniphest()
-        maniphest.create_tasks_from_yaml.return_value = {"task_ids": [7, 8]}
-        maniphest.task_show.return_value = {
-            "tasks": [a_task_record(7, "parent"), a_task_record(8, "child")],
-            "missing_ids": [],
-        }
-        template = tmp_path / "tasks.yaml"
-        template.write_text("tasks:\n")
+        spec = self._spec(tmp_path)
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
-            result = runner.invoke(
-                app, ["--format=json", "maniphest", "create", "--with", str(template)]
-            )
+            with patch.object(
+                phabfive.create, "plan_spec", return_value=self._planned("parent")
+            ):
+                with patch.object(
+                    phabfive.create,
+                    "apply_plan",
+                    return_value=iter(self._records("parent", "child")),
+                ):
+                    result = runner.invoke(
+                        app,
+                        ["--format=json", "maniphest", "create", "--with", str(spec)],
+                    )
 
         records = json.loads(result.stdout)
-        assert [r["Task"]["Name"] for r in records] == ["parent", "child"]
-        maniphest.task_show.assert_called_once_with([7, 8])
 
-    def test_a_human_format_still_prints_nothing(self, tmp_path):
-        """Unchanged: a real template run has never printed anything."""
+        assert [one["title"] for one in records] == ["parent", "child"]
+        # The object type is on every record, which is what makes a mixed
+        # spec reportable at all.
+        assert {one["type"] for one in records} == {"task"}
+        assert [one["monogram"] for one in records] == ["T7", "T8"]
+
+    def test_a_human_format_lists_what_was_created(self, tmp_path):
+        """Changed on purpose: a real run used to print nothing at all."""
+        import phabfive.create
+
         maniphest = a_maniphest()
-        maniphest.create_tasks_from_yaml.return_value = {"task_ids": [7]}
-        template = tmp_path / "tasks.yaml"
-        template.write_text("tasks:\n")
+        spec = self._spec(tmp_path)
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
-            result = runner.invoke(
-                app, ["--format=rich", "maniphest", "create", "--with", str(template)]
-            )
+            with patch.object(
+                phabfive.create, "plan_spec", return_value=self._planned("parent")
+            ):
+                with patch.object(
+                    phabfive.create,
+                    "apply_plan",
+                    return_value=iter(self._records("parent")),
+                ):
+                    result = runner.invoke(
+                        app,
+                        ["--format=rich", "maniphest", "create", "--with", str(spec)],
+                    )
 
-        assert result.stdout.strip() == ""
+        assert "created" in result.stdout
+        assert "T7" in result.stdout
         maniphest.task_show.assert_not_called()
 
     def test_dry_run_preview_moves_to_stderr(self, tmp_path):
+        import phabfive.create
+
         maniphest = a_maniphest()
-        maniphest.create_tasks_from_yaml.return_value = {
-            "dry_run": True,
-            "tasks": [{"depth": 0, "title": "parent"}],
-        }
-        template = tmp_path / "tasks.yaml"
-        template.write_text("tasks:\n")
+        spec = self._spec(tmp_path)
 
         with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
-            result = runner.invoke(
-                app,
-                [
-                    "--format=json",
-                    "maniphest",
-                    "create",
-                    "--with",
-                    str(template),
-                    "--dry-run",
-                ],
-            )
+            with patch.object(
+                phabfive.create, "plan_spec", return_value=self._planned("parent")
+            ):
+                result = runner.invoke(
+                    app,
+                    [
+                        "--format=json",
+                        "maniphest",
+                        "create",
+                        "--with",
+                        str(spec),
+                        "--dry-run",
+                    ],
+                )
 
-        assert result.stdout.strip() == ""
-        assert "- parent" in result.stderr
+        # A machine format's dry run puts the plan's own records on stdout -
+        # that is what makes a preview something a program can act on - and
+        # the sentence about them on stderr.
+        assert [one["display"]["title"] for one in json.loads(result.stdout)] == [
+            "parent"
+        ]
+        assert "would create" in result.stderr
 
 
 class TestCacheClear:

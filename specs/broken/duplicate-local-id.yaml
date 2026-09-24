@@ -1,0 +1,24 @@
+# Wrong on purpose: reports `duplicate-local-id`, offline.
+#
+# Two items claim `id: epic`, so `$epic` names two things and the file
+# cannot say which. A local id is unique across the whole document and not
+# per section, because a `$ref` does not say what type it expects until the
+# key it is written in is read.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: duplicate-local-id
+  description: Two items claiming the same local id.
+  version: "1"
+  author: phabfive
+
+tasks:
+  - id: epic
+    title: Stand up the observability platform
+
+  - id: epic
+    title: Stand up the metrics collector
+
+  - title: Write the alerting runbook
+    parents:
+      - "$epic"

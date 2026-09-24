@@ -1356,14 +1356,23 @@ SPEC_FILE_EXTENSIONS = ("yaml", "yml", "json", "jsonl", "ndjson", "toml")
 def complete_spec_file(incomplete: str) -> List[str]:
     """Complete a path to a spec file, filtered to the formats that load.
 
-    The first file-path completer phabfive has - `--with` never had one - so
-    it is written out here rather than left to the shell: click's own file
-    completion offers every file, and offering a .md or a .png to `spec
-    validate` is offering something the loader will refuse.
+    The only file-path completer phabfive has, and it is written out here
+    rather than left to the shell because click's own file completion offers
+    a .md and a .png too - which is offering an option something the loader
+    will refuse on its name alone.
+
+    It is on every option that takes a spec: `-f` on `apply` and `search`,
+    the `FILE` argument of `spec validate`, and all seven `--with`s, which
+    reach it through `phabfive.cli.spec_flags.with_spec_option`. `--with`
+    had none until that factory existed, so TAB on it offered every file in
+    the directory; `tests/test_with_option_parity.py` is what keeps the
+    seven from drifting apart again.
 
     Directories are offered with a trailing separator so completion keeps
     walking down; a dotfile is offered only once a dot is typed, which is
-    what a shell does.
+    what a shell does. A leading `~` is expanded to look the directory up
+    and kept in what is offered, because the shell expands it again when the
+    command finally runs.
 
     Every failure answers with no completions. A directory that cannot be
     read must not break the shell's TAB.
@@ -1384,7 +1393,7 @@ def complete_spec_file(incomplete: str) -> List[str]:
     directory, separator, prefix = incomplete.rpartition(os.sep)
 
     if separator:
-        base = Path(directory or os.sep)
+        base = Path(directory or os.sep).expanduser()
     else:
         base = Path(".")
 

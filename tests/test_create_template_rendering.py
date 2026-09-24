@@ -3,8 +3,8 @@
 """Rendering a creation template (#464).
 
 `maniphest create --with` renders every string a template names with Jinja2,
-`projects` included - docs/create-templates.md names a project by variable in
-five places, and each one used to be looked up with the braces still in it.
+`projects` included - the create guide names a project by variable, and each
+one used to be looked up with the braces still in it.
 
 `variables` is optional, as the same document says: a template that defines
 none, or writes an empty or null mapping, renders what it has and creates its
@@ -68,7 +68,7 @@ def _transactions(phab, call=0):
 
 class TestProjects:
     def test_a_variable_names_a_project(self):
-        """docs/create-templates.md writes projects: ["{{ project_name }}"]."""
+        """A spec may write projects: ["{{ project_name }}"]."""
         phab = _phab()
 
         _create(
@@ -202,7 +202,7 @@ class TestProjects:
 
 class TestOptionalVariables:
     def test_a_template_without_variables_creates_its_tasks(self):
-        """docs/create-templates.md:34 documents the key as optional."""
+        """`variables:` is documented as optional, and is."""
         phab = _phab()
 
         result = _create(phab, [_task("Plain")])

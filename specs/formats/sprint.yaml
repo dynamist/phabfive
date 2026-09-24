@@ -1,0 +1,36 @@
+# One create spec, written four times: sprint.yaml, sprint.json,
+# sprint.jsonl and sprint.toml. All four parse to the same spec, and
+# `tests/test_spec_format_parity.py` is what keeps that true - the claim
+# that no serialization is second-class is checked rather than asserted.
+#
+#   phabfive apply -f specs/formats/sprint.yaml --dry-run
+#
+# YAML is the only one of the four that can carry this comment, which is
+# also the reason `metadata.description` matters more in the other three.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: sprint
+  description: The same create spec in YAML, JSON, JSONL and TOML.
+  version: "1"
+  author: phabfive
+
+variables:
+  sprint: Sprint 1
+  owner: mikael.wallin
+
+tasks:
+  - title: "{{ sprint }}: write the release checklist"
+    description: Every step the release needs, in the order it needs them.
+    priority: high
+    assignment: "{{ owner }}"
+    projects:
+      - Development
+      - QA
+
+  - title: "{{ sprint }}: rehearse the rollback"
+    description: Restore last week's backup onto the staging host and time it.
+    priority: normal
+    assignment: ove.pettersson
+    projects:
+      - Infrastructure

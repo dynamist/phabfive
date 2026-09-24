@@ -172,7 +172,9 @@ class TestDeprecatedAll:
         result, mock_m = _invoke_with_template({"all": False})
 
         assert "Usage:" in _output(result)
-        assert "deprecated" not in _output(result)
+        # Named, not the bare word: `--with` itself is deprecated since #486
+        # and says so on every run, which is a different sentence.
+        assert "in a search template is deprecated" not in _output(result)
         mock_m.task_search.assert_not_called()
 
 

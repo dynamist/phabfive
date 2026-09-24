@@ -25,6 +25,7 @@ from phabfive.cli.output import (
     _setup_output_options,
     is_machine_format,
 )
+from phabfive.cli.spec_flags import with_spec_option
 from phabfive.constants import (
     PROJECT_MILESTONE_ICON,
     PROJECT_ORDER_DEFAULT,
@@ -41,6 +42,29 @@ from phabfive.exceptions import (
 from phabfive.options import split_list_option
 from phabfive.ordering import complete_order_value
 from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
+
+# Every option of `project create` a spec is applied instead of: a spec is
+# applied as it stands, so a value given alongside --with would be dropped
+# without a word, and it is refused rather than ignored (#465). Keyed by the
+# command's parameter name, valued with the option as it is typed; the same
+# shape `maniphest create` and `paste create` each declare, read by the one
+# `refuse_unspecced_create`.
+_CREATE_OPTIONS_IGNORED_BY_SPEC = {
+    "name": "NAME",
+    "description": "--description",
+    "icon": "--icon",
+    "color": "--color",
+    "slug": "--slug",
+    "member": "--member",
+    "parent": "--parent",
+    "milestone_of": "--milestone-of",
+    "space": "--space",
+    "visible_to": "--visible-to",
+    "editable_by": "--editable-by",
+    "joinable_by": "--joinable-by",
+    "yes": "--yes",
+    "interactive": "--interactive",
+}
 
 project_app = typer.Typer(
     cls=AgentFooterGroup, help="The project app", no_args_is_help=True
@@ -203,12 +227,7 @@ def project_search(
     query: Optional[str] = typer.Argument(
         None, help="Free text to match, the way the web UI's search box does"
     ),
-    with_template: Optional[str] = typer.Option(
-        None,
-        "--with",
-        help="Load the search from a YAML search spec; every option below "
-        "overrides what the spec says",
-    ),
+    with_template: Optional[str] = with_spec_option("search"),
     member: Optional[List[str]] = typer.Option(
         None,
         "--member",
@@ -445,7 +464,10 @@ def project_search(
 @project_app.command("create")
 def project_create(
     ctx: typer.Context,
-    name: str = typer.Argument(..., help="Project name"),
+    name: Optional[str] = typer.Argument(
+        None, help="Project name (required unless using --with)"
+    ),
+    with_template: Optional[str] = with_spec_option("create"),
     description: Optional[str] = typer.Option(
         None, "--description", help="Project description"
     ),
@@ -511,8 +533,24 @@ def project_create(
         phabfive project create "Backend" --parent='#platform'
         phabfive project create "Sprint 2" --milestone-of='#platform'
         phabfive project create "Humans" --editable-by='#humans' --joinable-by=admin --dry-run
+        phabfive project create --with specs/create/platform-project.yaml
     """
+    from phabfive.cli.create_spec import refuse_unspecced_create
     from phabfive.cli.editor import confirm_apply, render_changes, resolve_assume_yes
+
+    # `--with` is the deprecated spelling of `phabfive apply -f FILE`, and
+    # it is the same flag on all three create commands: what a spec creates
+    # is decided by the file, so this runs every object type it holds.
+    # Refused before anything is constructed or connected, so a call that is
+    # wrong however it resolves costs no request.
+    refuse_unspecced_create(ctx, with_template, _CREATE_OPTIONS_IGNORED_BY_SPEC)
+
+    if not with_template and not name:
+        typer.echo(
+            "Error: a project name is required, unless --with names a create spec.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     _validate_policies(
         visible_to=visible_to, editable_by=editable_by, joinable_by=joinable_by
@@ -526,6 +564,13 @@ def project_create(
 
     _setup_output_options(ctx)
     project = _get_project_app()
+
+    if with_template:
+        from phabfive.cli.create_spec import load_create_spec, run_create_spec
+
+        spec = load_create_spec(with_template)
+        run_create_spec(ctx, project, spec, with_template, dry_run=dry_run)
+        return
 
     # A machine-readable format answers with the record `project show` would
     # give. A dry run wrote nothing, so it has no record to give: the

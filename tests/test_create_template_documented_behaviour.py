@@ -2,7 +2,7 @@
 
 """What a creation template actually does, where the documentation said otherwise (#466).
 
-Two behaviours were described in `docs/create-templates.md` and `phabfive/SKILL.md`
+Two behaviours were described in the create-template page and `phabfive/SKILL.md`
 without existing in the code. The documents now say what happens; these tests pin it,
 so the phase that implements the described behaviour instead (#463, from #480 on) has
 to flip an assertion on purpose rather than discover it.

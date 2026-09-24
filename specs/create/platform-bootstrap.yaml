@@ -1,0 +1,92 @@
+# One document, three object types, and the references that tie them
+# together. This is the file that justifies `phabfive apply` existing: no
+# single-application command can create a project, a milestone of it and the
+# tasks tagged into it in one pass, because nothing exists to name until the
+# run is under way.
+#
+#   phabfive apply -f specs/create/platform-bootstrap.yaml --dry-run
+#
+# `$name` names something *this* file creates. It is resolved while the spec
+# is applied, which is why it is not written `{{ name }}`: a variable is
+# rendered before anything exists, a `$ref` is filled in as each object is
+# created. Declaration order does not matter - an item may name a `$ref`
+# declared further down the file - but a circle is an error. Everything here
+# happens to be declared before it is used, because that also reads better.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: platform-bootstrap
+  description: >-
+    A project, a milestone of it, and the tasks tagged into both, wired
+    together with $local references.
+  version: "1"
+  author: phabfive
+
+variables:
+  owner: mikael.wallin
+
+projects:
+  - id: observability
+    name: Observability Platform
+    description: Metrics, logs and traces for everything we run.
+    slugs:
+      - observability
+    icon: project
+    color: indigo
+    # `@me` is whoever runs the spec, and it is here for a reason rather
+    # than for completeness: the tasks below are `visible-to:
+    # "$observability"`, and Phorge refuses to create an object whose view
+    # policy would hide it from the person creating it. Without this line
+    # the projects are created and the first task is refused with "The view
+    # policy of this object would no longer allow you to view the object",
+    # which `--dry-run` cannot see, because a policy is only checked when
+    # something is written.
+    members:
+      - "@me"
+      - "{{ owner }}"
+      - viola.larsson
+
+  # A milestone is a project with a parent, so it is a `projects:` item like
+  # any other - it just takes `milestone-of:` instead of `icon:` and
+  # `slugs:`, which Phorge derives from the project it belongs to.
+  - id: first-milestone
+    name: Foundations
+    milestone-of: "$observability"
+    description: The first milestone of the platform work.
+
+tasks:
+  - id: epic
+    title: Stand up the observability platform
+    description: |
+      The umbrella task. Everything below hangs off it, and every one of
+      them is tagged into both the project and its first milestone.
+    priority: high
+    assignment: "{{ owner }}"
+    projects:
+      - "$observability"
+      - "$first-milestone"
+    # A policy takes a $ref too: the tasks are visible to whoever can see
+    # the project this same file creates.
+    visible-to: "$observability"
+
+  - title: Deploy the metrics collector
+    description: One agent per host, with the rollout done a rack at a time.
+    parents:
+      - "$epic"
+    assignment: ove.pettersson
+    projects:
+      - "$observability"
+      - "$first-milestone"
+    visible-to: "$observability"
+
+  - title: Write the alerting runbook
+    description: What each alert means and who answers it.
+    parents:
+      - "$epic"
+    assignment: viola.larsson
+    subscribers:
+      - "@sonja.bergstrom"
+    projects:
+      - "$observability"
+      - "$first-milestone"
+    visible-to: "$observability"

@@ -1,0 +1,54 @@
+# The smallest create spec worth copying: a few variables and three tasks.
+#
+#   phabfive apply -f specs/create/sprint-tasks.yaml --dry-run
+#   phabfive apply -f specs/create/sprint-tasks.yaml
+#
+# --dry-run plans and prints without creating anything. A variable can be
+# supplied from outside the file, which is what makes one spec serve every
+# sprint:
+#
+#   phabfive apply -f specs/create/sprint-tasks.yaml --set sprint=13
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: sprint-tasks
+  description: >-
+    Three tasks that open a sprint: the plan, the work and the review. The
+    projects and the person named here are the ones the development Phorge is
+    seeded with, so the file runs as it is written.
+  version: "1"
+  author: phabfive
+variables:
+  sprint: 12
+  release: "2024.4"
+  reviewer: "tommy.svensson"
+tasks:
+  - title: "Plan sprint {{ sprint }}"
+    description: |
+      Agree what sprint {{ sprint }} contains and write it down.
+
+      Every variable in this file is rendered with Jinja2, in the title and
+      in the description alike, so `{{ release }}` reads the same wherever
+      it is written.
+    projects:
+      - Development
+    priority: "high"
+  - title: "Build release {{ release }}"
+    description: |
+      Produce release {{ release }} from what sprint {{ sprint }} agreed on.
+
+      A task may name more than one project; it is tagged into each of them.
+    projects:
+      - Development
+      - Infrastructure
+    priority: "normal"
+  - title: "Review release {{ release }} against the security checklist"
+    description: |
+      Walk release {{ release }} through the checklist before it ships.
+
+      `assignment` takes one username, and it renders like anything else.
+    projects:
+      - Security
+      - QA
+    priority: "normal"
+    assignment: "{{ reviewer }}"

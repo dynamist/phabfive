@@ -1,0 +1,50 @@
+# One command, four searches: the state of everything you are tagged into.
+#
+#   phabfive search -f specs/search/project-status-overview.yaml
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: project-status-overview
+  description: >-
+    A status meeting in one file: what is urgent, what was finished, what is
+    stuck and what was escalated. Every search carries `tag: "*"`, so it
+    covers every project you are a member of; replace it with a project name
+    for one board.
+  version: "1"
+  author: phabfive
+searches:
+  - type: task
+    title: "🔥 High Priority Open Tasks"
+    description: "Tasks that need immediate attention"
+    search:
+      tag: "*"
+      priority: "in:High,in:Unbreak Now!,in:Triage"
+      status: "in:Open"
+      show-history: true
+
+  - type: task
+    title: "✅ Recently Resolved Tasks"
+    description: "Tasks completed in the last week"
+    search:
+      tag: "*"
+      status: "closed+in:Resolved"
+      updated-after: 7
+      show-metadata: true
+
+  - type: task
+    title: "🚫 Blocked or Stalled Work"
+    description: "Tasks that might need intervention"
+    search:
+      tag: "*"
+      column: "in:Blocked,been:Waiting"
+      updated-after: 14
+      show-history: true
+
+  - type: task
+    title: "📈 Priority Escalations"
+    description: "Tasks that had priority raised recently"
+    search:
+      tag: "*"
+      priority: "raised"
+      updated-after: 30
+      show-history: true

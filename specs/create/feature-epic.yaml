@@ -1,0 +1,97 @@
+# Everything a create spec can say about a task, in one file: nested
+# subtasks, a YAML anchor reused as a subscriber list, an assignment, and
+# links onto tasks that already exist.
+#
+#   phabfive apply -f specs/create/feature-epic.yaml --dry-run
+#   phabfive apply -f specs/create/feature-epic.yaml
+#
+# The projects and people are the ones the development Phorge is seeded with
+# (docs/phorge-setup.md), and T1, T2 and T3 are three of the four tasks that
+# seed creates. Against another instance, change the names and the monograms
+# first: `--dry-run` reports every one that does not resolve.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: feature-epic
+  description: >-
+    Two epics, one of them with subtasks of its own, and then one task per
+    thing a task can carry: several projects, an assignment, a parent that
+    already exists, subtasks that already exist, and a subscriber list shared
+    through a YAML anchor.
+  version: "2"
+  author: phabfive
+variables:
+  release: "2024.4"
+  standard: "DO-326A"
+  component: "secure boot"
+  workgroup: &WORKGROUP
+    - "gabriel.blomqvist"
+    - "sebastian.soderberg"
+tasks:
+  - title: "[EPIC] Ship {{ component }} in {{ release }}"
+    description: |
+      The umbrella task for {{ component }}.
+      It is many lines of text, and every one of them is rendered, so
+      {{ release }} reads the same here as it does in the title.
+    projects:
+      - "Development"
+    priority: "high"
+  - title: "[EPIC] Certify {{ release }} against {{ standard }}"
+    description: |
+      The second epic, and the one that owns the subtasks below.
+      Anything nested under `tasks:` is created after its parent and linked
+      to it, so this is one document rather than three.
+    projects:
+      - "GUNNAR-Core"
+    priority: "unbreak"
+    tasks:
+      - title: "Collect the {{ standard }} evidence"
+        description: |
+          A subtask with projects of its own, which are not inherited from
+          the epic above but written here.
+        projects:
+          - "Security"
+        priority: "low"
+      - title: "Review the evidence package"
+        description: |
+          A subtask with no projects of its own: it is created, linked to its
+          parent, and left untagged.
+        priority: "wish"
+  - title: "Document {{ component }} for {{ release }}"
+    description: |
+      A task tagged into three projects at once.
+    projects:
+      - "Development"
+      - "GUNNAR-Core"
+      - "Infrastructure"
+  - title: "Assign the {{ component }} rollout"
+    description: |
+      `assignment` takes one username, and the task is created owned by them.
+    projects:
+      - "GUNNAR-Core"
+    assignment: "gabriel.blomqvist"
+  - title: "Track {{ component }} under an existing task"
+    description: |
+      `parents` names tasks that already exist, by monogram. T1 itself is
+      never edited by this spec; the link is written from the new task.
+    projects:
+      - "GUNNAR-Core"
+    parents:
+      - "T1"
+  - title: "Adopt two existing tasks as subtasks"
+    description: |
+      `subtasks` is the same link from the other end: the tasks named here
+      already exist and become children of this one.
+    projects:
+      - "GUNNAR-Core"
+    subtasks:
+      - "T2"
+      - "T3"
+  - title: "Keep the workgroup informed about {{ component }}"
+    description: |
+      `subscribers` takes a list of usernames. This one comes from the
+      `workgroup` anchor declared above, which is how a list is reused
+      without repeating it - a YAML feature, so it works in YAML only.
+    projects:
+      - "GUNNAR-Core"
+    subscribers: *WORKGROUP

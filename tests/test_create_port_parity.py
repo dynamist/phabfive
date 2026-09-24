@@ -351,20 +351,20 @@ class TestTheReturnValue:
 
 
 class TestTheShippedTemplates:
-    """Every template in the tree still plans, mega-2024-simulation included."""
+    """Every shipped create spec still plans, large-programme included."""
 
     @pytest.mark.parametrize(
         "path, tasks",
         [
-            ("templates/task-create/test-template.yaml", 3),
-            ("templates/task-create/test-template-v2.yml", 9),
-            ("templates/task-create/mega-2024-simulation.yml", 66),
+            ("specs/create/sprint-tasks.yaml", 3),
+            ("specs/create/feature-epic.yaml", 9),
+            ("specs/create/large-programme.yaml", 66),
         ],
     )
     def test_every_task_in_it_reaches_the_plan(self, path, tasks):
         """What is under test is the shape, not the fixture.
 
-        The names these templates use are not on any instance this suite
+        The names these specs use are not on any instance this suite
         has, so resolving them would report sixty problems and say nothing
         about whether the document was walked. An **empty** `Resolution()`
         is how a caller asks for that on purpose: `plan_create` uses a

@@ -1,0 +1,27 @@
+# Every project that is still active, with its members.
+#
+#   phabfive search -f specs/search/active-projects.yaml
+#
+# `type: project` is what makes this a project search; without it an item
+# searches tasks, which is what every search template written before the
+# spec format existed meant.
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: active-projects
+  description: Active projects and who is in them.
+  version: "1"
+  author: phabfive
+
+searches:
+  - type: project
+    title: Active projects
+    description: |
+      Projects that have not been archived, newest first as the instance
+      orders them. `milestones: false` drops the milestones, which are
+      projects too and would otherwise crowd out the real ones.
+    search:
+      status: active
+      milestones: false
+      show-members: true
+      limit: 50

@@ -1,0 +1,46 @@
+# Hanging new subtasks off a task that already exists.
+#
+#   phabfive apply -f specs/create/anchor-existing-task.yaml --dry-run
+#
+# The first `tasks:` item carries no `title:`, so it creates nothing: it is
+# an *anchor*, and `parent:` names the task its children hang off. T1 is
+# never edited. Each child is created carrying `parents.add`, which is the
+# rule the format states and not an implementation detail - a `.set` would
+# replace whatever else already hangs off T1, and Conduit gives no way to
+# put it back.
+#
+# The flat spelling of the same thing is one item per child carrying
+# `parents: [T1]` itself, which is what the last task below does. Nesting is
+# the readable form when several children share one parent.
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: anchor-existing-task
+  description: New subtasks under an existing task, added and never set.
+  version: "1"
+  author: phabfive
+
+tasks:
+  - parent: T1
+    tasks:
+      - title: Rotate the build server host keys
+        description: Follow the runbook; announce the window a day ahead.
+        priority: high
+        assignment: tommy.svensson
+        projects:
+          - Security
+          - Infrastructure
+
+      - title: Re-run the SSH configuration audit
+        description: The audit has to pass before the parent task is closed.
+        assignment: sebastian.soderberg
+        projects:
+          - Security
+
+  # The same relationship, written flat.
+  - title: Record the rotation in the change log
+    parents:
+      - T1
+    assignment: deploy.bot
+    projects:
+      - Infrastructure

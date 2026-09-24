@@ -1,0 +1,23 @@
+# Wrong on purpose: reports `unknown-user`, online.
+#
+# Offline this file is clean: `nobody.here` is a well-formed username, and
+# whether the instance has one is not a question the file can answer. It
+# takes the second layer, which asks the instance about every reference in
+# one pass - so a spec naming four people who do not exist is one report of
+# four problems and not four runs.
+#
+#   phabfive spec validate specs/broken/unknown-user.yaml
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: unknown-user
+  description: An assignee and a subscriber the instance does not have.
+  version: "1"
+  author: phabfive
+
+tasks:
+  - title: Rotate the build server host keys
+    description: Both names below are well-formed and neither one exists.
+    assignment: nobody.here
+    subscribers:
+      - "@also.nobody"
