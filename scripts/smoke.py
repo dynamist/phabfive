@@ -400,8 +400,23 @@ def check_completion(executable, home, timeout):
     return f"offers {len(offered)} candidates"
 
 
+#: A spec this script writes for itself, rather than reading one from the
+#: repository. Deliberately minimal: what is under test is that
+#: `phabfive.spec` is reachable and that validating needs no configuration,
+#: not what any particular shipped file contains.
+SMOKE_SPEC = """spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: smoke
+searches:
+  - type: task
+    search:
+      status: open
+"""
+
+
 def check_spec_validate_offline(executable, home, timeout):
-    """`spec validate --offline` on a shipped spec, with no configuration.
+    """`spec validate --offline` on a spec this check writes, no configuration.
 
     The only check that reaches phabfive/spec/ in a frozen build. Every
     other command imports its app module, which PyInstaller follows; the
@@ -411,11 +426,17 @@ def check_spec_validate_offline(executable, home, timeout):
 
     It also pins the promise the subpackage is built on: no token, no URL,
     no ~/.arcrc and no network, on a HOME that has nothing in it.
-    """
-    spec_file = REPOSITORY / "specs" / "search" / "blocked-tasks.yaml"
 
-    if not spec_file.exists():  # pragma: no cover - a corpus that moved
-        raise Failure(f"no spec to validate at {spec_file}")
+    The spec is written here rather than read from `specs/`, because this
+    script does not always run inside a checkout. The Dockerfile copies it
+    to `/tmp/smoke.py` and nothing else, so `REPOSITORY` resolved to `/` and
+    the shipped corpus was not there at all - green on every executable and
+    every wheel, red only inside the image, which is where v0.11.0-rc.1
+    found it. A check that needs the repository cannot be the check that
+    runs where the repository is absent.
+    """
+    spec_file = Path(home) / "smoke-spec.yaml"
+    spec_file.write_text(SMOKE_SPEC, encoding="utf-8")
 
     code, output = run(
         executable, ["spec", "validate", str(spec_file), "--offline"], home, timeout
