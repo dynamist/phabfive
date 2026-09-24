@@ -1,5 +1,5 @@
 [tools]
 # Local Phorge in the shared k3d cluster, keep the same pins as the other apps in it
 k3d = "5.9.0"
-kubectl = "1.36.4"
+kubectl = "1.37.0"
 kubeconform = "0.8.0"
