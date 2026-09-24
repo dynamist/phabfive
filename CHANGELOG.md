@@ -1,6 +1,31 @@
-# Unreleased
+# 0.11.0 (2026-09-24)
 
 ## Upgrade Notes
+
+* **Breaking change for Python callers: `SEARCH_TEMPLATE_KEYS` is gone from
+  `phabfive.constants`.** The keys a search spec may use are derived from one `Field`
+  declaration per key in `phabfive.spec.registry`; ask `spec_keys("task", "search")`.
+  The old constant and the CLI's reader were two hand-maintained lists that had to agree
+  and did not - six parameters the command read were refused by the loader, two of them
+  documented as supported
+
+* **An undefined variable in a spec is now an error.** Jinja2's default renders it as the
+  empty string, so `{{ sprint_numbr }}` silently produced `"Sprint  planning"` and
+  created the task anyway. It now names the variable and offers the three remedies.
+  Write `{{ x | default("...") }}` where a variable is genuinely optional
+
+* **`maniphest create --with` refuses the options it used to ignore.** `--tag`,
+  `--assign`, `--priority`, `--space`, `--status`, `--column`, `--subscribe`,
+  `--visible-to`, `--editable-by`, `--yes` and `--interactive` were accepted alongside a
+  template and silently dropped. They are now refused, naming the offending option, before
+  anything is sent. Put the values in the spec. `--dry-run` and the global `--format` are
+  honoured and still work
+
+* **The example corpus moved from `templates/` to `specs/`**, with `create/` and
+  `search/` rather than `task-create/` and `task-search`, since it is no longer
+  task-only. The files are renamed purpose-first and carry the new envelope. Nothing
+  installed changes - it was never packaged - but a script pointing at the old paths
+  needs updating
 
 * **Breaking change: `diffusion branch list` is gone.** `diffusion repo show <repo>
   --show-branches` lists a repository's branches, and `--show-tags` its tags, which nothing
@@ -26,14 +51,14 @@
   which a list of values to add has no use for. `Maniphest.create_task` no longer splits
   on `+` at all: its `tags` and `subscribers` are split on commas, so a project named
   `C++` reaches it whole
-* **`@me` is an error on an instance that has a user called `me`, in every option.**
-  `--assigned`, `--author`, `--assign`, `--subscribe`, `--member`, `--add-member` and
-  `--remove-member` - on maniphest, paste and project commands, and on `edit` - quietly
-  took `@me` to mean you even when somebody else is called `me`, while the policy options
-  refused it. They now refuse it the same way, naming that user's PHID, and exit 1: an
-  assignment or a subscription handed to the wrong one of you is the same mistake as a
-  policy. Give your own username, or that user's PHID, instead. Nothing changes on an
-  instance without such a user
+* **`@me` is a keyword and always means you, even where an account is named `me`.**
+  It is resolved in one place for every option that takes a user - `--assigned`,
+  `--author`, `--assign`, `--subscribe`, `--member`, `--add-member`, `--remove-member`
+  and the policy options - so they no longer disagree about what it means. The `@` is
+  what makes it a keyword, and this is the one place in phabfive where the sigil decides
+  anything: `alice` and `@alice` are the same user everywhere else, so the account called
+  `me` is named by writing it without the sigil. A policy value is the exception, because
+  its grammar has never accepted an unprefixed name - name that account by PHID there
 * **The `~/.config/phabfive.yaml` credentials deprecation is a log message.** It reads
   `WARNING - ~/.config/phabfive.yaml contains ...` rather than `WARNING: ...`, and `-q`
   now silences it
@@ -82,6 +107,66 @@
   nothing (#422)
 
 ## New Features
+
+### The Phorge Spec Format
+
+* **One declarative file creates and searches every object phabfive reaches.** The two
+  YAML template systems - one for `maniphest create --with`, one for `maniphest search
+  --with` - shared nothing: different loaders, different root keys, one of them
+  validating its keys and the other silently ignoring them, both Maniphest-only and both
+  YAML-only. They are now one format, `spec: phorge/v1alpha1`, named after the domain
+  rather than the tool, and documented for someone who is not using phabfive in
+  `docs/phorge-spec.md`
+
+* **`phabfive apply -f FILE` and `phabfive search -f FILE`** run a spec whatever it
+  holds. A top-level verb is what makes one file able to create a project *and* the
+  tasks tagged into it, which does not belong under `maniphest create`. Each dispatches
+  on the spec's `kind:` and points at the other when handed the wrong one
+
+* **YAML, JSON, JSONL and TOML all load**, and the same spec in any of them produces the
+  same plan. Multi-document works in every format - `---` in YAML, one object per line
+  in JSONL, an explicit list key everywhere - so no format is second-class. Three
+  limitations are documented rather than worked around: YAML anchors are YAML-only
+  sugar, JSON and JSONL have no comments, and TOML has no null
+
+* **A spec creates tasks, projects and pastes**, with `$local-id` references between
+  them, so one document can create a project and tag tasks into it in one run, applied
+  in dependency order. Passphrases are refused, offline, naming the reason: Phorge
+  exposes no `passphrase.edit` endpoint, so this is a fact about the API rather than
+  unfinished work
+
+* **A link to an object that already exists is never a rewrite.** `parents:` and
+  `subtasks:` used to emit `parents.set` and `subtasks.set`, which is harmless on a task
+  the spec creates and silent data loss on one it does not - `subtasks.set` on `T123`
+  discards every subtask `T123` already had. Every link to an existing object is now
+  `.add`, and apply refuses a transaction carrying `objectIdentifier` outright, so the
+  rule cannot be broken by a later edit that forgets it
+
+* **Validation happens in two layers, and a plan is the proof both passed.** Offline
+  settles everything a schema and a static read can - unknown keys, wrong types,
+  undeclared and circular variables, dangling `$local-id`s - with no token, no URL and no
+  configuration file, so a repository of specs is checkable in CI on a machine that has
+  never seen a Phorge. Online settles what only an instance can answer - users, projects,
+  Spaces, statuses, priorities, columns - and reports **every** unresolvable reference in
+  one run rather than one per run
+
+* **`phabfive spec validate FILE`** reports problems as records, with `--offline` for the
+  first layer alone and an exit code per layer: `0` clean, `1` offline, `2` a reference
+  that does not resolve, `3` an instance that could not be asked
+
+* **Specs are usable from a program.** `Spec.from_data(mapping)` takes a dict rather than
+  a path, validation returns records rather than printing, and a plan is inspectable and
+  serializable before anything is written - so a web frontend can show a user what would
+  happen, and apply yields one record per object as it goes
+
+* **`--with` still works, on all seven commands that take a spec, and is deprecated on
+  all seven.** It is declared once now: it had drifted into three different help strings,
+  a claim that only YAML is read, and tab completion on two of the seven
+
+* **`specs/` replaces `templates/`** - one corpus, thirty-one files, every one validated
+  offline on every test run. The old corpus was never loaded by the suite at all, which
+  is how its beginner example sat unloadable for however long it had a `tickets:` root
+  key where the code required `tasks:`
 
 ### Using phabfive as a Library
 * **The library surface is exported from the top level** - `from phabfive import
@@ -376,8 +461,7 @@
   usernames among the first 100 users.** A template's `assignment` now sets the task's
   owner; it was documented but never sent. `assignment` and `subscribers` take a
   username, `@username`, `@me` or a user PHID, case-insensitively, as every option that
-  takes a user does, and `@me` is refused on an instance with a user called `me`, naming
-  the field. Only the users the template names are looked up - it used to fetch one
+  takes a user does. Only the users the template names are looked up - it used to fetch one
   unpaged page of every user - and all of them before any task is created, so an unknown
   user in the last task leaves nothing half made. Both are rendered with the template's
   variables, as the documented examples assumed, and `--dry-run` shows each task's
@@ -428,9 +512,9 @@
   `--editable-by`, `--can-push` and `--joinable-by` - on `maniphest search`, on the
   create and edit commands of tasks, repositories and projects, and on `edit` - answered
   `@me` with `User '@me' does not exist`. It now resolves to you, through `user.whoami`,
-  as `--assigned=@me` does, and the help text lists it and tab completion offers it. On
-  an instance that has a user called `me`, `@me` is an error and exits 1 rather than
-  guessing which of you is meant; give a PHID instead. Fixes #435
+  as `--assigned=@me` does, and the help text lists it and tab completion offers it. An
+  account whose username is `me` does not take the keyword; name that account by PHID in
+  a policy. Fixes #435, #496
 
 ## Other Notes
 
