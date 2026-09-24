@@ -20,9 +20,13 @@ We follow basic [SemVer](https://semver.org/) versioning with extensions defined
 
 PEP 440 also allows for post and dev releases if needed, but in general we should only publish stable regular SemVer releases.
 
-## Automated Release (Recommended)
+## Releasing
 
-Starting with v0.6.0, releases are automated via GitHub Actions using PyPI trusted publishing (OIDC).
+Releases are automated via GitHub Actions using PyPI trusted publishing (OIDC), and have
+been since v0.6.0. There is no manual path: a hand-rolled upload was documented here
+until 0.11.0, and its instructions had drifted far enough from the workflow that its
+step calling TestPyPI mandatory read as current process while an `-rc` tag published
+nowhere at all (#509). Git history has it if it is ever wanted.
 
 ### One-Time Setup
 
@@ -37,14 +41,26 @@ On [pypi.org](https://pypi.org):
    - **Workflow**: `release.yml`
    - **Environment**: `pypi`
 
-#### 2. Create GitHub Environment
+#### 2. Configure TestPyPI Trusted Publisher
+
+A release candidate publishes to TestPyPI and nowhere else, so this is what makes an
+`-rc` tag installable. On [test.pypi.org](https://test.pypi.org), the same way:
+
+1. Go to **Manage** > **phabfive** > **Publishing**
+2. Add trusted publisher with:
+   - **Owner**: `dynamist`
+   - **Repository**: `phabfive`
+   - **Workflow**: `release.yml`
+   - **Environment**: `testpypi`
+
+#### 3. Create GitHub Environments
 
 In repository **Settings** > **Environments**:
 
-1. Create environment named `pypi`
+1. Create environments named `pypi` and `testpypi`
 2. (Optional) Add protection rules requiring reviewer approval
 
-#### 3. Make the Container Image Public
+#### 4. Make the Container Image Public
 
 The first release pushes `ghcr.io/dynamist/phabfive` as a private package. In the
 organization's **Packages** > **phabfive** > **Package settings**, change the
@@ -80,6 +96,19 @@ git push origin main
 git tag -a v0.6.0 -m "Release v0.6.0"
 git push origin v0.6.0
 ```
+
+A tag containing `-rc` is a release candidate: it publishes to **TestPyPI** rather than
+PyPI, and skips the `X.Y` and `latest` image tags, but builds the six executables,
+pushes the image and creates a GitHub release marked as a prerelease. Install one the
+way anyone else would, which is the half of a release a local build cannot check:
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ 'phabfive==0.11.0rc1'
+```
+
+The extra index is not optional: phabfive's dependencies are not on TestPyPI, so
+resolution fails without somewhere real to find them.
 
 This triggers the GitHub Actions workflow which will:
 
@@ -160,209 +189,28 @@ git commit -m "Bump version to 0.7.0-dev.0"
 git push origin main
 ```
 
-## Manual Release (Legacy)
-
-If you cannot use the automated workflow (e.g., trusted publishing not configured), follow these manual steps.
-
-### Building a Release
-
-#### Prerequisites
-
-1. **PyPI Account & Permissions**
-   - You must be an **owner** or **maintainer** for phabfive on PyPI
-   - Currently only Henrik and Tim are owners
-   - Ask them for assistance if you need upload permissions
-
-2. **Tools Installed**
-```bash
-   # Install uv if not already installed
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-
-   # Install build dependencies
-   uv sync --group dev
-```
-
-#### Release Steps
-
-**1. Update Version**
-
-Update the version in `pyproject.toml`:
-
-```toml
-[project]
-name = "phabfive"
-version = "0.5.0"  # ← update this
-```
-
-**2. Update CHANGELOG**
-
-Add release notes to `CHANGELOG.md` documenting:
-- New features
-- Bug fixes
-- Breaking changes (if any)
-- Deprecations (if any)
-
-**3. Commit and tag**
-
-Commit the version bump and CHANGELOG.
-
-**Note:** This is an important step!
-
-```bash
-git commit -m"Bump version: 0.5.0rc0 → 0.5.0"
-git push origin
-
-git tag -a v0.5.0 -m "Release version 0.5.0"
-git push origin v0.5.0
-```
-
-**4. Build Distributions**
-
-```bash
-# Clean previous builds
-make clean
-
-# Build source distribution and wheel
-uv build
-
-# Verify build artifacts
-ls -lh dist/
-# Should see:
-# phabfive-0.5.0.tar.gz
-# phabfive-0.5.0-py3-none-any.whl
-```
-
-**5. Test the Build**
-
-Before uploading anywhere, verify the build works locally to catch issues early:
-
-```bash
-make smoke
-```
-
-That installs phabfive unlocked into a throwaway venv and runs `scripts/smoke.py`
-against it -- the same script the release workflow runs on every artifact, so the
-manual check and CI cannot drift apart. To check a specific built distribution
-instead:
-
-```bash
-python -m venv /tmp/test-env
-/tmp/test-env/bin/pip install dist/phabfive-0.5.0-py3-none-any.whl
-python scripts/smoke.py --venv /tmp/test-env
-rm -rf /tmp/test-env
-```
-
-Use plain `pip` rather than `uv pip`: uv applies `uv.lock` and the `exclude-newer`
-window, which is what hid the missing `click` declaration from every test run. The
-point of this check is to resolve dependencies the way a user installing from PyPI
-does.
-
-**6. Upload to TestPyPI (MANDATORY)**
-
-Before uploading to the main PyPI, you **must** test on TestPyPI to catch any packaging issues:
-
-```bash
-# Upload to TestPyPI using uv
-export UV_PUBLISH_TOKEN=pypi-ABCDEF # ← token for test.pypi.org -- IMPORTANT
-uv publish --publish-url https://test.pypi.org/legacy/
-```
-
-**Note:** Get your TestPyPI API token at https://test.pypi.org/manage/account/token/
-
-**7. Test Installation from TestPyPI**
-
-Verify the package installs correctly from TestPyPI:
-
-```bash
-# Create clean test environment
-uv venv test-pypi-env
-source test-pypi-env/bin/activate
-
-# Install from TestPyPI
-# --index-strategy unsafe-best-match: Required because uv's default security
-#   prevents mixing package versions from different indexes. Since you control
-#   both TestPyPI and PyPI for phabfive, this is safe and necessary.
-# --extra-index-url: Allows dependencies (like mkdocs) to be installed from PyPI
-uv pip install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  --index-strategy unsafe-best-match \
-  phabfive
-
-# Verify it works
-phabfive --help
-
-# Cleanup
-deactivate
-rm -rf test-pypi-env
-```
-
-If everything works, proceed to production upload.
-
-**8. Upload to PyPI**
-
-```bash
-# Upload to production PyPI using uv
-export UV_PUBLISH_TOKEN=pypi-ABCDEF # ← token for pypi.org -- IMPORTANT
-uv publish
-```
-
-**Note:** Get your PyPI API token at https://pypi.org/manage/account/token/
-
-**9. Create GitHub Release**
-
-Go to https://github.com/dynamist/phabfive/releases/new and:
-
-1. Select the tag you just created
-2. Title: `v0.5.0`
-3. Copy release notes from CHANGELOG
-4. Attach build artifacts (optional)
-5. Publish release
-
-**10. Bump to dev release**
-
-After you published the version it is equally important to bump the source code to a dev release so that your dev and test environments don't think twice if it is running a released version of phabfive or the latest code.
-
-**Note:** This is an important step!
-
-Update the version in `pyproject.toml`:
-
-```toml
-[project]
-name = "phabfive"
-version = "0.6.0-dev.0"  # ← update this
-```
-
-Then commit and push:
-
-```bash
-git commit -m"Bump version: 0.5.0 → 0.6.0-dev.0"
-git push origin
-```
-
-### Additional Resources
+## Additional Resources
 
 - [Python Packaging User Guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/)
 - [PyPI Project Page](https://pypi.org/project/phabfive/)
+- [TestPyPI Project Page](https://test.pypi.org/project/phabfive/)
 - [GitHub Releases](https://github.com/dynamist/phabfive/releases)
 
-### Troubleshooting
+## Troubleshooting
 
-**Build fails:**
+**`check-version` fails.** The tag and `pyproject.toml` disagree, or the version is a
+`dev` one. The message names both. Move the tag rather than editing the version to match
+it - every artifact is named after `pyproject.toml`, so a tag bent to fit publishes a
+release full of artifacts for another version, which is what happened to `v0.10.0-rc.1`.
 
-- Ensure `pyproject.toml` is valid
-- Check that all required files are present
-- Run tests first: `uv run pytest`
+**A publish job fails with a permissions or OIDC error.** The trusted publisher is not
+configured, or its environment name does not match. `pypi` and `testpypi` are separate
+publishers on separate sites and both have to exist; see the one-time setup above.
 
-**Upload fails with authentication error:**
+**The version already exists.** Neither PyPI nor TestPyPI lets a version be replaced, and
+deleting one does not free the filename. Cut the next candidate - `-rc.2` - rather than
+trying to reuse a number. This is the reason to cut candidates at all.
 
-- Verify you have maintainer/owner permissions on PyPI and TestPyPI
-- Use API tokens (required for `__token__` username)
-- Set up tokens at https://pypi.org/manage/account/token/ and https://test.pypi.org/manage/account/token/
-- Contact current owners for assistance
-
-**Version already exists on PyPI:**
-
-- You cannot overwrite existing versions
-- Increment version number and rebuild
-- Consider using post-releases (e.g., `0.5.0.post1`) for minor fixes
+**The build fails before anything is published.** `scripts/smoke.py` runs every artifact
+before it goes anywhere, so a build that cannot start stops the release instead of
+shipping. Reproduce it locally with `uv run python scripts/smoke.py --venv .venv`.
