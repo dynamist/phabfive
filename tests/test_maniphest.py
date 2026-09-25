@@ -256,11 +256,13 @@ class TestResolveProjectById:
         ]
         phab.project.query.assert_not_called()
 
-    def test_search_unknown_phid_returns_empty(self):
+    def test_search_unknown_phid_is_not_found(self):
+        from phabfive.exceptions import PhabfiveNotFoundException
         from phabfive.maniphest.resolvers import resolve_project_phids
 
         phab = self._mock_phab()
-        assert resolve_project_phids(phab, "PHID-PROJ-missing") == []
+        with pytest.raises(PhabfiveNotFoundException, match="PHID-PROJ-missing"):
+            resolve_project_phids(phab, "PHID-PROJ-missing")
         phab.project.query.assert_not_called()
 
     def test_search_prefers_hashtag_over_numeric_id(self):
@@ -272,10 +274,12 @@ class TestResolveProjectById:
         for call in phab.project.search.call_args_list:
             assert "ids" not in call.kwargs["constraints"]
 
-    def test_search_unknown_numeric_id_returns_empty(self):
+    def test_search_unknown_numeric_id_is_not_found(self):
+        from phabfive.exceptions import PhabfiveNotFoundException
         from phabfive.maniphest.resolvers import resolve_project_phids
 
-        assert resolve_project_phids(self._mock_phab(), "99999") == []
+        with pytest.raises(PhabfiveNotFoundException, match="99999"):
+            resolve_project_phids(self._mock_phab(), "99999")
 
     def test_create_resolves_numeric_id_and_phid(self):
         from phabfive.maniphest.resolvers import resolve_project_phids_for_create

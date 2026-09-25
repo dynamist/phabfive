@@ -23,7 +23,6 @@ from phabfive.exceptions import (
     PhabfiveAPIException,
     PhabfiveConfigException,
     PhabfiveDataException,
-    PhabfiveException,
     PhabfiveInputException,
     PhabfiveNotFoundException,
     PhabfiveRemoteException,
@@ -1771,68 +1770,58 @@ class Maniphest(Phabfive):
             if "," in tag or "+" in tag:
                 try:
                     project_patterns = parse_project_patterns(tag)
-                    log.debug(
-                        f"Parsed {len(project_patterns)} tag patterns from '{tag}'"
-                    )
+                except PhabfiveInputException as e:
+                    raise PhabfiveInputException(
+                        f"Invalid tag pattern '{tag}': {e}"
+                    ) from e
 
-                    # Resolve each project name/wildcard in all patterns to PHIDs
-                    # Keep track of which PHIDs belong to which pattern for AND/OR logic
-                    resolved_phids_set = set()
-                    resolved_phids_by_pattern = []
+                log.debug(f"Parsed {len(project_patterns)} tag patterns from '{tag}'")
 
-                    for pattern in project_patterns:
-                        # Resolve all project names in this pattern to PHIDs
-                        phids_by_name = []
-                        for project_name in pattern.project_names:
-                            phids = self._resolve_project_phids(project_name)
-                            if not phids:
-                                log.error(
-                                    f"No projects matched '{project_name}' in tag pattern '{tag}'"
-                                )
-                                return
-                            phids_by_name.append(phids)
+                # Resolve each project name/wildcard in all patterns to PHIDs.
+                # A name that resolves to nothing raises rather than being
+                # dropped: `--tag a,typo` searching only `a` would look like
+                # an answer (#523). Keep track of which PHIDs belong to which
+                # pattern for AND/OR logic
+                resolved_phids_set = set()
+                resolved_phids_by_pattern = []
 
-                        # For AND logic (multiple project names): create cartesian product
-                        # For OR logic (single project name): just flatten the list
-                        if len(pattern.project_names) > 1:
-                            # AND logic: create all combinations (cartesian product)
-                            combinations = list(itertools.product(*phids_by_name))
-                            # Store as tuples that must all be in task's projectPHIDs
-                            resolved_phids_by_pattern.append(combinations)
-                        else:
-                            # OR logic: just a flat list of PHIDs (from wildcard expansion)
-                            resolved_phids_by_pattern.append(phids_by_name[0])
+                for pattern in project_patterns:
+                    phids_by_name = [
+                        self._resolve_project_phids(project_name)
+                        for project_name in pattern.project_names
+                    ]
 
-                        # Add all PHIDs to the set for fetching
-                        for phid_list in phids_by_name:
-                            resolved_phids_set.update(phid_list)
+                    # For AND logic (multiple project names): create cartesian product
+                    # For OR logic (single project name): just flatten the list
+                    if len(pattern.project_names) > 1:
+                        # AND logic: create all combinations (cartesian product)
+                        combinations = list(itertools.product(*phids_by_name))
+                        # Store as tuples that must all be in task's projectPHIDs
+                        resolved_phids_by_pattern.append(combinations)
+                    else:
+                        # OR logic: just a flat list of PHIDs (from wildcard expansion)
+                        resolved_phids_by_pattern.append(phids_by_name[0])
 
-                    # Sorted, not just listed: set iteration order over strings
-                    # is randomised per process (PYTHONHASHSEED), which made the
-                    # per-project merge below come out differently on every run.
-                    project_phids = sorted(resolved_phids_set)
+                    # Add all PHIDs to the set for fetching
+                    for phid_list in phids_by_name:
+                        resolved_phids_set.update(phid_list)
 
-                    if not project_phids:
-                        log.error(f"No projects matched the tag pattern '{tag}'")
-                        return
+                # Sorted, not just listed: set iteration order over strings
+                # is randomised per process (PYTHONHASHSEED), which made the
+                # per-project merge below come out differently on every run.
+                project_phids = sorted(resolved_phids_set)
 
-                    # Determine AND vs OR logic for logging
-                    has_and_patterns = any(
-                        len(p.project_names) > 1 for p in project_patterns
-                    )
-                    logic_type = "AND" if has_and_patterns else "OR"
-                    log.info(
-                        f"Filtering to tag(s): {tag} "
-                        f"({len(project_phids)} project(s), {logic_type} logic)"
-                    )
-                except PhabfiveException as e:
-                    log.error(f"Invalid tag pattern: {e}")
-                    return
+                # Determine AND vs OR logic for logging
+                has_and_patterns = any(
+                    len(p.project_names) > 1 for p in project_patterns
+                )
+                logic_type = "AND" if has_and_patterns else "OR"
+                log.info(
+                    f"Filtering to tag(s): {tag} "
+                    f"({len(project_phids)} project(s), {logic_type} logic)"
+                )
             else:
                 project_phids = self._resolve_project_phids(tag)
-                if not project_phids:
-                    # Error already logged in _resolve_project_phids
-                    return
 
                 log.info(
                     f"Filtering to tag(s): {tag} ({len(project_phids)} project(s))"
