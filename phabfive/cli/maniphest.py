@@ -469,11 +469,10 @@ def create(
         board_phid = None
         if column and tags:
             # Use the first tag as the board context
-            board_phids = maniphest._resolve_project_phids(tags[0])
-            if board_phids:
-                board_phid = board_phids[0]
-            else:
-                sys.stderr.write(f"Error: Board not found: {tags[0]}\n")
+            try:
+                board_phid = maniphest._resolve_project_phids(tags[0])[0]
+            except (PhabfiveConfigException, PhabfiveDataException) as e:
+                sys.stderr.write(f"Error: {e}\n")
                 raise typer.Exit(1)
 
         try:

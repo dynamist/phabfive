@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # phabfive imports
-from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
+from phabfive.exceptions import (
+    PhabfiveConfigException,
+    PhabfiveDataException,
+    PhabfiveInputException,
+)
 from phabfive.maniphest import Maniphest
 from phabfive.maniphest.resolvers import (
     ambiguous_project_message,
@@ -95,11 +99,12 @@ class TestAmbiguousProjectMessage:
 
 
 class TestSearchResolution:
-    def test_ambiguous_name_is_rejected(self, caplog):
-        assert resolve_project_phids(_mock_phab(), "sprint 1") == []
-        assert AMBIGUOUS.replace("'Sprint 1'", "'sprint 1'") in caplog.text
+    def test_ambiguous_name_is_rejected(self):
+        with pytest.raises(PhabfiveInputException) as excinfo:
+            resolve_project_phids(_mock_phab(), "sprint 1")
+        assert str(excinfo.value) == AMBIGUOUS.replace("'Sprint 1'", "'sprint 1'")
 
-    def test_ambiguous_name_is_rejected_in_fallback(self, caplog):
+    def test_ambiguous_name_is_rejected_in_fallback(self):
         """Also when the name query fails and all projects are fetched."""
         phab = _mock_phab()
         search = phab.project.search.side_effect
@@ -111,8 +116,9 @@ class TestSearchResolution:
 
         phab.project.search.side_effect = search_without_query
 
-        assert resolve_project_phids(phab, "Sprint 1") == []
-        assert AMBIGUOUS in caplog.text
+        with pytest.raises(PhabfiveInputException) as excinfo:
+            resolve_project_phids(phab, "Sprint 1")
+        assert str(excinfo.value) == AMBIGUOUS
 
     def test_unique_name_resolves(self):
         assert resolve_project_phids(_mock_phab(), "Release") == ["PHID-PROJ-10"]

@@ -155,13 +155,23 @@ def resolve_project_phids(phab, project: str) -> list[str]:
     Returns
     -------
     list
-        List of project PHIDs matching the pattern. Empty list if no matches.
+        List of project PHIDs matching the pattern, never empty.
         Duplicates are automatically removed when multiple slugs match the same project.
+
+    Raises
+    ------
+    PhabfiveNotFoundException
+        Nothing matches, with the closest hashtags when there are any.
+    PhabfiveInputException
+        No name was given, or a name several projects share.
+    PhabfiveRemoteException
+        The project list could not be fetched.
     """
     # Validate project parameter
     if not project or project == "":
-        log.error("No project name provided. Use '*' to search all projects.")
-        return []
+        raise PhabfiveInputException(
+            "No project name provided. Use '*' to search all projects."
+        )
 
     # Check if wildcard search is needed early to optimize API calls
     has_wildcard = "*" in project
@@ -174,8 +184,7 @@ def resolve_project_phids(phab, project: str) -> list[str]:
                 f"Found project by PHID '{project}' -> '{proj['fields']['name']}'"
             )
             return [proj["phid"]]
-        log.error(f"Project '{project}' not found")
-        return []
+        raise PhabfiveNotFoundException(f"Project '{project}' not found")
 
     # For exact match without wildcard, try direct lookup first (more efficient)
     if not has_wildcard:
@@ -193,6 +202,7 @@ def resolve_project_phids(phab, project: str) -> list[str]:
             log.debug(f"Direct slug lookup failed: {e}")
 
         # Also try searching by name in case user provided the display name
+        matches = []
         try:
             result = phab.project.search(constraints={"query": project})
             matches = [
@@ -200,18 +210,16 @@ def resolve_project_phids(phab, project: str) -> list[str]:
                 for proj in result.get("data", [])
                 if proj["fields"]["name"].lower() == project.lower()
             ]
-            if len(matches) > 1:
-                log.error(ambiguous_project_message(project, matches))
-                return []
-            if matches:
-                phid = matches[0]["phid"]
-                name = matches[0]["fields"]["name"]
-                log.debug(
-                    f"Found project by name '{project}' -> '{name}' (PHID: {phid})"
-                )
-                return [phid]
         except Exception as e:
             log.debug(f"Name query lookup failed: {e}")
+
+        if len(matches) > 1:
+            raise PhabfiveInputException(ambiguous_project_message(project, matches))
+        if matches:
+            phid = matches[0]["phid"]
+            name = matches[0]["fields"]["name"]
+            log.debug(f"Found project by name '{project}' -> '{name}' (PHID: {phid})")
+            return [phid]
 
         # Fall back to numeric project ID (e.g. "8048" from /project/view/8048/)
         proj = lookup_project_by_id(phab, project)
@@ -274,8 +282,7 @@ def resolve_project_phids(phab, project: str) -> list[str]:
                         hashtag_to_phid[slug.lower()] = phid
 
     except Exception as e:
-        log.error(f"Failed to fetch projects: {e}")
-        return []
+        raise PhabfiveRemoteException(f"Failed to fetch projects: {e}")
 
     log.debug(
         f"Fetched {len(phid_to_primary_name)} total projects with {len(slug_to_phid)} slugs/hashtags from Phabricator"
@@ -307,8 +314,9 @@ def resolve_project_phids(phab, project: str) -> list[str]:
             matching_display_names = [phid_to_primary_name[p] for p in matching_phids]
 
             if not matching_phids:
-                log.warning(f"Wildcard pattern '{project}' matched no projects")
-                return []
+                raise PhabfiveNotFoundException(
+                    f"Wildcard pattern '{project}' matched no projects"
+                )
 
             log.info(
                 f"Wildcard pattern '{project}' matched {len(matching_phids)} "
@@ -336,8 +344,7 @@ def resolve_project_phids(phab, project: str) -> list[str]:
     )
     if len(name_matches) > 1:
         projects = fetch_projects_by_phid(phab, name_matches) or name_matches
-        log.error(ambiguous_project_message(project, projects))
-        return []
+        raise PhabfiveInputException(ambiguous_project_message(project, projects))
 
     if name_matches:
         log.debug(f"Found case-insensitive name match for project '{project}'")
@@ -368,12 +375,10 @@ def resolve_project_phids(phab, project: str) -> list[str]:
             # Limit to 3 unique projects
             unique_suggestions = unique_suggestions[:3]
 
-            log.error(
+            raise PhabfiveNotFoundException(
                 f"Project '{project}' not found. Did you mean: {', '.join(unique_suggestions)}?"
             )
-        else:
-            log.error(f"Project '{project}' not found")
-        return []
+        raise PhabfiveNotFoundException(f"Project '{project}' not found")
 
 
 def resolve_user_phid(phab, username):
