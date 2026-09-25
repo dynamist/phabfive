@@ -1406,19 +1406,18 @@ class Maniphest(Phabfive):
     def _read_pages(self, constraints, log_context="", order=None):
         """Every page of one maniphest.search, concatenated.
 
-        The columns attachment is asked for on every page, which is not
-        free, and #478 wondered whether it could be conditional. It cannot,
-        not yet: three separate readers need it and two of them are not the
-        filters. `formatters.build_task_display_data` renders a task's
-        "Boards" out of it for *every* displayed task, and
-        `filters.task_matches_project_patterns` reads project membership off
-        `boards` because the search is not asked for the projects
-        attachment. So dropping it would quietly remove a section from the
-        output and change which tasks a `--tag a+b` search keeps. Making it
-        conditional means first giving those two readers a source of their
-        own, which is its own change with its own test.
+        Two attachments on every page. `columns` is what
+        `formatters.build_task_display_data` renders a task's "Boards" from.
+        `projects` is what `filters.task_matches_project_patterns` reads a
+        task's membership from: every project it is tagged with, which
+        `columns.boards` is not - that lists only projects with a workboard,
+        and reading membership off it dropped every task of a board-less
+        project from a `--tag a,b` search (#519).
         """
-        kwargs = {"constraints": constraints, "attachments": {"columns": True}}
+        kwargs = {
+            "constraints": constraints,
+            "attachments": {"columns": True, "projects": True},
+        }
         if order:
             kwargs["order"] = order
 
@@ -1986,8 +1985,9 @@ class Maniphest(Phabfive):
             # Note: project_patterns is derived from tag, so not shown separately
             log.info(f"Filtering {len(result_data)} tasks by {', '.join(filter_desc)}")
 
-            # Add performance warning for large datasets
-            if len(result_data) > 50:
+            # Only the history filters read transactions, one request per
+            # task; the project filter reads the search's own attachments
+            if len(result_data) > 50 and (need_columns or need_priority or need_status):
                 log.warning(
                     f"Filtering {len(result_data)} tasks may take a while as each task "
                     "requires fetching transition history from the API"

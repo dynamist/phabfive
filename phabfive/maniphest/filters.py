@@ -146,10 +146,10 @@ def task_matches_project_patterns(task, project_patterns, resolved_phids_by_patt
     if not project_patterns or not resolved_phids_by_pattern:
         return True  # No filtering needed
 
-    # Get project PHIDs from the boards the task is on
-    # Project information is stored in attachments.columns.boards, not in fields
-    boards = task.get("attachments", {}).get("columns", {}).get("boards", {})
-    task_project_phids = set(boards.keys()) if boards else set()
+    # Every project the task is tagged with. Not attachments.columns.boards,
+    # which lists only the projects that have a workboard (#519)
+    projects = task.get("attachments", {}).get("projects", {})
+    task_project_phids = set(projects.get("projectPHIDs") or [])
 
     if not task_project_phids:
         # Task has no projects, can't match

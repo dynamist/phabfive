@@ -278,9 +278,12 @@ def _maniphest(project_phids=None, tasks_by_project=None, tasks=None):
             for phid in projects:
                 for task in tasks_by_project.get(phid, []):
                     task = dict(task)
-                    # The --tag post-filter reads project membership off the
-                    # board attachment, so a canned task needs one
-                    task["attachments"] = {"columns": {"boards": {phid: {}}}}
+                    # The --tag post-filter reads membership off the projects
+                    # attachment. No board: a project needs none to hold tasks
+                    task["attachments"] = {
+                        "columns": {"boards": {}},
+                        "projects": {"projectPHIDs": [phid]},
+                    }
                     data.append(task)
             resp.response = {"data": data}
         else:
