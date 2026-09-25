@@ -44,6 +44,7 @@ from phabfive.spec import (
     validate_offline,
 )
 from phabfive.spec.problems import Layer
+from phabfive.spec.references import STRUCTURAL_KEYS
 from phabfive.spec.registry import (
     FIELDS,
     Field,
@@ -244,11 +245,23 @@ class TestTheGeneratedDocumentIsRealJsonSchema:
         with pytest.raises(PhabfiveInputException, match="Unknown object type"):
             build_schema("search", object_type="sandwich")
 
-    def test_an_object_type_with_no_declared_field_is_permissive(self):
+    def test_an_object_type_with_no_declared_field_is_permissive(self, monkeypatch):
         """A registry that says nothing cannot honestly call a key unknown."""
+        kept = tuple(field for field in FIELDS if "paste" not in field.objects)
+        monkeypatch.setattr("phabfive.spec.registry.FIELDS", kept)
+
         schema = build_schema("create", object_type="paste")
 
         assert schema["additionalProperties"] is True
+
+    @pytest.mark.parametrize("object_type", ["task", "project", "paste"])
+    def test_a_create_item_is_closed_and_holds_its_structural_keys(self, object_type):
+        """The create pairs are complete, so the schema refuses an unknown key
+        and describes the keys that are structure rather than fields (#518)."""
+        schema = build_schema("create", object_type=object_type)
+
+        assert schema["additionalProperties"] is False
+        assert set(STRUCTURAL_KEYS[object_type]) <= set(schema["properties"])
 
 
 #: Shipped specs the published JSON Schema refuses although the validation
@@ -984,6 +997,69 @@ class TestTheSearchItemItself:
 
         with pytest.raises(PhabfiveDataException, match="not a mapping"):
             check("kind: search\nsearches:\n  - nope\n")
+
+
+class TestUnknownCreateItemKeys:
+    """A create item's key set is complete, so a key nothing reads is reported.
+
+    Until #518 it was not, and a task written with `tags:` instead of
+    `projects:` validated clean offline and online and was then created
+    attached to nothing.
+    """
+
+    def test_tags_on_a_task_is_reported_and_points_at_projects(self):
+        problems = check(
+            "kind: create\nprojects:\n  - id: p\n    name: P\n"
+            "tasks:\n  - title: A\n    tags: [$p]\n"
+        )
+
+        assert codes(problems) == ["unknown-key"]
+        assert problems[0].object == "tasks[0]"
+        assert problems[0].field == "tags"
+        assert "Did you mean 'projects'?" in problems[0].reason
+        assert "--tag" in problems[0].reason
+
+    @pytest.mark.parametrize(
+        "section, item, key, meant",
+        [
+            ("tasks", "title: A", "tag", "projects"),
+            ("tasks", "title: A", "assign", "assignment"),
+            ("tasks", "title: A", "subscribe", "subscribers"),
+            ("tasks", "title: A", "priorty", "priority"),
+            ("pastes", "title: A", "tags", "projects"),
+            ("projects", "name: A", "member", "members"),
+            ("projects", "name: A", "colour", "color"),
+        ],
+    )
+    def test_an_unknown_key_on_any_create_item_is_reported(
+        self, section, item, key, meant
+    ):
+        problems = check(f"kind: create\n{section}:\n  - {item}\n    {key}: x\n")
+
+        assert codes(problems) == ["unknown-key"]
+        assert f"Did you mean {meant!r}?" in problems[0].reason
+
+    def test_an_unknown_key_on_a_nested_task_is_reported(self):
+        problems = check(
+            "kind: create\ntasks:\n  - title: A\n    tasks:\n"
+            "      - title: B\n        tags: [x]\n"
+        )
+
+        assert codes(problems) == ["unknown-key"]
+        assert problems[0].object == "tasks[0].tasks[0]"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "kind: create\ntasks:\n  - id: e\n    title: E\n"
+            "  - title: A\n    parents: [$e]\n",
+            "kind: create\ntasks:\n  - id: e\n    title: E\n"
+            "  - title: A\n    subtasks: [$e]\n",
+            "kind: create\ntasks:\n  - parent: T1\n    tasks:\n      - title: A\n",
+        ],
+    )
+    def test_the_structural_keys_are_not_unknown(self, text):
+        assert check(text) == []
 
 
 class TestUnknownTopLevelKeys:

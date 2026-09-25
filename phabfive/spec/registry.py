@@ -781,8 +781,7 @@ FIELDS: tuple[Field, ...] = (
     # The first two keys of a `projects:` item, declared in Phase 1 because
     # they are the two the validation layers could already say something
     # about. The rest of the key set is declared further down, with the task
-    # and paste create blocks; see the note above DECLARED_COMPLETE for why
-    # none of the three pairs is called complete yet.
+    # and paste create blocks.
     Field(
         name="color",
         # Not INSTANCE_ENUM. The colour *keys* are fixed in Phorge's source -
@@ -817,8 +816,9 @@ FIELDS: tuple[Field, ...] = (
     # could not express before #481, and declaring them here is what makes
     # the two paths the same key set rather than two overlapping ones.
     #
-    # `id:` and `tasks:` are **not** declared, and neither are `parents:` and
-    # `subtasks:`. See the note above DECLARED_COMPLETE for both reasons.
+    # `id:` and `tasks:` are **not** declared, and neither are `parent:`,
+    # `parents:` and `subtasks:`: they are `references.STRUCTURAL_KEYS`. See
+    # the note above DECLARED_COMPLETE.
     Field(
         name="title",
         kind=FieldKind.TEXT,
@@ -1041,28 +1041,27 @@ FIELDS: tuple[Field, ...] = (
 #: `docs/phorge-spec.md` has to say so in the same change, which
 #: `tests/test_spec_docs.py` is what holds it to.
 #:
-#: **The three create pairs are not in it yet, and two separate things are
-#: missing before they can be.**
+#: **A create pair's key set is more than its fields.** `id:`, `tasks:`,
+#: `parent:`, `parents:` and `subtasks:` are structure rather than values - a
+#: local name, a list of child items, and references that may be a
+#: `$local-id` - so they are not `Field`s, and declaring `parents:` as a
+#: `FieldKind.MONOGRAM` would make the offline pass call `$epic` a
+#: `bad-monogram`. `phabfive.spec.references.STRUCTURAL_KEYS` lists them, and
+#: `validate._check_fields` and `schema._create_item_schema` both read it, so
+#: the walk and the oracle agree about a create item's whole key set.
 #:
-#: 1. `id:` and `tasks:` are structure rather than values - a local name and
-#:    a list of child items - so they are not `Field`s and there is no
-#:    `FieldKind` that would describe either. `phabfive.spec.schema` writes
-#:    both into the generated create item schema itself, while
-#:    `validate._check_fields` reads the registry alone. Declaring a create
-#:    pair complete today would make the walk call `id:` an unknown key on a
-#:    spec the schema accepts, and the oracle and the walk have to agree.
-#: 2. `parents:` and `subtasks:` are undeclared for the same reason in
-#:    reverse: they are `FieldKind.MONOGRAM`, and `validate._check_monograms`
-#:    reports `$platform` as `bad-monogram` because it does not know that a
-#:    `$local-id` is a legal value of a create key. A create spec has been
-#:    able to write `parents: ["$epic"]` since Phase 1, so declaring them
-#:    before that check learns about local ids would turn a working spec red.
+#: Until #518 the create pairs were left out of this set for exactly that
+#: reason, and a task written with `tags:` instead of `projects:` validated
+#: clean and was created attached to nothing.
 DECLARED_COMPLETE: frozenset[tuple[str, str]] = frozenset(
     {
         ("task", "search"),
         ("project", "search"),
         ("paste", "search"),
         ("passphrase", "search"),
+        ("task", "create"),
+        ("project", "create"),
+        ("paste", "create"),
     }
 )
 

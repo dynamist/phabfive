@@ -1100,7 +1100,7 @@ this page are generated from; see its own documentation for how to run a spec,
 what it prints and what it exits with. Nothing on this page is about it, and a
 rule that needs a particular program to be true is not a rule of the format.
 
-Three gaps in that implementation are worth knowing about while reading the
+Two gaps in that implementation are worth knowing about while reading the
 tables above, because they are gaps in a reader and not in the format:
 
 - `unknown-status` and `unknown-priority` are part of the code vocabulary before
@@ -1110,11 +1110,12 @@ tables above, because they are gaps in a reader and not in the format:
 - `unknown-spec-version` is likewise in the vocabulary, but a `spec:` the reader
   does not implement is refused while the document is being read, before layer 1
   begins, so what a caller actually sees is `unreadable` carrying the same
-  reason;
-- none of the three create pairs (`task`, `project`, `paste`) declares its key
-  set complete, so no create item is reported `unknown-key`. The precondition
-  under [Layer 1](#layer-1-offline) is what that is; the four search pairs do
-  declare theirs.
+  reason.
+
+It declares all seven (object type, verb) pairs complete, so an unknown key on
+any create item or search is reported `unknown-key` under
+[Layer 1](#layer-1-offline). A create item's key set is its keys in the tables
+above together with [the structural keys](#the-structural-keys).
 
 <!--
   The tables between BEGIN/END GENERATED markers are written by

@@ -56,6 +56,7 @@ __all__ = [
     "RefKind",
     "Reference",
     "ReferenceField",
+    "STRUCTURAL_KEYS",
     "SpecObject",
     "UNCREATABLE_OBJECT_KEYS",
     "classify_reference",
@@ -305,6 +306,20 @@ _PASTE_REFERENCE_FIELDS: tuple[ReferenceField, ...] = (
     ReferenceField("visible-to", creates=("project",)),
     ReferenceField("editable-by", creates=("project",)),
 )
+
+#: The create keys that are structure rather than a declared value, by
+#: object type. `id:` names an item, `tasks:` holds a task's children, and a
+#: task's three linking keys hold references that may be a `$local-id` - so
+#: none of them is a `registry.Field`, and the registry alone is not the whole
+#: key set of a create item. These are the rest of it: together with
+#: `registry.fields_for(object_type, "create")` they are every key a create
+#: item may hold, which is what lets the create pairs be declared complete and
+#: a `tags:` on a task be reported rather than dropped (#518).
+STRUCTURAL_KEYS: Mapping[str, tuple[str, ...]] = {
+    "task": (LOCAL_ID_KEY, NESTED_KEY, "parent", "parents", "subtasks"),
+    "project": (LOCAL_ID_KEY,),
+    "paste": (LOCAL_ID_KEY,),
+}
 
 #: Which keys of each object type hold references. The key is the *spec
 #: object* type, so ``"search"`` is one item of a search spec, whose own
