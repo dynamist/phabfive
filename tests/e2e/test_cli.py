@@ -513,11 +513,14 @@ def test_repo_list_url_is_a_deprecated_alias(phabfive_raw):
 
 
 def test_uri_list_on_a_repository_without_uris(phabfive_raw):
-    """An empty result, not a failure: the seeded repositories carry no URIs."""
+    """An empty result, not a failure: the seeded repositories carry no URIs.
+
+    An empty list, so stdout is still a JSON document (#522).
+    """
     result = phabfive_raw("--format", "json", "diffusion", "uri", "list", "GUNNAR")
 
     assert result.returncode == 0
-    assert result.stdout == ""
+    assert json.loads(result.stdout) == []
 
 
 def test_uri_list_refuses_an_io_value_that_is_not_one(phabfive_raw):
