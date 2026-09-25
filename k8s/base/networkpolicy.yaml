@@ -1,4 +1,5 @@
-# Nothing reaches phorge pods except Traefik (to Phorge) and Phorge (to MariaDB)
+# Nothing reaches phorge pods except Traefik (to Phorge), Phorge (to MariaDB)
+# and the dev applications that read Phorge over Conduit.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -24,6 +25,34 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: traefik
+      ports:
+        - port: 80
+---
+# Conduit clients inside the cluster. Dynatron's standup reports search
+# Phorge from the hub and the worker, and a pod cannot go out through
+# Traefik to come back in: `phorge.localhost` resolves to the pod itself,
+# and reaching Traefik's ClusterIP directly would mean pinning an address
+# that changes when the cluster is recreated. So the clients are named
+# here, where a destination's ingress belongs, rather than worked around
+# at the caller.
+#
+# Namespace-scoped rather than pod-scoped on purpose: it grants the dev
+# namespace, not a particular Deployment, so a second consumer there needs
+# no change. Port 80 only, which is all Conduit uses.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phorge-from-dev-apps
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: phorge
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: dynatron
       ports:
         - port: 80
 ---
