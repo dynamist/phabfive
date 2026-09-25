@@ -209,6 +209,7 @@ def search(
         phabfive user search --role=any -l 0
         phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0
     """
+    from phabfive.display import display_empty
     from phabfive.record_display import display_records
     from phabfive.user import User
 
@@ -275,6 +276,7 @@ def search(
 
     if not records:
         typer.echo("No users found", err=True)
+        display_empty(_get_output_format(ctx))
         return
 
     display_records(records, _get_output_format(ctx), user, tabular=True)

@@ -63,6 +63,9 @@ Global options must come **before** the subcommand. `phabfive maniphest show T12
 - `json` and `yaml` wrap them in a list. `jsonl` does not: it writes one object per line
   with no wrapper, which is what `jq -c`, `while read` loops and appended log files want.
   Nothing in a `jsonl` line is ever split across lines, so counting lines counts records.
+- A search that finds nothing prints `[]` in `json` and `yaml`, nothing in `jsonl`, and
+  exits 0. A search that could not run - a `--tag` naming no project, say - prints
+  nothing on stdout and exits non-zero, so an empty list is always an answer.
 - `rich`, `tree` and `table` are for humans. `rich` refuses to render a line longer than
   4096 characters and raises instead, which real task descriptions do hit.
 - `table` is a grid, and list-shaped: `diffusion repo list`, `diffusion uri list`,

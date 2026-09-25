@@ -135,6 +135,7 @@ def search(
     see and tests each one. A small --limit shortens that walk once enough
     have matched, it does not make the query cheap.
     """
+    from phabfive.display import display_empty
     from phabfive.passphrase.display import display_passphrases_list
 
     # Require at least one search criterion - unless a spec carries them,
@@ -191,6 +192,7 @@ def search(
                 typer.echo("No credentials found matching the criteria", err=True)
             else:
                 typer.echo("No credentials found", err=True)
+            display_empty(output_format)
             raise typer.Exit(0)
 
         display_passphrases_list(

@@ -29,7 +29,12 @@ from rich.text import Text
 from rich.tree import Tree
 from ruamel.yaml import YAML
 
-from phabfive.display import _escape_for_rich, _yaml_scalar, render_records
+from phabfive.display import (
+    _escape_for_rich,
+    _yaml_scalar,
+    display_empty,
+    render_records,
+)
 from phabfive.json_output import emit_records
 from phabfive.table import display_records_table
 
@@ -300,6 +305,7 @@ def display_records(records, output_format, phabfive_instance, tabular=False):
         :func:`render_records` doing nothing special.
     """
     if not records:
+        display_empty(output_format)
         return
 
     console = phabfive_instance.get_console()
