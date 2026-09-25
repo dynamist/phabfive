@@ -522,13 +522,14 @@ class TestSearch:
         assert "--status must be one of: active, archived, any" in result.stderr
         phab.project.search.assert_not_called()
 
-    def test_nothing_found_leaves_stdout_empty(self, phab, restore_output_format):
+    def test_nothing_found_is_an_empty_list(self, phab, restore_output_format):
+        """A document a program can parse, not zero bytes (#522)."""
         result = _invoke(
             phab, ["--format=json", "project", "search", "--status=archived", "nope"]
         )
 
         assert result.exit_code == 0
-        assert result.stdout == ""
+        assert result.stdout == "[]\n"
         assert "No projects found" in result.stderr
 
 

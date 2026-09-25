@@ -327,11 +327,12 @@ class TestCli:
             "viola",
         ]
 
-    def test_nothing_found_leaves_stdout_empty(self, restore_output_format):
+    def test_nothing_found_is_an_empty_list(self, restore_output_format):
+        """A document a program can parse, not zero bytes (#522)."""
         result = self._invoke(["--format=json", "user", "search", "nobody"])
 
         assert result.exit_code == 0
-        assert result.stdout == ""
+        assert result.stdout == "[]\n"
         assert "No users found" in result.stderr
 
     def test_an_unknown_role_exits_non_zero(self):

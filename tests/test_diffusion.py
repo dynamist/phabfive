@@ -3860,10 +3860,11 @@ class TestUriListFilterCli:
         diffusion.uri_list.assert_not_called()
 
     def test_a_filter_matching_nothing_is_still_a_success(self):
+        """Not a terminal, so the fallback format: an empty yaml list (#522)."""
         result, _ = self._invoke(["uri", "list", "R5", "--io=read"])
 
         assert result.exit_code == 0
-        assert result.output == ""
+        assert result.output == "[]\n"
 
 
 class TestListFormats:

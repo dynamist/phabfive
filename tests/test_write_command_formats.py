@@ -1112,7 +1112,7 @@ class TestStatusTextOnStderr:
             )
 
         assert result.exit_code == 0
-        assert result.stdout.strip() == ""
+        assert result.stdout == "[]\n"
         assert "No pastes found" in result.stderr
 
     @pytest.mark.parametrize(

@@ -41,6 +41,7 @@ from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
 from phabfive.options import any_list_value, split_list_option
 from phabfive.ordering import complete_order_value
 from phabfive.paste.core import build_paste_search_constraints
+from phabfive.display import display_empty
 from phabfive.paste.display import display_pastes
 
 paste_app = typer.Typer(
@@ -276,6 +277,7 @@ def search(
     if not result["pastes"]:
         typer.echo("No pastes found", err=True)
         _echo_no_match_hint(text_query)
+        display_empty(_get_output_format(ctx))
         return
 
     # The record `paste show` answers with, less the content, so a filter

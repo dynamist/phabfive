@@ -349,6 +349,7 @@ def project_search(
         phabfive project search --with searches.yaml
         phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0
     """
+    from phabfive.display import display_empty
     from phabfive.project.display import display_projects
 
     if status is not None and status not in PROJECT_STATUS_CHOICES:
@@ -456,6 +457,7 @@ def project_search(
     if not result.get("projects"):
         typer.echo("No projects found", err=True)
         _echo_no_match_hint(query)
+        display_empty(_get_output_format(ctx))
         return
 
     display_projects(result, _get_output_format(ctx), project, tabular=True)

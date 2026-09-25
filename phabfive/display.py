@@ -16,6 +16,26 @@ from phabfive.json_output import emit_records
 from phabfive.table import display_records_table
 
 
+#: The formats whose output is one document holding a list of records.
+_LIST_DOCUMENT_FORMATS = ("json", "yaml")
+
+
+def display_empty(output_format):
+    """Print what a list-shaped format says for a search that found nothing.
+
+    `json` and `yaml` print an empty list, so a program reading stdout gets a
+    document it can parse rather than zero bytes, which is also what a
+    failed command prints (#522). `jsonl` prints nothing, which is already
+    zero records, and the terminal formats print nothing because the command
+    says "No ... found" on stderr.
+
+    Only for a search that ran. A result of None is a failure, and printing
+    `[]` for it would make the failure look like an answer.
+    """
+    if output_format in _LIST_DOCUMENT_FORMATS:
+        print("[]")
+
+
 def render_records(output_format, renderers):
     """Dispatch to the renderer for a format. The one ``--format`` switch.
 
@@ -783,7 +803,11 @@ def display_tasks(
         - and so has a table to offer. `show` leaves it False and
         `--format=table` falls back to rich there.
     """
-    if not result or not result.get("tasks"):
+    if not result:
+        return
+
+    if not result.get("tasks"):
+        display_empty(output_format)
         return
 
     console = phabfive_instance.get_console()
@@ -993,6 +1017,7 @@ def display_users(user_dicts, output_format, phabfive_instance):
         Instance to access formatting helpers
     """
     if not user_dicts:
+        display_empty(output_format)
         return
 
     console = phabfive_instance.get_console()

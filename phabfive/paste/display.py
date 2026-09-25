@@ -7,7 +7,7 @@ project or a repository. What is left here is ``value``, the one format a
 paste has something of its own to say for.
 """
 
-from phabfive.display import render_records
+from phabfive.display import display_empty, render_records
 from phabfive.record_display import display_records
 
 
@@ -46,7 +46,11 @@ def display_pastes(result, output_format, phabfive_instance, tabular=False):
         True from `paste search`, which is list-shaped. `paste show` leaves
         it False and gets rich for `--format=table`.
     """
-    if not result or not result.get("pastes"):
+    if not result:
+        return
+
+    if not result.get("pastes"):
+        display_empty(output_format)
         return
 
     records = result["pastes"]
