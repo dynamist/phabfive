@@ -36,6 +36,7 @@ from typer.main import get_command
 
 from phabfive.spec import parse_spec, validate_offline
 from phabfive.spec.problems import CODES, Severity
+from phabfive.spec.references import STRUCTURAL_KEYS
 from phabfive.spec.registry import spec_keys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -202,6 +203,7 @@ def test_the_structural_create_keys_are_documented():
     }
 
     assert documented == {"id", "tasks", "parent", "parents", "subtasks"}
+    assert documented == {key for keys in STRUCTURAL_KEYS.values() for key in keys}
 
 
 def test_every_problem_code_is_documented():

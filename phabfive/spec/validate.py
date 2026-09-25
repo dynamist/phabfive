@@ -67,6 +67,7 @@ from phabfive.spec.references import (
     LOCAL_ID_KEY,
     NESTED_KEY,
     REFERENCE_FIELDS,
+    STRUCTURAL_KEYS,
     Reference,
     RefKind,
     ReferenceField,
@@ -126,6 +127,26 @@ def _suggestion(key: str, known: Sequence[str]) -> str:
     matches = difflib.get_close_matches(key, known, n=1, cutoff=_SUGGESTION_CUTOFF)
 
     return f" Did you mean {matches[0]!r}?" if matches else ""
+
+
+def _flag_suggestion(key: str, declared: Sequence[Field]) -> str:
+    """ " Did you mean ..." when a key is spelled like a field's CLI flag.
+
+    The key and the flag of one field are often not alike: a task's
+    `projects:` is `--tag`, and `tag:` is what a search spec calls it, so
+    `tags:` on a create item is a plausible guess that no edit distance
+    leads back to `projects` (#518). A plural of the flag counts too.
+    """
+    for field in declared:
+        if field.cli is None:
+            continue
+
+        flag = field.cli.lstrip("-")
+
+        if key in (flag, f"{flag}s"):
+            return f" Did you mean {field.name!r}? It is what {field.cli} sets."
+
+    return ""
 
 
 def _type_name(value: object) -> str:
@@ -992,9 +1013,10 @@ def _check_fields(
       that has declared two keys of an object cannot honestly call the third
       unknown, and declaring the first field of an object type would
       otherwise turn every other key of it into an error overnight.
-    - **Is this value right?** For every declared key, wherever it is. A
-      colour is checked in a `projects:` item today even though the rest of
-      that item's keys are not yet declared.
+    - **Is this value right?** For every declared key, wherever it is.
+
+    A create item's key set is its fields plus `references.STRUCTURAL_KEYS`,
+    which are keys without being `Field`s.
     """
     declared = fields_for(object_type, verb)
 
@@ -1002,12 +1024,16 @@ def _check_fields(
         return []
 
     problems: list[Problem] = []
-    known = [field.name for field in declared]
+    structural = STRUCTURAL_KEYS.get(object_type, ()) if verb == "create" else ()
+    known = [field.name for field in declared] + list(structural)
     complete = (object_type, verb) in DECLARED_COMPLETE
 
     if complete:
         for raw_key in mapping:
             key = str(raw_key)
+
+            if key in structural:
+                continue
 
             if field_by_name(key, object_type, verb) is not None:
                 continue
@@ -1019,7 +1045,7 @@ def _check_fields(
                     value=mapping[raw_key],
                     reason=(
                         f"A {object_type} {verb} has no key {key!r}."
-                        f"{_suggestion(key, known)}"
+                        f"{_flag_suggestion(key, declared) or _suggestion(key, known)}"
                     ),
                     code="unknown-key",
                 )

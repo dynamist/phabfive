@@ -568,6 +568,16 @@ def _search_type_branches() -> list[dict[str, Any]]:
     return branches
 
 
+#: A task's linking keys, which are `references.STRUCTURAL_KEYS` rather than
+#: `Field`s and so have to be described here for `additionalProperties` to be
+#: false on a task item.
+_LINK_DESCRIPTIONS: dict[str, str] = {
+    "parent": "One task this item hangs off: T123 or $local-id.",
+    "parents": "Tasks this item hangs off: T123 or $local-id.",
+    "subtasks": "Tasks that hang off this item: T123 or $local-id.",
+}
+
+
 def _create_item_schema(object_type: str) -> dict[str, Any]:
     """One created object: its declared fields, its local id, its children."""
     schema = _fields_schema(object_type, "create")
@@ -588,6 +598,15 @@ def _create_item_schema(object_type: str) -> dict[str, Any]:
             "items": {"$ref": "#/$defs/task"},
             "description": "Child tasks, created with this one as their parent.",
         }
+
+        # Not a monogram pattern: a `$local-id` is as legal here as T123, and
+        # the offline pass is what tells the two apart and checks each
+        for key, description in _LINK_DESCRIPTIONS.items():
+            properties[key] = {
+                "type": ["string", "array"],
+                "items": {"type": "string"},
+                "description": description,
+            }
 
     schema["properties"] = properties
 
