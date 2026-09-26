@@ -101,7 +101,7 @@
       ],
       "groupName": "kubernetes toolchain",
       "prBodyNotes": [
-        ":warning: `k8s/cluster/k3d.yaml` is shared verbatim with every repo using the `dynamist-dev` cluster. Bump it in all of them in the same window, or the `coexistence` job fails on the diff. Recreate the cluster with `make destroy` + `make up` afterwards."
+        ":warning: `k8s/cluster/k3d.yaml` is shared verbatim with every repo using the `dynamist` cluster. Bump it in all of them in the same window, or the `coexistence` job fails on the diff. Recreate the cluster with `make destroy` + `make up` afterwards."
       ]
     },
     {

@@ -11,7 +11,7 @@ mise trust && make tools     # k3d, kubectl and kubeconform, pinned in mise.toml
 make up
 ```
 
-`make up` creates the shared k3d cluster `dynamist-dev` (or reuses it), builds the `dynamist/phorge` image, imports it into the cluster, deploys `k8s/overlays/local` into the namespace `phorge` and follows the logs until Phorge is ready, including the admin password recovery link. Docker is required, the cluster runs in it. See [Kubernetes Setup](#kubernetes-setup).
+`make up` creates the shared k3d cluster `dynamist` (or reuses it), builds the `dynamist/phorge` image, imports it into the cluster, deploys `k8s/overlays/local` into the namespace `phorge` and follows the logs until Phorge is ready, including the admin password recovery link. Docker is required, the cluster runs in it. See [Kubernetes Setup](#kubernetes-setup).
 
 **2. Stop Phorge:** `make down` stops Phorge and MariaDB and keeps the data. `make reset` deletes the `phorge` namespace with all its data.
 
@@ -357,7 +357,7 @@ Phorge runs in a local [k3d](https://k3d.io) cluster, which is k3s in Docker. Th
 - **Phorge:** `k8s/base` holds the `phorge` namespace, MariaDB (StatefulSet `mariadb`), Phorge (Deployment `phorge`, `Recreate` so two pods never upgrade the same database), the Ingress, a ResourceQuota with default limits and NetworkPolicies. Only Traefik reaches Phorge and only Phorge reaches MariaDB, whose port is not published on the host. Overlays: `local` (with `config.local.env`) and `ci`.
 - **Images:** `make phorge-image` builds `dynamist/phorge`, tags it by content and imports it with `k3d image import`, no registry is involved.
 
-Every `make` target passes `--context k3d-dynamist-dev`, so it never acts on another cluster.
+Every `make` target passes `--context k3d-dynamist`, so it never acts on another cluster.
 
 ## Useful Commands
 

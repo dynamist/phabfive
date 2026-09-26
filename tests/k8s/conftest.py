@@ -16,7 +16,7 @@ import pytest
 import requests
 
 ROOT = Path(__file__).resolve().parents[2]
-KUBE_CONTEXT = "k3d-dynamist-dev"
+KUBE_CONTEXT = "k3d-dynamist"
 NAMESPACE = "phorge"
 TRAEFIK_404 = "404 page not found"
 

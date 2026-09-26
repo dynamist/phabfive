@@ -406,7 +406,7 @@ Renovate (Mend app, `renovate.json`) is the only bot, batching everything into o
 - `minimumReleaseAge: "5 days"` exists to stay behind `[tool.uv] exclude-newer = "4 days"` in
   `pyproject.toml`. uv resolves as if four days ago, so a fresher version would be proposed but
   could not be locked. Change the two together or lock file updates start failing.
-- `k8s/cluster/k3d.yaml` is shared verbatim with every repo in the `dynamist-dev` cluster, and the
+- `k8s/cluster/k3d.yaml` is shared verbatim with every repo in the `dynamist` cluster, and the
   `coexistence` job diffs it, so `kubectl` (mise) and the k3s image move together in the
   `kubernetes toolchain` group - and the PR has to be merged in every such repo in the same window.
 - `ruff` is capped below 0.16 in both `pyproject.toml` and the `ruff` group's `allowedVersions`
