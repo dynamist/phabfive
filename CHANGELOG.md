@@ -1,5 +1,16 @@
 # Unreleased
 
+## Bug Fixes
+
+* **`--column` moves the card on every board `--tag` names.** A task has a position on
+  each board it is on, so a move says which boards it applies to: none needed when the
+  task is on exactly one, and one `--tag` per board otherwise. `--tag=A,B --column=Done`
+  lands the card in Done on both, in a single `column` transaction, and `--column=forward`
+  advances it a column on each. Previously the first `--tag` was the board and the rest
+  were tagged but not moved on. The error for a task on several boards now suggests the
+  one edit that covers them all, before the per-board commands. Fixes #515
+
+
 # 0.11.0 (2026-09-24)
 
 ## Upgrade Notes

@@ -971,7 +971,7 @@ def edit(
     tag: Optional[List[str]] = typer.Option(
         None,
         "--tag",
-        help="Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated); the first is the board for --column",
+        help="Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated); with --column, each is a board to move on",
         autocompletion=complete_tag_list,
     ),
     add_tag: Optional[List[str]] = typer.Option(

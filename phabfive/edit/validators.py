@@ -46,24 +46,30 @@ def validate_board_column_context(
         task_id (str): Task ID (e.g., "123")
         task_data (dict): Current task data from API (with attachments)
         column_arg (str): Value of --column flag (e.g., "Done", "forward", "backward")
-        board_phid (str): The board --tag named, already resolved, or None
+        board_phid (list): The boards --tag named, already resolved, or None
         maniphest: Maniphest instance for naming the boards of an error
 
     Returns:
-        tuple: (board_phid, error_message)
-               board_phid is None if error, error_message is None if success
+        tuple: (board_phids, error_message)
+               board_phids is None if error, error_message is None if success
 
+    A task has a position on every board it is on, so a column move names the
+    boards it applies to: all of the ones --tag named, or - when it named
+    none - the task's own, and only a task on exactly one board has an answer
+    that is not a guess.
     """
     if column_arg is None:
         # No column change requested, no validation needed
         return (None, None)
 
+    named = [board_phid] if isinstance(board_phid, str) else list(board_phid or [])
+
     # Get list of boards this task is on
     task_boards = get_task_boards(task_data)
 
-    if board_phid:
-        # User specified a board
-        return (board_phid, None)
+    if named:
+        # User specified the boards
+        return (named, None)
 
     # No board specified, try to auto-detect
     if len(task_boards) == 0:
@@ -73,11 +79,12 @@ def validate_board_column_context(
         )
     elif len(task_boards) == 1:
         # Single board, auto-detect
-        return (task_boards[0], None)
+        return ([task_boards[0]], None)
     else:
         # Multiple boards, cannot auto-detect
         board_names = get_board_names(task_boards, maniphest.phab)
         return (
             None,
-            f"Task T{task_id} is on multiple boards {board_names}. Use --tag=BOARD to specify which board.",
+            f"Task T{task_id} is on multiple boards {board_names}. "
+            "Use --tag=BOARD for each board to move the task on.",
         )

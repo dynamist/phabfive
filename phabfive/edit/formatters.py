@@ -21,10 +21,10 @@ def generate_partition_suggestions(errors_by_boards):
         task_str = ",".join([f"T{tid}" for tid in task_ids])
 
         suggestions.append(f"# Tasks on {board_str}:")
-        # Pick the first board as the target (user can adjust)
-        target_board = board_list[0]
+        # Every board they share, because a column move reaches each board it
+        # names and one at a time is several edits for one change.
         suggestions.append(
-            f'phabfive edit {task_str} --tag="{target_board}" --column=COLUMN'
+            f'phabfive edit {task_str} --tag="{",".join(board_list)}" --column=COLUMN'
         )
         suggestions.append("")
 

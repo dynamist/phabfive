@@ -2692,7 +2692,7 @@ class Maniphest(Phabfive):
         title=None,
         priority=None,
         status=None,
-        board_phid=None,
+        board_phids=None,
         column=None,
         assign=None,
         description=None,
@@ -2723,8 +2723,10 @@ class Maniphest(Phabfive):
             Priority to set or "raise"/"lower"
         status : str, optional
             Status to set
-        board_phid : str, optional
-            Board PHID for column context
+        board_phids : list, optional
+            The boards `column` moves the task on. A task has a position on
+            every board it is on, so a move names the boards it applies to:
+            the one it is on, or the ones `--tag` named
         column : str, optional
             Column name or "forward"/"backward"
         assign : str, optional
@@ -2877,12 +2879,14 @@ class Maniphest(Phabfive):
         added_tags = self._project_tags(tag, option="--tag")
         removed_tags = self._project_tags(untag, option="--untag")
 
+        boards = list(board_phids or [])
+
         # A board found by auto-detection is never a --tag, so the refusal of
         # a project both added and removed does not see it: moving a task on a
         # board while taking it off that board is the same contradiction
-        if column and board_phid:
+        if column and boards:
             for value, (phid, name) in removed_tags.items():
-                if phid == board_phid:
+                if phid in boards:
                     raise PhabfiveInputException(
                         f"Cannot both remove {name or value} and move the task "
                         f"to a column on it"
@@ -2891,63 +2895,76 @@ class Maniphest(Phabfive):
         # Handle column. Its transactions are kept aside until the tags are
         # known, because a task going onto a board goes through the same
         # projects.add as a --tag, and must be sent before the move.
+        #
+        # One move per board: a task has a position on each board it is on, so
+        # `--tag=A,B --column=Done` is two moves. They travel as one "column"
+        # transaction, which takes a list ("List of columns to move the task
+        # to", ManiphestEditEngine).
         column_transactions = []
         column_changes = []
-        if column and board_phid:
+        moved_to = []
+        for board_phid in boards if column else []:
             column_phid = self._navigate_column(task_id, task_data, column, board_phid)
-            if column_phid:
-                # Get current and new column names
-                from phabfive.maniphest.fetchers import get_column_info
+            if not column_phid:
+                continue
 
-                column_info = get_column_info(self.phab, board_phid)
-                new_column_name = column_info.get(column_phid, {}).get("name", column)
+            # Get current and new column names
+            from phabfive.maniphest.fetchers import get_column_info
 
-                # Get the current column on this board. The PHID is what the
-                # target is compared against, not the name: two boards can
-                # both have a "Backlog", and a task can be on both.
-                current_col_phid = None
-                current_column_name = None
-                boards_data = (
-                    task_data.get("attachments", {})
-                    .get("columns", {})
-                    .get("boards", {})
-                )
-                if board_phid in boards_data:
-                    current_columns = boards_data[board_phid].get("columns", [])
-                    if current_columns:
-                        current_col_phid = current_columns[0].get("phid")
-                        current_column_name = column_info.get(current_col_phid, {}).get(
-                            "name"
-                        )
+            column_info = get_column_info(self.phab, board_phid)
+            new_column_name = column_info.get(column_phid, {}).get("name", column)
 
-                # Also need to add task to board if not already on it. This
-                # stays outside the comparison below: putting a task on a
-                # board and into a column is one edit. A board that is also
-                # a --tag - the first one is how it is named - is already
-                # being added, and joins the same transaction otherwise.
-                task_projects = task_data["attachments"]["projects"]["projectPHIDs"]
-                if board_phid not in task_projects and board_phid not in {
-                    phid for phid, _ in added_tags.values()
-                }:
-                    added_tags = {
-                        **added_tags,
-                        board_phid: (board_phid, self._project_name(board_phid)),
+            # Get the current column on this board. The PHID is what the
+            # target is compared against, not the name: two boards can
+            # both have a "Backlog", and a task can be on both.
+            current_col_phid = None
+            current_column_name = None
+            boards_data = (
+                task_data.get("attachments", {}).get("columns", {}).get("boards", {})
+            )
+            if board_phid in boards_data:
+                current_columns = boards_data[board_phid].get("columns", [])
+                if current_columns:
+                    current_col_phid = current_columns[0].get("phid")
+                    current_column_name = column_info.get(current_col_phid, {}).get(
+                        "name"
+                    )
+
+            # Also need to add task to board if not already on it. This
+            # stays outside the comparison below: putting a task on a
+            # board and into a column is one edit. A board that is also
+            # a --tag is already being added, and joins the same
+            # transaction otherwise.
+            task_projects = task_data["attachments"]["projects"]["projectPHIDs"]
+            if board_phid not in task_projects and board_phid not in {
+                phid for phid, _ in added_tags.values()
+            }:
+                added_tags = {
+                    **added_tags,
+                    board_phid: (board_phid, self._project_name(board_phid)),
+                }
+
+            # A task already in the target column needs no transaction,
+            # and reporting one would claim a move that never happened.
+            if column_phid != current_col_phid:
+                moved_to.append(column_phid)
+                column_changes.append(
+                    {
+                        "field": "Column",
+                        "old": current_column_name or "(none)",
+                        # Two rows both reading "Done" would not say what is
+                        # happening, so a move says which board it is on as
+                        # soon as there is more than one.
+                        "new": (
+                            f"{new_column_name} on {self._project_name(board_phid)}"
+                            if len(boards) > 1
+                            else new_column_name
+                        ),
                     }
+                )
 
-                # A task already in the target column needs no transaction,
-                # and reporting one would claim a move that never happened.
-                if column_phid != current_col_phid:
-                    column_transactions.append(
-                        {"type": "column", "value": [column_phid]}
-                    )
-
-                    column_changes.append(
-                        {
-                            "field": "Column",
-                            "old": current_column_name or "(none)",
-                            "new": new_column_name,
-                        }
-                    )
+        if moved_to:
+            column_transactions.append({"type": "column", "value": moved_to})
 
         # Handle tags, as subscribers: only a change is sent, and the board a
         # --column puts the task on rides in the same projects.add
@@ -3172,7 +3189,7 @@ class Maniphest(Phabfive):
         title=None,
         priority=None,
         status=None,
-        board_phid=None,
+        board_phids=None,
         column=None,
         assign=None,
         description=None,
@@ -3222,7 +3239,7 @@ class Maniphest(Phabfive):
             title=title,
             priority=priority,
             status=status,
-            board_phid=board_phid,
+            board_phids=board_phids,
             column=column,
             assign=assign,
             description=description,
