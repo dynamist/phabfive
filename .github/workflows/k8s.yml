@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 env:
-  KUBECTL: mise exec -- kubectl --context k3d-dynamist-dev
+  KUBECTL: mise exec -- kubectl --context k3d-dynamist
 
 jobs:
   # Deploying costs about four minutes of k3d, and coexistence far more, so a
