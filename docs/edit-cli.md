@@ -52,7 +52,7 @@ Arguments:
 Options:
   --priority=PRIORITY       Set priority (unbreak|high|normal|low|wish|raise|lower)
   --status=STATUS           Set status (open|resolved|wontfix|invalid|duplicate)
-  --tag=PROJECT             Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated); the first is the board for --column
+  --tag=PROJECT             Add a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated); with --column, each is a board to move on
   --untag=PROJECT           Remove a project tag (name, #hashtag, ID or PHID; repeatable, or comma-separated)
   --column=COLUMN           Set column on board (or use forward/backward)
   --assign=USER             Set assignee (use @me for yourself)
@@ -522,7 +522,19 @@ phabfive maniphest search --author=@me --priority="in:Needs Triage" | \
 
 ## Board/Column Validation Rules
 
-Understanding when board context is required:
+Understanding when board context is required.
+
+A task has a position on every board it is on, so a column move names the
+boards it applies to. A task on exactly one board needs no `--tag`; a task on
+several needs one `--tag` per board the move should reach:
+
+```bash
+# Done on both boards, in one edit
+phabfive edit T906 --tag="Architecture,Development" --column=Done
+
+# and one column forward on each, wherever the card sits there
+phabfive edit T906 --tag="Architecture,Development" --column=forward
+```
 
 | Scenario | Board Context | Behavior |
 |----------|---------------|----------|
@@ -530,7 +542,7 @@ Understanding when board context is required:
 | `--column` only, task on multiple boards | ❌ Required | Error with suggestions |
 | `--tag` + `--column`, task on specified board | ✅ Explicit | Moves to column |
 | `--tag` + `--column`, task NOT on board | ✅ Explicit | Adds to board + sets column |
-| Several `--tag` + `--column` | ✅ First `--tag` | Adds every tag + sets column on the first |
+| Several `--tag` + `--column` | ✅ Every `--tag` | Adds every tag + moves the card on **each** board named, in one transaction |
 | No `--column` specified | N/A | No validation needed |
 
 ## Output Formats

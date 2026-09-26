@@ -204,6 +204,9 @@ class TestBuildTaskEdit:
 class TestTagsWithColumn:
     COLUMNS = {
         "PHID-PROJ-qa": {"PHID-PCOL-qa-done": {"name": "Done", "sequence": 0}},
+        "PHID-PROJ-backend": {
+            "PHID-PCOL-backend-done": {"name": "Done", "sequence": 0}
+        },
     }
 
     def _build(self, task, **kwargs):
@@ -218,7 +221,7 @@ class TestTagsWithColumn:
             ),
         ):
             return maniphest.build_task_edit(
-                "42", task, column="Done", board_phid="PHID-PROJ-qa", **kwargs
+                "42", task, column="Done", board_phids=["PHID-PROJ-qa"], **kwargs
             )
 
     def test_the_board_is_added_once_with_the_other_tags(self):
@@ -295,6 +298,90 @@ def mock_config(monkeypatch):
     monkeypatch.setattr("phabfive.core.Phabricator", lambda **kwargs: MagicMock())
 
 
+class TestAColumnMovesOnEveryBoardNamed:
+    """A task has a position on each board it is on, so --tag=a,b is two moves."""
+
+    COLUMNS = {
+        "PHID-PROJ-qa": {"PHID-PCOL-qa-done": {"name": "Done", "sequence": 0}},
+        "PHID-PROJ-backend": {
+            "PHID-PCOL-backend-done": {"name": "Done", "sequence": 0}
+        },
+    }
+
+    def _build(self, task, boards, **kwargs):
+        maniphest = _maniphest()
+        columns = {
+            "PHID-PROJ-qa": "PHID-PCOL-qa-done",
+            "PHID-PROJ-backend": "PHID-PCOL-backend-done",
+        }
+        with (
+            patch(
+                "phabfive.maniphest.fetchers.get_column_info",
+                side_effect=lambda phab, board: self.COLUMNS[board],
+            ),
+            patch.object(
+                Maniphest,
+                "_navigate_column",
+                side_effect=lambda task_id, data, column, board: columns[board],
+            ),
+        ):
+            return maniphest.build_task_edit(
+                "42", task, column="Done", board_phids=boards, **kwargs
+            )
+
+    def test_both_moves_travel_as_one_column_transaction(self):
+        """The field is documented as "List of columns to move the task to"."""
+        transactions, _ = self._build(
+            _task(["PHID-PROJ-qa", "PHID-PROJ-backend"]),
+            ["PHID-PROJ-qa", "PHID-PROJ-backend"],
+        )
+
+        assert [t for t in transactions if t["type"] == "column"] == [
+            {
+                "type": "column",
+                "value": ["PHID-PCOL-qa-done", "PHID-PCOL-backend-done"],
+            }
+        ]
+
+    def test_each_move_says_which_board_it_is_on(self):
+        """Two rows both reading "Done" would not say what is happening."""
+        _, changes = self._build(
+            _task(["PHID-PROJ-qa", "PHID-PROJ-backend"]),
+            ["PHID-PROJ-qa", "PHID-PROJ-backend"],
+        )
+
+        assert [c["new"] for c in changes if c["field"] == "Column"] == [
+            "Done on QA",
+            "Done on Backend",
+        ]
+
+    def test_one_board_leaves_the_move_unlabelled(self):
+        """Naming the board is only worth the noise when there are several."""
+        _, changes = self._build(_task(["PHID-PROJ-qa"]), ["PHID-PROJ-qa"])
+
+        assert [c["new"] for c in changes if c["field"] == "Column"] == ["Done"]
+
+    def test_a_board_the_task_is_not_on_is_joined_before_the_move(self):
+        """A card cannot be placed in a column of a board it is not on."""
+        transactions, _ = self._build(
+            _task(["PHID-PROJ-qa"]), ["PHID-PROJ-qa", "PHID-PROJ-backend"]
+        )
+
+        types = [t["type"] for t in transactions]
+        assert types.index("projects.add") < types.index("column")
+        [add] = [t for t in transactions if t["type"] == "projects.add"]
+        assert add["value"] == ["PHID-PROJ-backend"]
+
+    def test_untagging_any_board_of_the_move_is_refused(self):
+        """The refusal covered the one board; it covers each of them now."""
+        with pytest.raises(PhabfiveInputException, match="Cannot both remove"):
+            self._build(
+                _task(["PHID-PROJ-qa", "PHID-PROJ-backend"]),
+                ["PHID-PROJ-qa", "PHID-PROJ-backend"],
+                untag=["backend"],
+            )
+
+
 class TestPlan:
     """The batch resolves the tags once, and refuses before fetching a task."""
 
@@ -327,16 +414,17 @@ class TestPlan:
 
         edit.maniphest._get_task_data.assert_not_called()
 
-    def test_the_first_tag_is_the_board_for_column(self, edit):
+    def test_every_tag_is_a_board_for_column(self, edit):
+        """A task has a position on each board, so --tag=a,b is two moves."""
         with patch("phabfive.edit.plan.validate_board_column_context") as validate:
-            validate.return_value = ("PHID-PROJ-qa", None)
+            validate.return_value = (["PHID-PROJ-qa", "PHID-PROJ-backend"], None)
             edit.maniphest.build_task_edit = MagicMock(return_value=([], []))
 
             edit.plan("T1", tag=["qa,backend"], column="Done")
 
-        assert validate.call_args.args[3] == "PHID-PROJ-qa"
+        assert validate.call_args.args[3] == ["PHID-PROJ-qa", "PHID-PROJ-backend"]
         kwargs = edit.maniphest.build_task_edit.call_args.kwargs
-        assert kwargs["board_phid"] == "PHID-PROJ-qa"
+        assert kwargs["board_phids"] == ["PHID-PROJ-qa", "PHID-PROJ-backend"]
         assert kwargs["tag"] == {
             "qa": ("PHID-PROJ-qa", "QA"),
             "backend": ("PHID-PROJ-backend", "Backend"),
@@ -357,9 +445,9 @@ class TestPlan:
         edit.plan("T1,T2", column="Done")
 
         assert [
-            c.kwargs["board_phid"]
+            c.kwargs["board_phids"]
             for c in edit.maniphest.build_task_edit.call_args_list
-        ] == ["PHID-PROJ-backend", "PHID-PROJ-qa"]
+        ] == [["PHID-PROJ-backend"], ["PHID-PROJ-qa"]]
 
     def test_a_task_on_several_boards_after_one_on_a_single_board_is_refused(
         self, edit

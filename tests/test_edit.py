@@ -401,7 +401,7 @@ class TestBoardColumnValidation:
             "123", task_data, "Done", None, None
         )
 
-        assert board_phid == "PHID-PROJ-board1"
+        assert board_phid == ["PHID-PROJ-board1"]
         assert error is None
 
     def test_multiple_boards_without_tag_errors(self):
@@ -924,7 +924,7 @@ class TestBuildTaskEditColumn:
             transactions, changes = maniphest.build_task_edit(
                 "93",
                 self._task({"PHID-PROJ-qa": "PHID-PCOL-qa-backlog"}),
-                board_phid="PHID-PROJ-qa",
+                board_phids=["PHID-PROJ-qa"],
                 column="Backlog",
             )
 
@@ -938,7 +938,7 @@ class TestBuildTaskEditColumn:
         with self._maniphest() as maniphest:
             result = maniphest.edit_task_by_id(
                 task_id="93",
-                board_phid="PHID-PROJ-qa",
+                board_phids=["PHID-PROJ-qa"],
                 column="Backlog",
                 task_data=self._task({"PHID-PROJ-qa": "PHID-PCOL-qa-backlog"}),
             )
@@ -954,7 +954,7 @@ class TestBuildTaskEditColumn:
             transactions, changes = maniphest.build_task_edit(
                 "93",
                 self._task({"PHID-PROJ-qa": "PHID-PCOL-qa-backlog"}),
-                board_phid="PHID-PROJ-qa",
+                board_phids=["PHID-PROJ-qa"],
                 column="Doing",
             )
 
@@ -972,7 +972,7 @@ class TestBuildTaskEditColumn:
             transactions, changes = maniphest.build_task_edit(
                 "93",
                 self._task({}),
-                board_phid="PHID-PROJ-qa",
+                board_phids=["PHID-PROJ-qa"],
                 column="Backlog",
             )
 
@@ -998,7 +998,7 @@ class TestBuildTaskEditColumn:
 
         with self._maniphest() as maniphest:
             transactions, changes = maniphest.build_task_edit(
-                "93", task, board_phid="PHID-PROJ-ops", column="Backlog"
+                "93", task, board_phids=["PHID-PROJ-ops"], column="Backlog"
             )
 
         assert transactions == [
@@ -1012,7 +1012,7 @@ class TestBuildTaskEditColumn:
             transactions, changes = maniphest.build_task_edit(
                 "93",
                 self._task({"PHID-PROJ-ops": "PHID-PCOL-ops-done"}),
-                board_phid="PHID-PROJ-ops",
+                board_phids=["PHID-PROJ-ops"],
                 column="forward",
             )
 
@@ -1308,7 +1308,7 @@ class TestPartitionSuggestions:
         result = generate_partition_suggestions(errors_by_boards)
 
         assert "phabfive edit T123,T456" in result
-        assert '--tag="Board1"' in result
+        assert '--tag="Board1,Board2"' in result
         assert "echo" not in result  # Should not use echo pipe format
 
 

@@ -127,11 +127,11 @@ class EditPlan:
         return bool(self._confirm and self._confirm())
 
 
-def _validate(maniphest, task_ids, column, board_phid, task_data):
+def _validate(maniphest, task_ids, column, board_phids, task_data):
     """Fetch and check every task, raising once for all that failed.
 
-    `board_phid` is the board named for `column`, if one was; otherwise each
-    task's own board is used, when it has exactly one.
+    `board_phids` are the boards named for `column`, if any were; otherwise
+    each task's own board is used, when it has exactly one.
 
     Returns
     -------
@@ -147,8 +147,8 @@ def _validate(maniphest, task_ids, column, board_phid, task_data):
 
             # Its own name: a board auto-detected for one task must not
             # become the named board for the tasks after it
-            task_board, error = validate_board_column_context(
-                task_id, data, column, board_phid, maniphest
+            task_boards, error = validate_board_column_context(
+                task_id, data, column, board_phids, maniphest
             )
 
             if error:
@@ -160,7 +160,7 @@ def _validate(maniphest, task_ids, column, board_phid, task_data):
                 problems.append(ValidationProblem(task_id, error, boards))
             else:
                 validated.append(
-                    {"task_id": task_id, "task_data": data, "board_phid": task_board}
+                    {"task_id": task_id, "task_data": data, "board_phids": task_boards}
                 )
 
         except Exception as e:
@@ -258,8 +258,8 @@ def plan_task_edits(
     The remaining arguments are the changes, as `maniphest edit` takes them:
     `priority` and `column` also take "raise"/"lower" and
     "forward"/"backward". `tag` and `untag` add and remove projects, by name,
-    hashtag, ID or PHID (repeatable, or comma-separated), and the first `tag`
-    is also the board `column` is on.
+    hashtag, ID or PHID (repeatable, or comma-separated), and with `column`
+    every `tag` is also a board the card moves on.
 
     Returns
     -------
@@ -295,9 +295,11 @@ def plan_task_edits(
     # same mistake once per task instead of stopping the batch
     user_list_edit("projects", "Tags", (), added=added_tags, removed=removed_tags)
 
-    board_phid = added_tags[tags[0]][0] if column and tags else None
+    # Every board named, not just the first: a task has a position on each
+    # board it is on, so `--tag=A,B --column=Done` is a move on both.
+    board_phids = [added_tags[value][0] for value in tags] if column and tags else None
 
-    validated = _validate(maniphest, task_ids, column, board_phid, task_data or {})
+    validated = _validate(maniphest, task_ids, column, board_phids, task_data or {})
 
     entries = []
     for task in validated:
@@ -309,7 +311,7 @@ def plan_task_edits(
                 title=title,
                 priority=priority,
                 status=status,
-                board_phid=task["board_phid"],
+                board_phids=task["board_phids"],
                 column=column,
                 assign=assign,
                 unassign=unassign,

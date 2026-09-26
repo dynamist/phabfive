@@ -462,12 +462,23 @@ def _edit_task_single(
 
             # For multiple boards error, show copy-paste ready commands (up to 5 boards)
             if problem.boards and len(problem.boards) <= 5:
+                # One move on every board first: that is one edit, and a
+                # column move reaches each board it names. One board at a
+                # time stays, since moving a card on one and not the other
+                # is a real thing to want.
+                boards = sorted(problem.boards)
                 sys.stderr.write("\nSuggested commands:\n\n")
-                for board_name in sorted(problem.boards):
-                    sys.stderr.write(f"# Move on {board_name}:\n")
+                sys.stderr.write("# Move on all of them, in one edit:\n")
+                sys.stderr.write(
+                    f'phabfive edit T{task_id} --tag="{",".join(boards)}" '
+                    f"--column={column}\n\n"
+                )
+                sys.stderr.write("# Or one board at a time:\n")
+                for board_name in boards:
                     sys.stderr.write(
-                        f'phabfive edit T{task_id} --tag="{board_name}" --column={column}\n\n'
+                        f'phabfive edit T{task_id} --tag="{board_name}" --column={column}\n'
                     )
+                sys.stderr.write("\n")
 
             return 1
 
