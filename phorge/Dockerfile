@@ -12,11 +12,22 @@ RUN apt update && apt install -y git default-mysql-client python3-pygments
 # Enable Apache modules
 RUN a2enmod rewrite
 
-# Clone Phorge and Arcanist from GitHub mirrors (per guide)
-RUN git clone https://github.com/phorgeit/phorge.git
-RUN git clone https://github.com/phorgeit/arcanist.git
-RUN git config --system --add safe.directory /app/phorge
-RUN git config --system --add safe.directory /app/arcanist
+# Phorge and Arcanist from the GitHub mirrors, at the commits of a branch or tag
+# that `make phorge-image VERSION=...` resolves (see scripts/phorge-build-args.sh).
+# A git checkout rather than an archive, Phorge reads its version from it.
+ARG PHORGE_VERSION
+ARG PHORGE_COMMIT
+ARG ARCANIST_COMMIT
+RUN test -n "$PHORGE_COMMIT" -a -n "$ARCANIST_COMMIT" || \
+      { echo "Build with make phorge-image, it passes the commits to check out" >&2; exit 1; } && \
+    for repo in phorge:$PHORGE_COMMIT arcanist:$ARCANIST_COMMIT; do \
+      git init -q "/app/${repo%%:*}" && \
+      git -C "/app/${repo%%:*}" fetch -q --depth 1 "https://github.com/phorgeit/${repo%%:*}.git" "${repo#*:}" && \
+      git -C "/app/${repo%%:*}" checkout -q FETCH_HEAD || exit 1; \
+    done && \
+    git config --system --add safe.directory /app/phorge && \
+    git config --system --add safe.directory /app/arcanist
+ENV PHORGE_VERSION=${PHORGE_VERSION}
 
 # Set up Apache and PHP for Phorge
 COPY phorge.conf /etc/apache2/conf-enabled/phorge.conf

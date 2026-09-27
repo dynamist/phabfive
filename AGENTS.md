@@ -28,6 +28,7 @@ uv run mypy                          # [tool.mypy] in pyproject.toml, checks pha
 
 # Local Phorge instance for testing, in the shared k3d cluster (see docs/phorge-setup.md)
 make up                              # create/reuse the cluster, build and deploy Phorge
+make reset && make up VERSION=master # stable (default), master or a tag like 2025.51 (remembered in .k8s/version)
 make down                            # stop, keep data
 make reset                           # delete the phorge namespace and its data
 make creds                           # print the credentials of the running Phorge
@@ -60,24 +61,39 @@ in the `test` group or a narrow `# type: ignore[code]`, never `ignore_errors`.
 
 ## The Kubernetes Check Is Gated
 
-`Kubernetes / Deploy and test in k3d` builds a k3d cluster and a Phorge image, so it costs about
-four minutes, and `coexistence` far more. The `decide` job in `.github/workflows/k8s.yml` decides
-whether a pull request pays for it:
+`Kubernetes / Deploy and test Phorge <version> in k3d` builds a k3d cluster and a Phorge image, so
+it costs about four minutes, and `coexistence` far more. The `decide` job in
+`.github/workflows/k8s.yml` decides whether a pull request pays for it:
 
-- a push to `main` or a `workflow_dispatch` run always deploys
-- the `ci:k8s` label always deploys, draft or not
+- a push to `main`, the weekly `schedule` or a `workflow_dispatch` run always deploys
+- the `ci:k8s` label, or a `ci:phorge-*` label, always deploys, draft or not
 - a draft pull request otherwise never deploys
 - otherwise it deploys only when the pull request touches `k8s/`, `phorge/`, `tests/k8s/`,
-  `tests/e2e/`, `phabfive/`, `Makefile`, `mise.toml`, `pyproject.toml`, `uv.lock` or
-  `.github/workflows/k8s.yml`
+  `tests/e2e/`, `phabfive/`, `scripts/phorge-build-args.sh`, `Makefile`, `mise.toml`,
+  `pyproject.toml`, `uv.lock` or `.github/workflows/k8s.yml`
 
 The job summary always states which rule fired. So **a green pull request does not mean the CLI was
-exercised against a real Phorge** - check whether `Deploy and test in k3d` ran, and add `ci:k8s` if
-you need it:
+exercised against a real Phorge** - check whether `Deploy and test Phorge ... in k3d` ran, and add
+`ci:k8s` if you need it:
 
 ```bash
 gh pr edit <number> --add-label ci:k8s
 ```
+
+The same job picks the Phorge versions the deploy matrix tests. A push to `main` and a pull request
+test `stable`. A pull request labelled `ci:phorge-<branch or tag>` tests exactly those versions
+instead - any ref Phorge and Arcanist both have works once the label exists, `master` and the
+release tags are created. The weekly and manual runs test `stable`, `master` and the two newest
+release tags, found at run time, so a new Phorge release needs no workflow change. `master` runs
+with `continue-on-error`: its breakage is a heads-up, not a failure.
+
+```bash
+gh pr edit <number> --add-label ci:phorge-master --add-label ci:phorge-2025.51
+gh workflow run k8s.yml -f versions="master 2025.51"
+```
+
+Adding or removing any other label does not rerun the workflow's jobs, and does not cancel a run in
+progress.
 
 The label is the manual override rather than an `/e2e-test` comment on purpose: it is sticky, so it
 survives later pushes and "Re-run failed jobs", and it keeps the safe `pull_request` event. An
@@ -85,8 +101,8 @@ survives later pushes and "Re-run failed jobs", and it keeps the safe `pull_requ
 and report no check on the pull request. If a comment command is ever wanted, it should only add
 this label, not run the job.
 
-`Validate manifests` is never gated - it is five seconds, and it is what catches a broken overlay
-on a pull request that skips the deployment.
+`Validate manifests` is never gated by the changed files - it is five seconds, and it is what
+catches a broken overlay on a pull request that skips the deployment.
 
 ## Architecture
 
