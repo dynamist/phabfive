@@ -9,6 +9,7 @@ disposable instance.
 # python std lib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -18,6 +19,18 @@ import warnings
 # 3rd party imports
 import pytest
 import requests
+
+
+def phorge_older_than(release):
+    """Whether the Phorge under test is a release tag before `release`, e.g. "2026.27".
+
+    `make test-e2e` passes the VERSION it was built from as PHORGE_VERSION. A
+    branch (stable, master), or no version at all, counts as current.
+    """
+    version = os.environ.get("PHORGE_VERSION", "")
+    if not re.fullmatch(r"\d{4}\.\d+", version):
+        return False
+    return tuple(map(int, version.split("."))) < tuple(map(int, release.split(".")))
 
 
 @pytest.fixture(scope="session")
