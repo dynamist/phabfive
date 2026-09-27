@@ -189,7 +189,8 @@ jobs:
       - name: Report the deployed Phorge
         run: |
           commit=$($KUBECTL -n phorge exec deploy/phorge -- git -C /app/phorge rev-parse HEAD)
-          echo "Phorge $VERSION at [${commit:0:12}](https://github.com/phorgeit/phorge/commit/$commit)" \
+          php=$($KUBECTL -n phorge exec deploy/phorge -- printenv PHP_VERSION)
+          echo "Phorge $VERSION at [${commit:0:12}](https://github.com/phorgeit/phorge/commit/$commit) on PHP $php" \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Do not depend on the runner's resolver for *.localhost
