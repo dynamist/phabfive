@@ -69,7 +69,7 @@ it costs about four minutes, and `coexistence` far more. The `decide` job in
 - the `ci:k8s` label, or a `ci:phorge-*` label, always deploys, draft or not
 - a draft pull request otherwise never deploys
 - otherwise it deploys only when the pull request touches `k8s/`, `phorge/`, `tests/k8s/`,
-  `tests/e2e/`, `phabfive/`, `scripts/phorge-build-args.sh`, `Makefile`, `mise.toml`,
+  `tests/e2e/`, `phabfive/`, `scripts/*.sh`, `Makefile`, `mise.toml`,
   `pyproject.toml`, `uv.lock` or `.github/workflows/k8s.yml`
 
 The job summary always states which rule fired. So **a green pull request does not mean the CLI was
