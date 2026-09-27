@@ -1,5 +1,14 @@
-# PHP with Apache, tag kept current by Renovate (Phorge requires PHP 7.2.25+)
-FROM php:8.5-apache
+# PHP with Apache, one stage per series, the PHP build arg picks one (see
+# scripts/phorge-build-args.sh). Phorge turns a deprecation raised while it loads
+# a class into an error, so an older release only starts on a PHP from before
+# its code was deprecated. Renovate keeps each stage on its series.
+ARG PHP=8.5
+FROM php:8.5-apache AS php-8.5
+FROM php:8.4-apache AS php-8.4
+FROM php:8.3-apache AS php-8.3
+FROM php:8.0-apache AS php-8.0
+
+FROM php-${PHP}
 
 WORKDIR /app
 
@@ -12,11 +21,22 @@ RUN apt update && apt install -y git default-mysql-client python3-pygments
 # Enable Apache modules
 RUN a2enmod rewrite
 
-# Clone Phorge and Arcanist from GitHub mirrors (per guide)
-RUN git clone https://github.com/phorgeit/phorge.git
-RUN git clone https://github.com/phorgeit/arcanist.git
-RUN git config --system --add safe.directory /app/phorge
-RUN git config --system --add safe.directory /app/arcanist
+# Phorge and Arcanist from the GitHub mirrors, at the commits of a branch or tag
+# that `make phorge-image VERSION=...` resolves (see scripts/phorge-build-args.sh).
+# A git checkout rather than an archive, Phorge reads its version from it.
+ARG PHORGE_VERSION
+ARG PHORGE_COMMIT
+ARG ARCANIST_COMMIT
+RUN test -n "$PHORGE_COMMIT" -a -n "$ARCANIST_COMMIT" || \
+      { echo "Build with make phorge-image, it passes the commits to check out" >&2; exit 1; } && \
+    for repo in phorge:$PHORGE_COMMIT arcanist:$ARCANIST_COMMIT; do \
+      git init -q "/app/${repo%%:*}" && \
+      git -C "/app/${repo%%:*}" fetch -q --depth 1 "https://github.com/phorgeit/${repo%%:*}.git" "${repo#*:}" && \
+      git -C "/app/${repo%%:*}" checkout -q FETCH_HEAD || exit 1; \
+    done && \
+    git config --system --add safe.directory /app/phorge && \
+    git config --system --add safe.directory /app/arcanist
+ENV PHORGE_VERSION=${PHORGE_VERSION}
 
 # Set up Apache and PHP for Phorge
 COPY phorge.conf /etc/apache2/conf-enabled/phorge.conf

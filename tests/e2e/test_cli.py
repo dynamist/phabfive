@@ -3,6 +3,7 @@
 
 # python std lib
 import json
+import re
 import time
 import uuid
 from urllib.parse import urlparse
@@ -10,6 +11,8 @@ from urllib.parse import urlparse
 # 3rd party imports
 import requests
 from ruamel.yaml import YAML
+
+from tests.e2e.conftest import phorge_older_than
 
 
 def test_whoami(phabfive, live_env):
@@ -275,7 +278,11 @@ def test_repo_show_describes_a_seeded_repository(phabfive):
     assert repo["Repository"]["Default Branch"] == "main"
     assert repo["Repository"]["VCS"] == "git"
     assert repo["Repository"]["Hosted"] is True
-    assert repo["Link"].endswith("/source/gunnar-firmware/")
+    if phorge_older_than("2026.27"):
+        # No browseUri before 2026.27, phabfive links the monogram instead
+        assert re.search(r"/R\d+$", repo["Link"])
+    else:
+        assert repo["Link"].endswith("/source/gunnar-firmware/")
     assert repo["Policy"]["Visible To"] == "All Users"
 
 

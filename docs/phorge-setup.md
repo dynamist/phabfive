@@ -194,7 +194,7 @@ password and token are obviously-fake sample values.
 The settings are in `k8s/base/config.env` and, for credentials, `k8s/base/secret.env`. To override settings locally, put them in the gitignored `k8s/overlays/local/config.local.env` and run `make up`:
 
 ```bash
-echo PHORGE_GIT_REF=master >> k8s/overlays/local/config.local.env
+echo PHORGE_SEED=users >> k8s/overlays/local/config.local.env
 make up
 ```
 
@@ -210,12 +210,41 @@ make up
 | `PHORGE_ADMIN_NAME` | `Administrator` | Admin display name |
 | `PHORGE_ADMIN_PASS` | `supersecr3tpassw0rdfordevelop1` | Admin password, enables immediate login (secret) |
 | `PHORGE_ADMIN_TOKEN` | `api-supersecr3tapikeyfordevelop1` | Pre-configured API token (secret) |
-| `PHORGE_GIT_REF` | `stable` | Git branch/tag/commit for Phorge |
-| `ARCANIST_GIT_REF` | `stable` | Git branch/tag/commit for Arcanist |
 | `PHORGE_SEED` | `all` | Seed modules to run, space-separated, or `all` / `none` |
 | `MYSQL_PASS` / `MARIADB_ROOT_PASSWORD` | `supersecr3tpassw0rdfordatabase1` | MariaDB root password (secret) |
 
-The Git refs are fetched and checked out when the pod starts. The `ci` overlay leaves them empty, which tests the Phorge and Arcanist baked into the image instead.
+### Phorge Versions
+
+`VERSION` picks the Phorge to build: a branch or a release tag that both Phorge and Arcanist have, which upstream keeps true for its branches and release tags.
+
+| `VERSION` | Source |
+|-----------|--------|
+| `stable` (default) | the `stable` branch, the current release plus its hotfixes |
+| `master` | the `master` branch, what the next release will be |
+| `2026.27`, `2025.51`, ... | a release tag, see [the tags](https://github.com/phorgeit/phorge/tags) |
+
+```bash
+make reset && make up VERSION=2025.51
+```
+
+`scripts/phorge-build-args.sh` resolves the branch or tag to a commit of Phorge and of Arcanist before the build, so a rebuild of `stable` or `master` picks up what upstream committed since, and changes nothing when upstream did not move. The Phorge and Arcanist in the image are those commits, nothing is fetched when the pod starts.
+
+The version is remembered in `.k8s/version`, so a plain `make up` builds the last one again. The pod remembers the version its data was set up with too, and refuses to start on another one, because a database cannot go back to an older Phorge and the schema of `master` is not the schema of `stable`. `make reset` deletes the data, then `make up VERSION=...` starts over. `make up` and `make ci-deploy` stop as soon as the pod cannot start, and print the end of its log, rather than waiting for the rollout to time out. `stable` moving on to a newer commit is not a change of version, it upgrades the database as usual.
+
+`make ps` and `make creds` show the version, the commits and the PHP that are running.
+
+#### PHP
+
+Phorge turns a deprecation that PHP raises while it runs into an error, so a release only works on the PHP series its code predates. Each release is built on the newest PHP it starts and seeds on:
+
+| Phorge | PHP | What newer PHP deprecates |
+|--------|-----|---------------------------|
+| `2025.51` and newer, `stable`, `master` | 8.5 | |
+| `2025.18` | 8.4 | `case ...;` with a semicolon (8.5) |
+| `2023.32` to `2024.35` | 8.3 | implicitly nullable parameters (8.4) |
+| `2022.37` to `2023.23` | 8.0 | `strlen()` of null (8.1) |
+
+`PHP=` builds on another series, one of the stages in `phorge/Dockerfile`: `make reset && make up VERSION=2025.18 PHP=8.5`.
 
 ## Configure phabfive
 
@@ -381,7 +410,13 @@ Both test suites only run when asked for, a plain `pytest` skips them:
 - **`make test-k8s`** (`tests/k8s`): the home page, the file domain and the API token work through Traefik, unknown hosts get a 404, the users, teams, projects, milestones, spaces, credentials and repositories from `phorge/seed/data/` exist (including the seeded repositories' branches and tags), and pods in other namespaces cannot reach Phorge or MariaDB.
 - **`make test-e2e`** (`tests/e2e`): end-to-end tests of phabfive itself, running the CLI against the instance and creating and editing real tasks.
 
-CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d cluster on the runner, deploys the `ci` overlay and runs both suites. A coexistence job deploys the apps listed in the repository variable `COEXISTENCE_REPOS` (space separated `owner/name`) into the same cluster and runs every app's tests, which also checks that the apps cannot reach each other and that all repos pin the same `k8s/cluster/k3d.yaml`. Each of those repos must provide the make targets `ci-deploy` and `ci-test`.
+CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d cluster on the runner, deploys the `ci` overlay and runs both suites, once per Phorge version:
+
+- a push to `main`, and a pull request, test `stable`
+- a pull request labelled `ci:phorge-<branch or tag>`, such as `ci:phorge-master` or `ci:phorge-2025.51`, tests exactly the labelled versions instead, and deploys even when the gate would have skipped it. Any branch or tag works once the label exists
+- the weekly run and a manual run test `stable`, `master` and the two newest release tags, found when the run starts. A manual run can name other versions in its `versions` input
+
+`master` may fail without failing the workflow, it is a heads-up about the next release. A coexistence job deploys the apps listed in the repository variable `COEXISTENCE_REPOS` (space separated `owner/name`) into the same cluster and runs every app's tests, which also checks that the apps cannot reach each other and that all repos pin the same `k8s/cluster/k3d.yaml`. Each of those repos must provide the make targets `ci-deploy` and `ci-test`.
 
 ## Troubleshooting
 

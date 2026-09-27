@@ -84,6 +84,10 @@ spec:
             - name: data
               mountPath: /app/files
               subPath: files
+            # The Phorge version the data was set up with, see entrypoint.sh
+            - name: data
+              mountPath: /var/lib/phabfive
+              subPath: state
       volumes:
         - name: data
           persistentVolumeClaim:

@@ -13,6 +13,8 @@ KUBE_CONTEXT := k3d-$(CLUSTER)
 NAMESPACE := phorge
 KUBECTL = mise exec -- kubectl --context $(KUBE_CONTEXT) -n $(NAMESPACE)
 K3D = mise exec -- k3d
+# Waits for the phorge rollout, failing as soon as the pod cannot start
+WAIT_FOR_PHORGE = KUBE_CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) scripts/wait-for-phorge.sh
 
 # libc of the phabfive image built by `make image` (gnu or musl)
 LIBC ?= gnu
@@ -21,6 +23,13 @@ LIBC ?= gnu
 OVERLAY ?= local
 PHORGE_IMAGE := dynamist/phorge
 BUILD_DIR := .k8s
+
+# Phorge to build: a branch (stable, master) or a release tag (2025.51), see
+# scripts/phorge-build-args.sh. Defaults to the last one built, switching needs
+# `make reset`.
+VERSION ?= $(shell cat $(BUILD_DIR)/version 2>/dev/null || echo stable)
+# PHP series to build on (8.0, 8.3, 8.4, 8.5), empty for the newest VERSION runs on
+PHP ?=
 
 # Same URL as k8s/base/config.env, so the cache clearing below targets the
 # instance in the cluster
@@ -147,9 +156,11 @@ destroy: check-tools ## DELETE the shared cluster with every app and all data (F
 
 ##@ Phorge
 
-phorge-image: check-tools ## build the phorge image and import it into the cluster
-	docker build -t $(PHORGE_IMAGE):dev phorge
+phorge-image: check-tools ## build the phorge image of VERSION (stable, master, 2025.51, ...) and import it into the cluster
 	@mkdir -p $(BUILD_DIR)
+	@args=$$(scripts/phorge-build-args.sh $(VERSION) $(PHP)) && \
+	docker build $$args -t $(PHORGE_IMAGE):dev phorge
+	@echo $(VERSION) > $(BUILD_DIR)/version
 	@# Tag by content, so the deployment only rolls out when the image changed
 	@tag=dev-$$(docker image inspect -f '{{.Id}}' $(PHORGE_IMAGE):dev | cut -d: -f2 | cut -c1-12); \
 	docker tag $(PHORGE_IMAGE):dev $(PHORGE_IMAGE):$$tag; \
@@ -167,10 +178,10 @@ deploy: check-tools ## apply the manifests of OVERLAY (local or ci) with the imp
 		> $(BUILD_DIR)/kustomization.yaml
 	mise exec -- kubectl --context $(KUBE_CONTEXT) apply -k $(BUILD_DIR)
 
-up: cluster phorge-image deploy ## start phorge in the cluster and follow its logs until it is ready
+up: cluster phorge-image deploy ## start phorge of VERSION in the cluster and follow its logs until it is ready
 	@$(KUBECTL) rollout status statefulset/mariadb --timeout=5m
 	@$(KUBECTL) logs -f deploy/phorge --pod-running-timeout=5m & logs=$$!; \
-	$(KUBECTL) rollout status deploy/phorge --timeout=20m; status=$$?; \
+	$(WAIT_FOR_PHORGE) 20m; status=$$?; \
 	sleep 2; kill $$logs 2>/dev/null; exit $$status
 
 down: check-tools ## stop phorge and mariadb, keep data
@@ -183,8 +194,9 @@ reset: check-tools ## DELETE the phorge namespace with all its data and clear it
 logs: check-tools ## follow phorge logs
 	$(KUBECTL) logs -f deploy/phorge
 
-ps: check-tools ## show pods, services, ingress and volumes
+ps: check-tools ## show pods, services, ingress, volumes and the running Phorge version
 	$(KUBECTL) get pods,svc,ingress,pvc
+	@$(KUBECTL) exec deploy/phorge -- sh -c 'echo "Phorge $$PHORGE_VERSION at $$(git -C /app/phorge rev-parse HEAD) on PHP $$PHP_VERSION"' 2>/dev/null || true
 
 shell: check-tools ## open shell in the phorge pod
 	$(KUBECTL) exec -it deploy/phorge -- /bin/bash
@@ -201,11 +213,11 @@ validate: ## validate the rendered manifests of all overlays
 	done
 
 test-k8s: ## run the smoke, seed data and isolation tests in tests/k8s against the deployed phorge (PYTEST_ARGS="-k smoke" for pytest)
-	PHABFIVE_LIVE_TESTS=1 mise exec -- uv run --no-project --with pytest --with requests --with pyyaml \
+	PHABFIVE_LIVE_TESTS=1 PHORGE_VERSION=$(VERSION) mise exec -- uv run --no-project --with pytest --with requests --with pyyaml \
 		pytest tests/k8s -p no:cacheprovider $(PYTEST_ARGS)
 
 test-e2e: install ## run phabfive's end-to-end tests (the CLI against the deployed phorge, PYTEST_ARGS="-k whoami" for pytest)
-	PHABFIVE_LIVE_TESTS=1 PHAB_URL=$(PHORGE_URL)/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 \
+	PHABFIVE_LIVE_TESTS=1 PHORGE_VERSION=$(VERSION) PHAB_URL=$(PHORGE_URL)/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 \
 		uv run pytest tests/e2e $(PYTEST_ARGS)
 
 ##@ CI
@@ -216,8 +228,13 @@ test-e2e: install ## run phabfive's end-to-end tests (the CLI against the deploy
 ci-deploy: cluster phorge-image ## build and deploy the ci overlay, wait until it is ready
 	$(MAKE) --no-print-directory deploy OVERLAY=ci
 	$(KUBECTL) rollout status statefulset/mariadb --timeout=10m
-	$(KUBECTL) rollout status deploy/phorge --timeout=30m
+	$(WAIT_FOR_PHORGE) 30m
 
+# Both suites run even when the first fails, and leave JUnit reports in
+# test-results/, so a run tells which tests a Phorge version passes
 ci-test: ## run every test against the deployed ci overlay
-	$(MAKE) --no-print-directory test-k8s PYTEST_ARGS="-v"
-	$(MAKE) --no-print-directory test-e2e PYTEST_ARGS="-v"
+	@mkdir -p test-results
+	@status=0; \
+	$(MAKE) --no-print-directory test-k8s PYTEST_ARGS="-v --junitxml=test-results/k8s.xml" || status=1; \
+	$(MAKE) --no-print-directory test-e2e PYTEST_ARGS="-v --junitxml=test-results/e2e.xml" || status=1; \
+	exit $$status
