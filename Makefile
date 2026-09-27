@@ -28,6 +28,8 @@ BUILD_DIR := .k8s
 # scripts/phorge-build-args.sh. Defaults to the last one built, switching needs
 # `make reset`.
 VERSION ?= $(shell cat $(BUILD_DIR)/version 2>/dev/null || echo stable)
+# PHP series to build on (8.0, 8.3, 8.4, 8.5), empty for the newest VERSION runs on
+PHP ?=
 
 # Same URL as k8s/base/config.env, so the cache clearing below targets the
 # instance in the cluster
@@ -156,7 +158,7 @@ destroy: check-tools ## DELETE the shared cluster with every app and all data (F
 
 phorge-image: check-tools ## build the phorge image of VERSION (stable, master, 2025.51, ...) and import it into the cluster
 	@mkdir -p $(BUILD_DIR)
-	@args=$$(scripts/phorge-build-args.sh $(VERSION)) && \
+	@args=$$(scripts/phorge-build-args.sh $(VERSION) $(PHP)) && \
 	docker build $$args -t $(PHORGE_IMAGE):dev phorge
 	@echo $(VERSION) > $(BUILD_DIR)/version
 	@# Tag by content, so the deployment only rolls out when the image changed
@@ -194,7 +196,7 @@ logs: check-tools ## follow phorge logs
 
 ps: check-tools ## show pods, services, ingress, volumes and the running Phorge version
 	$(KUBECTL) get pods,svc,ingress,pvc
-	@$(KUBECTL) exec deploy/phorge -- sh -c 'echo "Phorge $$PHORGE_VERSION at $$(git -C /app/phorge rev-parse HEAD)"' 2>/dev/null || true
+	@$(KUBECTL) exec deploy/phorge -- sh -c 'echo "Phorge $$PHORGE_VERSION at $$(git -C /app/phorge rev-parse HEAD) on PHP $$PHP_VERSION"' 2>/dev/null || true
 
 shell: check-tools ## open shell in the phorge pod
 	$(KUBECTL) exec -it deploy/phorge -- /bin/bash

@@ -232,7 +232,20 @@ make reset && make up VERSION=2025.51
 
 The version is remembered in `.k8s/version`, so a plain `make up` builds the last one again. The pod remembers the version its data was set up with too, and refuses to start on another one, because a database cannot go back to an older Phorge and the schema of `master` is not the schema of `stable`. `make reset` deletes the data, then `make up VERSION=...` starts over. `make up` and `make ci-deploy` stop as soon as the pod cannot start, and print the end of its log, rather than waiting for the rollout to time out. `stable` moving on to a newer commit is not a change of version, it upgrades the database as usual.
 
-`make ps` and `make creds` show the version and the commits that are running.
+`make ps` and `make creds` show the version, the commits and the PHP that are running.
+
+#### PHP
+
+Phorge turns a deprecation that PHP raises while it runs into an error, so a release only works on the PHP series its code predates. Each release is built on the newest PHP it starts and seeds on:
+
+| Phorge | PHP | What newer PHP deprecates |
+|--------|-----|---------------------------|
+| `2025.51` and newer, `stable`, `master` | 8.5 | |
+| `2025.18` | 8.4 | `case ...;` with a semicolon (8.5) |
+| `2023.32` to `2024.35` | 8.3 | implicitly nullable parameters (8.4) |
+| `2022.37` to `2023.23` | 8.0 | `strlen()` of null (8.1) |
+
+`PHP=` builds on another series, one of the stages in `phorge/Dockerfile`: `make reset && make up VERSION=2025.18 PHP=8.5`.
 
 ## Configure phabfive
 

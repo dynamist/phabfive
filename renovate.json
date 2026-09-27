@@ -110,6 +110,50 @@
         "dynamist/phorge"
       ],
       "enabled": false
+    },
+    {
+      "description": "The php-8.0 stage in phorge/Dockerfile stays on PHP 8.0: each stage is the newest PHP some Phorge releases run on, see scripts/phorge-build-args.sh. A new PHP series gets its own stage",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchDepNames": [
+        "php"
+      ],
+      "matchCurrentValue": "/^8\\.0-/",
+      "allowedVersions": "/^8\\.0-/"
+    },
+    {
+      "description": "The php-8.3 stage in phorge/Dockerfile stays on PHP 8.3: each stage is the newest PHP some Phorge releases run on, see scripts/phorge-build-args.sh. A new PHP series gets its own stage",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchDepNames": [
+        "php"
+      ],
+      "matchCurrentValue": "/^8\\.3-/",
+      "allowedVersions": "/^8\\.3-/"
+    },
+    {
+      "description": "The php-8.4 stage in phorge/Dockerfile stays on PHP 8.4: each stage is the newest PHP some Phorge releases run on, see scripts/phorge-build-args.sh. A new PHP series gets its own stage",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchDepNames": [
+        "php"
+      ],
+      "matchCurrentValue": "/^8\\.4-/",
+      "allowedVersions": "/^8\\.4-/"
+    },
+    {
+      "description": "The php-8.5 stage in phorge/Dockerfile stays on PHP 8.5: each stage is the newest PHP some Phorge releases run on, see scripts/phorge-build-args.sh. A new PHP series gets its own stage",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchDepNames": [
+        "php"
+      ],
+      "matchCurrentValue": "/^8\\.5-/",
+      "allowedVersions": "/^8\\.5-/"
     }
   ]
 }
