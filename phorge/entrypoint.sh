@@ -14,24 +14,20 @@ until mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASS" -e "
 done
 echo "Database is ready!"
 
-# Checkout specified git refs if provided
-if [ ! -z "$PHORGE_GIT_REF" ]; then
-  cd /app/phorge
-  echo "Fetching phorge..."
-  timeout 30 git fetch --all || echo "Warning: fetch timed out or failed for phorge"
-  echo "Checking out phorge ref: $PHORGE_GIT_REF"
-  git checkout "$PHORGE_GIT_REF" || echo "Warning: checkout failed for phorge"
+# A database cannot go back to an older Phorge, and the schema of another
+# branch is not the schema of this one. Remember the version the data was set up
+# with, and refuse another one instead of failing somewhere in storage upgrade.
+# The name is compared, so stable moving forward upgrades as usual.
+VERSION_FILE=/var/lib/phabfive/phorge-version
+if [ -n "$PHORGE_VERSION" ]; then
+  if [ -s "$VERSION_FILE" ] && [ "$(cat "$VERSION_FILE")" != "$PHORGE_VERSION" ]; then
+    echo "ERROR: the database was set up with Phorge $(cat "$VERSION_FILE"), this image runs Phorge ${PHORGE_VERSION}"
+    echo "ERROR: run 'make reset' to delete the data, then 'make up VERSION=${PHORGE_VERSION}' again"
+    exit 1
+  fi
+  mkdir -p "$(dirname "$VERSION_FILE")"
+  echo "$PHORGE_VERSION" >"$VERSION_FILE"
 fi
-
-if [ ! -z "$ARCANIST_GIT_REF" ]; then
-  cd /app/arcanist
-  echo "Fetching arcanist..."
-  timeout 30 git fetch --all || echo "Warning: fetch timed out or failed for arcanist"
-  echo "Checking out arcanist ref: $ARCANIST_GIT_REF"
-  git checkout "$ARCANIST_GIT_REF" || echo "Warning: checkout failed for arcanist"
-fi
-
-cd /app/phorge
 
 # Configure Phorge database connection
 echo "Configuring Phorge database connection..."
@@ -116,12 +112,6 @@ fi
 # describes this instance rather than what the seed data would have created
 source /usr/local/bin/lib/banner.sh
 print_banner
-
-# Print git refs with history links
-PHORGE_REF=$(cd /app/phorge && git rev-parse --abbrev-ref HEAD 2>/dev/null || git rev-parse --short HEAD)
-ARCANIST_REF=$(cd /app/arcanist && git rev-parse --abbrev-ref HEAD 2>/dev/null || git rev-parse --short HEAD)
-echo "phorge: https://we.phorge.it/source/phorge/history/${PHORGE_REF}/"
-echo "arcanist: https://we.phorge.it/source/arcanist/history/${ARCANIST_REF}/"
 
 # Start daemons in background, as the user Apache serves Conduit with. As root
 # they create /app/repo/<id> owned by root, and every git-backed ref query then
