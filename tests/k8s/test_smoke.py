@@ -1,7 +1,13 @@
 # -*- coding: utf-8 -*-
 """Phorge answers through the shared Traefik ingress."""
 
+# python std lib
+import os
+import re
+import subprocess
+
 # 3rd party imports
+import pytest
 import requests
 
 from tests.k8s.conftest import TRAEFIK_404
@@ -35,3 +41,34 @@ def test_wrong_api_token_is_rejected(phorge_url):
         f"{phorge_url}/api/user.whoami", data={"api.token": "api-wrong"}, timeout=30
     )
     assert response.json()["error_code"] is not None
+
+
+def test_phorge_version(kubectl):
+    """The deployed Phorge is the VERSION it was built from (make passes PHORGE_VERSION)."""
+    version = os.environ.get("PHORGE_VERSION")
+    if not version:
+        pytest.skip("no PHORGE_VERSION, run through make test-k8s")
+    deployed = kubectl("exec", "deploy/phorge", "--", "printenv", "PHORGE_VERSION")
+    assert deployed.stdout.strip() == version, (
+        "the deployed image is of another version"
+    )
+    if not re.fullmatch(r"\d{4}\.\d+", version):
+        return  # a branch may have moved on since the build
+    head = kubectl(
+        "exec", "deploy/phorge", "--", "git", "-C", "/app/phorge", "rev-parse", "HEAD"
+    )
+    remote = subprocess.run(
+        [
+            "git",
+            "ls-remote",
+            "https://github.com/phorgeit/phorge.git",
+            f"refs/tags/{version}^{{}}",
+            f"refs/tags/{version}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    commits = [line.split()[0] for line in remote.stdout.splitlines()]
+    assert head.stdout.strip() in commits, f"the deployed Phorge is not tag {version}"

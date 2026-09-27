@@ -128,6 +128,16 @@ print_spaces() {
   done <<< "$rows"
 }
 
+# The branch or tag the image was built from, and the commits it resolved to
+print_version() {
+  local commit
+  echo "🏷️ Phorge ${PHORGE_VERSION:-(unknown version)}:"
+  for repo in phorge arcanist; do
+    commit=$(git -C "/app/${repo}" rev-parse HEAD 2>/dev/null) || continue
+    echo "  - ${repo} https://github.com/phorgeit/${repo}/commit/${commit}"
+  done
+}
+
 # RECOVERY_LINK is only set while entrypoint.sh runs, a later `make creds` has
 # no one-time link to show and leaves that line out
 print_banner() {
@@ -153,6 +163,8 @@ print_banner() {
   print_projects
   echo ""
   print_spaces
+  echo ""
+  print_version
   echo ""
   echo "🌍 Your new Phorge is waiting for you at:"
   echo "   $PHORGE_URL"
