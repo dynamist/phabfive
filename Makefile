@@ -13,6 +13,8 @@ KUBE_CONTEXT := k3d-$(CLUSTER)
 NAMESPACE := phorge
 KUBECTL = mise exec -- kubectl --context $(KUBE_CONTEXT) -n $(NAMESPACE)
 K3D = mise exec -- k3d
+# Waits for the phorge rollout, failing as soon as the pod cannot start
+WAIT_FOR_PHORGE = KUBE_CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) scripts/wait-for-phorge.sh
 
 # libc of the phabfive image built by `make image` (gnu or musl)
 LIBC ?= gnu
@@ -177,7 +179,7 @@ deploy: check-tools ## apply the manifests of OVERLAY (local or ci) with the imp
 up: cluster phorge-image deploy ## start phorge of VERSION in the cluster and follow its logs until it is ready
 	@$(KUBECTL) rollout status statefulset/mariadb --timeout=5m
 	@$(KUBECTL) logs -f deploy/phorge --pod-running-timeout=5m & logs=$$!; \
-	$(KUBECTL) rollout status deploy/phorge --timeout=20m; status=$$?; \
+	$(WAIT_FOR_PHORGE) 20m; status=$$?; \
 	sleep 2; kill $$logs 2>/dev/null; exit $$status
 
 down: check-tools ## stop phorge and mariadb, keep data
@@ -224,7 +226,7 @@ test-e2e: install ## run phabfive's end-to-end tests (the CLI against the deploy
 ci-deploy: cluster phorge-image ## build and deploy the ci overlay, wait until it is ready
 	$(MAKE) --no-print-directory deploy OVERLAY=ci
 	$(KUBECTL) rollout status statefulset/mariadb --timeout=10m
-	$(KUBECTL) rollout status deploy/phorge --timeout=30m
+	$(WAIT_FOR_PHORGE) 30m
 
 ci-test: ## run every test against the deployed ci overlay
 	$(MAKE) --no-print-directory test-k8s PYTEST_ARGS="-v"

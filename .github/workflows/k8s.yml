@@ -142,7 +142,7 @@ jobs:
               -e '^(k8s|phorge|phabfive)/' \
               -e '^tests/(k8s|e2e)/' \
               -e '^(Makefile|mise\.toml|pyproject\.toml|uv\.lock)$' \
-              -e '^scripts/phorge-build-args\.sh$' \
+              -e '^scripts/[^/]+\.sh$' \
               -e '^\.github/workflows/k8s\.yml$'); then
             decide true "$(printf 'Deploying, because these changed files affect it:\n\n```\n%s\n```\n' "$hits")"
           fi

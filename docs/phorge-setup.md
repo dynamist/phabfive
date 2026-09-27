@@ -229,7 +229,7 @@ make reset && make up VERSION=2025.51
 
 `scripts/phorge-build-args.sh` resolves the branch or tag to a commit of Phorge and of Arcanist before the build, so a rebuild of `stable` or `master` picks up what upstream committed since, and changes nothing when upstream did not move. The Phorge and Arcanist in the image are those commits, nothing is fetched when the pod starts.
 
-The version is remembered in `.k8s/version`, so a plain `make up` builds the last one again. The pod remembers the version its data was set up with too, and refuses to start on another one, because a database cannot go back to an older Phorge and the schema of `master` is not the schema of `stable`. `make reset` deletes the data, then `make up VERSION=...` starts over. `stable` moving on to a newer commit is not a change of version, it upgrades the database as usual.
+The version is remembered in `.k8s/version`, so a plain `make up` builds the last one again. The pod remembers the version its data was set up with too, and refuses to start on another one, because a database cannot go back to an older Phorge and the schema of `master` is not the schema of `stable`. `make reset` deletes the data, then `make up VERSION=...` starts over. `make up` and `make ci-deploy` stop as soon as the pod cannot start, and print the end of its log, rather than waiting for the rollout to time out. `stable` moving on to a newer commit is not a change of version, it upgrades the database as usual.
 
 `make ps` and `make creds` show the version and the commits that are running.
 
