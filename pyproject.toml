@@ -69,7 +69,7 @@ test = [
   # Unconditionally, unlike the runtime marker above: mypy runs with
   # python_version = "3.10", so it type checks the tomli branch of
   # phabfive.spec.loader whatever the interpreter running it is.
-  "tomli>=2.0",
+  "tomli>=2.4.1",
   "types-appdirs>=1.4.3.5",
   "types-pyyaml>=6.0.12.20260906",
   "types-requests>=2.33.0.20260906",
