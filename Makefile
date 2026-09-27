@@ -215,7 +215,7 @@ test-k8s: ## run the smoke, seed data and isolation tests in tests/k8s against t
 		pytest tests/k8s -p no:cacheprovider $(PYTEST_ARGS)
 
 test-e2e: install ## run phabfive's end-to-end tests (the CLI against the deployed phorge, PYTEST_ARGS="-k whoami" for pytest)
-	PHABFIVE_LIVE_TESTS=1 PHAB_URL=$(PHORGE_URL)/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 \
+	PHABFIVE_LIVE_TESTS=1 PHORGE_VERSION=$(VERSION) PHAB_URL=$(PHORGE_URL)/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 \
 		uv run pytest tests/e2e $(PYTEST_ARGS)
 
 ##@ CI
