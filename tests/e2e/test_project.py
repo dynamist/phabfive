@@ -8,6 +8,8 @@ import uuid
 # 3rd party imports
 import pytest
 
+from tests.e2e.conftest import phorge_older_than
+
 
 @pytest.fixture
 def create_project(phabfive):
@@ -129,6 +131,12 @@ def test_an_edit_that_changes_nothing_says_so(create_project, phabfive_raw):
     assert json.loads(result.stdout)[0]["Project"]["Color"] == "blue"
 
 
+@pytest.mark.xfail(
+    phorge_older_than("2026.27"),
+    reason="project.edit crashes creating a milestone before Phorge 2026.27, which looks "
+    "the parent up by the PHID of a project it has not loaded yet",
+    strict=True,
+)
 def test_subprojects_and_milestones(create_project, phabfive):
     parent = create_project()
     hashtag = _hashtag(parent)
