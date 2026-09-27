@@ -47,12 +47,15 @@ final class PhabfiveAuthSeedModule extends PhabfiveSeedModule {
     $token = id(new PhabricatorConduitToken())
       ->loadOneWhere('token = %s', $secret);
     if (!$token) {
-      PhabricatorConduitToken::initializeNewToken(
+      $token = PhabricatorConduitToken::initializeNewToken(
         $admin->getPHID(),
         PhabricatorConduitToken::TYPE_COMMANDLINE)
-        ->setTokenName('phabfive-dev')
-        ->setToken($secret)
-        ->save();
+        ->setToken($secret);
+      // Tokens have names since July 2026, releases before that have none
+      if (property_exists($token, 'tokenName')) {
+        $token->setTokenName('phabfive-dev');
+      }
+      $token->save();
       $this->log(pht('Created API token.'));
     }
   }
