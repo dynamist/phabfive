@@ -980,7 +980,7 @@ provides-extras = ["repl"]
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = ">=7.13.5" },
-    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
@@ -995,7 +995,7 @@ dev = [
 docs = [{ name = "mkdocs", specifier = ">=1.6.1" }]
 test = [
     { name = "coverage", specifier = ">=7.13.5" },
-    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
