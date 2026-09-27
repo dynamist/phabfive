@@ -131,7 +131,7 @@ print_spaces() {
 # The branch or tag the image was built from, and the commits it resolved to
 print_version() {
   local commit
-  echo "🏷️ Phorge ${PHORGE_VERSION:-(unknown version)}:"
+  echo "🏷️ Phorge ${PHORGE_VERSION:-(unknown version)} on PHP ${PHP_VERSION:-?}:"
   for repo in phorge arcanist; do
     commit=$(git -C "/app/${repo}" rev-parse HEAD 2>/dev/null) || continue
     echo "  - ${repo} https://github.com/phorgeit/${repo}/commit/${commit}"
