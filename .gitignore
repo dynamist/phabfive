@@ -127,6 +127,7 @@ dmypy.json
 
 # Generated kustomization and local overrides for k8s
 .k8s/
+test-results/
 k8s/overlays/local/config.local.env
 
 # Throwaway venv built by "make smoke"

@@ -228,6 +228,11 @@ ci-deploy: cluster phorge-image ## build and deploy the ci overlay, wait until i
 	$(KUBECTL) rollout status statefulset/mariadb --timeout=10m
 	$(WAIT_FOR_PHORGE) 30m
 
+# Both suites run even when the first fails, and leave JUnit reports in
+# test-results/, so a run tells which tests a Phorge version passes
 ci-test: ## run every test against the deployed ci overlay
-	$(MAKE) --no-print-directory test-k8s PYTEST_ARGS="-v"
-	$(MAKE) --no-print-directory test-e2e PYTEST_ARGS="-v"
+	@mkdir -p test-results
+	@status=0; \
+	$(MAKE) --no-print-directory test-k8s PYTEST_ARGS="-v --junitxml=test-results/k8s.xml" || status=1; \
+	$(MAKE) --no-print-directory test-e2e PYTEST_ARGS="-v --junitxml=test-results/e2e.xml" || status=1; \
+	exit $$status
