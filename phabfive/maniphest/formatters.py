@@ -683,7 +683,9 @@ def build_task_display_data(
     parents_map, subtasks_map : dict, optional
         Mapping of task ID to related tasks
     commits_map : dict, optional
-        Mapping of task ID to related commits
+        Mapping of task ID to related commits. For all three, None means the
+        relations were not fetched and the key is left out of the record,
+        while a task missing from a map has none
     matching_boards_map : dict, optional
         Mapping of task ID to matching board PHIDs
     matching_priority_map : dict, optional
@@ -722,12 +724,6 @@ def build_task_display_data(
         assignee_transitions_map = {}
     if comments_map is None:
         comments_map = {}
-    if parents_map is None:
-        parents_map = {}
-    if subtasks_map is None:
-        subtasks_map = {}
-    if commits_map is None:
-        commits_map = {}
     if matching_boards_map is None:
         matching_boards_map = {}
     if matching_priority_map is None:
@@ -869,11 +865,16 @@ def build_task_display_data(
         if boards_data:
             task_dict["Boards"] = boards_data
 
-        # Add Parents and Subtasks (always include in dict, may be empty list)
-        # These are populated by task_show(), empty for task_search()
-        task_dict["Parents"] = parents_map.get(item["id"], [])
-        task_dict["Subtasks"] = subtasks_map.get(item["id"], [])
-        task_dict["Commits"] = commits_map.get(item["id"], [])
+        # Published only when they were fetched: an empty list says the task
+        # has none, which is not something to say about relations nobody
+        # asked for
+        for key, relations in (
+            ("Parents", parents_map),
+            ("Subtasks", subtasks_map),
+            ("Commits", commits_map),
+        ):
+            if relations is not None:
+                task_dict[key] = relations.get(item["id"], [])
 
         # Add Comments section if show_comments is enabled
         if show_comments:

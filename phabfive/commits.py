@@ -157,20 +157,20 @@ def resolve_commit_phids(phab, values, option=None):
     return {value: found[value][0] for value in values}
 
 
-def fetch_commit_handles(phab, phids):
-    """Describe commits for display, in the order given.
+def describe_commits(phab, phids):
+    """Describe commits for display, keyed by PHID.
 
-    A PHID the viewer cannot see is left out, as a related task the viewer
-    cannot see is.
+    One ``phid.query`` however many commits, so the commits of many tasks
+    can be named at once. A PHID the viewer cannot see is left out, as a
+    related task the viewer cannot see is.
 
     Returns
     -------
-    list
-        ``{"Link": uri, "Commit": {"Identifier": name, "Summary": summary}}``
-        per commit
+    dict
+        ``{phid: {"Link": uri, "Commit": {"Identifier": name, "Summary": summary}}}``
     """
     handles = _query_handles(phab, phids)
-    commits = []
+    commits = {}
 
     for phid in phids:
         handle = handles.get(phid)
@@ -184,20 +184,33 @@ def fetch_commit_handles(phab, phids):
         elif summary == name:
             summary = ""
 
-        commits.append(
-            {
-                "Link": handle.get("uri", ""),
-                "Commit": {"Identifier": name, "Summary": summary},
-            }
-        )
+        commits[phid] = {
+            "Link": handle.get("uri", ""),
+            "Commit": {"Identifier": name, "Summary": summary},
+        }
 
     return commits
+
+
+def fetch_commit_handles(phab, phids):
+    """Describe commits for display, in the order given.
+
+    Returns
+    -------
+    list
+        ``{"Link": uri, "Commit": {"Identifier": name, "Summary": summary}}``
+        per commit the viewer can see
+    """
+    commits = describe_commits(phab, phids)
+
+    return [commits[phid] for phid in phids if phid in commits]
 
 
 __all__ = [
     "COMMIT_GRAMMAR",
     "COMMIT_PHID_PREFIX",
     "MIN_HASH_LENGTH",
+    "describe_commits",
     "fetch_commit_handles",
     "is_too_short",
     "lookup_commits",

@@ -61,6 +61,9 @@ def _phab():
     phab = MagicMock()
     phab.project.query.return_value = {"data": PROJECTS}
     phab.project.search.side_effect = lambda constraints: _project_search(constraints)
+    # A write answers with the task's relations; a bare MagicMock would hand
+    # back a cursor that never ends
+    phab.edge.search.return_value = {"data": [], "cursor": {"after": None}}
     return phab
 
 

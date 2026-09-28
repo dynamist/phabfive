@@ -54,6 +54,7 @@ TASK_SEARCH_KEYS = frozenset(
         "show_history",
         "show_metadata",
         "show_policy",
+        "show_relations",
         "include_closed",
         "limit",
         "order",
@@ -185,6 +186,7 @@ class TestTheDefaultCall:
             "show_history": False,
             "show_metadata": False,
             "show_policy": False,
+            "show_relations": False,
             "include_closed": False,
             "limit": 100,
             "order": None,
@@ -255,6 +257,7 @@ class TestBooleanSentinels:
             ("--show-history", "show-history", "show_history"),
             ("--show-metadata", "show-metadata", "show_metadata"),
             ("--show-policy", "show-policy", "show_policy"),
+            ("--show-relations", "show-relations", "show_relations"),
             ("--all", "all", "include_closed"),
         ],
     )
@@ -269,6 +272,7 @@ class TestBooleanSentinels:
             ("show-history", "show_history"),
             ("show-metadata", "show_metadata"),
             ("show-policy", "show_policy"),
+            ("show-relations", "show_relations"),
             ("all", "include_closed"),
         ],
     )
@@ -283,6 +287,7 @@ class TestBooleanSentinels:
             ("--show-history", "show-history", "show_history"),
             ("--show-metadata", "show-metadata", "show_metadata"),
             ("--show-policy", "show-policy", "show_policy"),
+            ("--show-relations", "show-relations", "show_relations"),
             ("--all", "all", "include_closed"),
         ],
     )
@@ -302,6 +307,7 @@ class TestBooleanSentinels:
             ("show-history", "show_history"),
             ("show-metadata", "show_metadata"),
             ("show-policy", "show_policy"),
+            ("show-relations", "show_relations"),
         ],
     )
     def test_a_template_false_stays_false(self, key, parameter):
@@ -613,6 +619,7 @@ class TestTheCriteriaGuard:
             {"show-history": True},
             {"show-metadata": True},
             {"show-policy": True},
+            {"show-relations": True},
             {"limit": 5},
             {"order": "title"},
         ],

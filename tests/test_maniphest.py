@@ -1495,9 +1495,8 @@ class TestTaskShowOrdering:
             "attachments": {"columns": {"boards": {}}},
         }
 
-    @patch("phabfive.maniphest.core.fetch_task_relationships", return_value=[])
     @patch("phabfive.maniphest.core.Phabfive.__init__")
-    def test_results_follow_requested_order(self, mock_init, mock_relationships):
+    def test_results_follow_requested_order(self, mock_init):
         """Tasks are displayed in the order they were requested, not API order."""
         mock_init.return_value = None
         maniphest = Maniphest()

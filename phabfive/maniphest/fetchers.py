@@ -4,6 +4,8 @@
 
 import logging
 
+from phabfive.pagination import search_all_pages
+
 log = logging.getLogger(__name__)
 
 
@@ -784,14 +786,9 @@ def fetch_task_edges(phab, task_phid, relationship_type):
     list
         List of related task or commit PHIDs
     """
-    edge_type = _RELATIONSHIP_EDGE_TYPES[relationship_type]
-    result = phab.edge.search(sourcePHIDs=[task_phid], types=[edge_type])
-
-    related_phids = [
-        edge["destinationPHID"]
-        for edge in (result or {}).get("data", [])
-        if edge.get("destinationPHID")
-    ]
+    related_phids = fetch_edges_for_tasks(phab, [task_phid], [relationship_type])[
+        task_phid
+    ][relationship_type]
 
     log.debug(f"Found {len(related_phids)} {relationship_type} for task {task_phid}")
     return related_phids
@@ -826,3 +823,62 @@ def fetch_task_relationships(phab, task_phid, relationship_type):
             f"Failed to fetch {relationship_type} for {task_phid}: {type(e).__name__}: {e}"
         )
         return []
+
+
+def fetch_edges_for_tasks(phab, task_phids, relationship_types):
+    """
+    Fetch the parents, subtasks or commits of many tasks at once.
+
+    One `edge.search` for every task and every relationship, paged, where
+    `fetch_task_edges` costs a call per task and per relationship. That is
+    what lets a search answer with the relations of a whole board.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    task_phids : list
+        Task PHIDs
+    relationship_types : iterable
+        Any of "parents", "subtasks" and "commits"
+
+    Returns
+    -------
+    dict
+        ``{task_phid: {relationship_type: [phid, ...]}}``, with an entry for
+        every task and every relationship asked for, empty when there is
+        none. The PHIDs keep the order the server answered with.
+    """
+    relationship_types = list(relationship_types)
+    edges = {
+        phid: {relationship: [] for relationship in relationship_types}
+        for phid in task_phids
+    }
+
+    if not task_phids or not relationship_types:
+        return edges
+
+    by_edge_type = {
+        _RELATIONSHIP_EDGE_TYPES[relationship]: relationship
+        for relationship in relationship_types
+    }
+
+    def search(**kwargs):
+        result = phab.edge.search(**kwargs)
+        return getattr(result, "response", result) or {}
+
+    records = search_all_pages(
+        search,
+        sourcePHIDs=list(task_phids),
+        types=list(by_edge_type),
+    )
+
+    for edge in records:
+        relationship = by_edge_type.get(edge.get("edgeType"))
+        source = edges.get(edge.get("sourcePHID"))
+        destination = edge.get("destinationPHID")
+        if relationship and source is not None and destination:
+            source[relationship].append(destination)
+
+    log.debug(f"Found {len(records)} edges for {len(task_phids)} tasks")
+    return edges

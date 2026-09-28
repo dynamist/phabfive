@@ -480,6 +480,16 @@ FIELDS: tuple[Field, ...] = (
         help="Display filter match metadata.",
     ),
     Field(
+        name="show-relations",
+        kind=FieldKind.BOOL,
+        objects=_TASK,
+        verbs=_SEARCH,
+        cli="--show-relations",
+        constraint=None,
+        default=False,
+        help="Display each task's parents, subtasks and commits.",
+    ),
+    Field(
         name="show-policy",
         kind=FieldKind.BOOL,
         objects=frozenset({"task", "project"}),

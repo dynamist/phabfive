@@ -510,7 +510,7 @@ def _edit_task_single(
         # silence.
         if machine and not result.get("dry_run"):
             display_tasks(
-                edit.maniphest.task_show([int(task_id)]),
+                edit.maniphest.task_show([int(task_id)], show_relations=True),
                 output_format,
                 edit.maniphest,
             )
@@ -757,7 +757,9 @@ def edit_tasks_batch(
     # One query for the batch, and the same records `maniphest show` gives.
     if machine and settled_ids:
         display_tasks(
-            maniphest.task_show([int(task_id) for task_id in settled_ids]),
+            maniphest.task_show(
+                [int(task_id) for task_id in settled_ids], show_relations=True
+            ),
             output_format,
             maniphest,
         )

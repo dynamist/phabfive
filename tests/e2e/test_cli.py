@@ -716,7 +716,9 @@ def test_anchoring_subtasks_keeps_the_ones_the_task_already_had(
     )
 
     def subtask_titles():
-        [task] = phabfive("maniphest", "show", epic, json_output=True)
+        [task] = phabfive(
+            "maniphest", "show", epic, "--show-relations", json_output=True
+        )
         return sorted(one["Task"]["Name"] for one in task["Subtasks"])
 
     before = subtask_titles()
@@ -740,6 +742,41 @@ def test_anchoring_subtasks_keeps_the_ones_the_task_already_had(
 
     assert set(before) <= set(after)
     assert len(after) == 4
+
+
+def test_search_publishes_relations_when_asked(phabfive, create_task, conduit):
+    """#542: a search names relations inside and outside its own result."""
+    epic, epic_title = create_task()
+    child, _ = create_task()
+    outside, outside_title = create_task()
+
+    [child_task] = conduit(
+        "maniphest.search", **{"constraints[ids][0]": int(child.lstrip("T"))}
+    )["data"]
+    for parent in (epic, outside):
+        conduit(
+            "maniphest.edit",
+            **{
+                "objectIdentifier": parent,
+                "transactions[0][type]": "subtasks.add",
+                "transactions[0][value][0]": child_task["phid"],
+            },
+        )
+
+    def search(*args):
+        tasks = phabfive(
+            "maniphest", "search", f"--ids={epic},{child}", *args, json_output=True
+        )
+        return {task["Link"].rsplit("/", 1)[-1]: task for task in tasks}
+
+    found = search("--show-relations")
+    assert sorted(p["Task"]["Name"] for p in found[child]["Parents"]) == sorted(
+        [epic_title, outside_title]
+    )
+    assert [s["Link"].rsplit("/", 1)[-1] for s in found[epic]["Subtasks"]] == [child]
+
+    # Not asked for is not "none": the keys are left out
+    assert "Parents" not in search()[child]
 
 
 def test_a_spec_whose_object_is_refused_reports_what_exists(
@@ -846,7 +883,9 @@ def test_commits_attach_and_detach_by_short_hash(
     first, second = (commit["fields"]["identifier"] for commit in commits[:2])
 
     def attached():
-        [task] = phabfive("maniphest", "show", task_id, json_output=True)
+        [task] = phabfive(
+            "maniphest", "show", task_id, "--show-relations", json_output=True
+        )
         return sorted(c["Commit"]["Identifier"] for c in task["Commits"])
 
     task_id, _title = create_task("--attach", first[:7])
@@ -854,7 +893,9 @@ def test_commits_attach_and_detach_by_short_hash(
 
     assert attached() == sorted([f"rGUNNAR{first[:12]}", f"rGUNNAR{second[:12]}"])
 
-    [task] = phabfive("maniphest", "show", task_id, json_output=True)
+    [task] = phabfive(
+        "maniphest", "show", task_id, "--show-relations", json_output=True
+    )
     assert all(c["Link"] and c["Commit"]["Summary"] for c in task["Commits"])
 
     again = phabfive_raw("maniphest", "edit", task_id, "--attach", first, "--yes")

@@ -27,9 +27,10 @@ phabfive maniphest show T123
 phabfive maniphest show T123 T456
 phabfive maniphest show T123,T456
 
-# Show the optional sections: transition history, metadata, comments, policies
+# Show the optional sections: transition history, metadata, comments, policies,
+# parents/subtasks/commits
 phabfive maniphest show T123 --show-history --show-metadata
-phabfive maniphest show T123 -H -M -C -P
+phabfive maniphest show T123 -H -M -C -P -R
 
 # Machine-readable: one JSON array, or one object per line
 phabfive --format=json maniphest show T123 T456
@@ -172,9 +173,9 @@ phabfive maniphest edit T123 --detach=7d7fc2c
 
 `--add-commit` and `--remove-commit` are accepted as other names for the two.
 
-`maniphest show` lists commits after the parents and subtasks, each by the name
-Diffusion gives it and linked to its page. Machine-readable formats always carry
-the key, as they do `Parents` and `Subtasks`:
+`maniphest show --show-relations` (`-R`) lists commits after the parents and
+subtasks, each by the name Diffusion gives it and linked to its page; see
+[Parents, Subtasks and Commits](#parents-subtasks-and-commits):
 
 ```yaml
   Commits:
@@ -469,6 +470,39 @@ refused by name.
 `--has-parents` and `--has-subtasks` are tri-state: not given sends nothing,
 and the flags set them true. The false half - "tasks with no parent at all" - is
 written in a [search spec](search-specs.md) as `has-parents: false`.
+
+### Parents, Subtasks and Commits
+
+`--show-relations` adds each task's `Parents`, `Subtasks` and `Commits`, on
+`maniphest show` (also `-R`) and `maniphest search` alike, and as
+`show-relations: true` in a [search spec](search-specs.md). The records are the
+same whichever command produced them:
+
+```bash
+phabfive --format=json maniphest search --tag=Backend --show-relations
+phabfive maniphest show T123 --show-relations
+```
+
+```yaml
+  Parents:
+  - Link: http://phorge.localhost/T41
+    Task:
+      Name: Telemetry epic
+  Subtasks: []
+  Commits: []
+```
+
+Without the flag the three keys are left out and nothing extra is fetched. With
+it, all three are there, and an empty list means the task has none. If the
+lookup fails, a warning is logged and the keys are left out again rather than
+published empty. The relations of the whole result cost the same few
+calls however many tasks there are: one `edge.search`, one `maniphest.search`
+naming related tasks that are not in the result themselves, and one `phid.query`
+naming the commits. A related task or commit you cannot see is left out.
+
+A write command answering a machine-readable format (`maniphest create`,
+`edit`, `comment`) includes the relations, as `--show-relations` would, since it
+may have just set them.
 
 ### Listing Every Task
 

@@ -38,8 +38,8 @@ class TestDeclarations:
         # would be accepted by the loader and silently ignored, which is the
         # drift the registry exists to end. 22 in Phase 1, and the eleven
         # constraints maniphest.search always answered arrived with the
-        # command that sends them (#478).
-        assert len(fields_for("task", "search")) == 33
+        # command that sends them (#478), and show-relations with #542.
+        assert len(fields_for("task", "search")) == 34
 
     def test_every_field_is_declared_once_per_object_and_verb(self):
         """One declaration per (key, object type, verb), not per key.
