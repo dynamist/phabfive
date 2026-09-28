@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ruamel.yaml import YAML
 
-from phabfive.commits import fetch_commit_handles, resolve_commit_phids
+from phabfive.commits import describe_commits, resolve_commit_phids
 from phabfive.constants import (
     MANIPHEST_ORDER_DEFAULT,
     MANIPHEST_ORDER_DIRECTIONS,
@@ -23,12 +23,14 @@ from phabfive.exceptions import (
     PhabfiveAPIException,
     PhabfiveConfigException,
     PhabfiveDataException,
+    PhabfiveException,
     PhabfiveInputException,
     PhabfiveNotFoundException,
     PhabfiveRemoteException,
 )
 from phabfive.maniphest.fetchers import (
     fetch_all_transactions,
+    fetch_edges_for_tasks,
     fetch_project_names_for_boards,
     fetch_task_edges,
     fetch_task_relationships,
@@ -586,6 +588,7 @@ class Maniphest(Phabfive):
         show_metadata=False,
         show_comments=False,
         show_policy=False,
+        show_relations=False,
         show_description=True,
     ):
         """
@@ -606,6 +609,9 @@ class Maniphest(Phabfive):
         show_policy : bool, optional
             If True, display the task's policies. Naming them costs a
             ``phid.query``, so it is not paid for unless it was asked for.
+        show_relations : bool, optional
+            If True, fill each task's parents, subtasks and commits. They are
+            fetched for all the tasks at once; see `_fetch_relations`.
         show_description : bool, optional
             If True, include task description in output. Default is True.
         """
@@ -640,9 +646,7 @@ class Maniphest(Phabfive):
         status_transitions_map = {}
         assignee_transitions_map = {}
         comments_map = {}
-        parents_map = {}
-        subtasks_map = {}
-        commits_map = {}
+        parents_map = subtasks_map = commits_map = None
 
         for task_data in result_data:
             task_id = task_data["id"]
@@ -674,53 +678,8 @@ class Maniphest(Phabfive):
                 if all_fetched_transactions.get("comments"):
                     comments_map[task_id] = all_fetched_transactions["comments"]
 
-            # Fetch parent and subtask relationships
-            if task_phid:
-                parent_phids = fetch_task_relationships(self.phab, task_phid, "parents")
-                subtask_phids = fetch_task_relationships(
-                    self.phab, task_phid, "subtasks"
-                )
-
-                # Resolve PHIDs to task IDs and titles
-                all_related_phids = parent_phids + subtask_phids
-                if all_related_phids:
-                    related_result = self.phab.maniphest.search(
-                        constraints={"phids": all_related_phids}
-                    )
-                    phid_to_info = {
-                        t["phid"]: {
-                            "id": t["id"],
-                            "name": t["fields"].get("name", ""),
-                        }
-                        for t in related_result.get("data", [])
-                    }
-
-                    parents_map[task_id] = [
-                        {
-                            "Link": f"{self.url}/T{phid_to_info[p]['id']}",
-                            "Task": {"Name": phid_to_info[p]["name"]},
-                        }
-                        for p in parent_phids
-                        if p in phid_to_info
-                    ]
-                    subtasks_map[task_id] = [
-                        {
-                            "Link": f"{self.url}/T{phid_to_info[p]['id']}",
-                            "Task": {"Name": phid_to_info[p]["name"]},
-                        }
-                        for p in subtask_phids
-                        if p in phid_to_info
-                    ]
-                else:
-                    parents_map[task_id] = []
-                    subtasks_map[task_id] = []
-
-                commit_phids = fetch_task_relationships(self.phab, task_phid, "commits")
-                commits_map[task_id] = (
-                    fetch_commit_handles(self.phab, commit_phids)
-                    if commit_phids
-                    else []
-                )
+        if show_relations:
+            parents_map, subtasks_map, commits_map = self._fetch_relations(result_data)
 
         # Use shared method to build task data
         display_data = self._build_task_display_data(
@@ -744,6 +703,96 @@ class Maniphest(Phabfive):
         display_data["missing_ids"] = missing_ids
 
         return display_data
+
+    def _fetch_relations(self, tasks, relationships=("parents", "subtasks", "commits")):
+        """
+        The parents, subtasks and commits of many tasks, in a few calls.
+
+        One paged ``edge.search`` for every task, one ``maniphest.search``
+        naming the related tasks that are not among ``tasks`` already, and
+        one ``phid.query`` naming the commits - however many tasks there are.
+        A related task or commit the viewer cannot see is left out.
+
+        A failure is logged and answered with ``None``, as a relationship
+        that was not asked for is: the tasks themselves were found and are
+        still worth showing, but an empty list would say they have none.
+
+        Parameters
+        ----------
+        tasks : list
+            Tasks as ``maniphest.search`` returns them
+        relationships : tuple, optional
+            Which of "parents", "subtasks" and "commits" to fetch
+
+        Returns
+        -------
+        tuple
+            ``(parents_map, subtasks_map, commits_map)``, each keyed by task
+            ID and holding the ``{Link, Task: {Name}}`` or
+            ``{Link, Commit: {...}}`` records the formatters publish. A
+            relationship not asked for, or not fetched, is ``None``
+        """
+        maps: dict[str, dict] = {relationship: {} for relationship in relationships}
+        task_phids = [task["phid"] for task in tasks if task.get("phid")]
+        if not task_phids:
+            return maps.get("parents"), maps.get("subtasks"), maps.get("commits")
+
+        try:
+            edges = fetch_edges_for_tasks(self.phab, task_phids, relationships)
+
+            related = {
+                phid
+                for task_edges in edges.values()
+                for relationship in ("parents", "subtasks")
+                for phid in task_edges.get(relationship, [])
+            }
+            names = {
+                task["phid"]: (task["id"], task["fields"].get("name", ""))
+                for task in tasks
+                if task.get("phid")
+            }
+            unknown = sorted(related - names.keys())
+            if unknown:
+                for task in search_all_pages(
+                    self._search_page, constraints={"phids": unknown}
+                ):
+                    names[task["phid"]] = (task["id"], task["fields"].get("name", ""))
+
+            commit_phids = list(
+                dict.fromkeys(
+                    phid
+                    for task_edges in edges.values()
+                    for phid in task_edges.get("commits", [])
+                )
+            )
+            commits = describe_commits(self.phab, commit_phids)
+        except PhabfiveException as e:
+            log.warning(f"Failed to fetch task relations: {e}")
+            return None, None, None
+
+        for task in tasks:
+            task_edges = edges.get(task.get("phid"))
+            if task_edges is None:
+                continue
+            for relationship in relationships:
+                if relationship == "commits":
+                    records = [
+                        commits[phid]
+                        for phid in task_edges["commits"]
+                        if phid in commits
+                    ]
+                else:
+                    records = [
+                        {
+                            "Link": f"{self.url}/T{names[phid][0]}",
+                            "Task": {"Name": names[phid][1]},
+                        }
+                        for phid in task_edges[relationship]
+                        if phid in names
+                    ]
+                maps[relationship][task["id"]] = records
+
+        return maps.get("parents"), maps.get("subtasks"), maps.get("commits")
 
     def get_related_tasks(self, task_id, relationship_type):
         """
@@ -791,46 +840,9 @@ class Maniphest(Phabfive):
         if not related_data:
             return {"tasks": []}
 
-        # Fetch parents/subtasks for each related task
-        parents_map = {}
-        subtasks_map = {}
-        for task in related_data:
-            task_id = task["id"]
-            task_phid = task["phid"]
-
-            parent_phids = fetch_task_relationships(self.phab, task_phid, "parents")
-            subtask_phids = fetch_task_relationships(self.phab, task_phid, "subtasks")
-
-            # Resolve PHIDs to task IDs and titles
-            all_rel_phids = parent_phids + subtask_phids
-            if all_rel_phids:
-                rel_result = self.phab.maniphest.search(
-                    constraints={"phids": all_rel_phids}
-                )
-                phid_to_info = {
-                    t["phid"]: {"id": t["id"], "name": t["fields"].get("name", "")}
-                    for t in rel_result.get("data", [])
-                }
-
-                parents_map[task_id] = [
-                    {
-                        "Link": f"{self.url}/T{phid_to_info[p]['id']}",
-                        "Task": {"Name": phid_to_info[p]["name"]},
-                    }
-                    for p in parent_phids
-                    if p in phid_to_info
-                ]
-                subtasks_map[task_id] = [
-                    {
-                        "Link": f"{self.url}/T{phid_to_info[p]['id']}",
-                        "Task": {"Name": phid_to_info[p]["name"]},
-                    }
-                    for p in subtask_phids
-                    if p in phid_to_info
-                ]
-            else:
-                parents_map[task_id] = []
-                subtasks_map[task_id] = []
+        parents_map, subtasks_map, _ = self._fetch_relations(
+            related_data, relationships=("parents", "subtasks")
+        )
 
         # Build display data for related tasks
         return self._build_task_display_data(
@@ -1530,6 +1542,7 @@ class Maniphest(Phabfive):
         show_history=False,
         show_metadata=False,
         show_policy=False,
+        show_relations=False,
         include_closed=False,
         limit=100,
         order=None,
@@ -1605,10 +1618,14 @@ class Maniphest(Phabfive):
         show_history (bool, optional): If True, display column, priority, and status transition history for each task.
                       Must be explicitly requested; not auto-enabled by filters.
         show_metadata (bool, optional): If True, display which boards/priorities/statuses matched the filters.
+                      Shows MatchedBoards list, MatchedPriority, and MatchedStatus boolean for debugging filter logic.
         show_policy   (bool, optional): If True, display each task's policies. Naming them costs a
                       phid.query for the whole page, which a search that was not asked for a policy
                       does not pay.
-                      Shows MatchedBoards list, MatchedPriority, and MatchedStatus boolean for debugging filter logic.
+        show_relations (bool, optional): If True, fill each task's Parents, Subtasks and
+                      Commits. One edge.search covers the whole result, plus a
+                      maniphest.search naming related tasks outside it and a phid.query
+                      naming the commits; a search not asked for them makes none of these.
         include_closed (bool, optional): Deprecated, as --all is: the same as a status
                       scope of "any" for every --status group that names no scope of its own.
         limit         (int, optional): Maximum number of tasks to return. Default is 100.
@@ -2249,12 +2266,21 @@ class Maniphest(Phabfive):
                             "status"
                         ]
 
+        # After --limit and --include, so only the tasks that are published
+        # are asked about, and the ones --include added are too.
+        parents_map, subtasks_map, commits_map = (
+            self._fetch_relations(result_data) if show_relations else (None, None, None)
+        )
+
         # Use shared method to build task data
         return self._build_task_display_data(
             result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
             status_transitions_map=status_transitions_map,
+            parents_map=parents_map,
+            subtasks_map=subtasks_map,
+            commits_map=commits_map,
             matching_boards_map=matching_boards_map,
             matching_priority_map=matching_priority_map,
             matching_status_map=matching_status_map,

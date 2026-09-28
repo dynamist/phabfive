@@ -431,6 +431,7 @@ A `search:` mapping's keys are those of its item's `type:`.
 | `all` | boolean | &mdash; | `false` | &mdash; | **Deprecated**, write `status: any` instead. Deprecated spelling of status: any. |
 | `show-history` | boolean | &mdash; | `false` | &mdash; | Display transition history. |
 | `show-metadata` | boolean | &mdash; | `false` | &mdash; | Display filter match metadata. |
+| `show-relations` | boolean | &mdash; | `false` | &mdash; | Display each task's parents, subtasks and commits. |
 | `show-policy` | boolean | &mdash; | `false` | &mdash; | Display each result's policies. |
 | `limit` | integer | &mdash; | `100` | &mdash; | Maximum results to return, 0 for all. |
 | `order` | order | &mdash; | &mdash; | &mdash; | Sort as <field>[:asc\|:desc], e.g. updated:desc. |

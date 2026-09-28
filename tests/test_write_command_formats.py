@@ -247,7 +247,7 @@ class TestManiphestCreate:
         assert "https://phorge.example.com/T7" in result.stdout
         assert "probe 344" in result.stdout
         # The record came from task_show, not from a shape invented here
-        maniphest.task_show.assert_called_once_with([7])
+        maniphest.task_show.assert_called_once_with([7], show_relations=True)
 
     def test_json_stdout_parses_on_its_own(self):
         """The whole point: stdout alone, stderr discarded, is JSON."""
@@ -476,7 +476,7 @@ class TestEditBatch:
 
         assert retcode == 0
         assert len(json.loads(captured.out)) == 2
-        maniphest.task_show.assert_called_once_with([101, 102])
+        maniphest.task_show.assert_called_once_with([101, 102], show_relations=True)
 
     def test_prose_moves_to_stderr(self, capsys):
         from phabfive.cli.edit_flow import edit_tasks_batch

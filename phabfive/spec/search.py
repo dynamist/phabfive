@@ -132,6 +132,7 @@ PARAM_DEFAULTS: Mapping[str, Any] = {
     "show-history": False,
     "show-metadata": False,
     "show-policy": False,
+    "show-relations": False,
     "all": False,
     "limit": 100,
 }
@@ -702,6 +703,9 @@ def plan_search(
             ),
             "show_policy": _value(
                 params, overrides, "show-policy", PARAM_DEFAULTS["show-policy"]
+            ),
+            "show_relations": _value(
+                params, overrides, "show-relations", PARAM_DEFAULTS["show-relations"]
             ),
             "include_closed": _value(params, overrides, "all", PARAM_DEFAULTS["all"]),
             "limit": _value(params, overrides, "limit", PARAM_DEFAULTS["limit"]),

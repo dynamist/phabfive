@@ -584,10 +584,11 @@ def _display_task_yaml(task_dict, show_description=True):
                 boards[board_name] = board_data
         output["Boards"] = boards
 
-    # Always include Parents, Subtasks and Commits (even if empty list)
-    output["Parents"] = task_dict.get("Parents", [])
-    output["Subtasks"] = task_dict.get("Subtasks", [])
-    output["Commits"] = task_dict.get("Commits", [])
+    # Only when they were fetched, and then even when empty: an empty list
+    # says the task has none
+    for key in ("Parents", "Subtasks", "Commits"):
+        if key in task_dict:
+            output[key] = task_dict[key]
 
     # Add History section if present
     if task_dict.get("History"):
@@ -678,10 +679,11 @@ def _build_task_json_output(task_dict, show_description=True):
                 boards[board_name] = board_data
         output["Boards"] = boards
 
-    # Always include Parents, Subtasks and Commits (even if empty list)
-    output["Parents"] = task_dict.get("Parents", [])
-    output["Subtasks"] = task_dict.get("Subtasks", [])
-    output["Commits"] = task_dict.get("Commits", [])
+    # Only when they were fetched, and then even when empty: an empty list
+    # says the task has none
+    for key in ("Parents", "Subtasks", "Commits"):
+        if key in task_dict:
+            output[key] = task_dict[key]
 
     # Add History section if present
     if task_dict.get("History"):

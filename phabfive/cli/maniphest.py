@@ -143,7 +143,9 @@ def _show_tasks_after_write(ctx, maniphest_instance, task_ids):
     A create, an edit or a comment answers a machine-readable format with
     exactly what ``maniphest show`` answers with for the object it just
     wrote, so the monogram, the link and every field arrive together and no
-    second, parallel "result" shape has to be invented or kept in step.
+    second, parallel "result" shape has to be invented or kept in step. With
+    the relations, as ``--show-relations`` gives them: a write can set the
+    parents, subtasks and commits, and its answer should show what it set.
 
     Parameters
     ----------
@@ -154,7 +156,9 @@ def _show_tasks_after_write(ctx, maniphest_instance, task_ids):
     task_ids : list
         Task IDs, numeric or as strings
     """
-    result = maniphest_instance.task_show([int(task_id) for task_id in task_ids])
+    result = maniphest_instance.task_show(
+        [int(task_id) for task_id in task_ids], show_relations=True
+    )
     _display_tasks(result, _get_output_format(ctx), maniphest_instance)
 
 
@@ -176,6 +180,12 @@ def show(
     show_policy: bool = typer.Option(
         False, "--show-policy", "-P", help="Display the task's policies"
     ),
+    show_relations: bool = typer.Option(
+        False,
+        "--show-relations",
+        "-R",
+        help="Display the task's parents, subtasks and commits",
+    ),
     no_description: bool = typer.Option(
         False, "--no-description", "-n", help="Hide the task description"
     ),
@@ -188,6 +198,7 @@ def show(
         phabfive maniphest show T123 T456
         phabfive maniphest show T123,T456
         phabfive maniphest show T123 --show-policy
+        phabfive maniphest show T123 --show-relations
         phabfive T123  # shortcut
     """
     _setup_output_options(ctx)
@@ -215,6 +226,7 @@ def show(
         show_metadata=show_metadata,
         show_comments=show_comments,
         show_policy=show_policy,
+        show_relations=show_relations,
         show_description=not no_description,
     )
 
@@ -747,6 +759,11 @@ def search(
     show_policy: bool = typer.Option(
         False, "--show-policy", help="Display each task's policies"
     ),
+    show_relations: bool = typer.Option(
+        False,
+        "--show-relations",
+        help="Display each task's parents, subtasks and commits",
+    ),
     limit: int = typer.Option(
         100, "--limit", "-l", help="Maximum results to return, 0 for all"
     ),
@@ -860,6 +877,7 @@ def search(
         "show-history": show_history if show_history else None,
         "show-metadata": show_metadata if show_metadata else None,
         "show-policy": show_policy if show_policy else None,
+        "show-relations": show_relations if show_relations else None,
         "all": include_all if include_all else None,
         "limit": limit if limit != 100 else None,
         "order": order,

@@ -95,7 +95,14 @@ def _phab(attached=()):
     phab.diffusion.commit.search.side_effect = commit_search
     phab.phid.query.side_effect = phid_query
     phab.edge.search.return_value = {
-        "data": [{"destinationPHID": phid} for phid in attached]
+        "data": [
+            {
+                "sourcePHID": "PHID-TASK-42",
+                "edgeType": "task.commit",
+                "destinationPHID": phid,
+            }
+            for phid in attached
+        ]
     }
     phab.project.search.return_value = {"data": []}
     phab.maniphest.edit.return_value = {"object": {"id": 1, "phid": "PHID-TASK-1"}}
