@@ -126,6 +126,7 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
         T123 → maniphest show T123
         --format=yaml T123 → --format=yaml maniphest show T123
         T123 'comment' → maniphest comment T123 'comment'
+        T123 - → maniphest comment T123 -
         edit T123 → maniphest edit T123
         K123 → passphrase show K123
         P123 → paste show P123
@@ -198,11 +199,12 @@ def preprocess_monograms(argv: list[str]) -> list[str]:
     after = argv[monogram_idx + 1 :]
 
     # Handle comment shortcut: T123 'text' → maniphest comment T123 'text'
-    # But not when the next arg is also a monogram (T123 T456 → show both)
+    # But not when the next arg is also a monogram (T123 T456 → show both).
+    # A bare "-" is the comment read from stdin, not an option.
     if (
         prefix in _COMMENT_PREFIXES
         and after
-        and not after[0].startswith("-")
+        and (after[0] == "-" or not after[0].startswith("-"))
         and not _MONOGRAM_PATTERN.match(after[0])
     ):
         app_name = expansion[0]  # e.g., 'maniphest'

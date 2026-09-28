@@ -190,6 +190,15 @@ Add a comment to a task:
 
 ```bash
 phabfive maniphest comment T123 "This is my comment"
+
+# Read the comment from stdin, for multi-line text
+printf 'Done.\n\nSee rP1234 for the fix.\n' | phabfive maniphest comment T123 -
+
+# Omit the text to write it in $EDITOR
+phabfive maniphest comment T123
+
+# Monogram shortcut
+phabfive T123 "This is my comment"
 ```
 
 The command will output the task URI after successfully adding the comment.
