@@ -355,6 +355,82 @@ class TestManiphestComment:
 
         assert result.stdout.strip() == "https://phorge.example.com/T7"
 
+    def test_dash_reads_the_comment_from_stdin(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app,
+                ["--format=rich", "maniphest", "comment", "T7", "-"],
+                input="line one\n  line two\n\n",
+            )
+
+        assert result.exit_code == 0, result.output
+        maniphest.add_task_comment.assert_called_once_with("T7", "line one\n  line two")
+
+    def test_empty_stdin_posts_nothing(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app, ["maniphest", "comment", "T7", "-"], input="  \n"
+            )
+
+        assert result.exit_code == 1
+        assert "Comment cannot be empty" in result.stderr
+        maniphest.add_task_comment.assert_not_called()
+
+    def test_omitted_text_without_a_terminal_posts_nothing(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(app, ["maniphest", "comment", "T7"], input="")
+
+        assert result.exit_code == 1
+        assert "Provide comment text or run interactively" in result.stderr
+        maniphest.add_task_comment.assert_not_called()
+
+    def test_omitted_text_opens_the_editor(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with (
+            patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest),
+            # CliRunner swaps in its own stdin, so a patch of sys.stdin is lost
+            patch("click.testing._NamedTextIOWrapper.isatty", return_value=True),
+            patch(
+                "phabfive.cli.editor.edit_text", return_value="from the editor\n"
+            ) as edit_text,
+        ):
+            result = runner.invoke(app, ["--format=rich", "maniphest", "comment", "T7"])
+
+        assert result.exit_code == 0, result.output
+        edit_text.assert_called_once()
+        maniphest.add_task_comment.assert_called_once_with("T7", "from the editor")
+
+    def test_a_cancelled_editor_posts_nothing(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with (
+            patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest),
+            # CliRunner swaps in its own stdin, so a patch of sys.stdin is lost
+            patch("click.testing._NamedTextIOWrapper.isatty", return_value=True),
+            patch("phabfive.cli.editor.edit_text", return_value=None),
+        ):
+            result = runner.invoke(app, ["--format=rich", "maniphest", "comment", "T7"])
+
+        assert result.exit_code == 0
+        assert "Comment cancelled" in result.stdout
+        maniphest.add_task_comment.assert_not_called()
+
+    def test_an_invalid_task_id_posts_nothing(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(app, ["maniphest", "comment", "7", "hello"])
+
+        assert result.exit_code == 1
+        maniphest.add_task_comment.assert_not_called()
+
 
 class TestEditBatch:
     """The batch path, which `maniphest edit` and `phabfive edit` share."""

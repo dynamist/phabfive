@@ -233,17 +233,57 @@ def show(
 def comment(
     ctx: typer.Context,
     ticket_id: str = typer.Argument(..., help="Task ID (e.g., T123)"),
-    comment_text: str = typer.Argument(..., help="Comment text to add"),
+    comment_text: Optional[str] = typer.Argument(
+        None, help="Comment text (use - to read from stdin, or omit to open $EDITOR)"
+    ),
 ) -> None:
     """Add a comment to a Maniphest task.
 
     A machine-readable format answers with the task's record, the one
     `maniphest show` gives, rather than with the link on its own.
+
+    \b
+    Examples:
+        phabfive maniphest comment T1 "Done, see rP1234"
+        phabfive maniphest comment T1  # opens $EDITOR
+        printf 'line one\\nline two\\n' | phabfive maniphest comment T1 -
+        phabfive T1 "Quick comment"  # monogram shortcut
     """
+    from phabfive.cli.editor import edit_text
+
     _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
 
-    maniphest.add_task_comment(ticket_id, comment_text)
+    preview = sys.stderr if is_machine_format(_get_output_format(ctx)) else sys.stdout
+
+    maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
+    if not re.match(maniphest_pattern, ticket_id):
+        typer.echo(f"Invalid task ID '{ticket_id}'. Expected format: T123", err=True)
+        raise typer.Exit(1)
+
+    if comment_text == "-":
+        if sys.stdin.isatty():
+            typer.echo("Error: '-' requires input from stdin", err=True)
+            raise typer.Exit(1)
+        # rstrip only: leading indentation is a remarkup code block
+        final_text = sys.stdin.read().rstrip()
+    elif comment_text is not None:
+        final_text = comment_text
+    else:
+        if not sys.stdin.isatty():
+            typer.echo("Error: Provide comment text or run interactively", err=True)
+            raise typer.Exit(1)
+        edited = edit_text("", prefix="task-comment-", suffix=".remarkup")
+        if edited is None:
+            print("Comment cancelled", file=preview)
+            raise typer.Exit(0)
+        final_text = edited.rstrip()
+
+    if not final_text.strip():
+        typer.echo("Error: Comment cannot be empty", err=True)
+        raise typer.Exit(1)
+
+    maniphest.add_task_comment(ticket_id, final_text)
 
     task_id = int(ticket_id[1:])
 

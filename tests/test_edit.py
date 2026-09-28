@@ -1400,6 +1400,13 @@ class TestEditExpansion:
         result = preprocess_monograms(["phabfive", "T123", "Add a comment"])
         assert result == ["phabfive", "maniphest", "comment", "T123", "Add a comment"]
 
+    def test_dash_comment_shortcut_reads_stdin(self):
+        """Test 'T123 -' expands to 'maniphest comment T123 -', not show."""
+        from phabfive.cli import preprocess_monograms
+
+        result = preprocess_monograms(["phabfive", "T123", "-"])
+        assert result == ["phabfive", "maniphest", "comment", "T123", "-"]
+
     def test_edit_passphrase_expansion(self):
         """Test 'edit K123' expands to 'passphrase edit K123'."""
         from phabfive.cli import preprocess_monograms
