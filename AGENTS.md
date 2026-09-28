@@ -83,8 +83,10 @@ gh pr edit <number> --add-label ci:k8s
 The same job picks the Phorge versions the deploy matrix tests. A push to `main` and a pull request
 test `stable`. A pull request labelled `ci:phorge-<branch or tag>` tests exactly those versions
 instead - any ref Phorge and Arcanist both have works once the label exists, `master` and the
-release tags are created. The weekly and manual runs test `stable`, `master` and the two newest
-release tags, found at run time, so a new Phorge release needs no workflow change. `master` runs
+release tags are created. The weekly and manual runs test `stable`, `master`, the two newest
+release tags, found at run time, so a new Phorge release needs no workflow change, and
+`phabricator` - Phabricator as Phacility left it, the closest stand-in for a Phacility-hosted
+instance, which may carry patches that were never published. `master` runs
 with `continue-on-error`: its breakage is a heads-up, not a failure.
 
 ```bash
