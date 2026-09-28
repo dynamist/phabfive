@@ -17,6 +17,7 @@ from phabfive.cli.completers import (
     complete_priority,
     complete_priority_change,
     complete_priority_filter,
+    complete_relation,
     complete_space,
     complete_space_filter,
     complete_status,
@@ -704,26 +705,22 @@ def search(
     parent: Optional[str] = typer.Option(
         None,
         "--parent",
-        help="Only the subtasks of these tasks (e.g., T123 or T123,T456)",
+        help="Only the subtasks of these tasks (e.g., T123 or T123,T456); "
+        "@some for tasks with a parent, @none for tasks without",
+        autocompletion=complete_relation,
     ),
     subtask: Optional[str] = typer.Option(
         None,
         "--subtask",
-        help="Only the parents of these tasks (e.g., T123 or T123,T456)",
+        help="Only the parents of these tasks (e.g., T123 or T123,T456); "
+        "@some for tasks with subtasks, @none for tasks without",
+        autocompletion=complete_relation,
     ),
-    # Optional[bool] rather than bool: a flag nobody typed has to stay
-    # distinguishable from --has-parents meaning "no", the way every other
-    # override here does. Only the True half has a flag; a template says
-    # `has-parents: false` for the other one.
-    has_parents: Optional[bool] = typer.Option(
+    commit: Optional[str] = typer.Option(
         None,
-        "--has-parents",
-        help="Only tasks that are a subtask of something",
-    ),
-    has_subtasks: Optional[bool] = typer.Option(
-        None,
-        "--has-subtasks",
-        help="Only tasks that have subtasks",
+        "--commit",
+        help="@some for tasks with a commit attached, @none for tasks without",
+        autocompletion=complete_relation,
     ),
     include_all: bool = typer.Option(
         False,
@@ -867,10 +864,7 @@ def search(
         "subtype": subtype,
         "parent": parent,
         "subtask": subtask,
-        # Already None when the flag was not given, which is what the
-        # sentinel above spells out longhand for the older boolean flags.
-        "has-parents": has_parents,
-        "has-subtasks": has_subtasks,
+        "commit": commit,
         "column": column,
         "priority": priority,
         "status": status,

@@ -78,6 +78,7 @@ __all__ = [
     "plan_searches",
     "run_search",
     "task_ids",
+    "task_relation",
     "wants_banner",
 ]
 
@@ -116,8 +117,7 @@ SEARCH_PARAMS: Mapping[str, str] = {
     "subtype": "subtype",
     "parent": "parent",
     "subtask": "subtask",
-    "has-parents": "has_parents",
-    "has-subtasks": "has_subtasks",
+    "commit": "commit",
     "closed-by": "closed_by",
     "closed-after": "closed_after",
     "closed-before": "closed_before",
@@ -161,28 +161,20 @@ CRITERIA_PARAMS: tuple[str, ...] = (
     "priority_patterns",
     "status_patterns",
     "include_task_ids",
-    # The server-side constraints of #478. `has_parents`/`has_subtasks` are
-    # listed here as well as in `_TRISTATE_PARAMS`, which is what makes their
-    # `False` half count: this is a truthiness test and `has-parents: false`
-    # - tasks with no parent, a real question - is tested for presence there.
+    # The server-side constraints of #478. `parent: "@none"` - tasks with no
+    # parent, a real question - is a non-empty string, so a truthiness test
+    # counts it.
     "ids",
     "phids",
     "subscriber",
     "subtype",
     "parent",
     "subtask",
-    "has_parents",
-    "has_subtasks",
+    "commit",
     "closed_by",
     "closed_after",
     "closed_before",
 )
-
-
-#: The `params` entries that are **tri-state**: absent, true or false, where
-#: false is a filter and not the absence of one. Tested for presence rather
-#: than for truth by `SearchPlan.has_criteria`.
-_TRISTATE_PARAMS: tuple[str, ...] = ("has_parents", "has_subtasks")
 
 
 class SearchPlanError(PhabfiveInputException):
@@ -325,15 +317,7 @@ class SearchPlan:
         criterion, because that is how a script asks for every task on
         purpose, and so does the deprecated `all:`, the older spelling of the
         same request.
-
-        `has_parents` and `has_subtasks` are tri-state, so they are tested
-        for *presence* and not for truth: ``has-parents: false`` is "tasks
-        with no parent at all", which is as real a filter as its opposite and
-        used to print the command's usage instead of running.
         """
-        if any(self.params.get(key) is not None for key in _TRISTATE_PARAMS):
-            return True
-
         return any(self.params.get(key) for key in CRITERIA_PARAMS)
 
     @property
@@ -598,6 +582,70 @@ def task_ids(value: Any, *, option: Optional[str] = None) -> Optional[list]:
             found.append(int(part[1:]))
 
     return found or None
+
+
+def task_relation(
+    value: Any, *, option: Optional[str] = None, ids: bool = True
+) -> str | list | None:
+    """A relation filter: task ids, or ``@some`` or ``@none`` on its own.
+
+    ``parent:``, ``subtask:`` and ``commit:`` answer "which ones" with ids
+    and "any at all" with a keyword: ``@some`` is the tasks that have one,
+    ``@none`` the tasks that have none. A keyword is the whole answer, so it
+    is refused next to an id - ``T1,@none`` asks for two things that cannot
+    both hold.
+
+    Parameters
+    ----------
+    value
+        What was written, as `task_ids` reads it.
+    option : str, optional
+        The flag or key to name in the error.
+    ids : bool, optional
+        Whether task ids are accepted at all. ``commit:`` takes only the
+        keywords.
+
+    Returns
+    -------
+    str, list or None
+        The keyword as `RELATION_SOME` or `RELATION_NONE`, the ids as ints,
+        or None when nothing usable was written.
+
+    Raises
+    ------
+    SearchPlanError
+        A keyword next to anything else, or an id where only a keyword is
+        taken. `check` is "invalid-task-id", as for a malformed id.
+    """
+    from phabfive.constants import RELATION_KEYWORDS
+
+    if not value:
+        return None
+
+    entries: Iterable[Any] = value if isinstance(value, (list, tuple)) else [value]
+    parts = [part.strip() for entry in entries for part in str(entry).split(",")]
+    parts = [part for part in parts if part]
+    keywords = [part for part in parts if part.casefold() in RELATION_KEYWORDS]
+    where = f" for {option}" if option else ""
+    accepted = " or ".join(RELATION_KEYWORDS)
+
+    if keywords:
+        if len(parts) > 1:
+            raise SearchPlanError(
+                f"{keywords[0]} cannot be combined with anything else{where}",
+                check="invalid-task-id",
+            )
+        return keywords[0].casefold()
+
+    if not ids:
+        if not parts:
+            return None
+        raise SearchPlanError(
+            f"Invalid value '{parts[0]}'{where}. Expected {accepted}",
+            check="invalid-task-id",
+        )
+
+    return task_ids(value, option=option)
 
 
 def plan_search(

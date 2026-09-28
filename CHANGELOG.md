@@ -1,5 +1,35 @@
 # Unreleased
 
+## Upgrade Notes
+
+* **Breaking change: `--has-parents` and `--has-subtasks` are gone.** Write
+  `--parent=@some` and `--subtask=@some`, and in a search spec `parent: "@some"` for
+  `has-parents: true` and `parent: "@none"` for `has-parents: false`. A spec that still
+  uses the old keys is refused with the replacement named
+
+* **Breaking change: `maniphest show` fetches relations only with `--show-relations`
+  (`-R`).** Like `--show-history` and `--show-policy`. The records `create`, `edit` and
+  `comment` answer a machine-readable format with still carry them
+
+* **Breaking change: `Parents`, `Subtasks` and `Commits` are left out of a task's record
+  unless relations were asked for.** They used to be published as empty lists, which
+  says the task has none. With `--show-relations` all three are there, and `[]` means
+  none; a failed lookup leaves them out again, with a warning
+
+## New Features
+
+* **`--show-relations` on `maniphest search` and `maniphest show`.** Fills each task's
+  `Parents`, `Subtasks` and `Commits`, also as `show-relations: true` in a search spec,
+  for the whole result in a fixed number of calls: one `edge.search`, one
+  `maniphest.search` for related tasks outside the result and one `phid.query` for the
+  commits. #542
+
+* **`--parent` and `--subtask` take `@some` and `@none`, and `--commit` is new.**
+  `--parent=@some` is the tasks that have a parent and `--parent=@none` the ones that
+  have none, and the same for `--subtask`, alongside the task ids both still take.
+  `--commit=@some` and `--commit=@none` filter on attached commits; `maniphest.search`
+  cannot, so one `edge.search` over the matching tasks answers it, before `--limit`
+
 ## Bug Fixes
 
 * **`--column` moves the card on every board `--tag` names.** A task has a position on
