@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       versions:
-        description: Phorge branches or tags to test, space separated (blank for stable, master and the two newest releases)
+        description: Phorge branches or tags to test, space separated, phabricator for Phabricator (blank for stable, master, the two newest releases and phabricator)
         required: false
         default: ""
 
@@ -64,7 +64,8 @@ jobs:
     steps:
       # stable on every change, or the refs of the ci:phorge-* labels on a pull
       # request. Weekly, stable, master and the two newest releases, which
-      # upstream tags YYYY.WW, so a new release needs no change here
+      # upstream tags YYYY.WW, so a new release needs no change here, and
+      # Phabricator, which Phacility still hosts
       - name: Pick the Phorge versions
         id: versions
         env:
@@ -78,7 +79,7 @@ jobs:
             releases=$(git ls-remote --tags --refs https://github.com/phorgeit/phorge.git |
               sed -n 's|.*refs/tags/||p' | grep -E '^[0-9]{4}\.[0-9]+$' | sort -V | tail -2)
             # shellcheck disable=SC2086
-            versions=$(printf '%s\n' stable master $releases | jq -Rnc '[inputs]')
+            versions=$(printf '%s\n' stable master $releases phabricator | jq -Rnc '[inputs]')
           elif [ "$EVENT" = workflow_dispatch ]; then
             # shellcheck disable=SC2086
             versions=$(printf '%s\n' $INPUT | jq -Rnc '[inputs]')
@@ -189,8 +190,9 @@ jobs:
       - name: Report the deployed Phorge
         run: |
           commit=$($KUBECTL -n phorge exec deploy/phorge -- git -C /app/phorge rev-parse HEAD)
+          repo=$($KUBECTL -n phorge exec deploy/phorge -- printenv PHORGE_REPO)
           php=$($KUBECTL -n phorge exec deploy/phorge -- printenv PHP_VERSION)
-          echo "Phorge $VERSION at [${commit:0:12}](https://github.com/phorgeit/phorge/commit/$commit) on PHP $php" \
+          echo "$VERSION at [${commit:0:12}]($repo/commit/$commit) on PHP $php" \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Do not depend on the runner's resolver for *.localhost
