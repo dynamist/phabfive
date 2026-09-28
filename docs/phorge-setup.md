@@ -356,7 +356,14 @@ Phorge runs in a local [k3d](https://k3d.io) cluster, which is k3s in Docker. Th
 - **Cluster:** `k8s/cluster/k3d.yaml`, identical in every repo that uses it. It pins the k3s version and publishes the bundled Traefik ingress on `127.0.0.1:80` and `:443`. Whichever app starts first creates the cluster, the others reuse it.
 - **Routing:** each app has a standard `Ingress` with its own hostnames, here `phorge.localhost` and `cdn.localhost` to the `phorge` Service.
 - **Phorge:** `k8s/base` holds the `phorge` namespace, MariaDB (StatefulSet `mariadb`), Phorge (Deployment `phorge`, `Recreate` so two pods never upgrade the same database), the Ingress, a ResourceQuota with default limits and NetworkPolicies. Only Traefik and the `dynatron` namespace reach Phorge and only Phorge reaches MariaDB, whose port is not published on the host. Overlays: `local` (with `config.local.env`) and `ci`.
-- **In-cluster clients:** a pod cannot use `phorge.localhost`, which resolves to the pod itself. Phorge also answers to its Service name (`PHORGE_ALLOWED_URIS`), so a client in a namespace the NetworkPolicy admits sets `PHAB_URL=http://phorge.phorge.svc.cluster.local/api/` and needs no `hostAlias`.
+- **In-cluster clients:** a pod cannot use `phorge.localhost`, which resolves to the pod itself. Phorge also answers to its Service name (`PHORGE_ALLOWED_URIS`), so a client in a namespace the NetworkPolicy admits reaches it at `http://phorge.phorge.svc.cluster.local/api/` and needs no `hostAlias`. Configure that as `PHAB_API_URL`, with `PHAB_WEB_URL=http://phorge.localhost` beside it, so the links in whatever the pod renders still open on the host:
+
+    ```bash
+    PHAB_API_URL=http://phorge.phorge.svc.cluster.local/api/
+    PHAB_WEB_URL=http://phorge.localhost
+    ```
+
+    Setting `PHAB_URL` to the Service name instead makes every link phabfive returns a `*.svc.cluster.local` address, which resolves nowhere outside the cluster.
 - **Images:** `make phorge-image` builds `dynamist/phorge`, tags it by content and imports it with `k3d image import`, no registry is involved.
 
 Every `make` target passes `--context k3d-dynamist`, so it never acts on another cluster.

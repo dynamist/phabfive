@@ -348,6 +348,8 @@ USER_ROLE_CONSTRAINTS = {
 CONFIGURABLES = [
     "PHAB_TOKEN",
     "PHAB_URL",
+    "PHAB_API_URL",
+    "PHAB_WEB_URL",
     "PHAB_SPACE",
     "PHAB_FALLBACK",
     "PHAB_CACHE",
@@ -360,6 +362,10 @@ CONFIGURABLES = [
 DEFAULTS = {
     "PHAB_TOKEN": "",
     "PHAB_URL": "",
+    # The split pair, for an instance whose Conduit endpoint is not the address
+    # a reader can open. Both or neither, see Phabfive._resolve_url_pair.
+    "PHAB_API_URL": "",
+    "PHAB_WEB_URL": "",
     "PHAB_SPACE": "S1",
     "PHAB_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml, json or jsonl)
     "PHAB_CACHE": True,  # Cache API lookups that shell completion repeats
@@ -397,8 +403,18 @@ VALIDATORS = {
     "PHAB_URL": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
     "PHAB_TOKEN": "^[a-zA-Z0-9-]{32}$",
     "PHAB_FALLBACK": "^(yaml|json|jsonl|ndjson)$",
+    # Empty is how these two say "unset", since most instances need neither.
+    # The endpoint takes the same shape as PHAB_URL; the web half is an origin
+    # with no path at all, which is what turns a pasted /api/ endpoint into a
+    # named error rather than links nobody can open.
+    "PHAB_API_URL": r"^$|^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
+    "PHAB_WEB_URL": r"^$|^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/?$",
 }
-VALIDATION_HINTS = {"PHAB_URL": "example: https://we.phorge.it/api/"}
+VALIDATION_HINTS = {
+    "PHAB_URL": "example: https://we.phorge.it/api/",
+    "PHAB_API_URL": "example: http://phorge.phorge.svc.cluster.local/api/",
+    "PHAB_WEB_URL": "the address a reader opens, no /api/ suffix, example: https://we.phorge.it",
+}
 MISSING_CONFIG_HINTS = {
     "PHAB_TOKEN": "add token to ~/.arcrc or run: phabfive user setup",
     "PHAB_URL": 'create .arcconfig with: {"phabricator.uri": "https://we.phorge.it/"} or run: phabfive user setup',
