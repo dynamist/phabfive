@@ -19,6 +19,7 @@ import json
 import os
 from unittest import mock
 
+import appdirs
 import pytest
 
 from phabfive import cache
@@ -176,18 +177,19 @@ class TestFromTheEnvironment:
 
         A per-layer check would reject this, and splitting configuration across
         layers is the ordinary way to keep an address in a file and a secret in
-        the environment.
+        the environment. `user_config_dir` is patched rather than steered with
+        XDG_CONFIG_HOME, which appdirs honours only on Linux.
         """
-        config_dir = tmp_path / ".config"
-        config_dir.mkdir()
-        config_file = config_dir / "phabfive.yaml"
+        config_file = tmp_path / "phabfive.yaml"
         config_file.write_text(f"PHAB_WEB_URL: {WEB}\n")
         os.chmod(config_file, 0o600)
-        only_the_environment.setenv("XDG_CONFIG_HOME", str(config_dir))
         only_the_environment.setenv("PHAB_TOKEN", TOKEN)
         only_the_environment.setenv("PHAB_API_URL", API)
 
-        conf, _ = Phabfive.read_config()
+        with mock.patch.object(
+            appdirs, "user_config_dir", return_value=str(tmp_path / "phabfive")
+        ):
+            conf, _ = Phabfive.read_config()
 
         assert conf["PHAB_URL"] == API
         assert conf["PHAB_WEB_URL"] == WEB
