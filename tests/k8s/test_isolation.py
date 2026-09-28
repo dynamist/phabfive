@@ -57,18 +57,24 @@ def other_namespaces(kubectl):
     return ["default", *(ns["metadata"]["name"] for ns in others)]
 
 
+# The namespaces k8s/base/networkpolicy.yaml admits to Phorge's Conduit port
+CONDUIT_CLIENTS = {"dynatron"}
+
+
 @pytest.mark.parametrize(
-    "host,port",
+    "host,port,admitted",
     [
-        ("phorge.phorge.svc.cluster.local", 80),
-        ("mariadb.phorge.svc.cluster.local", 3306),
+        ("phorge.phorge.svc.cluster.local", 80, CONDUIT_CLIENTS),
+        ("mariadb.phorge.svc.cluster.local", 3306, set()),
     ],
 )
-def test_other_namespaces_cannot_reach_phorge(kubectl, host, port):
+def test_other_namespaces_cannot_reach_phorge(kubectl, host, port, admitted):
     for namespace in other_namespaces(kubectl):
-        assert not probe_from(kubectl, namespace, host, port), (
-            f"{host}:{port} is reachable from {namespace}"
-        )
+        reachable = probe_from(kubectl, namespace, host, port)
+        if namespace in admitted:
+            assert reachable, f"{host}:{port} is not reachable from {namespace}"
+        else:
+            assert not reachable, f"{host}:{port} is reachable from {namespace}"
 
 
 def test_probe_detects_open_ports(kubectl):

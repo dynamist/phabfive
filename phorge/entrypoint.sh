@@ -47,6 +47,17 @@ if [ ! -z "$PHORGE_URL" ]; then
   ./bin/config set phabricator.base-uri "$PHORGE_URL"
 fi
 
+# Further URIs Phorge answers to besides PHORGE_URL, space-separated. Phorge
+# checks the Host header and answers "Site Not Found" for any other host, so
+# this is what lets a client inside the cluster use the Service DNS name.
+# Deleted when empty, a restarted container keeps its local config.
+if [ -n "$PHORGE_ALLOWED_URIS" ]; then
+  ./bin/config set phabricator.allowed-uris \
+    "$(php -r 'echo json_encode(preg_split("/\s+/", trim(getenv("PHORGE_ALLOWED_URIS"))));')"
+else
+  ./bin/config delete phabricator.allowed-uris >/dev/null 2>&1 || true
+fi
+
 # Set title if provided - using ui.logo instead of phabricator.title which doesn't exist in Phorge
 if [ ! -z "$PHORGE_TITLE" ]; then
   ./bin/config set cluster.instance "$PHORGE_TITLE"
