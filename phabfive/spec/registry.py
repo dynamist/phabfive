@@ -307,7 +307,7 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--assigned",
         constraint="assigned",
-        help="Assignee: a username, @me, or a user PHID.",
+        help="Assignee: a username, @me, @none for unassigned, or a user PHID.",
     ),
     Field(
         name="author",

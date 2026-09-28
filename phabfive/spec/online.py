@@ -98,7 +98,7 @@ import logging
 from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional, Protocol
 
-from phabfive.me import is_me
+from phabfive.me import is_me, is_none, refuse_none
 from phabfive.pagination import search_all_pages
 from phabfive.spec.problems import Layer, Problem, Severity, problem
 from phabfive.spec.references import (
@@ -550,6 +550,8 @@ def index_references(spec: "Spec") -> ReferenceIndex:
             reference
             for reference in iter_references(spec)
             if _UNRENDERED not in reference.value
+            # "No assignee" names nothing the instance has to answer for
+            and not (is_none(reference.value) and field_name(reference) == "assigned")
         ]
     )
 
@@ -905,6 +907,17 @@ class ManiphestUserResolver:
         """Answer every user the spec named. See :class:`Resolver`."""
         results: dict[str, ResolveResult] = {}
 
+        # `@none` in `assigned:` never reaches a resolver, see
+        # `index_references`, so here it is in a key that takes only users
+        for value in values:
+            if is_none(value):
+                results[value] = ResolveResult(
+                    value=value,
+                    problem="unknown-user",
+                    reason=str(refuse_none()),
+                )
+
+        values = [value for value in values if not is_none(value)]
         me_values = [value for value in values if is_me(value)]
         phid_values = [
             value

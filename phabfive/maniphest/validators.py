@@ -5,6 +5,7 @@
 import logging
 
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveInputException
+from phabfive.me import is_none
 
 log = logging.getLogger(__name__)
 
@@ -16,16 +17,17 @@ def validate_assignment(assign, unassign):
     Parameters
     ----------
     assign : str or None
-        The user to assign
+        The user to assign, or "@none" for nobody
     unassign : bool
         Whether to remove the assignee
 
     Raises
     ------
     PhabfiveInputException
-        If both are given
+        If both are given. "@none" with --unassign asks for the same thing
+        twice, which is redundant rather than a conflict
     """
-    if assign and unassign:
+    if assign and unassign and not is_none(assign):
         raise PhabfiveInputException("--assign and --unassign cannot be used together")
 
 

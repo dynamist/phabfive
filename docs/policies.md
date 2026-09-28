@@ -51,6 +51,10 @@ Every policy option — `--visible-to`, `--editable-by`, `--can-push` and
 | `@me` | You — whoever the API token belongs to, as in `maniphest search --assigned=@me` |
 | `PHID-...` | Whatever object the PHID names — this is how a **custom policy rule** is set, since it has no other name |
 
+`@none` is refused: it means "no assignee" to `--assigned` and `--assign`,
+and a policy nobody satisfies is `no-one`. A user whose username is `none` is
+named by their PHID here.
+
 `@me` is a keyword and always means you, in the policy options and in every
 other option that takes a user (`--assigned`, `--author`, `--assign`,
 `--subscribe`, `--member`). An instance that has a user whose username is `me`

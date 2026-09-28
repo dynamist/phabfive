@@ -83,7 +83,8 @@ def edit_command(
     assign: Optional[str] = typer.Option(
         None,
         "--assign",
-        help="Set assignee (username, @me for yourself, or a user PHID)",
+        help="Set assignee (username, @me for yourself, or a user PHID); "
+        "@none is the same as --unassign",
         autocompletion=complete_user,
     ),
     unassign: bool = typer.Option(

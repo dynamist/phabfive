@@ -25,6 +25,7 @@ from phabfive.cli.completers import (
     complete_tag_list,
     complete_user,
     complete_user_list,
+    complete_assignee_filter,
     complete_user_list_filter,
 )
 from phabfive.cli.output import (
@@ -614,8 +615,9 @@ def search(
     assigned: Optional[str] = typer.Option(
         None,
         "--assigned",
-        help="Filter by assignee: username, @me for yourself, or user PHID",
-        autocompletion=complete_user_list_filter,
+        help="Filter by assignee: username, @me for yourself, @none for "
+        "unassigned, or user PHID",
+        autocompletion=complete_assignee_filter,
     ),
     author: Optional[str] = typer.Option(
         None,
@@ -1043,7 +1045,8 @@ def edit(
     assign: Optional[str] = typer.Option(
         None,
         "--assign",
-        help="Set assignee (username, @me for yourself, or a user PHID)",
+        help="Set assignee (username, @me for yourself, or a user PHID); "
+        "@none is the same as --unassign",
         autocompletion=complete_user,
     ),
     unassign: bool = typer.Option(

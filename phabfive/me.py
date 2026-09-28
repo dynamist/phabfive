@@ -24,13 +24,28 @@ phabfive used to refuse ``@me`` outright on such an instance and demand a PHID
 wrong person: every caller on the instance lost ``@me`` because of an account
 they had never heard of, and looking up your own PHID is worse than the thing
 it replaced.
+
+``@none`` is the other keyword, and it follows the same rule: it means "no
+assignee" even on an instance with a user called ``none``, and ``none``
+without the sigil is that user (#513). Only the options where "nobody" has a
+meaning take it - ``--assigned``, where it is Phorge's ``none()`` datasource
+function, and ``--assign``, where it clears the owner like ``--unassign``.
+Every other option refuses it through :func:`refuse_none` rather than
+looking up a user called "none" behind the caller's back.
 """
 
 # phabfive imports
-from phabfive.exceptions import PhabfiveDataException
+from phabfive.exceptions import PhabfiveDataException, PhabfiveInputException
 
 # The spelling that means whoever is running the command
 ME = "@me"
+
+# The spelling that means no assignee
+NONE = "@none"
+
+# What maniphest.search's `assigned` constraint takes for "no assignee". It
+# mixes with user PHIDs as OR, so "@none,@me" is unassigned or mine.
+NONE_DATASOURCE = "none()"
 
 
 def is_me(value):
@@ -51,6 +66,45 @@ def is_me(value):
     bool
     """
     return isinstance(value, str) and value.strip().casefold() == ME
+
+
+def is_none(value):
+    """Whether a value is ``@none``, in any case.
+
+    The sigil is required, as it is for :func:`is_me`: a bare ``none`` is the
+    user called "none".
+
+    Parameters
+    ----------
+    value : str or None
+        What was typed
+
+    Returns
+    -------
+    bool
+    """
+    return isinstance(value, str) and value.strip().casefold() == NONE
+
+
+def refuse_none(option=None):
+    """The error for ``@none`` given to an option that takes only users.
+
+    Parameters
+    ----------
+    option : str, optional
+        The option ``@none`` came from, named in the message
+
+    Returns
+    -------
+    PhabfiveInputException
+        To be raised by the caller
+    """
+    where = f"{option}: " if option else ""
+
+    return PhabfiveInputException(
+        f"{where}{NONE} means no assignee, which only --assigned and --assign "
+        f"take. To name the user called 'none', leave out the @"
+    )
 
 
 def whoami_me(phab, option=None):
@@ -111,7 +165,11 @@ def resolve_me(phab, option=None):
 
 __all__ = [
     "ME",
+    "NONE",
+    "NONE_DATASOURCE",
     "is_me",
+    "is_none",
+    "refuse_none",
     "resolve_me",
     "whoami_me",
 ]

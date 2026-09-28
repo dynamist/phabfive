@@ -416,7 +416,7 @@ A `search:` mapping's keys are those of its item's `type:`.
 | `tag` | project reference | &mdash; | &mdash; | `projects` | Project, workboard, hashtag, ID or PHID; wildcards allowed. |
 | `include` | monogram: `T123` | yes | &mdash; | &mdash; | Tasks to force into the results whatever the filters say. |
 | `exclude` | monogram: `T123` | yes | &mdash; | &mdash; | Tasks to drop from the results even when the filters match. |
-| `assigned` | user reference | &mdash; | &mdash; | `assigned` | Assignee: a username, @me, or a user PHID. |
+| `assigned` | user reference | &mdash; | &mdash; | `assigned` | Assignee: a username, @me, @none for unassigned, or a user PHID. |
 | `author` | user reference | &mdash; | &mdash; | `authorPHIDs` | Author: a username, @me, or a user PHID. |
 | `space` | Space reference | &mdash; | &mdash; | `spaces` | Space monogram, name or pattern; wildcards allowed. |
 | `created-after` | time | &mdash; | &mdash; | `createdStart` | Tasks created within TIME, e.g. 1h, 7d, 2w. |
