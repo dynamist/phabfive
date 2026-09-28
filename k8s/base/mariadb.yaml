@@ -27,7 +27,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: mariadb
-          image: mariadb:12
+          image: mariadb:13
           args:
             - --max-allowed-packet=67108864
             - --innodb-buffer-pool-size=256M
