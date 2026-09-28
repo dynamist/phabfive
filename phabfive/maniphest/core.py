@@ -71,7 +71,7 @@ from phabfive.maniphest.validators import (
     validate_priority,
     validate_status,
 )
-from phabfive.me import is_me
+from phabfive.me import NONE_DATASOURCE, is_me, is_none
 from phabfive.options import split_list_option, value_list
 from phabfive.policy import (
     policy_label,
@@ -928,12 +928,14 @@ class Maniphest(Phabfive):
 
         return search_configs
 
-    def _resolve_user_filter_phids(self, value, label, option=None):
+    def _resolve_user_filter_phids(self, value, label, option=None, allow_none=False):
         """
         Resolve a user search filter into PHIDs.
 
         Accepts "@me", a username or @username, a user PHID, or a
         comma-separated list of them for OR logic, e.g. "@me,user1,@user2".
+        With `allow_none`, "@none" is accepted too and becomes the `none()`
+        datasource function, which the server reads as "no assignee".
 
         Parameters
         ----------
@@ -943,29 +945,47 @@ class Maniphest(Phabfive):
             Used in the log line, e.g. "assigned to" or "authored by".
         option : str, optional
             The option the value came from, named in any error about @me
+        allow_none : bool, optional
+            Whether "@none" is a value this filter takes. Only the assignee
+            filter does; anywhere else it is refused, not read as a user
+            called "none".
 
         Returns
         -------
         list
-            User PHIDs, in the order given. Empty if there is no filter.
+            User PHIDs, and `none()` for "@none", in the order given. Empty
+            if there is no filter.
 
         Raises
         ------
         PhabfiveDataException
             If any name cannot be resolved to a PHID. Filtering on a name
             that does not exist would otherwise look like "no matches".
+        PhabfiveInputException
+            On "@none" without `allow_none`
         """
         if not value:
             return []
 
+        names = [n.strip() for n in value.split(",") if n.strip()]
         users = self._resolve_users(
-            [n.strip() for n in value.split(",") if n.strip()], option=option
+            [name for name in names if not (allow_none and is_none(name))],
+            option=option,
         )
-        phids = list(dict.fromkeys(phid for phid, _ in users.values()))
-        resolved_names = [
-            f"@me ({username})" if is_me(name) else (username or name)
-            for name, (_, username) in users.items()
-        ]
+        phids = []
+        resolved_names = []
+        for name in names:
+            if allow_none and is_none(name):
+                phids.append(NONE_DATASOURCE)
+                resolved_names.append("nobody")
+                continue
+            phid, username = users[name]
+            phids.append(phid)
+            resolved_names.append(
+                f"@me ({username})" if is_me(name) else (username or name)
+            )
+        phids = list(dict.fromkeys(phids))
+        resolved_names = list(dict.fromkeys(resolved_names))
 
         if len(resolved_names) > 1:
             log.info(f"Filtering by tasks {label} any of: {', '.join(resolved_names)}")
@@ -1717,7 +1737,7 @@ class Maniphest(Phabfive):
 
         # Resolve the user filters - convert @me or username(s) to PHID(s)
         assigned_phids = self._resolve_user_filter_phids(
-            assigned, "assigned to", option="--assigned"
+            assigned, "assigned to", option="--assigned", allow_none=True
         )
         author_phids = self._resolve_user_filter_phids(
             author, "authored by", option="--author"
@@ -2779,6 +2799,10 @@ class Maniphest(Phabfive):
             If a policy names a project or user that does not exist
         """
         validate_assignment(assign, unassign)
+
+        # @none is "no assignee", which is what --unassign already does
+        if is_none(assign):
+            assign, unassign = None, True
 
         # Fetch current task state unless the caller already has it
         if task_data is None:

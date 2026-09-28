@@ -95,11 +95,14 @@ filters below keep that grammar, where `,` is OR.
 
 `maniphest edit` (and `phabfive edit`) sets the assignee with `--assign` and
 removes it with `--unassign`. The two cannot be combined, and unassigning a task
-that has no assignee changes nothing:
+that has no assignee changes nothing. `--assign=@none` is the same as
+`--unassign`, so a search and an edit can use the same value (see
+[Naming Users](#naming-users)):
 
 ```bash
 phabfive maniphest edit T123 --assign=@alice
 phabfive maniphest edit T123 T124 --unassign
+phabfive maniphest edit T123 --assign=@none
 phabfive --format=yaml maniphest search --assigned=@me | phabfive edit --unassign
 ```
 
@@ -386,6 +389,7 @@ Every option that takes a user - `--assigned`, `--author`, `--assign`,
 |---|---|
 | `alice` or `@alice` | the user with that username, in any case |
 | `@me` | you, whoever the API token belongs to |
+| `@none` | nobody - `--assigned` and `--assign` only |
 | `PHID-USER-...` | the user with that PHID |
 
 ```bash
@@ -393,17 +397,31 @@ phabfive maniphest search --assigned=@me,alice
 phabfive maniphest edit T123 --assign=PHID-USER-75k6ju3upxlmi3gmks3m --subscribe=@bob
 ```
 
+`--assigned=@none` finds tasks with no assignee. The server does the filtering,
+so `--limit` and paging work as usual, and it mixes with users as OR:
+
+```bash
+phabfive maniphest search --tag=Dynamist-Infra --column="in:In progress" --assigned=@none
+phabfive maniphest search --tag=Dynamist-Infra --assigned=@none,@me   # unassigned or yours
+```
+
+`--assign=@none` clears the assignee, like `--unassign`. Every other option
+that takes a user - `--author`, `--subscriber`, `--closed-by`, `--subscribe`
+and the rest - refuses `@none`, since "nobody" means nothing there.
+
 A name that is not a user is an error rather than a search that matches nothing.
 
-`@me` is a **keyword** and always means you, even on an instance that has a user
-whose username is `me`. The `@` is what makes it one, and this is the only place
-in phabfive where the sigil changes what a value means - everywhere else
-`alice` and `@alice` are the same user. To name that account, write it without
-the sigil:
+`@me` and `@none` are **keywords**: `@me` always means you, even on an instance
+that has a user whose username is `me`, and `@none` always means nobody, even
+on one with a user called `none`. The `@` is what makes them keywords, and these
+are the only places in phabfive where the sigil changes what a value means -
+everywhere else `alice` and `@alice` are the same user. To name such an account,
+write it without the sigil:
 
 ```bash
 phabfive maniphest search --author=@me     # your tasks
 phabfive maniphest search --author=me      # the user whose username is "me"
+phabfive maniphest search --assigned=none  # the user whose username is "none"
 ```
 
 !!! important

@@ -31,7 +31,7 @@ import logging
 # phabfive imports
 from phabfive.constants import POLICY_KEYWORDS, POLICY_LABELS
 from phabfive.exceptions import PhabfiveConfigException, PhabfiveDataException
-from phabfive.me import is_me, resolve_me
+from phabfive.me import NONE, is_me, is_none, resolve_me
 
 log = logging.getLogger(__name__)
 
@@ -77,10 +77,21 @@ def validate_policy_value(value, option=None):
     if value in POLICY_KEYWORDS or value.startswith(PHID_PREFIX):
         return value
 
+    where = f"{option} " if option else ""
+
+    if is_none(value):
+        # A policy has no bare-username spelling to fall back on, so @none
+        # cannot name the user called "none" here the way it can elsewhere.
+        # Whoever typed it almost certainly meant nobody, which is no-one.
+        raise PhabfiveConfigException(
+            f"{where}does not take {NONE}, which means no assignee. For a "
+            f"policy nobody satisfies use no-one; for the user called "
+            f"'none' use their PHID"
+        )
+
     if value[:1] in ("#", "@") and len(value) > 1:
         return value
 
-    where = f"{option} " if option else ""
     raise PhabfiveConfigException(
         f"{where}must be one of: {POLICY_GRAMMAR} (got '{value}')"
     )

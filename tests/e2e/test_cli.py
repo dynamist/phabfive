@@ -87,6 +87,27 @@ def test_edit_unassigns_a_task(phabfive, conduit, create_task):
     assert owner() is None
 
 
+def test_search_assigned_none(phabfive, create_task):
+    """`@none` is Phorge's none() datasource function, which a mocked client
+    would accept whatever the server made of it (#513)."""
+    nobodys, _ = create_task()
+    violas, _ = create_task("--assign=@viola.larsson")
+    ids = f"--ids={nobodys},{violas}"
+
+    def found(assigned):
+        tasks = phabfive(
+            "maniphest", "search", ids, f"--assigned={assigned}", json_output=True
+        )
+        return {task["Link"].rsplit("/", 1)[-1] for task in tasks}
+
+    assert found("@none") == {nobodys}
+    assert found("@none,@viola.larsson") == {nobodys, violas}
+
+    phabfive("edit", violas, "--assign=@none", "--yes")
+
+    assert found("@none") == {nobodys, violas}
+
+
 def test_search_by_tag(phabfive, create_task):
     _task_id, title = create_task("--tag", "QA")
     tasks = phabfive("maniphest", "search", "--tag", "QA", json_output=True)

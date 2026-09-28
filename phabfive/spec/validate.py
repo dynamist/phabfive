@@ -55,6 +55,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional
 
 from phabfive.exceptions import PhabfiveException
+from phabfive.me import is_none
 from phabfive.spec.envelope import (
     METADATA_KEYS,
     SUPPORTED_SPEC_VERSIONS,
@@ -1309,6 +1310,25 @@ def _check_references(spec: "Spec", local_ids: Mapping[str, str]) -> list[Proble
                         f"followed by letters, digits, '-', '_' or '.'"
                     ),
                     code="bad-local-id",
+                )
+            )
+            continue
+
+        # `@none` is "no assignee", which only a search's `assigned:` takes.
+        # Anywhere else it is refused rather than looked up as a user
+        # called "none" - the bare `none` is that user (#513).
+        if is_none(reference.value) and name.rsplit(".", 1)[-1] != "assigned":
+            problems.append(
+                problem(
+                    reference.object,
+                    field=reference.field,
+                    value=reference.value,
+                    reason=(
+                        f"{reference.value!r} means no assignee, which only "
+                        f"assigned: takes. To name the user called 'none', "
+                        f"leave out the @"
+                    ),
+                    code="unknown-value",
                 )
             )
             continue

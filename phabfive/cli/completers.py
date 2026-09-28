@@ -709,9 +709,11 @@ def _describe_project_id(record) -> str:
 # Stop fetching users for username completion after this many matches
 USER_COMPLETION_LIMIT = 500
 
-# The only completion that starts with "@"; every option taking a username
-# also takes this shortcut for the current user
+# Every option taking a username also takes this shortcut for the current user
 ME_SHORTCUT = "@me"
+
+# Only the assignee filter takes this one, for tasks with no assignee
+NONE_SHORTCUT = "@none"
 
 
 def _fetch_users_named(phab, incomplete: str, include_disabled: bool) -> list:
@@ -864,7 +866,10 @@ def _cached_user_records(incomplete: str, include_disabled: bool) -> list:
 
 
 def _user_completions(
-    incomplete: str, include_disabled: bool, shortcuts: bool = True
+    incomplete: str,
+    include_disabled: bool,
+    shortcuts: bool = True,
+    none: bool = False,
 ) -> list:
     """Return (username, real name or None) pairs matching the typed text.
 
@@ -876,20 +881,25 @@ def _user_completions(
     nothing else - `user search --usernames`, whose constraint matches the
     name exactly. Offering `@me` there would hand the shell a value the
     command is documented to refuse.
+
+    `none` adds `@none`, for the one option that takes it: the assignee
+    filter, where it means "no assignee".
     """
+    offered: list[tuple[str, str | None]] = []
+    if shortcuts:
+        offered.append((ME_SHORTCUT, "yourself"))
+        if none:
+            offered.append((NONE_SHORTCUT, "nobody"))
+
     if incomplete.startswith("@"):
         # No username starts with "@", so the API has nothing to add here
-        if not shortcuts:
-            return []
-        return [(ME_SHORTCUT, "yourself")] if ME_SHORTCUT.startswith(incomplete) else []
+        return [pair for pair in offered if pair[0].startswith(incomplete)]
 
     records = _cached_user_records(incomplete, include_disabled)
 
-    # @me is only offered before a username is typed, since it can never be
-    # a prefix of one
-    pairs: list[tuple[str, str | None]] = (
-        [(ME_SHORTCUT, "yourself")] if shortcuts and not incomplete else []
-    )
+    # The shortcuts are only offered before a username is typed, since they
+    # can never be a prefix of one
+    pairs: list[tuple[str, str | None]] = offered if not incomplete else []
 
     incomplete_lower = incomplete.lower()
     for record in sorted(records, key=lambda r: r["username"].lower()):
@@ -999,6 +1009,27 @@ def complete_user_list_filter(incomplete: str) -> list[str | tuple[str, str]]:
     """
     typed, comma, last = incomplete.rpartition(",")
     pairs = _user_completions(last, include_disabled=True)
+    return _as_completions(pairs, prefix=f"{typed}{comma}")
+
+
+def complete_assignee_filter(incomplete: str) -> list[str | tuple[str, str]]:
+    """Complete maniphest search --assigned, a comma-separated list of users.
+
+    :func:`complete_user_list_filter` plus `@none`, which only this filter
+    takes: "@none,@me" is tasks that are unassigned or yours.
+
+    Parameters
+    ----------
+    incomplete : str
+        The incomplete value being typed
+
+    Returns
+    -------
+    list
+        Matching usernames, each prefixed with the names already typed
+    """
+    typed, comma, last = incomplete.rpartition(",")
+    pairs = _user_completions(last, include_disabled=True, none=True)
     return _as_completions(pairs, prefix=f"{typed}{comma}")
 
 

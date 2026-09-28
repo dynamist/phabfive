@@ -256,6 +256,9 @@ phabfive edit T123 --assign=alice
 
 # Assign to yourself
 phabfive edit T123 --assign=@me
+
+# Remove the assignee, the same as --unassign
+phabfive edit T123 --assign=@none
 ```
 
 ### Tags

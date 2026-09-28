@@ -12,13 +12,16 @@ because they all come through here:
 ``PHID-USER-...``   ``user.search`` by PHID, so a typo is still an error
 ==================  ====================================================
 
+``@none`` is refused here: it means "no assignee", and the two options that
+take it (``--assigned`` and ``--assign``) handle it before they get here.
+
 The policy options take ``@username`` too, but only with the ``@``, because a
 bare word there is a policy keyword - see phabfive.policy.
 """
 
 # phabfive imports
 from phabfive.exceptions import PhabfiveDataException, PhabfiveInputException
-from phabfive.me import is_me, whoami_me
+from phabfive.me import is_me, is_none, refuse_none, whoami_me
 
 USER_PHID_PREFIX = "PHID-USER-"
 
@@ -55,7 +58,12 @@ def resolve_user_phids(phab, values, option=None):
         typo in the third of five members is reported, not the first two
         added and the rest silently dropped. ``@me`` always resolves to the
         caller; a bare ``me`` is looked up as the username it is (#496)
+    PhabfiveInputException
+        If any of them is ``@none``, which names nobody (#513)
     """
+    if any(is_none(value) for value in values):
+        raise refuse_none(option)
+
     resolved = {}
     by_username = {}
     by_phid = []
