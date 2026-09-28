@@ -203,6 +203,7 @@ make up
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PHORGE_URL` | `http://phorge.localhost` | Base URL for Phorge |
+| `PHORGE_ALLOWED_URIS` | `http://phorge.phorge.svc.cluster.local` | Further URLs Phorge answers to, space-separated (`phabricator.allowed-uris`) |
 | `PHORGE_CDN_URL` | `http://cdn.localhost` | CDN URL for serving files |
 | `PHORGE_TITLE` | `RMI` | Instance title shown in UI |
 | `PHORGE_ADMIN_USER` | `admin` | Admin username |
@@ -354,7 +355,8 @@ Phorge runs in a local [k3d](https://k3d.io) cluster, which is k3s in Docker. Th
 
 - **Cluster:** `k8s/cluster/k3d.yaml`, identical in every repo that uses it. It pins the k3s version and publishes the bundled Traefik ingress on `127.0.0.1:80` and `:443`. Whichever app starts first creates the cluster, the others reuse it.
 - **Routing:** each app has a standard `Ingress` with its own hostnames, here `phorge.localhost` and `cdn.localhost` to the `phorge` Service.
-- **Phorge:** `k8s/base` holds the `phorge` namespace, MariaDB (StatefulSet `mariadb`), Phorge (Deployment `phorge`, `Recreate` so two pods never upgrade the same database), the Ingress, a ResourceQuota with default limits and NetworkPolicies. Only Traefik reaches Phorge and only Phorge reaches MariaDB, whose port is not published on the host. Overlays: `local` (with `config.local.env`) and `ci`.
+- **Phorge:** `k8s/base` holds the `phorge` namespace, MariaDB (StatefulSet `mariadb`), Phorge (Deployment `phorge`, `Recreate` so two pods never upgrade the same database), the Ingress, a ResourceQuota with default limits and NetworkPolicies. Only Traefik and the `dynatron` namespace reach Phorge and only Phorge reaches MariaDB, whose port is not published on the host. Overlays: `local` (with `config.local.env`) and `ci`.
+- **In-cluster clients:** a pod cannot use `phorge.localhost`, which resolves to the pod itself. Phorge also answers to its Service name (`PHORGE_ALLOWED_URIS`), so a client in a namespace the NetworkPolicy admits sets `PHAB_URL=http://phorge.phorge.svc.cluster.local/api/` and needs no `hostAlias`.
 - **Images:** `make phorge-image` builds `dynamist/phorge`, tags it by content and imports it with `k3d image import`, no registry is involved.
 
 Every `make` target passes `--context k3d-dynamist`, so it never acts on another cluster.
