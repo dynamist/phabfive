@@ -128,14 +128,17 @@ print_spaces() {
   done <<< "$rows"
 }
 
+print_checkout() {
+  local commit
+  commit=$(git -C "/app/$1" rev-parse HEAD 2>/dev/null) || return 0
+  echo "  - $1 $2/commit/${commit}"
+}
+
 # The branch or tag the image was built from, and the commits it resolved to
 print_version() {
-  local commit
   echo "🏷️ Phorge ${PHORGE_VERSION:-(unknown version)} on PHP ${PHP_VERSION:-?}:"
-  for repo in phorge arcanist; do
-    commit=$(git -C "/app/${repo}" rev-parse HEAD 2>/dev/null) || continue
-    echo "  - ${repo} https://github.com/phorgeit/${repo}/commit/${commit}"
-  done
+  print_checkout phorge "${PHORGE_REPO:-}"
+  print_checkout arcanist "${ARCANIST_REPO:-}"
 }
 
 # RECOVERY_LINK is only set while entrypoint.sh runs, a later `make creds` has

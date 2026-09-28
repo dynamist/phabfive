@@ -222,6 +222,7 @@ make up
 | `stable` (default) | the `stable` branch, the current release plus its hotfixes |
 | `master` | the `master` branch, what the next release will be |
 | `2026.27`, `2025.51`, ... | a release tag, see [the tags](https://github.com/phorgeit/phorge/tags) |
+| `phabricator` | Phabricator, which Phorge was forked from: the `stable` branch of [phacility/phabricator](https://github.com/phacility/phabricator), unchanged since 2022 (`phabricator-master` for `master`) |
 
 ```bash
 make reset && make up VERSION=2025.51
@@ -242,7 +243,7 @@ Phorge turns a deprecation that PHP raises while it runs into an error, so a rel
 | `2025.51` and newer, `stable`, `master` | 8.5 | |
 | `2025.18` | 8.4 | `case ...;` with a semicolon (8.5) |
 | `2023.32` to `2024.35` | 8.3 | implicitly nullable parameters (8.4) |
-| `2022.37` to `2023.23` | 8.0 | `strlen()` of null (8.1) |
+| `2022.37` to `2023.23`, `phabricator` | 8.0 | `strlen()` of null (8.1) |
 
 `PHP=` builds on another series, one of the stages in `phorge/Dockerfile`: `make reset && make up VERSION=2025.18 PHP=8.5`.
 
@@ -414,7 +415,7 @@ CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d clu
 
 - a push to `main`, and a pull request, test `stable`
 - a pull request labelled `ci:phorge-<branch or tag>`, such as `ci:phorge-master` or `ci:phorge-2025.51`, tests exactly the labelled versions instead, and deploys even when the gate would have skipped it. Any branch or tag works once the label exists
-- the weekly run and a manual run test `stable`, `master` and the two newest release tags, found when the run starts. A manual run can name other versions in its `versions` input
+- the weekly run and a manual run test `stable`, `master`, the two newest release tags, found when the run starts, and `phabricator`. A manual run can name other versions in its `versions` input
 
 `master` may fail without failing the workflow, it is a heads-up about the next release. A coexistence job deploys the apps listed in the repository variable `COEXISTENCE_REPOS` (space separated `owner/name`) into the same cluster and runs every app's tests, which also checks that the apps cannot reach each other and that all repos pin the same `k8s/cluster/k3d.yaml`. Each of those repos must provide the make targets `ci-deploy` and `ci-test`.
 
