@@ -744,6 +744,38 @@ def test_anchoring_subtasks_keeps_the_ones_the_task_already_had(
     assert len(after) == 4
 
 
+def test_search_by_relation_keywords(phabfive, create_task, conduit):
+    """`@some` and `@none` reach hasParents/hasSubtasks, and `--commit` the
+    edge.search phabfive filters on, against a real Phorge."""
+    epic, _ = create_task()
+    child, _ = create_task()
+
+    [child_task] = conduit(
+        "maniphest.search", **{"constraints[ids][0]": int(child.lstrip("T"))}
+    )["data"]
+    conduit(
+        "maniphest.edit",
+        **{
+            "objectIdentifier": epic,
+            "transactions[0][type]": "subtasks.add",
+            "transactions[0][value][0]": child_task["phid"],
+        },
+    )
+
+    def found(*args):
+        tasks = phabfive(
+            "maniphest", "search", f"--ids={epic},{child}", *args, json_output=True
+        )
+        return {task["Link"].rsplit("/", 1)[-1] for task in tasks}
+
+    assert found("--parent=@some") == {child}
+    assert found("--parent=@none") == {epic}
+    assert found("--subtask=@some") == {epic}
+    assert found("--subtask=@none") == {child}
+    assert found("--commit=@none") == {epic, child}
+    assert found("--commit=@some") == set()
+
+
 def test_search_publishes_relations_when_asked(phabfive, create_task, conduit):
     """#542: a search names relations inside and outside its own result."""
     epic, epic_title = create_task()

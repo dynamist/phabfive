@@ -266,10 +266,11 @@ class TestEachConstraintReachesTheAPI:
             ({"subtype": "bug,chore"}, "subtypes", ["bug", "chore"]),
             ({"parent": "T7"}, "parentIDs", [7]),
             ({"subtask": "T9,T10"}, "subtaskIDs", [9, 10]),
-            ({"has_parents": True}, "hasParents", True),
-            ({"has_parents": False}, "hasParents", False),
-            ({"has_subtasks": True}, "hasSubtasks", True),
-            ({"has_subtasks": False}, "hasSubtasks", False),
+            ({"parent": "@some"}, "hasParents", True),
+            ({"parent": "@none"}, "hasParents", False),
+            ({"parent": ["@NONE"]}, "hasParents", False),
+            ({"subtask": "@some"}, "hasSubtasks", True),
+            ({"subtask": "@none"}, "hasSubtasks", False),
             ({"closed_by": "alice"}, "closerPHIDs", [ALICE_PHID]),
         ],
     )
@@ -318,17 +319,36 @@ class TestEachConstraintReachesTheAPI:
             == set()
         )
 
-    def test_a_false_boolean_is_still_a_search(self, mock_init):
-        """`has-parents: false` asks for the tasks with no parent.
+    def test_none_is_still_a_search(self, mock_init):
+        """`parent: "@none"` asks for the tasks with no parent.
 
         Which is a filter, so it must lift the "no search criteria" guard
         that a bare `search` trips.
         """
         maniphest = _maniphest()
 
-        _run(maniphest, has_parents=False)
+        _run(maniphest, parent="@none")
 
         assert _constraints(maniphest)["hasParents"] is False
+        assert "parentIDs" not in _constraints(maniphest)
+
+    @pytest.mark.parametrize("kwarg", ["parent", "subtask"])
+    @pytest.mark.parametrize("value", ["T1,@none", ["@some", "T1"], "@some,@none"])
+    def test_a_keyword_is_the_whole_value(self, mock_init, kwarg, value):
+        maniphest = _maniphest()
+
+        with pytest.raises(PhabfiveInputException, match="cannot be combined"):
+            maniphest.task_search(**{kwarg: value})
+
+        assert maniphest.phab.maniphest.search.call_count == 0
+
+    def test_commit_takes_only_the_keywords(self, mock_init):
+        maniphest = _maniphest()
+
+        with pytest.raises(PhabfiveInputException, match="@some or @none"):
+            maniphest.task_search(commit="T1")
+
+        assert maniphest.phab.maniphest.search.call_count == 0
 
     @pytest.mark.parametrize("kwarg", ["ids", "parent", "subtask"])
     def test_something_that_is_not_a_task_is_refused_by_name(self, mock_init, kwarg):
@@ -359,7 +379,7 @@ class TestTheConstraintsAreCombinedNotReplaced:
             maniphest,
             subscriber="alice",
             subtype="bug",
-            has_subtasks=True,
+            subtask="@some",
             closed_after="30d",
         )
 
@@ -958,8 +978,9 @@ class TestTheCommandAndTheTemplateReachThem:
             (["--subtype", "bug"], "subtype", "bug"),
             (["--parent", "T7"], "parent", "T7"),
             (["--subtask", "T9"], "subtask", "T9"),
-            (["--has-parents"], "has_parents", True),
-            (["--has-subtasks"], "has_subtasks", True),
+            (["--parent", "@some"], "parent", "@some"),
+            (["--subtask", "@none"], "subtask", "@none"),
+            (["--commit", "@none"], "commit", "@none"),
             (["--closed-by", "alice"], "closed_by", "alice"),
             (["--closed-after", "7d"], "closed_after", "7d"),
             (["--closed-before", "7d"], "closed_before", "7d"),
@@ -977,8 +998,9 @@ class TestTheCommandAndTheTemplateReachThem:
             ("subtype", "subtype", "bug"),
             ("parent", "parent", "T7"),
             ("subtask", "subtask", "T9"),
-            ("has-parents", "has_parents", True),
-            ("has-subtasks", "has_subtasks", True),
+            ("parent", "parent", "@some"),
+            ("subtask", "subtask", "@none"),
+            ("commit", "commit", "@none"),
             ("closed-by", "closed_by", "alice"),
             ("closed-after", "closed_after", "7d"),
             ("closed-before", "closed_before", "7d"),
@@ -998,13 +1020,12 @@ class TestTheCommandAndTheTemplateReachThem:
 
         assert kwargs["subtype"] == "bug"
 
-    def test_a_false_boolean_alone_is_a_search(self):
-        """`has-parents: false` is the tasks with no parent, which is a filter.
+    def test_none_alone_is_a_search(self):
+        """`parent: "@none"` is the tasks with no parent, which is a filter.
 
         The criteria guard is a truthiness test over the planned parameters,
-        so this used to print the command's usage and exit 2 for a search
-        `task_search` runs perfectly well. `SearchPlan.has_criteria` tests
-        the tri-state keys for presence instead.
+        which `has-parents: false` used to fail: it printed the command's
+        usage and exited 2 for a search `task_search` runs perfectly well.
         """
         app = MagicMock()
         app.task_search.return_value = {"tasks": []}
@@ -1012,7 +1033,7 @@ class TestTheCommandAndTheTemplateReachThem:
         app._load_search_config.return_value = [
             {
                 "type": None,
-                "search": {"has-parents": False},
+                "search": {"parent": "@none"},
                 "title": None,
                 "description": None,
             }
@@ -1022,28 +1043,12 @@ class TestTheCommandAndTheTemplateReachThem:
             result = CliRunner().invoke(maniphest_app, ["search", "--with", "t.yaml"])
 
         assert result.exit_code == 0
-        assert app.task_search.call_args.kwargs["has_parents"] is False
-
-    def test_a_false_boolean_beside_another_key_is_searched_for(self):
-        kwargs = self._search(
-            ["search", "--with", "t.yaml"],
-            [
-                {
-                    "search": {"has-parents": False, "subtype": "bug"},
-                    "title": None,
-                    "description": None,
-                }
-            ],
-        )
-
-        assert kwargs["has_parents"] is False
+        assert app.task_search.call_args.kwargs["parent"] == "@none"
 
     def test_a_flag_nobody_typed_does_not_clobber_the_template(self):
         """The whole point of the command's sentinels, for the new keys too."""
-        configs = [
-            {"search": {"has-parents": True}, "title": None, "description": None}
-        ]
+        configs = [{"search": {"parent": "@some"}, "title": None, "description": None}]
 
         kwargs = self._search(["search", "--with", "t.yaml"], configs)
 
-        assert kwargs["has_parents"] is True
+        assert kwargs["parent"] == "@some"

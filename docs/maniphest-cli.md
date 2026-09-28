@@ -431,7 +431,7 @@ phabfive maniphest search --assigned=none  # the user whose username is "none"
 
     `TEXT_QUERY`, `--tag`, `--ids`, `--phids`, `--include`, `--assigned`,
     `--author`, `--subscriber`, `--closed-by`, `--subtype`, `--parent`,
-    `--subtask`, `--has-parents`, `--has-subtasks`, `--space`,
+    `--subtask`, `--commit`, `--space`,
     `--created-after`, `--created-before`, `--updated-after`,
     `--updated-before`, `--closed-after`, `--closed-before`, `--visible-to`,
     `--editable-by`, `--column`, `--priority` or `--status`.
@@ -452,9 +452,13 @@ wire:
 | `--subscriber @me,alice` | Tasks any of them is subscribed to |
 | `--subtype bug` | Tasks of this subtype (`maniphest.subtypes` configuration) |
 | `--parent T10` | Subtasks of these tasks |
+| `--parent @some` | Tasks that are a subtask of something |
+| `--parent @none` | Tasks that are a subtask of nothing |
 | `--subtask T11` | Parents of these tasks |
-| `--has-parents` | Only tasks that are a subtask of something |
-| `--has-subtasks` | Only tasks that have subtasks |
+| `--subtask @some` | Tasks that have subtasks |
+| `--subtask @none` | Tasks that have no subtasks |
+| `--commit @some` | Tasks with a commit attached |
+| `--commit @none` | Tasks with no commit attached |
 | `--closed-by @me` | Tasks closed by any of these users |
 | `--closed-after 7d` | Tasks closed within TIME |
 | `--closed-before 30d` | Tasks closed more than TIME ago |
@@ -467,9 +471,12 @@ A task id is written as a monogram, `T123`, everywhere - `--ids`, `--parent`,
 `--subtask`, `--include` and `--exclude` alike, and in a spec. A bare number is
 refused by name.
 
-`--has-parents` and `--has-subtasks` are tri-state: not given sends nothing,
-and the flags set them true. The false half - "tasks with no parent at all" - is
-written in a [search spec](search-specs.md) as `has-parents: false`.
+`@some` and `@none` are the whole value: `--parent=T10,@none` is refused, since
+no task can be both. A spec writes them the same way, `parent: "@none"`.
+
+`--commit` is the one of these the server cannot answer - `maniphest.search`
+has no commit constraint - so phabfive reads the commits of every matching task
+with one `edge.search` and filters them itself, before `--limit`.
 
 ### Parents, Subtasks and Commits
 

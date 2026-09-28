@@ -60,6 +60,15 @@ MONOGRAMS = {
     "maniphest": "T[0-9]+",
 }
 
+# What a task relation filter takes in place of task ids: `--parent=@some` is
+# the tasks that have a parent, `--parent=@none` the ones that have none, and
+# the same for `--subtask` and `--commit`. Keywords by their sigil, as `@me`
+# and `@none` are for users (see phabfive.me), so they cannot collide with a
+# monogram.
+RELATION_SOME = "@some"
+RELATION_NONE = "@none"
+RELATION_KEYWORDS = (RELATION_SOME, RELATION_NONE)
+
 # Monogram shortcuts for CLI: maps prefix letter to command expansion
 MONOGRAM_SHORTCUT = {
     "T": ["maniphest", "show"],  # T123 → maniphest show T123
@@ -574,6 +583,9 @@ __all__ = [
     "MANIPHEST_ORDER_FIELDS",
     "MONOGRAM_SHORTCUT",
     "MONOGRAMS",
+    "RELATION_KEYWORDS",
+    "RELATION_NONE",
+    "RELATION_SOME",
     "OutputFormat",
     "PASTE_LANGUAGES",
     "PASTE_ORDER_CHOICES",

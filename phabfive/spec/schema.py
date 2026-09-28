@@ -327,7 +327,20 @@ def _order_choices() -> tuple[str, ...]:
 
 
 def _scalar_schema(field: Field) -> dict[str, Any]:
-    """The schema for one value of one field, before `multiple` is applied."""
+    """The schema for one value of one field, before `multiple` is applied.
+
+    A field with `keywords` takes one of them as its whole value as well.
+    """
+    scalar = _kind_schema(field)
+
+    if field.keywords:
+        return {"anyOf": [{"enum": list(field.keywords)}, scalar]}
+
+    return scalar
+
+
+def _kind_schema(field: Field) -> dict[str, Any]:
+    """The schema for one value of one field's kind, keywords aside."""
     kind = field.kind
 
     if kind is FieldKind.TEXT:
@@ -423,7 +436,10 @@ def _one_of_list(field: Field, scalar: dict[str, Any]) -> dict[str, Any]:
     list spelling holds one monogram per item rather than repeating that.
     """
     if field.kind is FieldKind.MONOGRAM:
-        return {"type": "string", "pattern": monogram_pattern()}
+        item: dict[str, Any] = {"type": "string", "pattern": monogram_pattern()}
+        if field.keywords:
+            return {"anyOf": [{"enum": list(field.keywords)}, item]}
+        return item
 
     if field.kind is FieldKind.ENUM:
         return {"enum": list(field.choices)}

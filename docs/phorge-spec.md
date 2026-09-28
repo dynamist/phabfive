@@ -439,10 +439,9 @@ A `search:` mapping's keys are those of its item's `type:`.
 | `phids` | text | yes | &mdash; | `phids` | Only these task PHIDs, with every other filter still applied. |
 | `subscriber` | user reference | yes | &mdash; | `subscribers` | Tasks a user is subscribed to: a username, @me, or a PHID. |
 | `subtype` | text | yes | &mdash; | `subtypes` | Task subtype key, e.g. 'default' or one this instance defines. |
-| `parent` | monogram: `T123` | yes | &mdash; | `parentIDs` | Subtasks of these tasks. |
-| `subtask` | monogram: `T123` | yes | &mdash; | `subtaskIDs` | Parents of these tasks. |
-| `has-parents` | boolean | &mdash; | &mdash; | `hasParents` | Only tasks that are a subtask of something. |
-| `has-subtasks` | boolean | &mdash; | &mdash; | `hasSubtasks` | Only tasks that have subtasks. |
+| `parent` | monogram: `T123` | yes | &mdash; | `parentIDs` | Subtasks of these tasks; @some for any parent, @none for none. |
+| `subtask` | monogram: `T123` | yes | &mdash; | `subtaskIDs` | Parents of these tasks; @some for any subtask, @none for none. |
+| `commit` | enum: `@some`, `@none` | &mdash; | &mdash; | &mdash; | @some for tasks with a commit attached, @none for none. |
 | `closed-by` | user reference | yes | &mdash; | `closerPHIDs` | Tasks closed by a user: a username, @me, or a user PHID. |
 | `closed-after` | time | &mdash; | &mdash; | `closedStart` | Tasks closed within TIME, e.g. 1h, 7d, 2w. |
 | `closed-before` | time | &mdash; | &mdash; | `closedEnd` | Tasks closed more than TIME ago. |

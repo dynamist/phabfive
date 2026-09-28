@@ -150,6 +150,21 @@ def _flag_suggestion(key: str, declared: Sequence[Field]) -> str:
     return ""
 
 
+#: Keys a spec version once took and phabfive no longer reads, with what says
+#: the same thing now. Refused like any unknown key, but by name.
+_REPLACED_KEYS: Mapping[str, str] = {
+    "has-parents": 'parent: "@some" (or "@none" for false)',
+    "has-subtasks": 'subtask: "@some" (or "@none" for false)',
+}
+
+
+def _replacement(key: str) -> str:
+    """ " Write ... instead." for a key that was replaced, else ""."""
+    replacement = _REPLACED_KEYS.get(key)
+
+    return f" Write {replacement} instead." if replacement else ""
+
+
 def _type_name(value: object) -> str:
     """What to call a value's type in a sentence a person reads."""
     if value is None:
@@ -915,12 +930,39 @@ def _check_monograms(
     P45` is refused here rather than by `maniphest search` at the other end
     - a paste is a well-formed monogram and a well-formed nothing for a key
     that takes task ids.
+
+    One of `field.keywords` - ``parent: "@none"`` - is accepted as the whole
+    value, and refused next to anything else.
     """
     expected = ", ".join(f"{letter}123" for letter in field.monograms) or "T123"
     if isinstance(value, (list, tuple)):
         pairs = [(f"{field_path}[{index}]", one) for index, one in enumerate(value)]
     else:
         pairs = [(field_path, value)]
+
+    parts = [
+        part.strip()
+        for _, one in pairs
+        if isinstance(one, str) and not _unrendered(one)
+        for part in one.split(",")
+        if part.strip()
+    ]
+    keywords = [part for part in parts if part in field.keywords]
+    if keywords:
+        if len(parts) == 1 and len(pairs) == 1:
+            return []
+        return [
+            problem(
+                object_path,
+                field=field_path,
+                value=value,
+                reason=(
+                    f"{keywords[0]} is the whole value of {field.name} "
+                    "and cannot be combined with anything else"
+                ),
+                code="bad-monogram",
+            )
+        ]
 
     problems: list[Problem] = []
 
@@ -1046,7 +1088,7 @@ def _check_fields(
                     value=mapping[raw_key],
                     reason=(
                         f"A {object_type} {verb} has no key {key!r}."
-                        f"{_flag_suggestion(key, declared) or _suggestion(key, known)}"
+                        f"{_replacement(key) or _flag_suggestion(key, declared) or _suggestion(key, known)}"
                     ),
                     code="unknown-key",
                 )

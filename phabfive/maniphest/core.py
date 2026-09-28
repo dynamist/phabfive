@@ -14,6 +14,7 @@ from phabfive.constants import (
     MANIPHEST_ORDER_DEFAULT,
     MANIPHEST_ORDER_DIRECTIONS,
     MANIPHEST_ORDER_FIELDS,
+    RELATION_SOME,
     STATUS_MAP_CACHE_NAMESPACE,
     TASK_POLICY_FIELDS,
     TASK_POLICY_TRANSACTIONS,
@@ -172,6 +173,35 @@ def _task_id_list(value, option):
     from phabfive.spec.search import task_ids
 
     return task_ids(value, option=option)
+
+
+def _relation_filter(value, option, ids=True):
+    """A relation filter as the constraints it becomes.
+
+    Parameters
+    ----------
+    value : str or list
+        Task ids, or "@some" or "@none" on its own; see
+        `phabfive.spec.search.task_relation`.
+    option : str
+        The key to name in an error.
+    ids : bool, optional
+        Whether task ids are accepted, as well as the keywords.
+
+    Returns
+    -------
+    tuple
+        ``(task_ids, has)``: the ids to constrain on or None, and True for
+        "@some", False for "@none" or None when no keyword was given.
+    """
+    from phabfive.spec.search import task_relation
+
+    relation = task_relation(value, option=option, ids=ids)
+
+    if isinstance(relation, str):
+        return None, relation == RELATION_SOME
+
+    return relation, None
 
 
 def _lift_types(key):
@@ -1531,8 +1561,7 @@ class Maniphest(Phabfive):
         subtype=None,
         parent=None,
         subtask=None,
-        has_parents=None,
-        has_subtasks=None,
+        commit=None,
         closed_by=None,
         visible_to=None,
         editable_by=None,
@@ -1590,12 +1619,14 @@ class Maniphest(Phabfive):
                       username or a PHID; comma-separated for OR logic.
         subtype       (str|list, optional): Only tasks of these subtype keys. Instance
                       configuration, so the value is sent as written.
-        parent        (str|list, optional): Only the subtasks of these tasks.
-        subtask       (str|list, optional): Only the parents of these tasks.
-        has_parents   (bool, optional): True for tasks that are a subtask of something,
-                      False for the ones that are not. None sends no constraint.
-        has_subtasks  (bool, optional): True for tasks that have subtasks, False for the
-                      ones that do not. None sends no constraint.
+        parent        (str|list, optional): Only the subtasks of these tasks. "@some" for
+                      the tasks that have a parent, "@none" for the ones that have none,
+                      each on its own.
+        subtask       (str|list, optional): Only the parents of these tasks; "@some" and
+                      "@none" as for parent.
+        commit        (str, optional): "@some" for tasks with a commit attached, "@none"
+                      for tasks without. maniphest.search has no such constraint, so one
+                      edge.search over the matching tasks answers it, before the limit.
         closed_by     (str, optional): Only tasks closed by a user, as subscriber. A task
                       that is still open was closed by nobody and never matches.
         visible_to    (str, optional): Only tasks whose view policy is exactly this, in the
@@ -1656,10 +1687,7 @@ class Maniphest(Phabfive):
                 subtype,
                 parent,
                 subtask,
-                # `is not None`, because False is the filter "tasks with no
-                # parent" rather than the absence of one.
-                has_parents is not None,
-                has_subtasks is not None,
+                commit,
                 closed_by,
                 visible_to,
                 editable_by,
@@ -1726,8 +1754,9 @@ class Maniphest(Phabfive):
         task_ids = _task_id_list(ids, "'ids'")
         task_phids = _value_list(phids)
         subtypes = _value_list(subtype)
-        parent_ids = _task_id_list(parent, "'parent'")
-        subtask_ids = _task_id_list(subtask, "'subtask'")
+        parent_ids, has_parents = _relation_filter(parent, "'parent'")
+        subtask_ids, has_subtasks = _relation_filter(subtask, "'subtask'")
+        _, has_commits = _relation_filter(commit, "'commit'", ids=False)
 
         # Convert date filters to Unix timestamps (preserve original values for logging)
         created_after_original = created_after
@@ -1963,6 +1992,22 @@ class Maniphest(Phabfive):
                 )
             ]
             log.info(f"Policy filter kept {len(matched)} of {len(result_data)} tasks")
+            result_data = matched
+
+        # Before the transition filters fetch any history, like the policy
+        # filter, and one edge.search for every candidate at once.
+        if has_commits is not None:
+            edges = fetch_edges_for_tasks(
+                self.phab,
+                [task["phid"] for task in result_data if task.get("phid")],
+                ["commits"],
+            )
+            matched = [
+                task
+                for task in result_data
+                if bool(edges.get(task.get("phid"), {}).get("commits")) == has_commits
+            ]
+            log.info(f"Commit filter kept {len(matched)} of {len(result_data)} tasks")
             result_data = matched
 
         # Initialize task_transitions_map for storing transitions (used by both filtering and display)

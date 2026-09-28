@@ -73,6 +73,11 @@ OBJECT_TYPES = frozenset({"task", "project", "paste", "passphrase"})
 # key and a search-only key can share a name without sharing a declaration.
 VERBS = frozenset({"search", "create"})
 
+#: `phabfive.constants.RELATION_KEYWORDS`, spelled out: this module imports
+#: only the standard library (tests/test_spec_registry.py), and a test holds
+#: the two equal.
+_RELATION_KEYWORDS = ("@some", "@none")
+
 _NO_CONSTRAINTS: Mapping[str, Optional[str]] = MappingProxyType({})
 
 
@@ -127,6 +132,10 @@ class Field:
         ``include: P45`` is a paste, and `maniphest search` refuses it with
         "Expected format: T123". Mirrors
         ``phabfive.spec.references.ReferenceField.monograms``.
+    keywords
+        Values accepted on their own in place of what `kind` takes, e.g.
+        ``("@some", "@none")`` for ``parent:``, which is otherwise task ids.
+        A keyword is the whole value and is never mixed with the others.
     choices
         The accepted values, for ``FieldKind.ENUM`` only. Deliberately empty
         for everything an instance decides - baking a guessed status or
@@ -159,6 +168,7 @@ class Field:
     lifts: tuple[str, ...] = ()
     multiple: bool = False
     monograms: tuple[str, ...] = ()
+    keywords: tuple[str, ...] = ()
     choices: tuple[str, ...] = ()
     default: object = None
     help: str = ""
@@ -585,9 +595,11 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--parent",
         monograms=("T",),
+        keywords=_RELATION_KEYWORDS,
+        # `@some` and `@none` are sent as `hasParents` instead
         constraint="parentIDs",
         multiple=True,
-        help="Subtasks of these tasks.",
+        help="Subtasks of these tasks; @some for any parent, @none for none.",
     ),
     Field(
         name="subtask",
@@ -596,27 +608,23 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--subtask",
         monograms=("T",),
+        keywords=_RELATION_KEYWORDS,
+        # `@some` and `@none` are sent as `hasSubtasks` instead
         constraint="subtaskIDs",
         multiple=True,
-        help="Parents of these tasks.",
+        help="Parents of these tasks; @some for any subtask, @none for none.",
     ),
     Field(
-        name="has-parents",
-        kind=FieldKind.BOOL,
+        name="commit",
+        kind=FieldKind.ENUM,
         objects=_TASK,
         verbs=_SEARCH,
-        cli="--has-parents",
-        constraint="hasParents",
-        help="Only tasks that are a subtask of something.",
-    ),
-    Field(
-        name="has-subtasks",
-        kind=FieldKind.BOOL,
-        objects=_TASK,
-        verbs=_SEARCH,
-        cli="--has-subtasks",
-        constraint="hasSubtasks",
-        help="Only tasks that have subtasks.",
+        cli="--commit",
+        choices=_RELATION_KEYWORDS,
+        # maniphest.search has no commit constraint, so the attached commits
+        # are read with edge.search and filtered in Python, before --limit
+        constraint=None,
+        help="@some for tasks with a commit attached, @none for none.",
     ),
     Field(
         name="closed-by",

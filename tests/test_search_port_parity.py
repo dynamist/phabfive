@@ -70,8 +70,7 @@ TASK_SEARCH_KEYS = frozenset(
         "subtype",
         "parent",
         "subtask",
-        "has_parents",
-        "has_subtasks",
+        "commit",
     }
 )
 
@@ -190,9 +189,7 @@ class TestTheDefaultCall:
             "include_closed": False,
             "limit": 100,
             "order": None,
-            # #478's constraints, absent unless asked for, and `None` rather
-            # than `False` for the two booleans: a task with no parent is a
-            # real thing to search for, so "not asked" cannot be False.
+            # #478's constraints, absent unless asked for.
             "closed_after": None,
             "closed_before": None,
             "closed_by": None,
@@ -202,8 +199,7 @@ class TestTheDefaultCall:
             "subtype": None,
             "parent": None,
             "subtask": None,
-            "has_parents": None,
-            "has_subtasks": None,
+            "commit": None,
         }
 
 

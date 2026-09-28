@@ -13,6 +13,7 @@ from phabfive.constants import (
     PROJECT_COLORS,
     PROJECT_ICONS,
     PROJECT_STATUS_CHOICES,
+    RELATION_KEYWORDS,
     REPO_STATUS_CHOICES,
     USER_ROLE_ANY,
     USER_ROLES,
@@ -1281,6 +1282,15 @@ def complete_project_color(incomplete: str) -> List[str]:
 def complete_project_status(incomplete: str) -> List[str]:
     """Complete the project status filter for project search --status."""
     return _complete_fixed(incomplete, PROJECT_STATUS_CHOICES)
+
+
+def complete_relation(incomplete: str) -> List[str]:
+    """Complete the keywords of maniphest search --parent, --subtask and --commit.
+
+    Only the keywords: the task ids --parent and --subtask also take are
+    typed, not offered.
+    """
+    return _complete_fixed(incomplete, list(RELATION_KEYWORDS))
 
 
 def complete_user_role(incomplete: str) -> List[str]:
