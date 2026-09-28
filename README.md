@@ -216,6 +216,24 @@ export PHAB_TOKEN=cli-ABC123
 export PHAB_URL=https://yourserver.com/api/
 ```
 
+**When the endpoint is not the address people open:**
+
+`PHAB_URL` is both the Conduit endpoint phabfive calls and the root of every
+link it returns. Those are the same address almost everywhere, and come apart
+behind an ingress or split-horizon DNS -- a process inside a Kubernetes cluster
+reaches Phorge at a Service name, while the report it renders is read by people
+whose browsers cannot resolve one. Configure the two halves instead:
+
+```bash
+export PHAB_API_URL=http://phorge.phorge.svc.cluster.local/api/  # what phabfive calls
+export PHAB_WEB_URL=https://phorge.example.com                   # what links point at
+```
+
+Either `PHAB_URL` alone, or both of these -- half the pair is refused, because
+the missing address cannot be derived from the one you gave. The token in
+`~/.arcrc` and the completion cache stay keyed by the endpoint, so adopting the
+pair does not orphan either.
+
 **Windows SSL certificates:** If you encounter certificate errors, install [pip-system-certs](https://pypi.org/project/pip-system-certs/) to use the Windows certificate store: `pip install pip-system-certs`
 
 </details>

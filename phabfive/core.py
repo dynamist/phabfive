@@ -318,7 +318,12 @@ class Phabfive:
                 raise PhabfiveConfigException(error)
 
         # check validity of configurables
+        # A configuration built by a program, rather than discovered, carries
+        # only the keys it cares about: validators constrain the values that are
+        # there, while REQUIRED above is what constrains presence.
         for validator_key in VALIDATORS.keys():
+            if validator_key not in self.conf:
+                continue
             if not re.match(VALIDATORS[validator_key], self.conf[validator_key]):
                 error = f"{validator_key} is malformed"
                 example = VALIDATION_HINTS.get(validator_key)
@@ -334,9 +339,15 @@ class Phabfive:
         Pacer.from_conf(self.conf)
         self.phab = Conduit(self._client_factory(), RetryPolicy.from_conf(self.conf))
 
-        url = urlparse(self.conf["PHAB_URL"])
-
-        self.url = f"{url.scheme}://{url.netloc}"
+        # Every link phabfive hands back is rooted here. That is the endpoint's
+        # own origin unless PHAB_WEB_URL says a reader reaches the instance at
+        # a different address than this process does.
+        web = self.conf.get("PHAB_WEB_URL")
+        if web:
+            self.url = web.rstrip("/")
+        else:
+            url = urlparse(self.conf["PHAB_URL"])
+            self.url = f"{url.scheme}://{url.netloc}"
 
         if verify:
             self.verify_connection()
@@ -365,7 +376,7 @@ class Phabfive:
         if conf["PHAB_URL"]:
             conf["PHAB_URL"] = cls._normalize_url(conf["PHAB_URL"])
 
-        return conf
+        return cls._resolve_url_pair(conf, supersedes_explicit=url is not None)
 
     @classmethod
     def _from_parent(cls, parent):
@@ -788,6 +799,13 @@ class Phabfive:
         arcrc_lookup_conf = dict(conf)
         if "PHAB_URL" in environ and environ["PHAB_URL"]:
             arcrc_lookup_conf["PHAB_URL"] = environ["PHAB_URL"]
+        # A token authenticates against the endpoint, so ~/.arcrc keys it by
+        # the endpoint: a split configuration has to match on PHAB_API_URL or
+        # it looks up a host that was never written. The environment is
+        # formally merged further down, so read it here as well.
+        api_for_lookup = environ.get("PHAB_API_URL") or conf.get("PHAB_API_URL")
+        if api_for_lookup:
+            arcrc_lookup_conf["PHAB_URL"] = cls._normalize_url(api_for_lookup)
         arcrc_conf = cls._load_arcrc(arcrc_lookup_conf, select_host=select_host)
         if arcrc_conf:
             log.debug("Merging configuration from ~/.arcrc")
@@ -798,6 +816,14 @@ class Phabfive:
             conf,
             {key: value for key, value in environ.items() if key in CONFIGURABLES},
         )
+
+        # Last, so that the two shapes are judged on the merged configuration.
+        # Half a pair in one layer and half in another is a valid split, and a
+        # per-layer check would reject it.
+        conf = cls._resolve_url_pair(conf, supersedes_explicit=explicit_phab_url)
+
+        if conf.get("PHAB_API_URL"):
+            explicit_phab_url = True
 
         return conf, explicit_phab_url
 
@@ -852,6 +878,81 @@ class Phabfive:
         url += "/"
 
         return url
+
+    @classmethod
+    def _resolve_url_pair(cls, conf, supersedes_explicit=False):
+        """
+        Settle PHAB_API_URL and PHAB_WEB_URL into a configuration.
+
+        PHAB_URL is one string doing two jobs: the Conduit endpoint phabfive
+        calls, and the root of every link it hands back. Those are the same
+        address almost everywhere, which is why one setting has held up; they
+        come apart behind an ingress or split-horizon DNS, where a caller
+        reaching a Service name still has to emit links a reader can open.
+
+        So a configuration has exactly two valid shapes: PHAB_URL on its own,
+        or PHAB_API_URL and PHAB_WEB_URL together. Half a pair is an error
+        rather than a guess, because the missing half is precisely what cannot
+        be derived -- stripping /api/ off an endpoint is the assumption that
+        fails in the only case this exists for.
+
+        The pair resolves *into* PHAB_URL, so PHAB_URL always holds the
+        endpoint downstream. Everything keyed by instance -- the token in
+        ~/.arcrc, the cache directory -- therefore keeps keying on the address
+        it authenticates against, which is what those keys mean by an instance.
+
+        Parameters
+        ----------
+        conf : dict
+            A merged configuration.
+        supersedes_explicit : bool
+            Whether a PHAB_URL in `conf` was chosen deliberately rather than
+            read out of ~/.arcrc. Only then is being superseded worth a word:
+            ~/.arcrc carries a PHAB_URL for every stored token, so warning
+            about that one would fire on every ordinary run.
+
+        Returns
+        -------
+        dict
+            `conf`, with the pair normalized and PHAB_URL holding the endpoint.
+
+        Raises
+        ------
+        PhabfiveConfigException
+            When one half of the pair is configured without the other.
+        """
+        api = (conf.get("PHAB_API_URL") or "").strip()
+        web = (conf.get("PHAB_WEB_URL") or "").strip()
+
+        if not api and not web:
+            return conf
+
+        if not api or not web:
+            given, missing = (
+                ("PHAB_WEB_URL", "PHAB_API_URL")
+                if web
+                else ("PHAB_API_URL", "PHAB_WEB_URL")
+            )
+            raise PhabfiveConfigException(
+                f"{given} is configured without {missing}. Neither address can "
+                f"be derived from the other: configure both, or configure "
+                f"PHAB_URL alone when the endpoint and the address a reader "
+                f"opens are the same"
+            )
+
+        conf["PHAB_API_URL"] = cls._normalize_url(api)
+        conf["PHAB_WEB_URL"] = web.rstrip("/")
+
+        previous = conf.get("PHAB_URL") or ""
+        if supersedes_explicit and previous and previous != conf["PHAB_API_URL"]:
+            log.warning(
+                f"PHAB_URL ({previous}) is ignored because PHAB_API_URL and "
+                f"PHAB_WEB_URL are configured; the endpoint is "
+                f"{conf['PHAB_API_URL']}"
+            )
+        conf["PHAB_URL"] = conf["PHAB_API_URL"]
+
+        return conf
 
     def parse_monogram(self, text):
         """Parse a monogram from text and return object type and ID.
