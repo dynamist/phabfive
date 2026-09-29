@@ -74,6 +74,7 @@ from phabfive.maniphest.validators import (
     validate_assignment,
     validate_priority,
     validate_status,
+    validate_task_relations,
 )
 from phabfive.me import NONE_DATASOURCE, is_me, is_none
 from phabfive.options import split_list_option, value_list
@@ -2822,6 +2823,10 @@ class Maniphest(Phabfive):
         unassign=False,
         tag=None,
         untag=None,
+        parent=None,
+        unparent=None,
+        subtask=None,
+        unsubtask=None,
     ):
         """Compute the transactions for a task edit, without applying them.
 
@@ -2874,6 +2879,16 @@ class Maniphest(Phabfive):
             returned for them, so a batch resolves them once
         untag : list or dict, optional
             Projects to remove the task from, given as for `tag`
+        parent : list or dict, optional
+            Tasks to make parents of this one, by monogram or PHID
+            (repeatable, or comma-separated), or what `resolve_task_phids`
+            returned for them, so a batch resolves them once
+        unparent : list or dict, optional
+            Parent tasks to remove, given as for `parent`
+        subtask : list or dict, optional
+            Tasks to make subtasks of this one, given as for `parent`
+        unsubtask : list or dict, optional
+            Subtasks to remove, given as for `parent`
 
         Returns
         -------
@@ -2884,8 +2899,9 @@ class Maniphest(Phabfive):
         Raises
         ------
         PhabfiveInputException
-            On an argument value that cannot be used, a project both added
-            and removed, or the board of `column` removed
+            On an argument value that cannot be used, a project or task both
+            added and removed, the board of `column` removed, or the task
+            named as its own parent or subtask
         PhabfiveNotFoundException
             On a task, user, commit, project or column that does not exist
         PhabfiveConfigException
@@ -3186,6 +3202,34 @@ class Maniphest(Phabfive):
             transactions.extend(commit_transactions)
             changes.extend(commit_changes)
 
+        # Handle parents and subtasks, as commits: only a change is sent. Each
+        # is an edge on this task, so the task at the other end keeps the
+        # rest of its own.
+        if parent or unparent or subtask or unsubtask:
+            relations = {
+                "parents": (
+                    self._task_refs(parent, option="--parent"),
+                    self._task_refs(unparent, option="--unparent"),
+                ),
+                "subtasks": (
+                    self._task_refs(subtask, option="--subtask"),
+                    self._task_refs(unsubtask, option="--unsubtask"),
+                ),
+            }
+            validate_task_relations(task_id, task_data["phid"], relations)
+            for kind, (added, removed) in relations.items():
+                if not (added or removed):
+                    continue
+                relation_transactions, relation_changes = user_list_edit(
+                    kind,
+                    kind.capitalize(),
+                    fetch_task_edges(self.phab, task_data["phid"], kind),
+                    added=added,
+                    removed=removed,
+                )
+                transactions.extend(relation_transactions)
+                changes.extend(relation_changes)
+
         # Handle space
         if space:
             # Enumerated once per command, which also names the Space the task
@@ -3224,6 +3268,16 @@ class Maniphest(Phabfive):
         if isinstance(values, dict):
             return values
         return self._resolve_project_tags(split_list_option(values), option=option)
+
+    def _task_refs(self, values, option=None):
+        """The tasks an edit links or unlinks, as {value: (PHID, monogram)}.
+
+        Already-resolved maps pass through, as for `_project_tags`.
+        """
+        if isinstance(values, dict):
+            return values
+        parsed = split_list_option(values)
+        return resolve_task_phids(self.phab, parsed, option=option) if parsed else {}
 
     def _project_name(self, phid):
         """A project's name for a preview, or None when it cannot be read."""

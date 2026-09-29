@@ -238,6 +238,10 @@ def plan_task_edits(
     unsubscribe=None,
     attach=None,
     detach=None,
+    parent=None,
+    unparent=None,
+    subtask=None,
+    unsubtask=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -260,6 +264,8 @@ def plan_task_edits(
     "forward"/"backward". `tag` and `untag` add and remove projects, by name,
     hashtag, ID or PHID (repeatable, or comma-separated), and with `column`
     every `tag` is also a board the card moves on.
+    `parent`/`unparent` and `subtask`/`unsubtask` link and unlink tasks, by
+    monogram or PHID.
 
     Returns
     -------
@@ -273,10 +279,12 @@ def plan_task_edits(
         nobody satisfies and answer with a self-lockout.
     PhabfiveInputException
         When `assign` and `unassign` are both given, a project is both
-        tagged and untagged, or a project name is a wildcard or ambiguous.
+        tagged and untagged, a task both linked and unlinked, a value is not
+        a task, or a project name is a wildcard or ambiguous.
     PhabfiveNotFoundException
-        When a project to tag or untag does not exist. Like the two above,
-        checked once for the batch before any task is fetched.
+        When a project to tag or untag, or a task to link, does not exist.
+        Like the two above, checked once for the batch before any task is
+        fetched.
     PhabfiveValidationException
         When any task cannot be fetched or its board context is ambiguous.
         Nothing is planned for any task.
@@ -294,6 +302,21 @@ def plan_task_edits(
     # Refused here rather than by each task's build, which would report the
     # same mistake once per task instead of stopping the batch
     user_list_edit("projects", "Tags", (), added=added_tags, removed=removed_tags)
+
+    # Tasks to link, looked up once for the batch, as projects are
+    relations = {
+        name: maniphest._task_refs(value, option=f"--{name}")
+        for name, value in (
+            ("parent", parent),
+            ("unparent", unparent),
+            ("subtask", subtask),
+            ("unsubtask", unsubtask),
+        )
+    }
+    user_list_edit("parents", "Parents", (), relations["parent"], relations["unparent"])
+    user_list_edit(
+        "subtasks", "Subtasks", (), relations["subtask"], relations["unsubtask"]
+    )
 
     # Every board named, not just the first: a task has a position on each
     # board it is on, so `--tag=A,B --column=Done` is a move on both.
@@ -322,6 +345,10 @@ def plan_task_edits(
                 untag=removed_tags,
                 attach=attach,
                 detach=detach,
+                parent=relations["parent"],
+                unparent=relations["unparent"],
+                subtask=relations["subtask"],
+                unsubtask=relations["unsubtask"],
                 comment=comment,
                 space=space,
                 visible_to=visible_to,

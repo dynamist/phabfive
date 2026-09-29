@@ -42,6 +42,10 @@ class Edit(Phabfive):
         unsubscribe=None,
         attach=None,
         detach=None,
+        parent=None,
+        unparent=None,
+        subtask=None,
+        unsubtask=None,
         comment=None,
         space=None,
         visible_to=None,
@@ -59,7 +63,8 @@ class Edit(Phabfive):
         `priority` also takes "raise"/"lower", `column` also takes
         "forward"/"backward". `tag` and `untag` add and remove projects,
         by name, hashtag, ID or PHID, and the first `tag` is also the board
-        `column` is on.
+        `column` is on. `parent`/`unparent` and `subtask`/`unsubtask` link
+        and unlink tasks, by monogram or PHID.
 
         Returns
         -------
@@ -70,9 +75,10 @@ class Edit(Phabfive):
         ------
         PhabfiveInputException
             When an ID is not a task's, or a project is both tagged and
-            untagged.
+            untagged, or a task both linked and unlinked.
         PhabfiveNotFoundException
-            When a project to tag or untag does not exist.
+            When a project to tag or untag, or a task to link, does not
+            exist.
         PhabfiveValidationException
             When any task cannot be fetched, or its board is ambiguous. No
             edit is planned for any of them.
@@ -93,6 +99,10 @@ class Edit(Phabfive):
             unsubscribe=unsubscribe,
             attach=attach,
             detach=detach,
+            parent=parent,
+            unparent=unparent,
+            subtask=subtask,
+            unsubtask=unsubtask,
             comment=comment,
             space=space,
             visible_to=visible_to,

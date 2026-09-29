@@ -776,6 +776,39 @@ def test_search_by_relation_keywords(phabfive, create_task, conduit):
     assert found("--commit=@some") == set()
 
 
+def test_edit_links_and_unlinks_existing_tasks(phabfive, phabfive_raw, create_task):
+    """#548: `--parent`, `--subtask` and their `un-` halves on tasks that all
+    exist already, sent as the edge transactions `maniphest.edit` takes."""
+    epic, _ = create_task()
+    first, _ = create_task()
+    second, _ = create_task()
+
+    def related(task_id, key):
+        [task] = phabfive(
+            "maniphest", "show", task_id, "--show-relations", json_output=True
+        )
+        return {t["Link"].rsplit("/", 1)[-1] for t in task[key]}
+
+    phabfive("maniphest", "edit", first, "--parent", epic, "--yes")
+    phabfive("maniphest", "edit", epic, "--subtask", second, "--yes")
+
+    assert related(epic, "Subtasks") == {first, second}
+    assert related(first, "Parents") == {epic}
+
+    again = phabfive_raw("maniphest", "edit", first, "--parent", epic, "--yes")
+    assert again.returncode == 0, again.stderr
+    assert "No changes" in again.stderr
+
+    phabfive("maniphest", "edit", first, "--unparent", epic, "--yes")
+    phabfive("maniphest", "edit", epic, "--unsubtask", second, "--yes")
+
+    assert related(epic, "Subtasks") == set()
+
+    itself = phabfive_raw("maniphest", "edit", epic, "--subtask", epic, "--yes")
+    assert itself.returncode == 1
+    assert "cannot be its own subtask" in itself.stderr
+
+
 def test_search_publishes_relations_when_asked(phabfive, create_task, conduit):
     """#542: a search names relations inside and outside its own result."""
     epic, epic_title = create_task()
