@@ -75,25 +75,28 @@ print_users() {
 
 print_projects() {
   echo "🗂️ Projects:"
-  # A milestone is a child with a milestoneNumber, and is shown under its
-  # parent's name the way the web UI does. A plain subproject just lists
-  # itself. status 100 is archived.
-  local rows name parent archived
+  # A milestone is a child with a milestoneNumber, and is listed indented
+  # under its parent, in milestone order, the way the web UI nests them. A
+  # plain subproject just lists itself. status 100 is archived.
+  local rows name milestone archived
   if ! rows=$(mysql_rows phabricator_project "
         SELECT p.name,
-               IF(p.milestoneNumber IS NULL, '', IFNULL(parent.name, '')),
+               IF(p.milestoneNumber IS NULL, '', 'milestone'),
                IF(p.status = 100, 'archived', '')
         FROM project p
         LEFT JOIN project parent ON parent.phid = p.parentProjectPHID
-        ORDER BY p.id"); then
+        ORDER BY IF(p.milestoneNumber IS NULL, p.id, IFNULL(parent.id, p.id)),
+                 p.milestoneNumber IS NOT NULL,
+                 p.milestoneNumber,
+                 p.id"); then
     db_unreachable
     return
   fi
-  while IFS=$'\t' read -r name parent archived; do
+  while IFS=$'\t' read -r name milestone archived; do
     [ -n "$name" ] || continue
     local line="  - ${name}"
-    if [ -n "$parent" ]; then
-      line="${line} (${parent} milestone)"
+    if [ -n "$milestone" ]; then
+      line="    - ${name} (milestone)"
     fi
     if [ -n "$archived" ]; then
       line="${line} [archived]"
