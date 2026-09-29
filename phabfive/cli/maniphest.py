@@ -1134,6 +1134,26 @@ def edit(
         hidden=True,
         help="Alias for --detach",
     ),
+    parent: Optional[List[str]] = typer.Option(
+        None,
+        "--parent",
+        help="Add a parent task (T123 or task PHID; repeatable, or comma-separated)",
+    ),
+    unparent: Optional[List[str]] = typer.Option(
+        None,
+        "--unparent",
+        help="Remove a parent task (T123 or task PHID; repeatable, or comma-separated)",
+    ),
+    subtask: Optional[List[str]] = typer.Option(
+        None,
+        "--subtask",
+        help="Add a subtask (T123 or task PHID; repeatable, or comma-separated)",
+    ),
+    unsubtask: Optional[List[str]] = typer.Option(
+        None,
+        "--unsubtask",
+        help="Remove a subtask (T123 or task PHID; repeatable, or comma-separated)",
+    ),
     comment_text: Optional[str] = typer.Option(
         None,
         "--comment",
@@ -1194,6 +1214,7 @@ def edit(
         phabfive maniphest edit T123 --tag="Sprint" --column=forward
         phabfive maniphest edit T123 --tag=Backend,QA --untag=Triage
         phabfive maniphest edit T123 --space=S3
+        phabfive maniphest edit T123 --parent=T100 --subtask=T124,T125
         phabfive maniphest edit T123 --subscribe=@me --unsubscribe=alice
         phabfive maniphest edit T123 --unassign
         phabfive maniphest edit T123 --visible-to=public --editable-by='#infra'
@@ -1260,6 +1281,10 @@ def edit(
         unsubscribe=[*(unsubscribe or []), *(remove_subscriber or [])],
         attach=[*(attach or []), *(add_commit or [])],
         detach=[*(detach or []), *(remove_commit or [])],
+        parent=parent,
+        unparent=unparent,
+        subtask=subtask,
+        unsubtask=unsubtask,
         comment=comment_text,
         space=space,
         visible_to=visible_to,

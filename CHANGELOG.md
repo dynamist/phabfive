@@ -35,6 +35,14 @@
   creates the task, so the parent is not edited and keeps its subtasks, and every parent
   is looked up first: an unknown one is refused and nothing is created. #545
 
+* **`maniphest edit` links tasks that already exist.** `--parent` and `--subtask` add a
+  parent or a subtask, `--unparent` and `--unsubtask` remove one, also on `phabfive
+  edit`. Repeatable and comma-separated like `--attach` and `--detach`, and only a change
+  is sent. Every task named is looked up once for the batch before anything is sent,
+  since `maniphest.edit` accepts an edge to a task that does not exist, and a task named
+  as its own parent or subtask is refused before the server answers with a graph cycle.
+  #548
+
 ## Bug Fixes
 
 * **`--column` moves the card on every board `--tag` names.** A task has a position on

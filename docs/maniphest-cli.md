@@ -205,6 +205,16 @@ first: one that does not exist, or that you cannot see, is an error and no task
 is created. A machine-readable format answers with the new task's record,
 `Parents` included; see [Parents, Subtasks and Commits](#parents-subtasks-and-commits).
 
+`maniphest edit` (and `phabfive edit`) links tasks that already exist:
+`--parent` and `--subtask` add a parent or a subtask, `--unparent` and
+`--unsubtask` remove one. Each is repeatable and comma-separated, and only a
+change is sent. See [Linking Tasks](edit-cli.md#linking-tasks).
+
+```bash
+phabfive maniphest edit T3667 --parent=T3026
+phabfive maniphest edit T3026 --subtask=T3667,T3653 --unsubtask=T12
+```
+
 ### Add Comments
 
 Add a comment to a task:

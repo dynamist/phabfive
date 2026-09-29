@@ -58,6 +58,10 @@ Options:
   --assign=USER             Set assignee (use @me for yourself)
   --attach=COMMIT           Attach a commit (rCALLSIGN<hash>, R1:<hash>, hash or PHID)
   --detach=COMMIT           Detach a commit, spelled as for --attach
+  --parent=TASK             Add a parent task (T123 or task PHID)
+  --unparent=TASK           Remove a parent task
+  --subtask=TASK            Add a subtask (T123 or task PHID)
+  --unsubtask=TASK          Remove a subtask
   --comment=TEXT            Add comment with changes
   --space=SPACE             Move to a Space (monogram, name, or unique pattern)
   --dry-run                 Show changes without applying
@@ -318,6 +322,41 @@ A bare hash needs at least seven characters. One that matches commits in more
 than one repository - a fork, or a mirror next to the original - is an error
 listing them, so name the repository instead. `maniphest show` lists a task's
 commits under `Commits`, each linked to its page in Diffusion.
+
+### Linking Tasks
+
+`--parent` gives a task another parent and `--subtask` another subtask;
+`--unparent` and `--unsubtask` remove one. They link tasks that already exist -
+to create a task as a subtask, see `maniphest create --parent`. Each takes a
+task monogram or a task PHID, is repeatable and comma-separated, and sends only
+what changes, the way `--attach` and `--detach` do: a parent already there is
+not added again, and one that is not there is not removed.
+
+```bash
+# Move T3667 under the existing epic T3026
+phabfive edit T3667 --parent=T3026
+
+# The same link, from the other end
+phabfive edit T3026 --subtask=T3667
+
+# Move two tasks from one epic to another
+phabfive edit T3667 T3653 --parent=T3026 --unparent=T3015 --dry-run
+```
+
+```
+[DRY RUN] Would apply to T3667:
+  Parents: Added: T3026
+  Parents: Removed: T3015
+[DRY RUN] Would apply to T3653:
+  Parents: Added: T3026
+  Parents: Removed: T3015
+```
+
+Every task named is looked up once for the whole batch, before anything is
+sent; one that does not exist, or that you cannot see, stops the edit. A task
+named as its own parent or subtask, or as both a parent and a subtask of the
+same task, is refused for that task. A longer cycle - making an epic a subtask
+of its own subtask - is refused by the server.
 
 ### Policy Management
 

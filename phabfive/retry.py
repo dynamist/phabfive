@@ -87,6 +87,10 @@ IDEMPOTENT_TRANSACTIONS = frozenset(
         "commits.set",
         "commits.add",
         "commits.remove",
+        "parents.add",
+        "parents.remove",
+        "subtasks.add",
+        "subtasks.remove",
     }
 )
 

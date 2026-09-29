@@ -65,6 +65,10 @@ def run_edit(
     unsubscribe=None,
     attach=None,
     detach=None,
+    parent=None,
+    unparent=None,
+    subtask=None,
+    unsubtask=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -97,6 +101,10 @@ def run_edit(
         unsubscribe (list): Users to remove from the subscribers
         attach (list): Commits to attach, by monogram, hash or PHID
         detach (list): Commits to detach, spelled as for attach
+        parent (list): Tasks to make parents of the task, by monogram or PHID
+        unparent (list): Parent tasks to remove, spelled as for parent
+        subtask (list): Tasks to make subtasks of the task, spelled as for parent
+        unsubtask (list): Subtasks to remove, spelled as for parent
         comment (str): Comment to add
         space (str): Space to move the object to
         visible_to (str): Who can see it, the --visible-to policy
@@ -128,6 +136,10 @@ def run_edit(
             unsubscribe,
             attach,
             detach,
+            parent,
+            unparent,
+            subtask,
+            unsubtask,
             comment,
             space,
             visible_to,
@@ -174,6 +186,10 @@ def run_edit(
                         unsubscribe=unsubscribe,
                         attach=attach,
                         detach=detach,
+                        parent=parent,
+                        unparent=unparent,
+                        subtask=subtask,
+                        unsubtask=unsubtask,
                         comment=comment,
                         space=space,
                         visible_to=visible_to,
@@ -224,6 +240,10 @@ def run_edit(
                         unsubscribe=unsubscribe,
                         attach=attach,
                         detach=detach,
+                        parent=parent,
+                        unparent=unparent,
+                        subtask=subtask,
+                        unsubtask=unsubtask,
                         comment=comment,
                         space=space,
                         visible_to=visible_to,
@@ -277,6 +297,10 @@ def run_edit(
                     unsubscribe=unsubscribe,
                     attach=attach,
                     detach=detach,
+                    parent=parent,
+                    unparent=unparent,
+                    subtask=subtask,
+                    unsubtask=unsubtask,
                     comment=comment,
                     space=space,
                     visible_to=visible_to,
@@ -331,6 +355,10 @@ def _edit_task_single(
     unsubscribe=None,
     attach=None,
     detach=None,
+    parent=None,
+    unparent=None,
+    subtask=None,
+    unsubtask=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -358,6 +386,10 @@ def _edit_task_single(
         unsubscribe (list): Users to remove from the subscribers
         attach (list): Commits to attach, by monogram, hash or PHID
         detach (list): Commits to detach, spelled as for attach
+        parent (list): Tasks to make parents of the task, by monogram or PHID
+        unparent (list): Parent tasks to remove, spelled as for parent
+        subtask (list): Tasks to make subtasks of the task, spelled as for parent
+        unsubtask (list): Subtasks to remove, spelled as for parent
         comment (str): Comment to add
         space (str): Space to move the task to
         visible_to (str): Who can see it, the --visible-to policy
@@ -424,6 +456,10 @@ def _edit_task_single(
                 unsubscribe=unsubscribe,
                 attach=attach,
                 detach=detach,
+                parent=parent,
+                unparent=unparent,
+                subtask=subtask,
+                unsubtask=unsubtask,
                 comment=comment,
                 space=space,
                 visible_to=visible_to,
@@ -450,6 +486,10 @@ def _edit_task_single(
                 unsubscribe=unsubscribe,
                 attach=attach,
                 detach=detach,
+                parent=parent,
+                unparent=unparent,
+                subtask=subtask,
+                unsubtask=unsubtask,
                 comment=comment,
                 space=space,
                 visible_to=visible_to,
@@ -567,6 +607,10 @@ def edit_tasks_batch(
     unsubscribe=None,
     attach=None,
     detach=None,
+    parent=None,
+    unparent=None,
+    subtask=None,
+    unsubtask=None,
     comment=None,
     space=None,
     visible_to=None,
@@ -597,6 +641,10 @@ def edit_tasks_batch(
         unsubscribe (list): Users to remove from the subscribers
         attach (list): Commits to attach, by monogram, hash or PHID
         detach (list): Commits to detach, spelled as for attach
+        parent (list): Tasks to make parents of the task, by monogram or PHID
+        unparent (list): Parent tasks to remove, spelled as for parent
+        subtask (list): Tasks to make subtasks of the task, spelled as for parent
+        unsubtask (list): Subtasks to remove, spelled as for parent
         comment (str): Comment to add
         space (str): Space to move the tasks to
         visible_to (str): Who can see it, the --visible-to policy
@@ -636,6 +684,10 @@ def edit_tasks_batch(
             unsubscribe=unsubscribe,
             attach=attach,
             detach=detach,
+            parent=parent,
+            unparent=unparent,
+            subtask=subtask,
+            unsubtask=unsubtask,
             comment=comment,
             space=space,
             visible_to=visible_to,

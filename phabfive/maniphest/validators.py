@@ -31,6 +31,46 @@ def validate_assignment(assign, unassign):
         raise PhabfiveInputException("--assign and --unassign cannot be used together")
 
 
+def validate_task_relations(task_id, task_phid, relations):
+    """
+    Refuse parents and subtasks that would make a task relate to itself.
+
+    The server refuses both too, but only as "Graph cycle detected" with the
+    PHIDs involved. A cycle through other tasks is still left to it: finding
+    one here would mean walking the graph.
+
+    Parameters
+    ----------
+    task_id : str
+        The numeric ID of the task being edited
+    task_phid : str
+        Its PHID
+    relations : dict
+        "parents" and "subtasks", each (added, removed) as
+        ``resolve_task_phids`` returns them
+
+    Raises
+    ------
+    PhabfiveInputException
+        If the task is named as its own parent or subtask, or one task is
+        added as both a parent and a subtask
+    """
+    for kind, (added, removed) in relations.items():
+        for value, (phid, _) in (*added.items(), *removed.items()):
+            if phid == task_phid:
+                raise PhabfiveInputException(
+                    f"T{task_id} cannot be its own {kind[:-1]}: '{value}'"
+                )
+
+    parents = {phid: name for phid, name in relations["parents"][0].values()}
+    both = [name for phid, name in relations["subtasks"][0].values() if phid in parents]
+    if both:
+        raise PhabfiveInputException(
+            f"Cannot add {', '.join(dict.fromkeys(both))} as both a parent "
+            f"and a subtask of T{task_id}"
+        )
+
+
 def validate_priority(priority):
     """
     Validate and normalize priority value.
