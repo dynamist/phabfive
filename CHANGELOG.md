@@ -30,6 +30,11 @@
   `--commit=@some` and `--commit=@none` filter on attached commits; `maniphest.search`
   cannot, so one `edge.search` over the matching tasks answers it, before `--limit`
 
+* **`maniphest create --parent` creates a task as a subtask.** Takes a task monogram or
+  PHID, repeatable and comma-separated. The link is a `parents.add` in the request that
+  creates the task, so the parent is not edited and keeps its subtasks, and every parent
+  is looked up first: an unknown one is refused and nothing is created. #545
+
 ## Bug Fixes
 
 * **`--column` moves the card on every board `--tag` names.** A task has a position on

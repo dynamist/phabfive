@@ -188,6 +188,23 @@ subtasks, each by the name Diffusion gives it and linked to its page; see
 A bare hash that more than one repository has is an error naming each match;
 see [Attaching Commits](edit-cli.md#attaching-commits).
 
+### Subtasks
+
+`maniphest create --parent` creates the task as a subtask of an existing one.
+It takes a task monogram or a task PHID, and like `--attach` it is repeatable
+and comma-separated, since a task can have more than one parent:
+
+```bash
+phabfive maniphest create "Write the parser" --parent=T123
+phabfive maniphest create "Shared fix" --parent=T123,T124 --dry-run
+```
+
+The link is made in the same request that creates the task, and the parent is
+not edited, so the subtasks it already has are kept. Every parent is looked up
+first: one that does not exist, or that you cannot see, is an error and no task
+is created. A machine-readable format answers with the new task's record,
+`Parents` included; see [Parents, Subtasks and Commits](#parents-subtasks-and-commits).
+
 ### Add Comments
 
 Add a comment to a task:
