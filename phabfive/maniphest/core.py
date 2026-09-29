@@ -59,6 +59,7 @@ from phabfive.maniphest.resolvers import (
     resolve_project_tags,
     resolve_space,
     resolve_space_phids,
+    resolve_task_phids,
 )
 from phabfive.maniphest.utils import (
     PHORGE_ORDER_KEYS,
@@ -2514,6 +2515,7 @@ class Maniphest(Phabfive):
         priority=None,
         subscribers=None,
         commits=None,
+        parents=None,
         column=None,
         board_phid=None,
         space=None,
@@ -2545,6 +2547,9 @@ class Maniphest(Phabfive):
         commits : list, optional
             Commits to attach, by monogram, hash or PHID. Each item may hold
             several, separated by commas
+        parents : list, optional
+            Tasks to create this one as a subtask of, by monogram or PHID.
+            Each item may hold several, separated by commas
         column : str, optional
             Column name on board for initial placement
         board_phid : str, optional
@@ -2576,9 +2581,10 @@ class Maniphest(Phabfive):
         PhabfiveDataException
             If a policy names a project or user that does not exist
         PhabfiveNotFoundException
-            If a commit does not exist
+            If a commit or a parent task does not exist
         PhabfiveInputException
-            If a commit hash matches more than one commit
+            If a commit hash matches more than one commit, or a parent is not
+            a task monogram or PHID
         PhabfiveRemoteException
             If API call fails
         """
@@ -2592,6 +2598,7 @@ class Maniphest(Phabfive):
         parsed_tags = split_list_option(tags)
         parsed_subscribers = split_list_option(subscribers)
         parsed_commits = split_list_option(commits)
+        parsed_parents = split_list_option(parents)
 
         # Build transactions list
         transactions = []
@@ -2661,6 +2668,22 @@ class Maniphest(Phabfive):
             )
             transactions.append({"type": "commits.set", "value": commit_phids})
 
+        # Resolve parent tasks. `parents.add`, the transaction a create spec
+        # links a subtask with: the parent is not edited, so the subtasks it
+        # already has are kept.
+        parent_display = []
+        if parsed_parents:
+            resolved_parents = resolve_task_phids(
+                self.phab, parsed_parents, option="--parent"
+            )
+            parent_phids = list(
+                dict.fromkeys(phid for phid, _ in resolved_parents.values())
+            )
+            parent_display = list(
+                dict.fromkeys(name for _, name in resolved_parents.values())
+            )
+            transactions.append({"type": "parents.add", "value": parent_phids})
+
         # Resolve the Space to place the task in. Filtering may name several
         # Spaces at once; creating in one cannot, so this demands exactly one.
         space_display = None
@@ -2709,6 +2732,7 @@ class Maniphest(Phabfive):
                 "column": column,
                 "subscribers": subscriber_display,
                 "commits": commit_display,
+                "parents": parent_display,
                 "space": space_display,
                 "policy": policy_display,
             }

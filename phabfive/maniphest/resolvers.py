@@ -699,6 +699,81 @@ def resolve_project_tags(phab, values, option=None):
     return {value: (phid, names.get(phid)) for value, phid in resolved.items()}
 
 
+TASK_PHID_PREFIX = "PHID-TASK-"
+
+_TASK_MONOGRAM = re.compile(r"^T(\d+)$", re.IGNORECASE)
+
+
+def resolve_task_phids(phab, values, option=None):
+    """
+    Resolve tasks, by monogram or PHID, to PHIDs and monograms.
+
+    Every value is looked up, a PHID included, so a typo or a task the
+    viewer cannot see is refused here rather than by the edit that names it.
+    At most two ``maniphest.search`` calls, however many values.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    values : list
+        Task monograms (``T123``) or task PHIDs
+    option : str, optional
+        The option the values came from, named in any error
+
+    Returns
+    -------
+    dict
+        What was typed to (PHID, monogram), in the order given
+
+    Raises
+    ------
+    PhabfiveInputException
+        On a value that is neither a task monogram nor a task PHID
+    PhabfiveNotFoundException
+        Naming every value that is not a task, so nothing is half done
+    """
+    where = f" for {option}" if option else ""
+
+    ids = {}
+    phids = set()
+    for value in values:
+        match = _TASK_MONOGRAM.match(value)
+        if match:
+            ids[value] = int(match.group(1))
+        elif value.startswith(TASK_PHID_PREFIX):
+            phids.add(value)
+        else:
+            raise PhabfiveInputException(
+                f"Not a task{where}: '{value}'. Expected T123 or a task PHID"
+            )
+
+    found = []
+    for key, wanted in (("ids", sorted(set(ids.values()))), ("phids", sorted(phids))):
+        if wanted:
+            result = phab.maniphest.search(constraints={key: wanted}, limit=len(wanted))
+            found += result["data"]
+
+    by_id = {task["id"]: task["phid"] for task in found}
+    by_phid = {task["phid"]: task["id"] for task in found}
+
+    resolved = {}
+    missing = []
+    for value in values:
+        if value in ids and ids[value] in by_id:
+            resolved[value] = (by_id[ids[value]], f"T{ids[value]}")
+        elif value in by_phid:
+            resolved[value] = (value, f"T{by_phid[value]}")
+        else:
+            missing.append(value)
+
+    if missing:
+        listed = ", ".join(f"'{value}'" for value in missing)
+        raise PhabfiveNotFoundException(f"No such task{where}: {listed}")
+
+    return resolved
+
+
 def is_exact_monogram(space: str) -> bool:
     """Whether a Space was named by monogram, e.g. "S1", rather than by name."""
     return bool(space) and bool(_MONOGRAM.match(space))

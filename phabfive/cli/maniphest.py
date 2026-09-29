@@ -109,6 +109,7 @@ _CREATE_OPTIONS_IGNORED_BY_TEMPLATE = {
     "subscribe": "--subscribe",
     "attach": "--attach",
     "add_commit": "--add-commit",
+    "parent": "--parent",
     "space": "--space",
     "visible_to": "--visible-to",
     "editable_by": "--editable-by",
@@ -383,6 +384,12 @@ def create(
         hidden=True,
         help="Alias for --attach",
     ),
+    parent: Optional[List[str]] = typer.Option(
+        None,
+        "--parent",
+        help="Create as a subtask of this task (T123 or task PHID; "
+        "repeatable, or comma-separated)",
+    ),
     space: Optional[str] = typer.Option(
         None,
         "--space",
@@ -432,6 +439,7 @@ def create(
         phabfive maniphest create "Task" --priority=high --tag=Sprint
         phabfive maniphest create "Task" --tag=Sprint,QA --subscribe=@me,alice
         phabfive maniphest create "Task" --tag=Board --column=Backlog
+        phabfive maniphest create "Subtask" --parent=T123
         phabfive maniphest create "Task" --space=S3
         phabfive maniphest create "Task" --visible-to='#infra' --editable-by=admin
         echo "Description" | phabfive maniphest create "Task" --description=-
@@ -511,6 +519,7 @@ def create(
             [*(subscribe or []), *(add_subscriber or [])], "--subscribe"
         )
         commits = split_list_option([*(attach or []), *(add_commit or [])])
+        parents = split_list_option(parent)
 
         # Validate --column requires --tag
         if column and not tags:
@@ -539,6 +548,7 @@ def create(
                 priority=priority,
                 subscribers=subscribers,
                 commits=commits,
+                parents=parents,
                 column=column,
                 board_phid=board_phid,
                 space=space,
@@ -582,6 +592,11 @@ def create(
                 if result.get("commits"):
                     print(
                         f"  Commits: {', '.join(result['commits'])}",
+                        file=preview,
+                    )
+                if result.get("parents"):
+                    print(
+                        f"  Parents: {', '.join(result['parents'])}",
                         file=preview,
                     )
                 if result.get("space"):
