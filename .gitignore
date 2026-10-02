@@ -131,3 +131,7 @@ k8s/overlays/local/config.local.env
 
 # Throwaway venv built by "make smoke"
 .smoke/
+
+# nix
+result*
+.direnv*
