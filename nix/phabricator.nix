@@ -10,10 +10,13 @@
 }:
 buildPythonPackage (finalAttrs: {
   name = "phabricator";
-  version = "0.8.1";
+  # 0.8.1's Resource has no session, and phabfive's retry mounts an adapter on
+  # Resource.session, so every API command crashes before its first request.
+  # 0.9.1 adds it, and is what pip installs for the >=0.7.0 floor.
+  version = "0.9.1";
   pyproject = true;
 
-  srcHash = "sha256-NxP+u4/cNzon9kKaV75ZEp9JiTL0vSOU7VzufF3JI2s=";
+  srcHash = "sha256-4VmJSuAaJ/tkAZx0EhC8/Al3X8Qso1uUkXzbv3MaH+0=";
   src = fetchFromGitHub {
     owner = "disqus";
     repo = "python-phabricator";
