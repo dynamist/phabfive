@@ -127,8 +127,26 @@ class TestErrorTranslation:
             with pytest.raises(PhabfiveConnectionException) as caught:
                 conduit.user.whoami()
 
-        assert str(caught.value) == "Connection refused"
+        assert str(caught.value) == (
+            "phorge.example.com could not be reached (Connection refused)"
+        )
+        assert caught.value.host == "phorge.example.com"
+        assert caught.value.status is None
         assert caught.value.__cause__ is refused
+
+    def test_a_bad_status_names_the_host_and_the_status(self, conduit):
+        import requests
+
+        bad = requests.exceptions.HTTPError("Bad response status: 503")
+        with self._raising(bad):
+            with pytest.raises(PhabfiveConnectionException) as caught:
+                conduit.user.whoami()
+
+        assert str(caught.value) == (
+            "phorge.example.com answered HTTP 503 Service Unavailable"
+        )
+        assert caught.value.host == "phorge.example.com"
+        assert caught.value.status == 503
 
     def test_nested_endpoints_translate(self, conduit):
         from phabricator import APIError

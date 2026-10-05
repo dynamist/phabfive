@@ -332,7 +332,7 @@ class TestUsers:
             {
                 "Host": "other.example.com",
                 "URL": "https://other.example.com/api/",
-                "Error": "not reachable",
+                "Error": {"Code": "HTTP 503", "Message": "Service Unavailable"},
             },
         ]
 

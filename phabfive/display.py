@@ -875,7 +875,10 @@ def _display_user_rich(console, user_dict, phabfive_instance):
     console.print(f"  URL: {_escape_for_rich(url)}")
 
     if error:
-        console.print(f"  Error: {_escape_for_rich(error)}")
+        console.print("  Error:")
+        for key in ("Code", "Message"):
+            if error.get(key):
+                console.print(f"    {key}: {_escape_for_rich(error[key])}")
     elif user_data:
         console.print("  User:")
         # Make UserName clickable if link is available

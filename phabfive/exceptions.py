@@ -140,11 +140,16 @@ class PhabfiveConnectionException(PhabfiveRemoteException):
     """
     Raised when the server could not be reached or answered with an HTTP error.
 
-    Replaces requests.RequestException, which is what the client raises, and
-    keeps its message.
+    Replaces requests.RequestException, which is what the client raises.
+    `host` names the server that failed and `status` is the HTTP status it
+    answered with, each None when it is not known - a refused connection has
+    no status.
     """
 
-    pass
+    def __init__(self, message, *, host=None, status=None):
+        super().__init__(message)
+        self.host = host
+        self.status = status
 
 
 __all__ = [

@@ -7,7 +7,7 @@ from typing import List, Optional
 import typer
 
 from phabfive.cli.agents import AgentFooterGroup
-from phabfive.cli.apps import new_app
+from phabfive.cli.apps import connection_error, new_app
 from phabfive.cli.completers import (
     complete_user_role,
     complete_user_role_or_any,
@@ -89,7 +89,7 @@ def whoami(
         if not offer_setup_on_error(str(e)):
             raise typer.Exit(1)
     except PhabfiveConnectionException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        sys.stderr.write(f"Error: {connection_error(e)}\n")
         raise typer.Exit(1)
 
 
@@ -268,7 +268,7 @@ def search(
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
     except PhabfiveConnectionException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        sys.stderr.write(f"Error: {connection_error(e)}\n")
         raise typer.Exit(1)
     except PhabfiveRemoteException as e:
         typer.echo(f"ERROR: {e}", err=True)

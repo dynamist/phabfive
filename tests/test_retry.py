@@ -201,7 +201,7 @@ class TestWrites:
         assert len(transport.requests) == 1
         # Not "could not connect": it was sent, and may have been applied.
         assert str(caught.value).startswith(
-            "maniphest.edit was sent but no answer came back, so it may have been"
+            "maniphest.edit was sent but no answer came back from phorge.example.com"
         )
 
     def test_a_5xx_is_not_retried(self, wire, sleeps):
@@ -212,7 +212,7 @@ class TestWrites:
         assert len(transport.requests) == 1
         # A gateway error usually means the backend carried on working.
         assert str(caught.value).startswith(
-            "maniphest.edit was sent and the server answered HTTP 502, so it may"
+            "maniphest.edit was sent and phorge.example.com answered HTTP 502, so it"
         )
 
     def test_a_4xx_is_reported_as_it_is(self, wire, sleeps):
@@ -497,8 +497,11 @@ class TestAnnouncement:
             r.getMessage() for r in caplog.records if r.name == "phabfive.retry"
         ]
         assert [m.split(", retry")[0] for m in messages] == [
-            "maniphest.search: HTTP 503",
-            "maniphest.search: timed out",
-            "maniphest.search: could not connect",
+            "maniphest.search on phorge.example.com: HTTP 503 Service Unavailable",
+            "maniphest.search on phorge.example.com: timed out",
+            "maniphest.search on phorge.example.com: could not connect",
         ]
-        assert messages[0].startswith("maniphest.search: HTTP 503, retry 1 of 3 in ")
+        assert messages[0].startswith(
+            "maniphest.search on phorge.example.com: HTTP 503 Service Unavailable, "
+            "retry 1 of 3 in "
+        )

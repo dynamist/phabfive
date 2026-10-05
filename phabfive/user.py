@@ -25,6 +25,7 @@ from phabfive.core import Phabfive
 from phabfive.exceptions import (
     PhabfiveAPIException,
     PhabfiveConfigException,
+    PhabfiveConnectionException,
     PhabfiveInputException,
     PhabfiveRemoteException,
 )
@@ -32,6 +33,7 @@ from phabfive.maniphest.utils import format_timestamp, time_constraint
 from phabfive.options import value_list
 from phabfive.ordering import parse_order, sort_records
 from phabfive.pagination import iter_pages
+from phabfive.retry import status_phrase
 
 log = logging.getLogger(__name__)
 
@@ -184,7 +186,7 @@ class User(Phabfive):
         }
 
         if not token:
-            result["Error"] = "No token configured for this host"
+            result["Error"] = {"Message": "No token configured for this host"}
             return result
 
         try:
@@ -205,9 +207,17 @@ class User(Phabfive):
                 f"{base_url}/p/{user_name}/", user_name, show_url=False
             )
         except PhabfiveAPIException as e:
-            result["Error"] = str(e).replace("ERR-CONDUIT-CORE: ", "")
+            result["Error"] = {"Code": e.code, "Message": e.message}
+        except PhabfiveConnectionException as e:
+            if e.status:
+                result["Error"] = {
+                    "Code": f"HTTP {e.status}",
+                    "Message": status_phrase(e.status) or "Bad response status",
+                }
+            else:
+                result["Error"] = {"Message": str(e)}
         except PhabfiveRemoteException as e:
-            result["Error"] = str(e)
+            result["Error"] = {"Message": str(e)}
 
         return result
 
@@ -222,7 +232,9 @@ class User(Phabfive):
             - URL: Full API URL for PHAB_URL (e.g., "https://phabricator.example.com/api/")
             - User: dict with UserName, RealName, PrimaryEmail, Link
             - _link: Rich hyperlink to user profile (for rich format)
-            - Error: error message if whoami failed for this host (optional)
+            - Error: if whoami failed for this host, a dict with Message and,
+              when the failure has one, Code - an error code such as
+              ERR-INVALID-AUTH, or an HTTP status such as "HTTP 503"
         """
         arcrc_path = os.path.expanduser("~/.arcrc")
 
