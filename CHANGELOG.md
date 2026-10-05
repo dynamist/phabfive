@@ -16,6 +16,11 @@
   says the task has none. With `--show-relations` all three are there, and `[]` means
   none; a failed lookup leaves them out again, with a warning
 
+* **Breaking change: `user whoami` reports a failed host's `Error` as a mapping.** It
+  holds `Message` and, when the failure has one, `Code` - a Conduit error code such as
+  `ERR-INVALID-AUTH`, or an HTTP status such as `HTTP 503` - instead of one string, so a
+  program no longer has to split `Bad response status: 503` itself
+
 ## New Features
 
 * **`--show-relations` on `maniphest search` and `maniphest show`.** Fills each task's
@@ -52,6 +57,13 @@
   advances it a column on each. Previously the first `--tag` was the board and the rest
   were tagged but not moved on. The error for a task on several boards now suggests the
   one edit that covers them all, before the per-board commands. Fixes #515
+
+* **A server that fails is named.** With several hosts in `~/.arcrc`, a retry warning
+  did not say which one it was retrying, and an HTTP error read `Failed to connect to
+  Phabricator API: Bad response status: 503`. The warning is now `conduit.query on
+  phorge.localhost: HTTP 503 Service Unavailable, retry 1 of 3 in 0.1s` and the error
+  `phorge.localhost answered HTTP 503 Service Unavailable`. `PhabfiveConnectionException`
+  carries the `host` and the `status` for a program to read
 
 
 # 0.11.0 (2026-09-24)

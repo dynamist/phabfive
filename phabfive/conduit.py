@@ -30,42 +30,63 @@ import contextlib
 import re
 
 from phabfive.exceptions import PhabfiveAPIException, PhabfiveConnectionException
-from phabfive.retry import RetryPolicy, is_read, retries_writes
+from phabfive.retry import RetryPolicy, describe_status, is_read, retries_writes
 
 
 @contextlib.contextmanager
-def translated_errors(write=None):
+def translated_errors(write=None, host=None):
     """Raise the client's exceptions as phabfive's, chained to the original.
 
     `write` names a call that the retry policy would not repeat. When such a
     call was sent and its answer never came, the server may well have
     applied it, and the error says so rather than reading as a refused
-    connection.
+    connection. `host` names the server in the message, so a command
+    talking to several can tell which one failed.
     """
     import requests
     from phabricator import APIError
 
+    server = host or "the server"
     try:
         yield
     except APIError as e:
         raise PhabfiveAPIException(e.code, e.message) from e
     except requests.exceptions.RequestException as e:
+        status = _http_status(e)
         if write and _unanswered(e):
             raise PhabfiveConnectionException(
-                f"{write} was sent but no answer came back, so it may have been "
-                "applied. It was not sent again, since doing so is not safe: "
-                "check before trying again"
+                f"{write} was sent but no answer came back from {server}, so it "
+                "may have been applied. It was not sent again, since doing so "
+                "is not safe: check before trying again",
+                host=host,
             ) from e
-        status = _server_error(e) if write else None
-        if status:
+        if write and status and status >= 500:
             # A 502 or 504 from a proxy usually means the backend carried on
             # working, and a 500 may come after part of the work was done.
             raise PhabfiveConnectionException(
-                f"{write} was sent and the server answered HTTP {status}, so it "
+                f"{write} was sent and {server} answered HTTP {status}, so it "
                 "may have been applied. It was not sent again, since doing so "
-                "is not safe: check before trying again"
+                "is not safe: check before trying again",
+                host=host,
+                status=status,
             ) from e
-        raise PhabfiveConnectionException(str(e)) from e
+        if status:
+            message = f"{server} answered {describe_status(status)}"
+        elif host:
+            message = f"{host} could not be reached ({e})"
+        else:
+            message = str(e)
+        raise PhabfiveConnectionException(message, host=host, status=status) from e
+
+
+def _host(resource):
+    """The host a Resource's client talks to, or None."""
+    from urllib.parse import urlparse
+
+    url = getattr(getattr(resource, "api", None), "host", None)
+    if not isinstance(url, str):
+        return None
+    return urlparse(url).netloc or None
 
 
 def _unanswered(error):
@@ -81,11 +102,11 @@ def _unanswered(error):
 #: How the `phabricator` library reports a status other than 2xx. It raises
 #: `requests.HTTPError` with no response attached, so the message is all
 #: there is to go on.
-_BAD_STATUS = re.compile(r"Bad response status: (5\d\d)\b")
+_BAD_STATUS = re.compile(r"Bad response status: (\d\d\d)\b")
 
 
-def _server_error(error):
-    """The 5xx status a request was answered with, or None."""
+def _http_status(error):
+    """The HTTP status a request was answered with, or None."""
     import requests
 
     if not isinstance(error, requests.exceptions.HTTPError):
@@ -128,7 +149,7 @@ def _mount_retry(resource, method, retry):
         return
 
     replaced = resource.session.adapters.get("https://")
-    adapter = HTTPAdapter(max_retries=retry.urllib3_retry(method))
+    adapter = HTTPAdapter(max_retries=retry.urllib3_retry(method, _host(resource)))
     resource.session.mount("https://", adapter)
     resource.session.mount("http://", adapter)
     resource._phabfive_retry_key = key
@@ -159,7 +180,7 @@ class Endpoint:
         method = f"{resource.method}.{resource.endpoint}"
         _mount_retry(resource, method, object.__getattribute__(self, "_retry"))
         unsafe = not (is_read(method) or retries_writes())
-        with translated_errors(write=method if unsafe else None):
+        with translated_errors(write=method if unsafe else None, host=_host(resource)):
             return resource(**kwargs)
 
     def __repr__(self):

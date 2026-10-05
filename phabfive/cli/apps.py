@@ -76,8 +76,20 @@ def get_app(cls):
         # If setup succeeded, try again
         return new_app(cls)
     except PhabfiveConnectionException as e:
-        sys.stderr.write(f"Error: Failed to connect to Phabricator API: {e}\n")
+        sys.stderr.write(f"Error: {connection_error(e)}\n")
         raise typer.Exit(1)
 
 
-__all__ = ["get_app", "new_app", "prompt_host"]
+def connection_error(error):
+    """What to say about a PhabfiveConnectionException, after "Error: ".
+
+    An error that names its host already says which server failed and how.
+    One that does not - raised by a test's client, or by code that never
+    knew the host - is introduced as a connection failure.
+    """
+    if error.host:
+        return str(error)
+    return f"Failed to connect to Phabricator API: {error}"
+
+
+__all__ = ["connection_error", "get_app", "new_app", "prompt_host"]

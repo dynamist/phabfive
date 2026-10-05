@@ -14,6 +14,7 @@ import typer
 
 import phabfive
 from phabfive.cli.log_setup import init_logging
+from phabfive.cli.apps import connection_error
 from phabfive.exceptions import PhabfiveConnectionException, PhabfiveException
 from phabfive.cli.cache import cache_app
 from phabfive.cli.diffusion import diffusion_app
@@ -376,7 +377,7 @@ def cli_entrypoint() -> None:
         # so, not a traceback. Commands that can say something more specific
         # catch it first.
         if isinstance(e, PhabfiveConnectionException):
-            typer.echo(f"Error: Failed to connect to Phabricator API: {e}", err=True)
+            typer.echo(f"Error: {connection_error(e)}", err=True)
         else:
             typer.echo(f"Error: {e}", err=True)
         sys.exit(1)

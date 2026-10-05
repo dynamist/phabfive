@@ -27,7 +27,7 @@ applied, and sending it again could do it twice - post a comment twice, create
 two tasks. So it is not repeated, and the error says so:
 
 ```
-Error: Failed to connect to Phabricator API: maniphest.edit was sent but no answer came back, so it may have been applied. It was not sent again, since doing so is not safe: check before trying again
+Error: maniphest.edit was sent but no answer came back from phorge.example.com, so it may have been applied. It was not sent again, since doing so is not safe: check before trying again
 ```
 
 A write answered with a 5xx is not repeated either, and says the same. A 502 or
@@ -52,10 +52,10 @@ third. The randomness keeps many clients that failed together from coming back
 together. A server that answers with `Retry-After` is waited for as long as it
 asks - but never longer than `PHAB_BACKOFF_MAX`, which caps every single wait.
 
-Every retry is announced on stderr, with what went wrong and the wait:
+Every retry is announced on stderr, with the server, what went wrong and the wait:
 
 ```
-WARNING - maniphest.search: HTTP 503, retry 1 of 3 in 0.2s
+WARNING - maniphest.search on phorge.example.com: HTTP 503 Service Unavailable, retry 1 of 3 in 0.2s
 ```
 
 `-q` silences it.

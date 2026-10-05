@@ -135,6 +135,21 @@ def retries_writes():
     return _idempotent.get()
 
 
+def status_phrase(status):
+    """`Service Unavailable` for 503, or "" for a status HTTP does not name."""
+    from http import HTTPStatus
+
+    try:
+        return HTTPStatus(status).phrase
+    except ValueError:
+        return ""
+
+
+def describe_status(status):
+    """`HTTP 503 Service Unavailable`, or just `HTTP 599` for an unknown one."""
+    return f"HTTP {status} {status_phrase(status)}".rstrip()
+
+
 def _sleep(seconds):
     """The one place phabfive waits, so a test can replace it."""
     time.sleep(seconds)
@@ -203,8 +218,8 @@ class RetryPolicy:
         ceiling = min(self.backoff_max, BACKOFF_BASE * 2 ** (attempt - 1))
         return random.uniform(0, ceiling)
 
-    def urllib3_retry(self, method):
-        """The `urllib3.Retry` to send a call to `method` with.
+    def urllib3_retry(self, method, host=None):
+        """The `urllib3.Retry` to send a call to `method` on `host` with.
 
         urllib3 already knows which failures are safe to repeat for a POST:
         a connect error is retried whatever the method, since nothing was
@@ -229,6 +244,7 @@ class RetryPolicy:
             backoff_factor=0,
             policy=self,
             method_name=method,
+            host=host,
         )
 
     def __repr__(self):
@@ -255,7 +271,7 @@ def _retry_class():
         if last is None:
             return "failed"
         if last.status:
-            return f"HTTP {last.status}"
+            return describe_status(last.status)
         if isinstance(last.error, ConnectTimeoutError):
             return "could not connect"
         if isinstance(last.error, TimeoutError):
@@ -265,16 +281,18 @@ def _retry_class():
     class PolicyRetry(Retry):
         """Retry whose waits come from a RetryPolicy, and are logged."""
 
-        def __init__(self, *args, policy=None, method_name="", **kwargs):
+        def __init__(self, *args, policy=None, method_name="", host=None, **kwargs):
             super().__init__(*args, **kwargs)
             self.policy = policy or RetryPolicy()
             self.method_name = method_name
+            self.host = host
 
         def new(self, **kw):
             # urllib3 rebuilds the object after every attempt from its own
             # parameters, which do not include ours.
             kw.setdefault("policy", self.policy)
             kw.setdefault("method_name", self.method_name)
+            kw.setdefault("host", self.host)
             return super().new(**kw)
 
         def sleep(self, response=None):
@@ -287,8 +305,11 @@ def _retry_class():
             delay = min(delay, self.policy.backoff_max)
 
             reason = _reason(self.history[-1] if self.history else None)
+            call = (
+                f"{self.method_name} on {self.host}" if self.host else self.method_name
+            )
             log.warning(
-                f"{self.method_name}: {reason}, retry {attempt} of "
+                f"{call}: {reason}, retry {attempt} of "
                 f"{self.policy.retries} in {delay:.1f}s"
             )
             if delay > 0:
@@ -328,7 +349,9 @@ __all__ = [
     "IDEMPOTENT_TRANSACTIONS",
     "Pacer",
     "RetryPolicy",
+    "describe_status",
     "idempotent_writes",
     "is_idempotent_edit",
     "is_read",
+    "status_phrase",
 ]

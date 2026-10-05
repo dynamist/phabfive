@@ -69,6 +69,22 @@ class TestGetApp:
             "Error: Failed to connect to Phabricator API: down\n"
         )
 
+    def test_a_host_that_answered_an_error_is_named(self, capsys):
+        cls = mock.MagicMock(
+            side_effect=PhabfiveConnectionException(
+                "phorge.localhost answered HTTP 503 Service Unavailable",
+                host="phorge.localhost",
+                status=503,
+            )
+        )
+
+        with pytest.raises(typer.Exit):
+            get_app(cls)
+
+        assert capsys.readouterr().err == (
+            "Error: phorge.localhost answered HTTP 503 Service Unavailable\n"
+        )
+
 
 class TestEntrypoint:
     """An error nothing else caught is one line, not a traceback."""
@@ -99,6 +115,18 @@ class TestEntrypoint:
 
         assert code == 1
         assert err == "Error: Failed to connect to Phabricator API: refused\n"
+
+    def test_a_connection_error_naming_its_host(self, monkeypatch, capsys):
+        error = PhabfiveConnectionException(
+            "phorge.localhost answered HTTP 503 Service Unavailable",
+            host="phorge.localhost",
+            status=503,
+        )
+
+        code, err = self._run(error, monkeypatch, capsys)
+
+        assert code == 1
+        assert err == "Error: phorge.localhost answered HTTP 503 Service Unavailable\n"
 
     def test_any_phabfive_error(self, monkeypatch, capsys):
         code, err = self._run(PhabfiveDataException("no such URI"), monkeypatch, capsys)

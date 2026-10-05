@@ -11,7 +11,7 @@ import os
 from unittest import mock
 from unittest.mock import MagicMock, patch
 
-from phabfive.exceptions import PhabfiveAPIException
+from phabfive.exceptions import PhabfiveAPIException, PhabfiveConnectionException
 from typer.testing import CliRunner
 
 from phabfive.cli.user import user_app
@@ -121,7 +121,7 @@ class TestWhoamiForHost:
     def test_missing_token_reports_error(self):
         result = self._user()._whoami_for_host("https://phorge.example.com/api/", None)
 
-        assert result["Error"] == "No token configured for this host"
+        assert result["Error"] == {"Message": "No token configured for this host"}
         assert "User" not in result
 
     def test_api_error_is_captured(self):
@@ -134,8 +134,37 @@ class TestWhoamiForHost:
             "https://phorge.example.com/api/", TOKEN, phab=phab
         )
 
-        assert "Error" in result
+        assert result["Error"] == {"Code": "ERR-INVALID-AUTH", "Message": "bad token"}
         assert "User" not in result
+
+    def test_a_bad_status_is_split_into_code_and_message(self):
+        phab = MagicMock()
+        phab.user.whoami.side_effect = PhabfiveConnectionException(
+            "phorge.example.com answered HTTP 503 Service Unavailable",
+            host="phorge.example.com",
+            status=503,
+        )
+
+        result = self._user()._whoami_for_host(
+            "https://phorge.example.com/api/", TOKEN, phab=phab
+        )
+
+        assert result["Error"] == {"Code": "HTTP 503", "Message": "Service Unavailable"}
+
+    def test_an_unreachable_host_has_only_a_message(self):
+        phab = MagicMock()
+        phab.user.whoami.side_effect = PhabfiveConnectionException(
+            "phorge.example.com could not be reached (Connection refused)",
+            host="phorge.example.com",
+        )
+
+        result = self._user()._whoami_for_host(
+            "https://phorge.example.com/api/", TOKEN, phab=phab
+        )
+
+        assert result["Error"] == {
+            "Message": "phorge.example.com could not be reached (Connection refused)"
+        }
 
     def test_configured_host_uses_existing_client(self):
         """whoami_configured_host reports the host from self.conf."""
@@ -213,10 +242,48 @@ class TestWhoamiHostSelection:
         mock_user.whoami_configured_host.return_value = {
             "Host": "phorge.example.com",
             "URL": "https://phorge.example.com/api/",
-            "Error": "Failed to resolve host",
+            "Error": {"Message": "Failed to resolve host"},
         }
         mock_user_cls.return_value = mock_user
 
         result = runner.invoke(user_app, ["whoami"])
 
         assert result.exit_code == 1
+
+
+class TestWhoamiErrorDisplay:
+    """An error is a mapping, shown as Code and Message under Error."""
+
+    def _render(self, error):
+        from io import StringIO
+
+        from rich.console import Console
+
+        from phabfive.display import _display_user_rich
+
+        out = StringIO()
+        _display_user_rich(
+            Console(file=out, width=200, color_system=None),
+            {
+                "Host": "phorge.localhost",
+                "URL": "http://phorge.localhost/api/",
+                "Error": error,
+            },
+            MagicMock(),
+        )
+        return out.getvalue()
+
+    def test_code_and_message_each_have_a_line(self):
+        assert self._render({"Code": "HTTP 503", "Message": "Service Unavailable"}) == (
+            "- Host: phorge.localhost\n"
+            "  URL: http://phorge.localhost/api/\n"
+            "  Error:\n"
+            "    Code: HTTP 503\n"
+            "    Message: Service Unavailable\n"
+        )
+
+    def test_an_error_without_a_code_has_only_a_message(self):
+        rendered = self._render({"Message": "No token configured for this host"})
+
+        assert "Code:" not in rendered
+        assert "    Message: No token configured for this host\n" in rendered
