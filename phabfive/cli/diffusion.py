@@ -297,7 +297,9 @@ def repo_nudge(
     those name the commits with --commit, which waits until every one of
     them is imported. Name each commit of a push that matters: they are
     imported independently, so the newest being done says nothing about
-    the rest. Either gives up after --timeout seconds and exits 1.
+    the rest. Give one of --wait and --commit; either gives up after
+    --timeout seconds and exits 1, and fails at once on an inactive
+    repository.
 
     \b
     Examples:
@@ -324,8 +326,11 @@ def repo_nudge(
     commits: list[str] = []
     for commit_arg in commit or []:
         for part in commit_arg.split(","):
+            # `--commit "$SHA"` with SHA unset is a mistake, not a smaller
+            # wait, so an empty value is refused rather than skipped
             if not part.strip():
-                continue
+                typer.echo("ERROR: --commit names an empty commit", err=True)
+                raise typer.Exit(1)
             try:
                 commits.append(validate_commit_hash(part))
             except PhabfiveInputException as e:
@@ -333,8 +338,14 @@ def repo_nudge(
                 raise typer.Exit(1)
     commits = list(dict.fromkeys(commits))
 
-    if commit and not commits:
-        typer.echo("ERROR: --commit names no commit", err=True)
+    # Two different waits. Running one and saying nothing of the other would
+    # let a caller read one finished condition as both.
+    if wait and commits:
+        typer.echo(
+            "ERROR: --wait and --commit wait for different things: --wait for a "
+            "repository's initial import, --commit for the commits named. Give one",
+            err=True,
+        )
         raise typer.Exit(1)
 
     if commits and len(repo_ids) != 1:

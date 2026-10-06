@@ -598,9 +598,12 @@ update and returns at once. To block until the work is done:
   but imports its commits independently, so the newest being imported says
   nothing about the ones before it. Each value is a hash alone, at least 7
   characters; the repository is the argument.
+- Give one of `--wait` and `--commit`, not both: they wait for different things,
+  and both together is refused.
 - `--timeout <seconds>` (default 300) bounds either. Running out exits 1 with
-  what was still pending; so does an inactive repository, at once, since no
-  daemon ever updates one.
+  what was still pending. A repository that is inactive, or is deactivated
+  during the wait, fails it at once, since no daemon ever updates one; so does a
+  repository that can no longer be found.
 
 A nudge without a wait still warns about an inactive repository, and sends the
 nudge anyway.
