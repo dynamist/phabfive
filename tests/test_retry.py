@@ -322,7 +322,13 @@ class TestClassification:
 
     @pytest.mark.parametrize(
         "method",
-        ["maniphest.edit", "paste.edit", "diffusion.uri.edit", "maniphest.createtask"],
+        [
+            "maniphest.edit",
+            "paste.edit",
+            "diffusion.uri.edit",
+            "maniphest.createtask",
+            "diffusion.looksoon",
+        ],
     )
     def test_writes(self, method):
         assert not is_read(method)
@@ -370,6 +376,24 @@ class TestApplyTaskEdit:
         m, seen = self._maniphest()
         m.apply_task_edit("1", [{"type": "comment", "value": "hi"}])
         assert seen == [False]
+
+
+class TestApplyRepoNudge:
+    """`diffusion.looksoon` is a write, but asking twice changes nothing."""
+
+    def test_a_nudge_is_marked_idempotent(self):
+        from phabfive.diffusion import Diffusion
+
+        d = Diffusion.__new__(Diffusion)
+        d.phab = mock.MagicMock()
+        seen = []
+        d.phab.diffusion.looksoon.side_effect = lambda **kw: seen.append(
+            retries_writes()
+        )
+
+        d.apply_repo_nudge([{"phid": "PHID-REPO-1"}])
+
+        assert seen == [True]
 
 
 class TestConfiguration:

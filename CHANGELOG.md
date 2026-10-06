@@ -48,6 +48,13 @@
   as its own parent or subtask is refused before the server answers with a graph cycle.
   #548
 
+* **`diffusion repo nudge` asks Phorge to update repositories now.** What Update Now on
+  a repository's Manage → Status page does, through `diffusion.looksoon`: Phorge checks
+  a repository that rarely changes less and less often, so a new commit or observe URI
+  can otherwise take a while to be imported. Takes one or more repositories, each looked
+  up first, so an unknown one is refused and nothing is nudged. The update is only
+  scheduled; `repo show`'s `Importing` says when it has finished. #556
+
 ## Bug Fixes
 
 * **`--column` moves the card on every board `--tag` names.** A task has a position on

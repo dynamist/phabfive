@@ -475,6 +475,26 @@ phabfive --format=json diffusion repo show uridoc377 | jq '.[0].Repository.Hoste
 false
 ```
 
+**6. Ask Phorge to fetch now.** A new observe URI is picked up on the daemons'
+next pass, and Phorge checks a repository that rarely changes less and less
+often, so that can be a while. `repo nudge` does what Update Now on the
+repository's Manage → Status page does:
+
+```bash
+phabfive diffusion repo nudge uridoc377
+```
+
+```
+Asked Phorge to update R16 (uridoc377) soon
+```
+
+The update is only scheduled, so the command returns before anything is
+fetched. `Importing` turns false once the import has finished:
+
+```bash
+phabfive --format=json diffusion repo show uridoc377 | jq '.[0].Repository.Importing'
+```
+
 ## Filtering
 
 `uri list` takes filters that combine with AND. A filter left out is not

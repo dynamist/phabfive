@@ -94,7 +94,7 @@ parses for every command, including the ones that write.
 machine-readable format with the same record `show` gives for the object it touched, so
 the link and every field arrive together - `maniphest create/edit/comment`, the bare
 `edit`, `paste create/edit/comment`, `diffusion repo create/edit`,
-`diffusion uri create/edit` and `project create/edit`:
+`diffusion repo nudge`, `diffusion uri create/edit` and `project create/edit`:
 
 ```bash
 phabfive --format=json maniphest create "probe" --yes | jq -r '.[0].Link'
@@ -515,6 +515,7 @@ phabfive --format=json diffusion repo list all --show-uris
 phabfive --format=json diffusion repo show R5
 phabfive diffusion repo show R5 R6 --show-uris --show-branches
 phabfive --format=json diffusion repo show R5 --show-policy
+phabfive diffusion repo nudge R5 R6         # Update Now: fetch soon, returns at once
 phabfive --format=json diffusion uri list R5
 phabfive --format=table diffusion uri list R5        # the matrix, one row per URI
 phabfive diffusion uri list R5 --clone
@@ -579,6 +580,12 @@ nothing is an empty result - neither is a failure.
 name if it has one and its name if it does not, so a change to either can move
 them - `--dry-run` names every built-in URI that would move, with its current
 and new address, before anything is applied.
+
+`diffusion repo nudge` is Update Now (`diffusion.looksoon`): Phorge checks a
+repository that rarely changes less and less often, so after a push upstream or a
+new observe URI, nudge it rather than wait. It only schedules the update and
+returns at once - poll `repo show`'s `Importing` to see the import finish. An
+inactive repository is warned about, since it is not updated until activated.
 
 `diffusion repo create` and a `repo edit --short-name` both refuse a name that
 differs from an existing repository only in **case** or in `.` `-` `_`

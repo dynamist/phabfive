@@ -562,6 +562,26 @@ def test_uri_list_on_a_repository_that_does_not_exist(phabfive_raw):
     assert "Traceback" not in result.stderr
 
 
+def test_repo_nudge_answers_with_the_show_records(phabfive):
+    """diffusion.looksoon returns nothing; the records come from repo show.
+
+    Nudging a seeded repository is harmless - it only asks the daemons to
+    look again - so this needs no repository of its own.
+    """
+    repos = phabfive("diffusion", "repo", "nudge", "GUNNAR", "SPIKE", json_output=True)
+
+    assert [r["Repository"]["Callsign"] for r in repos] == ["GUNNAR", "SPIKE"]
+    assert all("Importing" in r["Repository"] for r in repos)
+
+
+def test_repo_nudge_sends_nothing_when_one_is_missing(phabfive_raw):
+    result = phabfive_raw("diffusion", "repo", "nudge", "GUNNAR,R9999")
+
+    assert result.returncode == 1
+    assert "'R9999' not found" in result.stderr
+    assert "Asked Phorge" not in result.stdout + result.stderr
+
+
 def test_repo_show_fails_on_a_partial_result(phabfive_raw):
     """GUNNAR is shown, and the exit code still says something was missed."""
     result = phabfive_raw(

@@ -46,6 +46,7 @@ from phabfive.exceptions import (
     PhabfiveAPIException,
     PhabfiveDataException,
     PhabfiveNameCollisionException,
+    PhabfiveNotFoundException,
 )
 from phabfive.policy import (
     policy_label,
@@ -53,6 +54,7 @@ from phabfive.policy import (
     resolve_policy_names,
     resolve_policy_value,
 )
+from phabfive.retry import idempotent_writes
 
 log = logging.getLogger(__name__)
 
@@ -333,6 +335,75 @@ class Diffusion(Phabfive):
         )
 
         return {"repositories": repositories, "missing_ids": missing_ids}
+
+    def build_repo_nudge(self, repo_ids):
+        """Resolve the repositories a nudge names, before anything is sent.
+
+        All of them or none: one name that does not resolve fails the lot,
+        so a typo never leaves half of a list nudged.
+
+        Parameters
+        ----------
+        repo_ids : list[str]
+            Repository monograms, callsigns or short names
+
+        Returns
+        -------
+        list[dict]
+            The repository records, in the order they were asked for
+
+        Raises
+        ------
+        PhabfiveNotFoundException
+            If any of the identifiers names no repository
+        """
+        repos = fetch_repositories(self.phab)
+
+        found = []
+        missing_ids = []
+
+        for repo_id in repo_ids:
+            match = match_repository(repos, repo_id)
+
+            if match is None:
+                missing_ids.append(repo_id)
+            else:
+                found.append(match)
+
+        if missing_ids:
+            names = ", ".join(f"'{repo_id}'" for repo_id in missing_ids)
+            noun = "Repository" if len(missing_ids) == 1 else "Repositories"
+            raise PhabfiveNotFoundException(f"{noun} {names} not found")
+
+        return found
+
+    def apply_repo_nudge(self, repos):
+        """Ask the daemons to update the repositories soon (`diffusion.looksoon`).
+
+        What the web UI's Update Now does. It only schedules the update and
+        returns nothing, so it neither waits for the fetch nor says whether
+        anything was imported. Asking twice changes nothing the first ask
+        did not, which is why a timed out call may be retried.
+
+        Parameters
+        ----------
+        repos : list[dict]
+            Repository records from build_repo_nudge
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the API refuses the call
+        """
+        # The method also takes "urgency", which Phorge reads nowhere - its
+        # source calls the parameter a joke - so it is not offered.
+        try:
+            with idempotent_writes():
+                self.phab.diffusion.looksoon(
+                    repositories=[repo["phid"] for repo in repos]
+                )
+        except PhabfiveAPIException as e:
+            raise PhabfiveDataException(str(e))
 
     def repo_list(self, status=None, show_uris=False, show_policy=False):
         """
