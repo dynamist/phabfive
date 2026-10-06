@@ -14,6 +14,7 @@ from phabfive.exceptions import (
     PhabfiveInputException,
     PhabfiveNotFoundException,
     PhabfiveRemoteException,
+    PhabfiveTimeoutException,
 )
 
 
@@ -22,6 +23,7 @@ from phabfive.exceptions import (
     [
         (PhabfiveInputException, (PhabfiveConfigException, ValueError)),
         (PhabfiveNotFoundException, (PhabfiveDataException, LookupError)),
+        (PhabfiveTimeoutException, (PhabfiveDataException,)),
         (PhabfiveAPIException, (PhabfiveRemoteException,)),
         (PhabfiveConnectionException, (PhabfiveRemoteException,)),
     ],

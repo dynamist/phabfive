@@ -582,6 +582,60 @@ def test_repo_nudge_sends_nothing_when_one_is_missing(phabfive_raw):
     assert "Asked Phorge" not in result.stdout + result.stderr
 
 
+def test_repo_nudge_wait_returns_once_the_import_has_finished(
+    phabfive, create_repository
+):
+    """A repository just created is importing, so there is something to wait on."""
+    name = create_repository()
+
+    [repo] = phabfive(
+        "diffusion",
+        "repo",
+        "nudge",
+        name,
+        "--wait",
+        "--timeout",
+        "120",
+        json_output=True,
+    )
+
+    assert repo["Repository"]["Importing"] is False
+
+
+def test_repo_nudge_commit_waits_for_an_imported_commit(phabfive_raw, conduit):
+    commit = _imported_commits(conduit, "GUNNAR")[0]["fields"]["identifier"]
+
+    result = phabfive_raw(
+        "diffusion",
+        "repo",
+        "nudge",
+        "GUNNAR",
+        "--commit",
+        commit[:12],
+        "--timeout",
+        "60",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"{commit[:12]} is imported into R" in result.stderr
+
+
+def test_repo_nudge_commit_gives_up_on_a_commit_that_is_not_there(phabfive_raw):
+    result = phabfive_raw(
+        "diffusion",
+        "repo",
+        "nudge",
+        "GUNNAR",
+        "--commit",
+        "0000000dead",
+        "--timeout",
+        "2",
+    )
+
+    assert result.returncode == 1
+    assert "0000000dead is still not found in R" in result.stderr
+
+
 def test_repo_show_fails_on_a_partial_result(phabfive_raw):
     """GUNNAR is shown, and the exit code still says something was missed."""
     result = phabfive_raw(
