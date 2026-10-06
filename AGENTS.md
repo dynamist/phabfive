@@ -249,9 +249,10 @@ nothing is discovered.
   POST and a write allows nothing - which retries a write only when it never reached the
   server
 - A write is retried like a read only inside `idempotent_writes()`. Mark a call site only
-  when it sets fields of an existing object; `Maniphest.apply_task_edit` marks an edit
-  whose transaction types are all in `IDEMPOTENT_TRANSACTIONS`. Never mark a create or a
-  comment
+  when a second arrival changes nothing the first did not: setting fields of an existing
+  object, or `diffusion.looksoon`, which only raises an existing repository's
+  needs-update flag. `Maniphest.apply_task_edit` marks an edit whose transaction types
+  are all in `IDEMPOTENT_TRANSACTIONS`. Never mark a create or a comment
 - `is_read()` classifies by method name (`*search`, `*query`, `query*`, `get*`, `whoami`,
   `info`, `lookup`). A new read-only endpoint outside those shapes is treated as a write:
   safe, just not retried on a timeout
