@@ -293,6 +293,12 @@ def repo_nudge(
     for repo_arg in repos:
         repo_ids.extend(part.strip() for part in repo_arg.split(",") if part.strip())
 
+    # `nudge ,` satisfies the required argument and names nothing; sending
+    # it would be an empty request reported as success
+    if not repo_ids:
+        typer.echo("ERROR: No repository named", err=True)
+        raise typer.Exit(1)
+
     try:
         records = diffusion.build_repo_nudge(repo_ids)
     except PhabfiveDataException as e:

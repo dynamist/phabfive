@@ -3386,6 +3386,15 @@ class TestRepoNudgeCli:
 
         assert diffusion.build_repo_nudge.call_args[0][0] == ["R5", "R6", "R7"]
 
+    @pytest.mark.parametrize("arg", [",", " , ,"])
+    def test_naming_no_repository_is_refused(self, arg):
+        result, diffusion = self._invoke(["diffusion", "repo", "nudge", arg])
+
+        assert result.exit_code == 1
+        assert "No repository named" in result.output
+        diffusion.build_repo_nudge.assert_not_called()
+        diffusion.apply_repo_nudge.assert_not_called()
+
     def test_a_nudge_is_sent_and_reported(self):
         result, diffusion = self._invoke(["diffusion", "repo", "nudge", "R5"])
 
