@@ -407,6 +407,56 @@ class Diffusion(Phabfive):
         except PhabfiveAPIException as e:
             raise PhabfiveDataException(str(e))
 
+    def _waitable_repositories(self, monograms, waiting_for):
+        """The repositories a wait is on, as they are now, or why it is futile.
+
+        Asked every round, not once before the wait: a repository can be
+        deactivated, or hidden from the caller, while it is being waited on.
+
+        Parameters
+        ----------
+        monograms : dict
+            Repository PHID to monogram, in the order to report them
+        waiting_for : str
+            What the wait is for, named in the inactive repository's error
+
+        Returns
+        -------
+        dict
+            Repository PHID to its current record
+
+        Raises
+        ------
+        PhabfiveNotFoundException
+            If any has gone, or can no longer be seen. Reading it as done
+            would report a wait as finished without having confirmed it
+        PhabfiveDataException
+            If any is inactive. No daemon touches an inactive repository, so
+            whatever is waited for can never happen there
+        """
+        current = {
+            repo["phid"]: repo
+            for repo in fetch_repositories(
+                self.phab, constraints={"phids": list(monograms)}
+            )
+        }
+
+        gone = [monogram for phid, monogram in monograms.items() if phid not in current]
+        if gone:
+            raise PhabfiveNotFoundException(
+                f"{', '.join(gone)} can no longer be found, so the wait cannot "
+                "be confirmed"
+            )
+
+        for phid, monogram in monograms.items():
+            if current[phid]["fields"].get("status") == "inactive":
+                raise PhabfiveDataException(
+                    f"{monogram} is inactive, so {waiting_for} will not happen "
+                    "until it is activated"
+                )
+
+        return current
+
     def wait_for_import(self, repos, timeout=DEFAULT_TIMEOUT):
         """Wait until none of the repositories is still importing.
 
@@ -423,9 +473,10 @@ class Diffusion(Phabfive):
 
         Raises
         ------
+        PhabfiveNotFoundException
+            If a repository can no longer be found
         PhabfiveDataException
-            If a repository still importing is inactive. No daemon touches
-            an inactive repository, so its import can never finish
+            If a repository is inactive, at once rather than at the timeout
         PhabfiveTimeoutException
             If any is still importing when the time is up, with their
             monograms in `pending`
@@ -433,27 +484,13 @@ class Diffusion(Phabfive):
         monograms = {repo["phid"]: f"R{repo['id']}" for repo in repos}
 
         def importing():
-            current = {
-                repo["phid"]: repo
-                for repo in fetch_repositories(
-                    self.phab, constraints={"phids": list(monograms)}
-                )
-            }
-            pending = []
+            current = self._waitable_repositories(monograms, "an update")
 
-            for phid, monogram in monograms.items():
-                fields = current.get(phid, {}).get("fields", {})
-
-                if not fields.get("isImporting"):
-                    continue
-                if fields.get("status") == "inactive":
-                    raise PhabfiveDataException(
-                        f"{monogram} is inactive, so its import will never "
-                        "finish until it is activated"
-                    )
-                pending.append(monogram)
-
-            return pending
+            return [
+                monogram
+                for phid, monogram in monograms.items()
+                if current[phid]["fields"].get("isImporting")
+            ]
 
         poll(
             importing,
@@ -485,8 +522,10 @@ class Diffusion(Phabfive):
 
         Raises
         ------
+        PhabfiveNotFoundException
+            If the repository can no longer be found
         PhabfiveDataException
-            If the repository is inactive, since it is never updated
+            If the repository is inactive, at once rather than at the timeout
         PhabfiveTimeoutException
             If any commit is not imported when the time is up, with those
             hashes in `pending`
@@ -494,17 +533,15 @@ class Diffusion(Phabfive):
         monogram = f"R{repo['id']}"
         commits = list(dict.fromkeys(commits))
 
-        if repo["fields"].get("status") == "inactive":
-            raise PhabfiveDataException(
-                f"{monogram} is inactive, so {', '.join(commits)} will never be "
-                "imported until it is activated"
-            )
-
         # What the last round saw of each pending commit: whether it was
         # found at all, for the timeout to say how far it got
         found = {}
 
         def not_imported():
+            self._waitable_repositories(
+                {repo["phid"]: monogram}, f"the import of {', '.join(commits)}"
+            )
+
             records = search_all_pages(
                 self.phab.diffusion.commit.search,
                 constraints={"identifiers": commits, "repositories": [repo["phid"]]},

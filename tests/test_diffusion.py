@@ -3537,7 +3537,10 @@ class TestRepoNudgeCli:
             (["R5", "R6", "--commit", "7d7fc2c3"], "name exactly one"),
             (["R5", "--commit", "main"], "not a commit hash"),
             (["R5", "--commit", "7d7fc2c3,main"], "'main' is not a commit hash"),
-            (["R5", "--commit", ","], "--commit names no commit"),
+            (["R5", "--commit", ","], "--commit names an empty commit"),
+            (["R5", "--commit", "", "--commit", "7d7fc2c3"], "an empty commit"),
+            (["R5", "--commit", "7d7fc2c3,"], "an empty commit"),
+            (["R5", "--wait", "--commit", "7d7fc2c3"], "wait for different things"),
             (["R5", "--timeout", "9"], "--timeout needs --wait or --commit"),
         ],
     )
@@ -3693,12 +3696,11 @@ class TestWaitForImport:
         assert str(caught.value) == "Still importing after 3s: R6"
         assert caught.value.pending == ["R6"]
 
-    def test_an_inactive_repository_still_importing_fails_at_once(
-        self, diffusion, clock
-    ):
-        """No daemon touches it, so waiting out the timeout would be futile."""
+    @pytest.mark.parametrize("importing", [True, False])
+    def test_an_inactive_repository_fails_at_once(self, diffusion, clock, importing):
+        """No daemon touches it, so the nudge did nothing to wait for."""
         diffusion.phab.diffusion.repository.search.return_value = {
-            "data": [_importing(5, True, status="inactive")],
+            "data": [_importing(5, importing, status="inactive")],
             "cursor": {"after": None},
         }
 
@@ -3706,6 +3708,30 @@ class TestWaitForImport:
             diffusion.wait_for_import([_importing(5, True)])
 
         assert clock.sleeps == []
+
+    def test_a_repository_deactivated_mid_wait_fails_that_round(self, diffusion, clock):
+        _search_answers(
+            diffusion,
+            [_importing(5, True)],
+            [_importing(5, True, status="inactive")],
+        )
+
+        with pytest.raises(PhabfiveDataException, match="R5 is inactive"):
+            diffusion.wait_for_import([_importing(5, True)])
+
+        assert clock.sleeps == [1]
+
+    def test_a_repository_that_vanishes_is_not_taken_as_finished(
+        self, diffusion, clock
+    ):
+        from phabfive.exceptions import PhabfiveNotFoundException
+
+        _search_answers(diffusion, [_importing(5, True)], [])
+
+        with pytest.raises(
+            PhabfiveNotFoundException, match="R5 can no longer be found"
+        ):
+            diffusion.wait_for_import([_importing(5, True)])
 
 
 def _commit(identifier, imported):
@@ -3720,6 +3746,14 @@ B_HASH = "1b2eccf4a6c9e0e1f2a3b4c5d6e7f8091a2b3c4d"
 
 
 class TestWaitForCommits:
+    @pytest.fixture(autouse=True)
+    def _active_repository(self, diffusion):
+        """Each round reads the repository too; it is R5 and active here."""
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_importing(5, False)],
+            "cursor": {"after": None},
+        }
+
     def test_waits_for_the_commit_to_be_imported_not_just_found(self, diffusion, clock):
         diffusion.phab.diffusion.commit.search.side_effect = [
             {"data": []},
@@ -3783,12 +3817,29 @@ class TestWaitForCommits:
         assert caught.value.pending == ["7d7fc2c3", "1b2eccf4"]
 
     def test_an_inactive_repository_fails_without_asking(self, diffusion, clock):
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_importing(5, False, status="inactive")],
+            "cursor": {"after": None},
+        }
+
         with pytest.raises(PhabfiveDataException, match="R5 is inactive"):
-            diffusion.wait_for_commits(
-                _importing(5, False, status="inactive"), ["7d7fc2c3"]
-            )
+            diffusion.wait_for_commits(_importing(5, False), ["7d7fc2c3"])
 
         diffusion.phab.diffusion.commit.search.assert_not_called()
+
+    def test_a_repository_deactivated_mid_wait_fails_that_round(self, diffusion, clock):
+        """The status is read every round, not only before the nudge."""
+        _search_answers(
+            diffusion,
+            [_importing(5, False)],
+            [_importing(5, False, status="inactive")],
+        )
+        diffusion.phab.diffusion.commit.search.return_value = {"data": []}
+
+        with pytest.raises(PhabfiveDataException, match="R5 is inactive"):
+            diffusion.wait_for_commits(_importing(5, False), ["7d7fc2c3"])
+
+        assert clock.sleeps == [1]
 
 
 class TestEditHeadersLinkToPhabricator:
