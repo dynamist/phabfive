@@ -516,7 +516,7 @@ phabfive --format=json diffusion repo show R5
 phabfive diffusion repo show R5 R6 --show-uris --show-branches
 phabfive --format=json diffusion repo show R5 --show-policy
 phabfive diffusion repo nudge R5 R6         # Update Now: fetch soon, returns at once
-phabfive diffusion repo nudge R5 --commit 7d7fc2c3e002   # and wait until it is imported
+phabfive diffusion repo nudge R5 --commit 7d7fc2c3e002,1b2eccf4a6c9   # and wait until both are imported
 phabfive --format=json diffusion uri list R5
 phabfive --format=table diffusion uri list R5        # the matrix, one row per URI
 phabfive diffusion uri list R5 --clone
@@ -591,10 +591,13 @@ update and returns at once. To block until the work is done:
   (`Importing` false) - what a new repository or a new observe URI goes through.
   A repository imported once does not import again for new commits, so for one
   of those `--wait` returns at once and proves nothing.
-- `--commit <hash>` waits until that commit is imported into the one repository
-  named - found *and* fully imported, so Diffusion can show it and it can be
-  attached to a task. The hash alone, at least 7 characters; the repository is
-  the argument.
+- `--commit <hash>` waits until every commit named is imported into the one
+  repository named - found *and* fully imported, so Diffusion can show it and it
+  can be attached to a task. Repeatable and comma-separated. Name every commit of
+  a push that is needed, not just the newest: Phorge discovers a push in order
+  but imports its commits independently, so the newest being imported says
+  nothing about the ones before it. Each value is a hash alone, at least 7
+  characters; the repository is the argument.
 - `--timeout <seconds>` (default 300) bounds either. Running out exits 1 with
   what was still pending; so does an inactive repository, at once, since no
   daemon ever updates one.

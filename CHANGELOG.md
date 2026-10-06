@@ -57,12 +57,14 @@
 
 * **`diffusion repo nudge --wait` and `--commit` wait for the import.** `--wait` waits
   until each repository's initial import has finished, which is what a new repository
-  or observe URI goes through. `--commit <hash>` waits until that commit is imported
-  into the one repository named - found and fully imported, so Diffusion can show it.
+  or observe URI goes through. `--commit <hash>` waits until every commit named is
+  imported into the one repository named - found and fully imported, so Diffusion can
+  show it. It is repeatable and comma-separated, and one search a round answers for all
+  of them, since the commits of a push are imported independently.
   `--timeout` (300 seconds by default) bounds either, and running out exits 1 naming
   what was still pending. An inactive repository fails at once, since no daemon
   updates it. A program gets the same from `Diffusion.wait_for_import` and
-  `wait_for_commit`, which raise the new `PhabfiveTimeoutException`. #557
+  `wait_for_commits`, which raise the new `PhabfiveTimeoutException`. #557
 
 ## Bug Fixes
 
