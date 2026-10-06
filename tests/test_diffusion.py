@@ -3297,6 +3297,161 @@ class TestRepoShowCli:
         assert "Traceback" not in result.output
 
 
+def _nudgeable(*specs):
+    """A Diffusion whose instance holds one repository per (id, name, status)."""
+    repos = []
+    for repo_id, name, status in specs:
+        repo = _repo(name, status=status)
+        repo["id"] = repo_id
+        repos.append(repo)
+
+    return _listing(repos)
+
+
+class TestRepoNudge:
+    """`diffusion.looksoon`: one call, PHIDs only, and all or nothing."""
+
+    def test_one_call_names_every_repository_by_phid(self):
+        diffusion = _nudgeable((5, "alpha", "active"), (6, "beta", "active"))
+
+        repos = diffusion.build_repo_nudge(["R6", "alpha"])
+        diffusion.apply_repo_nudge(repos)
+
+        diffusion.phab.diffusion.looksoon.assert_called_once_with(
+            repositories=["PHID-REPO-beta", "PHID-REPO-alpha"]
+        )
+
+    def test_a_missing_repository_fails_the_lot(self):
+        from phabfive.exceptions import PhabfiveNotFoundException
+
+        diffusion = _nudgeable((5, "alpha", "active"))
+
+        with pytest.raises(PhabfiveNotFoundException, match="'R9' not found"):
+            diffusion.build_repo_nudge(["R5", "R9"])
+
+    def test_every_missing_repository_is_named(self):
+        diffusion = _nudgeable((5, "alpha", "active"))
+
+        with pytest.raises(
+            PhabfiveDataException, match="Repositories 'R8', 'R9' not found"
+        ):
+            diffusion.build_repo_nudge(["R8", "R5", "R9"])
+
+    def test_an_api_refusal_is_a_data_error(self):
+        from phabfive.exceptions import PhabfiveAPIException
+
+        diffusion = _nudgeable((5, "alpha", "active"))
+        diffusion.phab.diffusion.looksoon.side_effect = PhabfiveAPIException(
+            "ERR-CONDUIT-CORE", "You do not have permission"
+        )
+
+        with pytest.raises(PhabfiveDataException, match="do not have permission"):
+            diffusion.apply_repo_nudge(diffusion.build_repo_nudge(["R5"]))
+
+
+class TestRepoNudgeCli:
+    """The CLI wiring: what is sent, what is said, and the exit code."""
+
+    def _invoke(self, args, records=None, build_error=None, apply_error=None):
+        from typer.testing import CliRunner
+
+        from phabfive.cli import app
+
+        mock_diffusion = MagicMock()
+        if build_error is not None:
+            mock_diffusion.build_repo_nudge.side_effect = build_error
+        else:
+            mock_diffusion.build_repo_nudge.return_value = (
+                records
+                if records is not None
+                else [
+                    {
+                        "id": 5,
+                        "phid": "PHID-REPO-5",
+                        "fields": {"name": "alpha", "status": "active"},
+                    }
+                ]
+            )
+        if apply_error is not None:
+            mock_diffusion.apply_repo_nudge.side_effect = apply_error
+        mock_diffusion.repo_show.return_value = {"repositories": [], "missing_ids": []}
+
+        with patch(
+            "phabfive.cli.diffusion._get_diffusion_app", return_value=mock_diffusion
+        ):
+            return CliRunner().invoke(app, args), mock_diffusion
+
+    def test_repositories_are_comma_separated_too(self):
+        _, diffusion = self._invoke(["diffusion", "repo", "nudge", "R5,R6", "R7"])
+
+        assert diffusion.build_repo_nudge.call_args[0][0] == ["R5", "R6", "R7"]
+
+    def test_a_nudge_is_sent_and_reported(self):
+        result, diffusion = self._invoke(["diffusion", "repo", "nudge", "R5"])
+
+        assert result.exit_code == 0
+        diffusion.apply_repo_nudge.assert_called_once()
+        assert "Asked Phorge to update R5 (alpha) soon" in result.output
+
+    def test_a_dry_run_sends_nothing(self):
+        result, diffusion = self._invoke(
+            ["diffusion", "repo", "nudge", "R5", "--dry-run"]
+        )
+
+        assert result.exit_code == 0
+        diffusion.apply_repo_nudge.assert_not_called()
+        assert "[DRY RUN] Would ask Phorge to update R5 (alpha)" in result.output
+
+    def test_a_missing_repository_exits_one_without_sending(self):
+        from phabfive.exceptions import PhabfiveNotFoundException
+
+        result, diffusion = self._invoke(
+            ["diffusion", "repo", "nudge", "R9"],
+            build_error=PhabfiveNotFoundException("Repository 'R9' not found"),
+        )
+
+        assert result.exit_code == 1
+        assert "ERROR: Repository 'R9' not found" in result.output
+        diffusion.apply_repo_nudge.assert_not_called()
+
+    def test_an_api_refusal_exits_one(self):
+        result, _ = self._invoke(
+            ["diffusion", "repo", "nudge", "R5"],
+            apply_error=PhabfiveDataException("You do not have permission"),
+        )
+
+        assert result.exit_code == 1
+        assert "You do not have permission" in result.output
+        assert "Traceback" not in result.output
+
+    def test_an_inactive_repository_is_warned_about_but_still_nudged(self):
+        result, diffusion = self._invoke(
+            ["diffusion", "repo", "nudge", "R5"],
+            records=[
+                {
+                    "id": 5,
+                    "phid": "PHID-REPO-5",
+                    "fields": {"name": "alpha", "status": "inactive"},
+                }
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "R5 (alpha) is inactive" in result.output
+        assert "repo edit R5 --status active" in result.output
+        diffusion.apply_repo_nudge.assert_called_once()
+
+    def test_a_machine_format_answers_with_the_show_records(self):
+        result, diffusion = self._invoke(
+            ["--format=json", "diffusion", "repo", "nudge", "alpha"]
+        )
+
+        assert result.exit_code == 0
+        diffusion.repo_show.assert_called_once_with(["R5"])
+        # The line a person reads is not mixed into the JSON
+        assert "Asked Phorge" not in result.stdout
+
+
 class TestEditHeadersLinkToPhabricator:
     """The header says which Phabricator object, not which git remote.
 

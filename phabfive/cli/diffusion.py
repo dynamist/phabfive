@@ -254,6 +254,82 @@ def repo_show(
         raise typer.Exit(1)
 
 
+@repo_app.command("nudge")
+def repo_nudge(
+    ctx: typer.Context,
+    repos: List[str] = typer.Argument(
+        ..., help="Repository monogram, callsign or short name (e.g., R5 R6 or R5,R6)"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be nudged without nudging it"
+    ),
+) -> None:
+    """Ask Phorge to update repositories now rather than later.
+
+    What Update Now on the repository's Manage → Status page does, through
+    the diffusion.looksoon Conduit method. Phorge checks a repository that
+    rarely changes less and less often, so a fresh commit can take a while
+    to be observed and imported.
+
+    The update is only scheduled: the command returns before anything is
+    fetched. Watch the Importing field of `repo show` to see it finish.
+
+    \b
+    Examples:
+        phabfive diffusion repo nudge R5
+        phabfive diffusion repo nudge R5,R6 --dry-run
+        phabfive --format=json diffusion repo nudge phabfive
+    """
+    _setup_output_options(ctx)
+    diffusion = _get_diffusion_app()
+
+    # A machine-readable format answers with the records `repo show` gives,
+    # so the lines a person reads go to stderr and stdout stays parseable.
+    machine = is_machine_format(_get_output_format(ctx))
+    preview = sys.stderr if machine else sys.stdout
+
+    # Support both space-separated (R5 R6) and comma-separated (R5,R6)
+    repo_ids: list[str] = []
+    for repo_arg in repos:
+        repo_ids.extend(part.strip() for part in repo_arg.split(",") if part.strip())
+
+    try:
+        records = diffusion.build_repo_nudge(repo_ids)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    labels = [f"R{repo['id']} ({repo['fields']['name']})" for repo in records]
+
+    # An inactive repository is not tracked, so the daemons ignore the nudge.
+    # It is still sent - activating it later is enough - but said out loud.
+    for label, repo in zip(labels, records):
+        if repo["fields"].get("status") != "active":
+            typer.echo(
+                f"WARNING: {label} is inactive and will not be updated until it "
+                f"is activated: phabfive diffusion repo edit R{repo['id']} "
+                "--status active",
+                err=True,
+            )
+
+    if dry_run:
+        for label in labels:
+            print(f"[DRY RUN] Would ask Phorge to update {label}", file=preview)
+        return
+
+    try:
+        diffusion.apply_repo_nudge(records)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    for label in labels:
+        print(f"Asked Phorge to update {label} soon", file=preview)
+
+    if machine:
+        _show_repos_after_write(ctx, diffusion, [f"R{repo['id']}" for repo in records])
+
+
 # Why each command refuses a near-duplicate by default. A create and a
 # rename are not equally grave - a rename can be undone, a create cannot -
 # so they do not claim the same reason.

@@ -131,6 +131,10 @@ def create_repository(phabfive, conduit):
     yield create
 
     for name in created:
+        # Update Now, so the wait below is for the import and not for the
+        # daemons to get round to a repository nobody has pushed to.
+        conduit("diffusion.looksoon", **{"repositories[0]": name})
+
         deadline = time.monotonic() + 60
         settled = False
 
@@ -260,6 +264,7 @@ def settled_repositories(conduit):
     format comparison with no stable data to compare.
     """
     deadline = time.monotonic() + 180
+    nudged = set()
 
     while True:
         importing = [
@@ -270,6 +275,16 @@ def settled_repositories(conduit):
 
         if not importing:
             return
+
+        # Update Now, once per repository, rather than waiting on the
+        # daemons' backoff for a repository that rarely changes.
+        unnudged = [repo["phid"] for repo in importing if repo["phid"] not in nudged]
+        if unnudged:
+            conduit(
+                "diffusion.looksoon",
+                **{f"repositories[{i}]": phid for i, phid in enumerate(unnudged)},
+            )
+            nudged.update(unnudged)
 
         if time.monotonic() >= deadline:
             pytest.skip(
