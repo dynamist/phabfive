@@ -45,6 +45,8 @@ SMOKE_TOKEN = "api-smoketest0000000000000000000"
 # The discard port. Refuses instantly rather than hanging, which is what makes
 # an offline connection-error check fast and reliable.
 DEAD_URL = "http://127.0.0.1:9/api/"
+# How a clean failure against DEAD_URL reads: the error names the server
+DEAD_URL_ERROR = "Error: 127.0.0.1:9 could not be reached"
 
 # This script lives in scripts/, so the corpus is one directory up.
 REPOSITORY = Path(__file__).resolve().parent.parent
@@ -475,7 +477,7 @@ def check_offline_command(executable, arguments, home, timeout):
 
     if code == 0:
         raise Failure(f"unexpectedly succeeded against {DEAD_URL}\n{indent(output)}")
-    if "Failed to connect to Phabricator API" not in output:
+    if DEAD_URL_ERROR not in output:
         raise Failure(f"no clean connection error\n{indent(output)}")
 
     return "clean connection error"
