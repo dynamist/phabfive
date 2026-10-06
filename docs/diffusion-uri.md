@@ -505,17 +505,22 @@ Finished importing R16 (uridoc377)
 `--wait` is for the repository's initial import, which a new observe URI
 starts. A repository that has been imported once does not import again for
 new commits, so `--wait` returns at once for it. After a push upstream, name
-the commit instead, and the command waits until Diffusion has imported it:
+the commits instead, and the command waits until Diffusion has imported every
+one of them:
 
 ```bash
-phabfive diffusion repo nudge uridoc377 --commit 7d7fc2c3e002 --timeout 600
+phabfive diffusion repo nudge uridoc377 --commit 7d7fc2c3e002,1b2eccf4a6c9 --timeout 600
 ```
 
 ```
 Asked Phorge to update R16 (uridoc377) soon
-Waiting up to 600s for 7d7fc2c3e002 to be imported into R16 (uridoc377)
-7d7fc2c3e002 is imported into R16 (uridoc377)
+Waiting up to 600s for 7d7fc2c3e002, 1b2eccf4a6c9 to be imported into R16 (uridoc377)
+7d7fc2c3e002, 1b2eccf4a6c9 are imported into R16 (uridoc377)
 ```
+
+Name each commit you need, not only the newest. Phorge discovers the commits
+of a push in order but imports them independently, so the newest being
+imported says nothing about the ones before it.
 
 ## Filtering
 

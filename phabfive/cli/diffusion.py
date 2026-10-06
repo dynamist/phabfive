@@ -265,10 +265,13 @@ def repo_nudge(
     wait: bool = typer.Option(
         False, "--wait", "-w", help="Wait until the repositories finish importing"
     ),
-    commit: Optional[str] = typer.Option(
+    commit: Optional[List[str]] = typer.Option(
         None,
         "--commit",
-        help="Wait until this commit hash is imported (one repository only)",
+        help=(
+            "Wait until this commit hash is imported (one repository only; "
+            "repeatable and comma-separated)"
+        ),
     ),
     timeout: Optional[int] = typer.Option(
         None,
@@ -291,8 +294,10 @@ def repo_nudge(
     anything is fetched. --wait waits for a repository's initial import,
     which is what a new repository or a new observe URI goes through.
     An imported repository does not import again for new commits, so for
-    those name the commit with --commit, which waits until it is imported.
-    Either gives up after --timeout seconds and exits 1.
+    those name the commits with --commit, which waits until every one of
+    them is imported. Name each commit of a push that matters: they are
+    imported independently, so the newest being done says nothing about
+    the rest. Either gives up after --timeout seconds and exits 1.
 
     \b
     Examples:
@@ -300,6 +305,7 @@ def repo_nudge(
         phabfive diffusion repo nudge R5,R6 --dry-run
         phabfive diffusion repo nudge R5 --wait
         phabfive diffusion repo nudge R5 --commit 7d7fc2c3e002 --timeout 600
+        phabfive diffusion repo nudge R5 --commit 7d7fc2c3e002,1b2eccf4a6c9
         phabfive --format=json diffusion repo nudge phabfive
     """
     # Support both space-separated (R5 R6) and comma-separated (R5,R6)
@@ -314,19 +320,30 @@ def repo_nudge(
         typer.echo("ERROR: No repository named", err=True)
         raise typer.Exit(1)
 
-    if commit is not None:
-        if len(repo_ids) != 1:
-            typer.echo(
-                "ERROR: --commit waits on one repository; name exactly one", err=True
-            )
-            raise typer.Exit(1)
-        try:
-            commit = validate_commit_hash(commit)
-        except PhabfiveInputException as e:
-            typer.echo(f"ERROR: --commit: {e}", err=True)
-            raise typer.Exit(1)
+    # Repeatable and comma-separated, the way the repositories are
+    commits: list[str] = []
+    for commit_arg in commit or []:
+        for part in commit_arg.split(","):
+            if not part.strip():
+                continue
+            try:
+                commits.append(validate_commit_hash(part))
+            except PhabfiveInputException as e:
+                typer.echo(f"ERROR: --commit: {e}", err=True)
+                raise typer.Exit(1)
+    commits = list(dict.fromkeys(commits))
 
-    if timeout is not None and not (wait or commit):
+    if commit and not commits:
+        typer.echo("ERROR: --commit names no commit", err=True)
+        raise typer.Exit(1)
+
+    if commits and len(repo_ids) != 1:
+        typer.echo(
+            "ERROR: --commit waits on one repository; name exactly one", err=True
+        )
+        raise typer.Exit(1)
+
+    if timeout is not None and not (wait or commits):
         typer.echo("ERROR: --timeout needs --wait or --commit", err=True)
         raise typer.Exit(1)
 
@@ -376,14 +393,15 @@ def repo_nudge(
     # A timeout is a PhabfiveDataException too, so it ends here with the
     # same one line and exit status 1 as every other failure
     try:
-        if commit:
+        if commits:
+            named = ", ".join(commits)
             print(
-                f"Waiting up to {seconds}s for {commit} to be imported into "
-                f"{labels[0]}",
+                f"Waiting up to {seconds}s for {named} to be imported into {labels[0]}",
                 file=preview,
             )
-            diffusion.wait_for_commit(records[0], commit, timeout=seconds)
-            print(f"{commit} is imported into {labels[0]}", file=preview)
+            diffusion.wait_for_commits(records[0], commits, timeout=seconds)
+            verb = "is" if len(commits) == 1 else "are"
+            print(f"{named} {verb} imported into {labels[0]}", file=preview)
         elif wait:
             print(
                 f"Waiting up to {seconds}s for {', '.join(labels)} to finish importing",

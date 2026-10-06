@@ -49,6 +49,7 @@ from phabfive.exceptions import (
     PhabfiveNameCollisionException,
     PhabfiveNotFoundException,
 )
+from phabfive.pagination import search_all_pages
 from phabfive.policy import (
     policy_label,
     policy_lockout_message,
@@ -411,7 +412,7 @@ class Diffusion(Phabfive):
 
         `isImporting` is the initial import: a repository that has been
         imported once does not report it again for new commits, so this
-        returns at once for one. `wait_for_commit` is the wait for a commit.
+        returns at once for one. `wait_for_commits` is the wait for commits.
 
         Parameters
         ----------
@@ -460,20 +461,25 @@ class Diffusion(Phabfive):
             lambda pending: f"Still importing after {timeout:g}s: {', '.join(pending)}",
         )
 
-    def wait_for_commit(self, repo, commit, timeout=DEFAULT_TIMEOUT):
-        """Wait until a commit has been imported into a repository.
+    def wait_for_commits(self, repo, commits, timeout=DEFAULT_TIMEOUT):
+        """Wait until every one of the commits is imported into a repository.
 
         A commit is found as soon as the daemons discover it, and imported
         once every step - message, changes, ownership - has run, which is
         when `isImported` is set. Waiting for it to be found would hand back
         a commit Diffusion cannot show yet.
 
+        Each commit is waited for in its own right: the daemons discover a
+        push in order but import its commits independently, so the newest
+        being imported says nothing about the ones before it. One search a
+        round answers for all of them.
+
         Parameters
         ----------
         repo : dict
             The repository record, from build_repo_nudge
-        commit : str
-            A commit hash, as validate_commit_hash answers with
+        commits : list[str]
+            Commit hashes, as validate_commit_hash answers with
         timeout : float, optional
             Seconds to wait for
 
@@ -482,31 +488,53 @@ class Diffusion(Phabfive):
         PhabfiveDataException
             If the repository is inactive, since it is never updated
         PhabfiveTimeoutException
-            If the commit is not imported when the time is up
+            If any commit is not imported when the time is up, with those
+            hashes in `pending`
         """
         monogram = f"R{repo['id']}"
+        commits = list(dict.fromkeys(commits))
 
         if repo["fields"].get("status") == "inactive":
             raise PhabfiveDataException(
-                f"{monogram} is inactive, so {commit} will never be imported "
-                "until it is activated"
+                f"{monogram} is inactive, so {', '.join(commits)} will never be "
+                "imported until it is activated"
             )
 
-        found = []
+        # What the last round saw of each pending commit: whether it was
+        # found at all, for the timeout to say how far it got
+        found = {}
 
         def not_imported():
-            result = self.phab.diffusion.commit.search(
-                constraints={"identifiers": [commit], "repositories": [repo["phid"]]}
+            records = search_all_pages(
+                self.phab.diffusion.commit.search,
+                constraints={"identifiers": commits, "repositories": [repo["phid"]]},
             )
-            found[:] = (result or {}).get("data", [])
+            found.clear()
+            pending = []
 
-            if found and all(c["fields"].get("isImported") for c in found):
-                return []
-            return [commit]
+            # A result does not say which identifier it matched, but a hash
+            # given is a prefix of the full one it found
+            for commit in commits:
+                matches = [
+                    record
+                    for record in records
+                    if record["fields"].get("identifier", "").startswith(commit)
+                ]
+
+                if matches and all(m["fields"].get("isImported") for m in matches):
+                    continue
+
+                found[commit] = bool(matches)
+                pending.append(commit)
+
+            return pending
 
         def describe(pending):
-            state = "found but not yet imported" if found else "not found"
-            return f"{commit} is still {state} in {monogram} after {timeout:g}s"
+            states = ", ".join(
+                f"{commit} ({'found but not yet imported' if found[commit] else 'not found'})"
+                for commit in pending
+            )
+            return f"Not imported into {monogram} after {timeout:g}s: {states}"
 
         poll(not_imported, timeout, describe)
 

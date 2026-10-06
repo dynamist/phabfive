@@ -602,8 +602,11 @@ def test_repo_nudge_wait_returns_once_the_import_has_finished(
     assert repo["Repository"]["Importing"] is False
 
 
-def test_repo_nudge_commit_waits_for_an_imported_commit(phabfive_raw, conduit):
-    commit = _imported_commits(conduit, "GUNNAR")[0]["fields"]["identifier"]
+def test_repo_nudge_commit_waits_for_imported_commits(phabfive_raw, conduit):
+    first, second = [
+        commit["fields"]["identifier"][:12]
+        for commit in _imported_commits(conduit, "GUNNAR")[:2]
+    ]
 
     result = phabfive_raw(
         "diffusion",
@@ -611,13 +614,13 @@ def test_repo_nudge_commit_waits_for_an_imported_commit(phabfive_raw, conduit):
         "nudge",
         "GUNNAR",
         "--commit",
-        commit[:12],
+        f"{first},{second}",
         "--timeout",
         "60",
     )
 
     assert result.returncode == 0, result.stderr
-    assert f"{commit[:12]} is imported into R" in result.stderr
+    assert f"{first}, {second} are imported into R" in result.stderr
 
 
 def test_repo_nudge_commit_gives_up_on_a_commit_that_is_not_there(phabfive_raw):
@@ -633,7 +636,7 @@ def test_repo_nudge_commit_gives_up_on_a_commit_that_is_not_there(phabfive_raw):
     )
 
     assert result.returncode == 1
-    assert "0000000dead is still not found in R" in result.stderr
+    assert "0000000dead (not found)" in result.stderr
 
 
 def test_repo_show_fails_on_a_partial_result(phabfive_raw):
