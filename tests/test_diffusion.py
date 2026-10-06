@@ -3352,12 +3352,17 @@ class TestRepoNudge:
 class TestRepoNudgeCli:
     """The CLI wiring: what is sent, what is said, and the exit code."""
 
-    def _invoke(self, args, records=None, build_error=None, apply_error=None):
+    def _invoke(
+        self, args, records=None, build_error=None, apply_error=None, wait_error=None
+    ):
         from typer.testing import CliRunner
 
         from phabfive.cli import app
 
         mock_diffusion = MagicMock()
+        if wait_error is not None:
+            mock_diffusion.wait_for_import.side_effect = wait_error
+            mock_diffusion.wait_for_commit.side_effect = wait_error
         if build_error is not None:
             mock_diffusion.build_repo_nudge.side_effect = build_error
         else:
@@ -3459,6 +3464,267 @@ class TestRepoNudgeCli:
         diffusion.repo_show.assert_called_once_with(["R5"])
         # The line a person reads is not mixed into the JSON
         assert "Asked Phorge" not in result.stdout
+
+    def test_wait_waits_for_every_repository(self):
+        result, diffusion = self._invoke(["diffusion", "repo", "nudge", "R5", "--wait"])
+
+        assert result.exit_code == 0
+        diffusion.wait_for_import.assert_called_once()
+        assert diffusion.wait_for_import.call_args[1] == {"timeout": 300}
+        assert "Finished importing R5 (alpha)" in result.output
+        diffusion.wait_for_commit.assert_not_called()
+
+    def test_commit_waits_for_the_commit_alone(self):
+        result, diffusion = self._invoke(
+            [
+                "diffusion",
+                "repo",
+                "nudge",
+                "R5",
+                "--commit",
+                "7D7FC2C3",
+                "--timeout",
+                "9",
+            ]
+        )
+
+        assert result.exit_code == 0
+        record = diffusion.build_repo_nudge.return_value[0]
+        diffusion.wait_for_commit.assert_called_once_with(record, "7d7fc2c3", timeout=9)
+        diffusion.wait_for_import.assert_not_called()
+        assert "7d7fc2c3 is imported into R5 (alpha)" in result.output
+
+    def test_a_timeout_exits_one(self):
+        from phabfive.exceptions import PhabfiveTimeoutException
+
+        result, _ = self._invoke(
+            ["diffusion", "repo", "nudge", "R5", "--wait"],
+            wait_error=PhabfiveTimeoutException("Still importing after 300s: R5"),
+        )
+
+        assert result.exit_code == 1
+        assert "ERROR: Still importing after 300s: R5" in result.output
+
+    @pytest.mark.parametrize(
+        ("args", "message"),
+        [
+            (["R5", "R6", "--commit", "7d7fc2c3"], "name exactly one"),
+            (["R5", "--commit", "main"], "not a commit hash"),
+            (["R5", "--timeout", "9"], "--timeout needs --wait or --commit"),
+        ],
+    )
+    def test_a_refusal_comes_before_anything_is_asked(self, args, message):
+        result, diffusion = self._invoke(["diffusion", "repo", "nudge", *args])
+
+        assert result.exit_code == 1
+        assert message in result.output
+        diffusion.build_repo_nudge.assert_not_called()
+        diffusion.apply_repo_nudge.assert_not_called()
+
+    def test_a_dry_run_does_not_wait(self):
+        _, diffusion = self._invoke(
+            ["diffusion", "repo", "nudge", "R5", "--wait", "--dry-run"]
+        )
+
+        diffusion.wait_for_import.assert_not_called()
+
+
+class _Clock:
+    """A monotonic clock that only moves when the code under test sleeps."""
+
+    def __init__(self):
+        self.now = 0.0
+        self.sleeps = []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    fake = _Clock()
+    monkeypatch.setattr("phabfive.diffusion.waiting.monotonic", fake.monotonic)
+    monkeypatch.setattr("phabfive.retry._sleep", fake.sleep)
+    return fake
+
+
+class TestPoll:
+    def test_nothing_pending_returns_without_waiting(self, clock):
+        from phabfive.diffusion.waiting import poll
+
+        poll(lambda: [], 60, str)
+
+        assert clock.sleeps == []
+
+    def test_the_pauses_double_up_to_a_ceiling(self, clock):
+        from phabfive.diffusion.waiting import MAX_INTERVAL, poll
+
+        answers = iter([["R5"]] * 6 + [[]])
+
+        poll(lambda: next(answers), 600, str)
+
+        assert clock.sleeps == [1, 2, 4, 8, MAX_INTERVAL, MAX_INTERVAL]
+
+    def test_the_last_pause_ends_at_the_deadline(self, clock):
+        """The timeout is the time allowed, not a number of pauses."""
+        from phabfive.diffusion.waiting import poll
+        from phabfive.exceptions import PhabfiveTimeoutException
+
+        with pytest.raises(PhabfiveTimeoutException) as caught:
+            poll(lambda: ["R5"], 5, lambda pending: f"waited on {pending}")
+
+        assert clock.sleeps == [1, 2, 2]
+        assert str(caught.value) == "waited on ['R5']"
+        assert caught.value.pending == ["R5"]
+
+    def test_a_zero_timeout_is_a_single_look(self, clock):
+        from phabfive.diffusion.waiting import poll
+        from phabfive.exceptions import PhabfiveTimeoutException
+
+        looks = []
+
+        with pytest.raises(PhabfiveTimeoutException):
+            poll(lambda: looks.append(1) or ["R5"], 0, str)
+
+        assert looks == [1]
+        assert clock.sleeps == []
+
+
+class TestValidateCommitHash:
+    def test_a_hash_is_lower_cased(self):
+        from phabfive.diffusion.waiting import validate_commit_hash
+
+        assert validate_commit_hash(" 7D7FC2C3 ") == "7d7fc2c3"
+
+    @pytest.mark.parametrize("value", ["rGUNNAR7d7fc2c3", "R1:7d7fc2c3", "main"])
+    def test_anything_but_a_hash_is_refused(self, value):
+        from phabfive.diffusion.waiting import validate_commit_hash
+        from phabfive.exceptions import PhabfiveInputException
+
+        with pytest.raises(PhabfiveInputException, match="not a commit hash"):
+            validate_commit_hash(value)
+
+    def test_a_hash_too_short_to_match_is_refused(self):
+        from phabfive.diffusion.waiting import validate_commit_hash
+        from phabfive.exceptions import PhabfiveInputException
+
+        with pytest.raises(PhabfiveInputException, match="at least 7 characters"):
+            validate_commit_hash("7d7fc2")
+
+
+def _search_answers(diffusion, *pages):
+    """Answer diffusion.repository.search with each page in turn."""
+    diffusion.phab.diffusion.repository.search.side_effect = [
+        {"data": page, "cursor": {"after": None}} for page in pages
+    ]
+
+
+def _importing(repo_id, importing, status="active"):
+    repo = _repo(f"r{repo_id}", status=status)
+    repo["id"] = repo_id
+    repo["phid"] = f"PHID-REPO-{repo_id}"
+    repo["fields"]["isImporting"] = importing
+    return repo
+
+
+class TestWaitForImport:
+    def test_asks_for_the_repositories_by_phid_until_none_is_importing(
+        self, diffusion, clock
+    ):
+        _search_answers(
+            diffusion,
+            [_importing(5, True), _importing(6, False)],
+            [_importing(5, False), _importing(6, False)],
+        )
+
+        diffusion.wait_for_import([_importing(5, True), _importing(6, True)])
+
+        constraints = diffusion.phab.diffusion.repository.search.call_args[1][
+            "constraints"
+        ]
+        assert constraints == {"phids": ["PHID-REPO-5", "PHID-REPO-6"]}
+        assert clock.sleeps == [1]
+
+    def test_a_timeout_names_what_is_still_importing(self, diffusion, clock):
+        from phabfive.exceptions import PhabfiveTimeoutException
+
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_importing(5, False), _importing(6, True)],
+            "cursor": {"after": None},
+        }
+
+        with pytest.raises(PhabfiveTimeoutException) as caught:
+            diffusion.wait_for_import(
+                [_importing(5, True), _importing(6, True)], timeout=3
+            )
+
+        assert str(caught.value) == "Still importing after 3s: R6"
+        assert caught.value.pending == ["R6"]
+
+    def test_an_inactive_repository_still_importing_fails_at_once(
+        self, diffusion, clock
+    ):
+        """No daemon touches it, so waiting out the timeout would be futile."""
+        diffusion.phab.diffusion.repository.search.return_value = {
+            "data": [_importing(5, True, status="inactive")],
+            "cursor": {"after": None},
+        }
+
+        with pytest.raises(PhabfiveDataException, match="R5 is inactive"):
+            diffusion.wait_for_import([_importing(5, True)])
+
+        assert clock.sleeps == []
+
+
+def _commit(imported):
+    return {"phid": "PHID-CMIT-1", "fields": {"isImported": imported}}
+
+
+class TestWaitForCommit:
+    def test_waits_for_the_commit_to_be_imported_not_just_found(self, diffusion, clock):
+        diffusion.phab.diffusion.commit.search.side_effect = [
+            {"data": []},
+            {"data": [_commit(False)]},
+            {"data": [_commit(True)]},
+        ]
+
+        diffusion.wait_for_commit(_importing(5, False), "7d7fc2c3")
+
+        assert diffusion.phab.diffusion.commit.search.call_args[1] == {
+            "constraints": {
+                "identifiers": ["7d7fc2c3"],
+                "repositories": ["PHID-REPO-5"],
+            }
+        }
+        assert clock.sleeps == [1, 2]
+
+    @pytest.mark.parametrize(
+        ("answer", "state"),
+        [([], "not found"), ([_commit(False)], "found but not yet imported")],
+    )
+    def test_a_timeout_says_how_far_the_commit_got(
+        self, diffusion, clock, answer, state
+    ):
+        from phabfive.exceptions import PhabfiveTimeoutException
+
+        diffusion.phab.diffusion.commit.search.return_value = {"data": answer}
+
+        with pytest.raises(PhabfiveTimeoutException) as caught:
+            diffusion.wait_for_commit(_importing(5, False), "7d7fc2c3", timeout=2)
+
+        assert str(caught.value) == f"7d7fc2c3 is still {state} in R5 after 2s"
+
+    def test_an_inactive_repository_fails_without_asking(self, diffusion, clock):
+        with pytest.raises(PhabfiveDataException, match="R5 is inactive"):
+            diffusion.wait_for_commit(
+                _importing(5, False, status="inactive"), "7d7fc2c3"
+            )
+
+        diffusion.phab.diffusion.commit.search.assert_not_called()
 
 
 class TestEditHeadersLinkToPhabricator:

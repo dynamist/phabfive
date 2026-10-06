@@ -112,6 +112,20 @@ class PhabfiveNotFoundException(PhabfiveDataException, LookupError):
     pass
 
 
+class PhabfiveTimeoutException(PhabfiveDataException):
+    """
+    Raised when something waited for did not happen in the time allowed.
+
+    Not a failure of the server, which answered every question it was asked:
+    the answer just never became the one waited for. `pending` names what
+    was still outstanding, so a caller can report it or wait again.
+    """
+
+    def __init__(self, message, pending=()):
+        super().__init__(message)
+        self.pending = list(pending)
+
+
 class PhabfiveRemoteException(PhabfiveException):
     """Raised when the server could not be asked, or refused what was asked."""
 
@@ -162,5 +176,6 @@ __all__ = [
     "PhabfiveNameCollisionException",
     "PhabfiveNotFoundException",
     "PhabfiveRemoteException",
+    "PhabfiveTimeoutException",
     "PhabfiveValidationException",
 ]

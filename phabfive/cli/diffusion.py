@@ -15,9 +15,11 @@ from phabfive.cli.output import (
 )
 from phabfive.constants import REPO_STATUS_CHOICES
 from phabfive.diffusion.formatters import repository_is_hosted
+from phabfive.diffusion.waiting import DEFAULT_TIMEOUT, validate_commit_hash
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
+    PhabfiveInputException,
     PhabfiveNameCollisionException,
 )
 from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
@@ -260,6 +262,20 @@ def repo_nudge(
     repos: List[str] = typer.Argument(
         ..., help="Repository monogram, callsign or short name (e.g., R5 R6 or R5,R6)"
     ),
+    wait: bool = typer.Option(
+        False, "--wait", "-w", help="Wait until the repositories finish importing"
+    ),
+    commit: Optional[str] = typer.Option(
+        None,
+        "--commit",
+        help="Wait until this commit hash is imported (one repository only)",
+    ),
+    timeout: Optional[int] = typer.Option(
+        None,
+        "--timeout",
+        min=0,
+        help=f"Seconds to wait before giving up [default: {DEFAULT_TIMEOUT}]",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show what would be nudged without nudging it"
     ),
@@ -271,15 +287,49 @@ def repo_nudge(
     rarely changes less and less often, so a fresh commit can take a while
     to be observed and imported.
 
-    The update is only scheduled: the command returns before anything is
-    fetched. Watch the Importing field of `repo show` to see it finish.
+    The update is only scheduled, so by default the command returns before
+    anything is fetched. --wait waits for a repository's initial import,
+    which is what a new repository or a new observe URI goes through.
+    An imported repository does not import again for new commits, so for
+    those name the commit with --commit, which waits until it is imported.
+    Either gives up after --timeout seconds and exits 1.
 
     \b
     Examples:
         phabfive diffusion repo nudge R5
         phabfive diffusion repo nudge R5,R6 --dry-run
+        phabfive diffusion repo nudge R5 --wait
+        phabfive diffusion repo nudge R5 --commit 7d7fc2c3e002 --timeout 600
         phabfive --format=json diffusion repo nudge phabfive
     """
+    # Support both space-separated (R5 R6) and comma-separated (R5,R6)
+    repo_ids: list[str] = []
+    for repo_arg in repos:
+        repo_ids.extend(part.strip() for part in repo_arg.split(",") if part.strip())
+
+    # Everything that can be refused without asking the server is refused
+    # before anything is sent. `nudge ,` satisfies the required argument and
+    # names nothing, which would be an empty request reported as success.
+    if not repo_ids:
+        typer.echo("ERROR: No repository named", err=True)
+        raise typer.Exit(1)
+
+    if commit is not None:
+        if len(repo_ids) != 1:
+            typer.echo(
+                "ERROR: --commit waits on one repository; name exactly one", err=True
+            )
+            raise typer.Exit(1)
+        try:
+            commit = validate_commit_hash(commit)
+        except PhabfiveInputException as e:
+            typer.echo(f"ERROR: --commit: {e}", err=True)
+            raise typer.Exit(1)
+
+    if timeout is not None and not (wait or commit):
+        typer.echo("ERROR: --timeout needs --wait or --commit", err=True)
+        raise typer.Exit(1)
+
     _setup_output_options(ctx)
     diffusion = _get_diffusion_app()
 
@@ -287,17 +337,6 @@ def repo_nudge(
     # so the lines a person reads go to stderr and stdout stays parseable.
     machine = is_machine_format(_get_output_format(ctx))
     preview = sys.stderr if machine else sys.stdout
-
-    # Support both space-separated (R5 R6) and comma-separated (R5,R6)
-    repo_ids: list[str] = []
-    for repo_arg in repos:
-        repo_ids.extend(part.strip() for part in repo_arg.split(",") if part.strip())
-
-    # `nudge ,` satisfies the required argument and names nothing; sending
-    # it would be an empty request reported as success
-    if not repo_ids:
-        typer.echo("ERROR: No repository named", err=True)
-        raise typer.Exit(1)
 
     try:
         records = diffusion.build_repo_nudge(repo_ids)
@@ -331,6 +370,30 @@ def repo_nudge(
 
     for label in labels:
         print(f"Asked Phorge to update {label} soon", file=preview)
+
+    seconds = DEFAULT_TIMEOUT if timeout is None else timeout
+
+    # A timeout is a PhabfiveDataException too, so it ends here with the
+    # same one line and exit status 1 as every other failure
+    try:
+        if commit:
+            print(
+                f"Waiting up to {seconds}s for {commit} to be imported into "
+                f"{labels[0]}",
+                file=preview,
+            )
+            diffusion.wait_for_commit(records[0], commit, timeout=seconds)
+            print(f"{commit} is imported into {labels[0]}", file=preview)
+        elif wait:
+            print(
+                f"Waiting up to {seconds}s for {', '.join(labels)} to finish importing",
+                file=preview,
+            )
+            diffusion.wait_for_import(records, timeout=seconds)
+            print(f"Finished importing {', '.join(labels)}", file=preview)
+    except PhabfiveDataException as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
 
     if machine:
         _show_repos_after_write(ctx, diffusion, [f"R{repo['id']}" for repo in records])

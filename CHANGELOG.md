@@ -55,6 +55,15 @@
   up first, so an unknown one is refused and nothing is nudged. The update is only
   scheduled; `repo show`'s `Importing` says when it has finished. #556
 
+* **`diffusion repo nudge --wait` and `--commit` wait for the import.** `--wait` waits
+  until each repository's initial import has finished, which is what a new repository
+  or observe URI goes through. `--commit <hash>` waits until that commit is imported
+  into the one repository named - found and fully imported, so Diffusion can show it.
+  `--timeout` (300 seconds by default) bounds either, and running out exits 1 naming
+  what was still pending. An inactive repository fails at once, since no daemon
+  updates it. A program gets the same from `Diffusion.wait_for_import` and
+  `wait_for_commit`, which raise the new `PhabfiveTimeoutException`. #557
+
 ## Bug Fixes
 
 * **`--column` moves the card on every board `--tag` names.** A task has a position on

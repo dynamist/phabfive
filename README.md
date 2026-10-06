@@ -318,6 +318,7 @@ edit and stops at the first the server refuses.
 | `PhabfiveValidationException` | some of several tasks failed validation, so none was changed; carries `.problems` |
 | `PhabfiveNotFoundException` | the object does not exist, or is not visible - also a `LookupError` |
 | `PhabfiveNameCollisionException` | a new name is too close to an existing one |
+| `PhabfiveTimeoutException` | what was waited for did not happen in time; carries `.pending` |
 | `PhabfiveRemoteException` | the server could not be asked, or refused |
 | `PhabfiveAPIException` | Conduit answered with an error; carries `.code` and `.message` |
 | `PhabfiveConnectionException` | the server could not be reached |

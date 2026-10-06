@@ -489,10 +489,32 @@ Asked Phorge to update R16 (uridoc377) soon
 ```
 
 The update is only scheduled, so the command returns before anything is
-fetched. `Importing` turns false once the import has finished:
+fetched. `--wait` waits for the import, and exits 1 if it has not finished
+within `--timeout` seconds (300 by default):
 
 ```bash
-phabfive --format=json diffusion repo show uridoc377 | jq '.[0].Repository.Importing'
+phabfive diffusion repo nudge uridoc377 --wait
+```
+
+```
+Asked Phorge to update R16 (uridoc377) soon
+Waiting up to 300s for R16 (uridoc377) to finish importing
+Finished importing R16 (uridoc377)
+```
+
+`--wait` is for the repository's initial import, which a new observe URI
+starts. A repository that has been imported once does not import again for
+new commits, so `--wait` returns at once for it. After a push upstream, name
+the commit instead, and the command waits until Diffusion has imported it:
+
+```bash
+phabfive diffusion repo nudge uridoc377 --commit 7d7fc2c3e002 --timeout 600
+```
+
+```
+Asked Phorge to update R16 (uridoc377) soon
+Waiting up to 600s for 7d7fc2c3e002 to be imported into R16 (uridoc377)
+7d7fc2c3e002 is imported into R16 (uridoc377)
 ```
 
 ## Filtering

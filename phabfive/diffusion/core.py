@@ -42,6 +42,7 @@ from phabfive.diffusion.validators import (
     validate_credential_type,
     validate_repo_identifier,
 )
+from phabfive.diffusion.waiting import DEFAULT_TIMEOUT, poll
 from phabfive.exceptions import (
     PhabfiveAPIException,
     PhabfiveDataException,
@@ -404,6 +405,110 @@ class Diffusion(Phabfive):
                 )
         except PhabfiveAPIException as e:
             raise PhabfiveDataException(str(e))
+
+    def wait_for_import(self, repos, timeout=DEFAULT_TIMEOUT):
+        """Wait until none of the repositories is still importing.
+
+        `isImporting` is the initial import: a repository that has been
+        imported once does not report it again for new commits, so this
+        returns at once for one. `wait_for_commit` is the wait for a commit.
+
+        Parameters
+        ----------
+        repos : list[dict]
+            Repository records from build_repo_nudge
+        timeout : float, optional
+            Seconds to wait for
+
+        Raises
+        ------
+        PhabfiveDataException
+            If a repository still importing is inactive. No daemon touches
+            an inactive repository, so its import can never finish
+        PhabfiveTimeoutException
+            If any is still importing when the time is up, with their
+            monograms in `pending`
+        """
+        monograms = {repo["phid"]: f"R{repo['id']}" for repo in repos}
+
+        def importing():
+            current = {
+                repo["phid"]: repo
+                for repo in fetch_repositories(
+                    self.phab, constraints={"phids": list(monograms)}
+                )
+            }
+            pending = []
+
+            for phid, monogram in monograms.items():
+                fields = current.get(phid, {}).get("fields", {})
+
+                if not fields.get("isImporting"):
+                    continue
+                if fields.get("status") == "inactive":
+                    raise PhabfiveDataException(
+                        f"{monogram} is inactive, so its import will never "
+                        "finish until it is activated"
+                    )
+                pending.append(monogram)
+
+            return pending
+
+        poll(
+            importing,
+            timeout,
+            lambda pending: f"Still importing after {timeout:g}s: {', '.join(pending)}",
+        )
+
+    def wait_for_commit(self, repo, commit, timeout=DEFAULT_TIMEOUT):
+        """Wait until a commit has been imported into a repository.
+
+        A commit is found as soon as the daemons discover it, and imported
+        once every step - message, changes, ownership - has run, which is
+        when `isImported` is set. Waiting for it to be found would hand back
+        a commit Diffusion cannot show yet.
+
+        Parameters
+        ----------
+        repo : dict
+            The repository record, from build_repo_nudge
+        commit : str
+            A commit hash, as validate_commit_hash answers with
+        timeout : float, optional
+            Seconds to wait for
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the repository is inactive, since it is never updated
+        PhabfiveTimeoutException
+            If the commit is not imported when the time is up
+        """
+        monogram = f"R{repo['id']}"
+
+        if repo["fields"].get("status") == "inactive":
+            raise PhabfiveDataException(
+                f"{monogram} is inactive, so {commit} will never be imported "
+                "until it is activated"
+            )
+
+        found = []
+
+        def not_imported():
+            result = self.phab.diffusion.commit.search(
+                constraints={"identifiers": [commit], "repositories": [repo["phid"]]}
+            )
+            found[:] = (result or {}).get("data", [])
+
+            if found and all(c["fields"].get("isImported") for c in found):
+                return []
+            return [commit]
+
+        def describe(pending):
+            state = "found but not yet imported" if found else "not found"
+            return f"{commit} is still {state} in {monogram} after {timeout:g}s"
+
+        poll(not_imported, timeout, describe)
 
     def repo_list(self, status=None, show_uris=False, show_policy=False):
         """

@@ -51,6 +51,7 @@ if TYPE_CHECKING:
         PhabfiveNameCollisionException,
         PhabfiveNotFoundException,
         PhabfiveRemoteException,
+        PhabfiveTimeoutException,
         PhabfiveValidationException,
     )
     from phabfive.maniphest import Maniphest
@@ -87,6 +88,7 @@ __all__ = [
     "PhabfiveNameCollisionException",
     "PhabfiveNotFoundException",
     "PhabfiveRemoteException",
+    "PhabfiveTimeoutException",
     "PhabfiveValidationException",
     "Problem",
     "Project",
@@ -121,6 +123,7 @@ _LAZY = {
     "PhabfiveNameCollisionException": "phabfive.exceptions",
     "PhabfiveNotFoundException": "phabfive.exceptions",
     "PhabfiveRemoteException": "phabfive.exceptions",
+    "PhabfiveTimeoutException": "phabfive.exceptions",
     "PhabfiveValidationException": "phabfive.exceptions",
     "Problem": "phabfive.spec",
     "Project": "phabfive.project",
