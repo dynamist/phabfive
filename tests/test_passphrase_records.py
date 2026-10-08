@@ -148,11 +148,19 @@ class TestShowCommand:
         assert json.loads(result.stdout)["Credential"]["Secret"] == "hunter2"
 
     def test_value_without_show_secret_is_refused_before_connecting(self):
-        result, mock_app = self._invoke(["--format=value", "passphrase", "show", "K1"])
+        """Refused before the app is built, which is what connects and verifies."""
+        from typer.testing import CliRunner
+
+        from phabfive.cli import app
+
+        with patch("phabfive.cli.passphrase._get_passphrase_app") as get_app:
+            result = CliRunner().invoke(
+                app, ["--format=value", "passphrase", "show", "K1"]
+            )
 
         assert result.exit_code == 1
         assert "--show-secret" in result.output
-        mock_app.get_passphrases.assert_not_called()
+        get_app.assert_not_called()
 
     @pytest.mark.parametrize("flag", ["-n", "-P", "--no-secret"])
     def test_the_old_flags_are_gone(self, flag):
