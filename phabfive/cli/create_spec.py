@@ -82,12 +82,13 @@ def options_given(ctx: typer.Context, options: dict) -> list:
     list
         The options given, in the order ``options`` lists them
     """
-    from click.core import ParameterSource
-
+    # By name, not against click.core.ParameterSource: from typer 0.26 the
+    # context is typer's own copy of click, whose enum is a different class,
+    # so an identity check calls every option given
     return [
         option
         for name, option in options.items()
-        if ctx.get_parameter_source(name) not in (None, ParameterSource.DEFAULT)
+        if getattr(ctx.get_parameter_source(name), "name", "DEFAULT") != "DEFAULT"
     ]
 
 
