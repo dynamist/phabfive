@@ -153,7 +153,7 @@ $ phabfive passphrase search --with specs/search/deploy-credentials.yaml --show-
 ERROR: --show-secret cannot be combined with --with; a search spec never fetches secret material, use `passphrase show` for one credential
 ```
 
-Read one secret with `phabfive passphrase show K1`.
+Read one secret with `phabfive passphrase show K1 --show-secret`.
 
 ## Transition patterns are not free either
 

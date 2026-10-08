@@ -38,25 +38,41 @@ def show(
     ids: List[str] = typer.Argument(
         ..., help="Passphrase ID(s) (e.g., K1 K2 or K1,K2,K3)"
     ),
-    no_secret: bool = typer.Option(
-        False, "--no-secret", "-n", help="Hide the secret value"
+    show_secret: bool = typer.Option(
+        False,
+        "--show-secret",
+        "-s",
+        help="Include secrets in output (hidden by default)",
     ),
     no_public_key: bool = typer.Option(
-        False, "--no-public-key", "-P", help="Hide public key for SSH credentials"
+        False, "--no-public-key", help="Hide public key for SSH credentials"
     ),
 ) -> None:
-    """Retrieve secrets from Passphrase by ID.
+    """Retrieve credentials from Passphrase by ID.
+
+    The secret is neither fetched nor shown unless --show-secret is given.
 
     \b
     Examples:
         phabfive passphrase show K1
+        phabfive passphrase show K1 --show-secret
         phabfive passphrase show K1 K2 K3
         phabfive passphrase show K1,K2,K3
-        phabfive K1  # shortcut
+        phabfive K1 -s  # shortcut
+        phabfive --format=value K1 -s  # the bare secret, for piping
     """
     from phabfive.passphrase.display import display_passphrases
 
     _setup_output_options(ctx)
+    output_format = _get_output_format(ctx)
+    if output_format == "value" and not show_secret:
+        # The bare value of a credential is its secret, so without it there is
+        # nothing to print - say so rather than print an empty line
+        typer.echo(
+            "ERROR: --format=value prints the secret, add --show-secret", err=True
+        )
+        raise typer.Exit(1)
+
     passphrase = _get_passphrase_app()
 
     # Support both space-separated (K1 K2) and comma-separated (K1,K2,K3)
@@ -65,26 +81,24 @@ def show(
         all_ids.extend(part.strip() for part in id_arg.split(",") if part.strip())
 
     try:
-        output_format = _get_output_format(ctx)
-        need_secrets = not no_secret
-        need_public_keys = not no_public_key
-
         # Always use get_passphrases for consistent behavior
         data = passphrase.get_passphrases(
             all_ids,
-            need_secrets=need_secrets,
-            need_public_keys=need_public_keys,
+            need_secrets=show_secret,
+            need_public_keys=not no_public_key,
         )
 
         if len(all_ids) == 1:
             # Single credential - use singular display
             from phabfive.passphrase.display import display_passphrase
 
-            display_passphrase(data[0], output_format, passphrase)
+            display_passphrase(
+                data[0], output_format, passphrase, show_secrets=show_secret
+            )
         else:
             # Multiple credentials
             display_passphrases(
-                data, output_format, passphrase, show_secrets=need_secrets
+                data, output_format, passphrase, show_secrets=show_secret
             )
 
     except (PhabfiveDataException, PhabfiveRemoteException) as e:

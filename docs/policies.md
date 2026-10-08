@@ -179,15 +179,11 @@ The flag is on six commands:
 | `diffusion repo show` | `--show-policy` | `-P` |
 | `diffusion repo list` | `--show-policy` | `-P` |
 | `maniphest show` | `--show-policy` | `-P` |
-| `maniphest search` | `--show-policy` | — |
+| `maniphest search` | `--show-policy` | `-P` |
 | `project show` | `--show-policy` | `-P` |
 | `project search` | `--show-policy` | `-P` |
 
-!!! note
-
-    `maniphest search` takes the long option only. On `passphrase show`, `-P`
-    already means `--no-public-key`, so do not carry the short form across
-    applications out of habit.
+`-P` means `--show-policy` wherever it is accepted, and nothing else.
 
 ### Why it is opt-in
 

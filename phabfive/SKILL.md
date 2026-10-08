@@ -75,8 +75,8 @@ Global options must come **before** the subcommand. `phabfive maniphest show T12
   columns are derived from the record, a cell is cut to 60 characters, and a column empty
   in every row is dropped - so never parse it, ask for `json` instead.
 - `value` prints bare values - no keys, no header, no decoration - for piping. Which
-  value is each command's own choice: `passphrase show` prints the secret, `passphrase
-  search` one monogram per line, `paste show` the content, and `paste search` (or
+  value is each command's own choice: `passphrase show --show-secret` prints the secret
+  (without `--show-secret` it is an error), `passphrase search` one monogram per line, `paste show` the content, and `paste search` (or
   `paste show --no-content`) one monogram per line. No other app has one to
   print, so for maniphest and diffusion it silently falls back to `rich`.
 - `strict` is accepted as an alias for `yaml`, `ndjson` as an alias for `jsonl`, and
@@ -216,6 +216,7 @@ phabfive --format=json maniphest show T123 --show-policy
 It is opt-in because naming a policy that points at a project or a user costs a
 `phid.query`, which a read that never looks at the section should not pay.
 `maniphest search --show-policy` adds it to every task on the page for one lookup.
+`-P` means `--show-policy` on every command that has the flag, and nothing else.
 
 The keys are Phorge's own labels, not the API's field names. `Can Interact` is the
 one repositories do not have, and a task does not store it - it derives it from
@@ -226,9 +227,9 @@ user is shown as `#projectslug` or `@username`, the same spelling the options be
 take.
 
 The defaults differ per app: `paste show` prints the content by default, and
-`passphrase show` prints the **secret** by default. Pass `--no-secret` unless the user
-asked for the value, and never echo a retrieved secret into a summary, a commit message or
-a file.
+`passphrase show` neither fetches nor prints the **secret** unless `--show-secret` (`-s`)
+is passed. Pass it only when the user asked for the value, and never echo a retrieved
+secret into a summary, a commit message or a file.
 
 ## Spaces hide objects that exist
 
@@ -507,7 +508,8 @@ phabfive --format=json paste show P42 | jq -r '.[0].Paste.Content'
 phabfive paste create "deploy notes" notes.md --dry-run
 
 phabfive --format=json passphrase search "deploy" --type=password
-phabfive --format=json passphrase show K12 --no-secret
+phabfive --format=json passphrase show K12                 # no Secret key
+phabfive --format=value passphrase show K12 --show-secret  # the bare secret
 
 phabfive --format=json diffusion repo list active
 phabfive --format=table diffusion repo list active   # a grid, for a human

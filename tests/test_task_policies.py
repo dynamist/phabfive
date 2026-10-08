@@ -343,7 +343,7 @@ class TestThePolicySectionIsOptIn:
 
         from phabfive.cli.maniphest import maniphest_app
 
-        for args, expected in (([], False), (["--show-policy"], True)):
+        for args, expected in (([], False), (["--show-policy"], True), (["-P"], True)):
             mock_maniphest = MagicMock()
             mock_maniphest.task_search.return_value = {"tasks": []}
 
