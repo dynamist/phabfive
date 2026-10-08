@@ -75,6 +75,8 @@ gh pr view <number> --comments   # the summary, with its confidence score and la
   thread why it does not apply
 - A finding often has siblings - the same mistake in another workflow or module. Look for them
   before calling it fixed
+- Renovate's pull requests are deliberately not reviewed (`excludeAuthors` in
+  `.greptile/config.json`), so CI alone decides those
 
 ## The Kubernetes Check Is Gated
 
