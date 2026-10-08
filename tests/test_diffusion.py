@@ -5017,6 +5017,22 @@ class TestFillHosting:
 
         assert "isHosted" not in repo["fields"]
 
+    def test_a_later_refusal_keeps_what_earlier_pages_answered(self):
+        """Only the repositories of the page that was not answered are unknown."""
+        from phabfive.diffusion.fetchers import fill_hosting
+
+        repos = self._unreported(150)
+        phab = MagicMock()
+        phab.repository.query.side_effect = [
+            [{"phid": repo["phid"], "isHosted": True} for repo in repos[:100]],
+            PhabfiveAPIException("ERR-CONDUIT-CORE", "a blip"),
+        ]
+
+        fill_hosting(phab, repos)
+
+        assert all(repo["fields"]["isHosted"] is True for repo in repos[:100])
+        assert all("isHosted" not in repo["fields"] for repo in repos[100:])
+
     def test_a_refusal_leaves_every_repository_unknown(self):
         from phabfive.diffusion.fetchers import fill_hosting
 
@@ -5055,6 +5071,35 @@ class TestFillHosting:
             for c in diffusion.phab.diffusion.repository.search.call_args_list
         ]
         assert attachments == [{}, {"uris": True}]
+
+    def test_the_record_repo_edit_reads_carries_its_uris(self):
+        """A rename preview names the built-in URIs it moves, read off this record.
+
+        The search attaches URIs only when asked, as Phorge does, so the
+        preview has something to show only if get_repo_record asks.
+        """
+        record = _repo("oldname", short_name="oldname")
+        record["id"] = 25
+        record = _with_builtin_uris(record, "oldname")
+        diffusion = _listing([])
+
+        def search(**kwargs):
+            found = dict(record)
+            if not kwargs.get("attachments", {}).get("uris"):
+                found["attachments"] = {}
+            return {"data": [found], "cursor": {"after": None}}
+
+        diffusion.phab.diffusion.repository.search.side_effect = search
+
+        _, changes = diffusion.build_repo_edit(
+            diffusion.get_repo_record("R25"), short_name="newname"
+        )
+
+        moved = [c for c in changes if c["field"] == "Built-in URI"]
+        assert {c["new"] for c in moved} == {
+            "http://phorge.localhost/diffusion/25/newname.git",
+            "http://phorge.localhost/source/newname.git",
+        }
 
     def test_the_record_repo_edit_reads_is_filled(self):
         diffusion = _listing([_show_repo(repo_id=5)])

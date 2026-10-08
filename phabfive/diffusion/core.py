@@ -1420,7 +1420,9 @@ class Diffusion(Phabfive):
         PhabfiveDataException
             If the repository does not exist
         """
-        repo = find_repository(self.phab, repo_name)
+        # The URIs are what build_repo_edit reads to preview how a new clone
+        # name moves the built-in URIs, see builtin_uri_moves.
+        repo = find_repository(self.phab, repo_name, attachments={"uris": True})
 
         if repo is None:
             raise PhabfiveDataException(f"Repository '{repo_name}' does not exist")
