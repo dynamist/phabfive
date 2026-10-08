@@ -19,6 +19,7 @@ from phabfive.diffusion.fetchers import (
     fetch_refs,
     fetch_repositories,
     demotion_io,
+    fill_hosting,
     find_repository,
     match_repository,
 )
@@ -306,6 +307,8 @@ class Diffusion(Phabfive):
                 missing_ids.append(repo_id)
             else:
                 found.append(match)
+
+        fill_hosting(self.phab, found)
 
         branches_map = {}
         tags_map = {}
@@ -605,13 +608,13 @@ class Diffusion(Phabfive):
         """
         status = status or REPO_STATUS_CHOICES
 
-        # Asked for whether or not they are shown: repository_is_hosted
-        # falls back to them on an instance that does not report isHosted,
-        # and the attachment rides this same call.
-        repos = fetch_repositories(self.phab, attachments={"uris": True})
+        repos = fetch_repositories(
+            self.phab, attachments={"uris": True} if show_uris else None
+        )
 
         repos = [repo for repo in repos if repo["fields"].get("status") in status]
         repos = sorted(repos, key=lambda repo: repo["fields"].get("name") or "")
+        fill_hosting(self.phab, repos)
 
         repositories = build_repository_display_data(
             self.url,
@@ -1409,22 +1412,22 @@ class Diffusion(Phabfive):
         Returns
         -------
         dict
-            The repository object, with 'id', 'phid' and 'fields' keys and
-            its URIs attached
+            The repository object, with 'id', 'phid' and 'fields' keys, and
+            isHosted filled in by fill_hosting where the instance leaves it out
 
         Raises
         ------
         PhabfiveDataException
             If the repository does not exist
         """
-        # The URIs attachment rides this same call because
-        # repository_is_hosted falls back to it on an instance that does not
-        # report isHosted, and repo edit consults it before it lets a push
-        # policy be set on a repository that cannot take one.
-        repo = find_repository(self.phab, repo_name, attachments={"uris": True})
+        repo = find_repository(self.phab, repo_name)
 
         if repo is None:
             raise PhabfiveDataException(f"Repository '{repo_name}' does not exist")
+
+        # repo edit consults it before it lets a push policy be set on a
+        # repository that cannot take one.
+        fill_hosting(self.phab, [repo])
 
         return repo
 

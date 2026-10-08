@@ -25,9 +25,10 @@ Phabricator and Phorge before 2025.51 have no `status` constraint on `project.se
 
 | What | Fails on | Why |
 |------|----------|-----|
-| The `Hosted` field of a repository | Phabricator, Phorge before 2025.51 | There is no `isHosted` field, and phabfive reports such a repository as not hosted |
 | `project create --milestone-of` | Phabricator, Phorge before 2026.27 | Phorge answers HTTP 500, a bug fixed upstream in 2026.27 |
 | A repository's link is `/source/<name>/` | Phabricator, Phorge before 2026.27 | There is no `browseUri` field, and phabfive links `/R<id>` instead, which works the same |
+
+A repository's `Hosted` works everywhere, by another route before 2025.51: those versions have no `isHosted` in `diffusion.repository.search`, so phabfive asks the frozen `repository.query`, which reports the same stored flag. Were that ever unavailable, `Hosted` is empty (`null` in JSON) rather than `false`.
 
 ## How This Is Tested
 

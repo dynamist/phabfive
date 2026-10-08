@@ -40,7 +40,3 @@ def missing_before(release, reason):
         reason=f"before Phorge {release}: {reason}",
         strict=True,
     )
-
-
-# Repositories report isHosted, without which phabfive calls a hosted one not hosted
-NO_IS_HOSTED = missing_before("2025.51", "repositories have no isHosted field")

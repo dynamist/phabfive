@@ -2,9 +2,13 @@
 
 """API data fetching functions for Diffusion module."""
 
+import logging
+
 from phabfive.diffusion.validators import validate_repo_identifier
 from phabfive.exceptions import PhabfiveAPIException, PhabfiveDataException
 from phabfive.pagination import search_all_pages
+
+log = logging.getLogger(__name__)
 
 
 def fetch_repositories(phab, query_key=None, attachments=None, constraints=None):
@@ -97,6 +101,62 @@ def find_repository(phab, repo_id, attachments=None):
         The matching repository, or None if nothing matches
     """
     return match_repository(fetch_repositories(phab, attachments=attachments), repo_id)
+
+
+#: How many repositories one repository.query asks about. It answers 100
+#: rows unless told otherwise, so a page of PHIDs is never cut short.
+_HOSTING_BATCH = 100
+
+
+def fill_hosting(phab, repos):
+    """
+    Add ``isHosted`` to repository records whose instance left it out.
+
+    Phabricator, and Phorge before 2025.51, have no ``isHosted`` in
+    ``diffusion.repository.search``. The frozen ``repository.query``
+    reports the same stored flag on those versions, so that is asked,
+    by PHID, and only for the records that lack it - an instance that
+    reports the field pays nothing.
+
+    Nothing else is a reliable stand-in. Phabricator derives the flag from
+    whether the repository observes a remote, but a repository from before
+    its URI migration can be neither hosted nor observing, and a hosted
+    one can answer with no URIs at all. So when ``repository.query`` is not
+    there to ask, the field stays missing, which
+    :func:`phabfive.diffusion.formatters.repository_is_hosted` reads as
+    unknown rather than as not hosted.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    repos : list
+        Repository records, from fetch_repositories. Updated in place.
+
+    Returns
+    -------
+    list
+        The same records
+    """
+    lacking = [repo for repo in repos if "isHosted" not in repo.get("fields", {})]
+    hosted = {}
+
+    for start in range(0, len(lacking), _HOSTING_BATCH):
+        phids = [repo["phid"] for repo in lacking[start : start + _HOSTING_BATCH]]
+
+        try:
+            answered = phab.repository.query(phids=phids)
+        except PhabfiveAPIException as e:
+            log.debug(f"repository.query did not answer, hosting is unknown: {e}")
+            return repos
+
+        hosted.update({row["phid"]: row["isHosted"] for row in answered or []})
+
+    for repo in lacking:
+        if repo["phid"] in hosted:
+            repo["fields"]["isHosted"] = bool(hosted[repo["phid"]])
+
+    return repos
 
 
 def demotion_io(uri_fields):

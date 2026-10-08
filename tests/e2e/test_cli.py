@@ -13,7 +13,6 @@ import requests
 from ruamel.yaml import YAML
 
 from tests.phorge_versions import (
-    NO_IS_HOSTED,
     missing_before,
     phorge_older_than,
 )
@@ -292,7 +291,6 @@ def test_jsonl_is_one_task_per_line(phabfive, create_task):
     ]
 
 
-@NO_IS_HOSTED
 def test_repo_show_describes_a_seeded_repository(phabfive):
     """GUNNAR is hosted, with history, per phorge/seed/data/repositories.json."""
     [repo] = phabfive(

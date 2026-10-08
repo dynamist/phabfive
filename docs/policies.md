@@ -425,7 +425,11 @@ phabfive diffusion repo show R16 --show-policy --no-description
 
 `Not a Hosted Repository` is a string, present in every format, so that every
 repository carries the same three keys. The boolean to test in a script is
-`Repository.Hosted`, in the same record.
+`Repository.Hosted`, in the same record. It is empty (`null` in JSON) when the
+instance does not say: Phabricator and Phorge before 2025.51 leave `isHosted` out
+of `diffusion.repository.search`, phabfive asks the frozen `repository.query`
+instead, and if that cannot answer either `Can Push` is shown as stored, since
+whether it is in force is not known.
 
 `--can-push` still works there, because Phorge allows it and a repository can be
 made hosted later, but it says on stderr that nothing will consult it yet:
