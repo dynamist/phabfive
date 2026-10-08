@@ -1,7 +1,8 @@
+# Apache: Conduit and the web UI, at web.phorge.svc.cluster.local in the cluster
 apiVersion: v1
 kind: Service
 metadata:
-  name: phorge
+  name: web
 spec:
   selector:
     app.kubernetes.io/name: phorge
@@ -9,12 +10,13 @@ spec:
     - name: http
       port: 80
 ---
-# git over SSH. No Ingress reaches it, Traefik's ports belong to the shared
-# cluster: `make ssh-forward` port-forwards to it instead.
+# git over SSH, at ssh.phorge.svc.cluster.local. No Ingress reaches it,
+# Traefik's ports belong to the shared cluster: `make ssh-forward`
+# port-forwards to it instead.
 apiVersion: v1
 kind: Service
 metadata:
-  name: phorge-ssh
+  name: ssh
 spec:
   selector:
     app.kubernetes.io/name: phorge

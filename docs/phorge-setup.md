@@ -201,7 +201,7 @@ which `make deploy` generates into `k8s/base/ssh/admin` (gitignored) and the
 
 No port on the host reaches sshd. The cluster's published ports are shared by
 every Dynamist dev app (`k8s/cluster/k3d.yaml`), so instead `make ssh-forward`
-forwards `localhost:2222` to the `phorge-ssh` Service for as long as it runs,
+forwards `localhost:2222` to the `ssh` Service for as long as it runs,
 and prints the command to use:
 
 ```bash
@@ -248,7 +248,7 @@ make up
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PHORGE_URL` | `http://phorge.localhost` | Base URL for Phorge |
-| `PHORGE_ALLOWED_URIS` | `http://phorge.phorge.svc.cluster.local` | Further URLs Phorge answers to, space-separated (`phabricator.allowed-uris`) |
+| `PHORGE_ALLOWED_URIS` | `http://web.phorge.svc.cluster.local` | Further URLs Phorge answers to, space-separated (`phabricator.allowed-uris`) |
 | `PHORGE_CDN_URL` | `http://cdn.localhost` | CDN URL for serving files |
 | `PHORGE_TITLE` | `RMI` | Instance title shown in UI |
 | `PHORGE_ADMIN_USER` | `admin` | Admin username |
@@ -257,9 +257,9 @@ make up
 | `PHORGE_ADMIN_PASS` | `supersecr3tpassw0rdfordevelop1` | Admin password, enables immediate login (secret) |
 | `PHORGE_ADMIN_TOKEN` | `api-supersecr3tapikeyfordevelop1` | Pre-configured API token (secret) |
 | `PHORGE_SEED` | `all` | Seed modules to run, space-separated, or `all` / `none` |
-| `PHORGE_SSH_USER` | `git` | User git over SSH logs in as (`diffusion.ssh-user`), empty turns SSH off |
+| `PHORGE_SSH_USER` | `git` | User git over SSH logs in as (`diffusion.ssh-user`). Only `git`, the image's one VCS user, or empty to turn SSH off |
 | `PHORGE_SSH_HOST` | `phorge.localhost` | Host in the SSH clone URIs Phorge advertises (`diffusion.ssh-host`) |
-| `PHORGE_SSH_PORT` | `2222` | Port in the SSH clone URIs, where `make ssh-forward` listens (`diffusion.ssh-port`) |
+| `PHORGE_SSH_PORT` | `2222` | Port in the SSH clone URIs (`diffusion.ssh-port`), and where `make ssh-forward` listens, which reads it from the same files |
 | `MYSQL_PASS` / `MARIADB_ROOT_PASSWORD` | `supersecr3tpassw0rdfordatabase1` | MariaDB root password (secret) |
 
 ### Phorge Versions
@@ -433,12 +433,12 @@ Two things Phorge enforces that are easy to trip over:
 Phorge runs in a local [k3d](https://k3d.io) cluster, which is k3s in Docker. The cluster can be shared with other Dynamist dev apps, and each app keeps to its own namespace:
 
 - **Cluster:** `k8s/cluster/k3d.yaml`, identical in every repo that uses it. It pins the k3s version and publishes the bundled Traefik ingress on `127.0.0.1:80` and `:443`. Whichever app starts first creates the cluster, the others reuse it.
-- **Routing:** each app has a standard `Ingress` with its own hostnames, here `phorge.localhost` and `cdn.localhost` to the `phorge` Service.
+- **Routing:** each app has a standard `Ingress` with its own hostnames, here `phorge.localhost` and `cdn.localhost` to the `web` Service.
 - **Phorge:** `k8s/base` holds the `phorge` namespace, MariaDB (StatefulSet `mariadb`), Phorge (Deployment `phorge`, `Recreate` so two pods never upgrade the same database), the Ingress, a ResourceQuota with default limits and NetworkPolicies. The Phorge pod has two containers, `web` (the default for `kubectl exec` and `logs`) and `sshd`, see [Git over SSH](#git-over-ssh). Only Traefik and the `dynatron` namespace reach Phorge, nothing reaches its sshd except `make ssh-forward`, and only Phorge reaches MariaDB, whose port is not published on the host. Overlays: `local` (with `config.local.env`) and `ci`.
-- **In-cluster clients:** a pod cannot use `phorge.localhost`, which resolves to the pod itself. Phorge also answers to its Service name (`PHORGE_ALLOWED_URIS`), so a client in a namespace the NetworkPolicy admits reaches it at `http://phorge.phorge.svc.cluster.local/api/` and needs no `hostAlias`. Configure that as `PHAB_API_URL`, with `PHAB_WEB_URL=http://phorge.localhost` beside it, so the links in whatever the pod renders still open on the host:
+- **In-cluster clients:** a pod cannot use `phorge.localhost`, which resolves to the pod itself. Phorge also answers to its Service name (`PHORGE_ALLOWED_URIS`), so a client in a namespace the NetworkPolicy admits reaches it at `http://web.phorge.svc.cluster.local/api/` and needs no `hostAlias`. Configure that as `PHAB_API_URL`, with `PHAB_WEB_URL=http://phorge.localhost` beside it, so the links in whatever the pod renders still open on the host:
 
     ```bash
-    PHAB_API_URL=http://phorge.phorge.svc.cluster.local/api/
+    PHAB_API_URL=http://web.phorge.svc.cluster.local/api/
     PHAB_WEB_URL=http://phorge.localhost
     ```
 

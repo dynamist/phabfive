@@ -27,7 +27,7 @@ from phabfive.core import Phabfive
 from phabfive.exceptions import PhabfiveConfigException
 
 
-API = "http://phorge.phorge.svc.cluster.local/api/"
+API = "http://web.phorge.svc.cluster.local/api/"
 WEB = "http://phorge.localhost"
 URL = "https://phorge.example.com/api/"
 TOKEN = "api-" + "a" * 28
@@ -100,7 +100,7 @@ class TestTwoAddresses:
         app = Phabfive(
             token=TOKEN,
             config={
-                "PHAB_API_URL": "http://phorge.phorge.svc.cluster.local",
+                "PHAB_API_URL": "http://web.phorge.svc.cluster.local",
                 "PHAB_WEB_URL": WEB,
             },
         )

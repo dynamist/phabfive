@@ -24,7 +24,7 @@ SSH_PORT = 2222
 
 @pytest.fixture(scope="module")
 def ssh_port():
-    """A local port forwarded to svc/phorge-ssh for as long as the module runs."""
+    """A local port forwarded to svc/ssh for as long as the module runs."""
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -39,7 +39,7 @@ def ssh_port():
             "port-forward",
             "--address",
             "127.0.0.1",
-            "svc/phorge-ssh",
+            "svc/ssh",
             f"{port}:22",
         ],
         stdout=subprocess.PIPE,
