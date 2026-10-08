@@ -65,7 +65,7 @@ Greptile reviews every pull request, and a green CI run says nothing about what 
 review before merging:
 
 ```bash
-gh api repos/dynamist/phabfive/pulls/<number>/comments --jq '.[] | "\(.path):\(.line) \(.body)"'
+gh api repos/dynamist/phabfive/pulls/<number>/comments --paginate --jq '.[] | "\(.path):\(.line) \(.body)"'
 gh pr view <number> --comments   # the summary, with its confidence score and last reviewed commit
 ```
 
