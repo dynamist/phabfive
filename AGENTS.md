@@ -61,8 +61,8 @@ in the `test` group or a narrow `# type: ignore[code]`, never `ignore_errors`.
 
 ## Before Merging
 
-Greptile reviews every pull request, and a green CI run says nothing about what it found. Read its
-review before merging:
+Greptile reviews every pull request except Renovate's, and a green CI run says nothing about what
+it found. Read its review before merging:
 
 ```bash
 gh api repos/dynamist/phabfive/pulls/<number>/comments --paginate --jq '.[] | "\(.path):\(.line) \(.body)"'
