@@ -66,7 +66,7 @@ cluster and a Phorge image, so it costs about four minutes, and `coexistence` fa
 `decide` job in `.github/workflows/k8s.yml` decides whether a pull request pays for it:
 
 - a push to `main`, the weekly `schedule` or a `workflow_dispatch` run always deploys
-- the `ci:k8s` label, or a `ci:phorge-*` label, always deploys, draft or not
+- the `ci:k8s` label, or a `ci:phorge-*` or `ci:phabricator-*` label, always deploys, draft or not
 - a draft pull request otherwise never deploys
 - otherwise it deploys only when the pull request touches `k8s/`, `phorge/`, `tests/k8s/`,
   `tests/e2e/`, `phabfive/`, `scripts/*.sh`, `Makefile`, `mise.toml`,
@@ -81,16 +81,16 @@ gh pr edit <number> --add-label ci:k8s
 ```
 
 The same job picks the Phorge versions the deploy matrix tests. A push to `main` and a pull request
-test `stable`. A pull request labelled `ci:phorge-<branch or tag>` tests exactly those versions
-instead - any ref Phorge and Arcanist both have works once the label exists, `master` and the
-release tags are created. The weekly and manual runs test `stable`, `master`, the two newest
+test `stable`. A pull request labelled `ci:phorge-<branch or tag>` or `ci:phabricator-<branch>`
+tests exactly those versions instead - any ref Phorge and Arcanist both have works once the label
+exists, `master`, the release tags and `ci:phabricator-stable` are created. The weekly and manual runs test `stable`, `master`, the two newest
 release tags, found at run time, so a new Phorge release needs no workflow change, and
 `phabricator-stable` - Phabricator as Phacility left it, the closest stand-in for a Phacility-hosted
 instance, which may carry patches that were never published. `master` runs
 with `continue-on-error`: its breakage is a heads-up, not a failure.
 
 ```bash
-gh pr edit <number> --add-label ci:phorge-master --add-label ci:phorge-2025.51
+gh pr edit <number> --add-label ci:phorge-master --add-label ci:phabricator-stable
 gh workflow run k8s.yml -f versions="master 2025.51"
 ```
 

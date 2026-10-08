@@ -3,7 +3,7 @@ name: Kubernetes
 
 on:
   pull_request:
-    # labeled and unlabeled for ci:k8s and the ci:phorge-* labels
+    # labeled and unlabeled for ci:k8s and the ci:phorge-* and ci:phabricator-* labels
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   push:
     branches:
@@ -18,13 +18,14 @@ on:
         required: false
         default: ""
 
-# A label other than ci:k8s and ci:phorge-* gets a group of its own, so it does
-# not cancel the running tests only to skip everything itself
+# A label other than ci:k8s, ci:phorge-* and ci:phabricator-* gets a group of
+# its own, so it does not cancel the running tests only to skip everything itself
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}${{
     contains(fromJSON('["labeled", "unlabeled"]'), github.event.action) &&
     github.event.label.name != 'ci:k8s' && !startsWith(github.event.label.name, 'ci:phorge-') &&
+    !startsWith(github.event.label.name, 'ci:phabricator-') &&
     format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
@@ -40,7 +41,8 @@ jobs:
   # deployment, or when it carries the ci:k8s label.
   #
   # It also picks the Phorge versions the deploy matrix tests: stable, or the
-  # refs of the ci:phorge-<branch or tag> labels on a pull request, which also
+  # refs of the ci:phorge-<branch or tag> and ci:phabricator-<branch> labels on
+  # a pull request, which also
   # count as the manual override.
   #
   # The label, and not a /command comment, is deliberately the manual override:
@@ -54,7 +56,8 @@ jobs:
     # Other labels do not change what runs
     if: >-
       !contains(fromJSON('["labeled", "unlabeled"]'), github.event.action) ||
-      github.event.label.name == 'ci:k8s' || startsWith(github.event.label.name, 'ci:phorge-')
+      github.event.label.name == 'ci:k8s' || startsWith(github.event.label.name, 'ci:phorge-') ||
+      startsWith(github.event.label.name, 'ci:phabricator-')
     permissions:
       contents: read
       pull-requests: read
@@ -62,11 +65,11 @@ jobs:
       deploy: ${{ steps.decide.outputs.deploy }}
       matrix: ${{ steps.versions.outputs.matrix }}
     steps:
-      # stable on every change, or the refs of the ci:phorge-* labels on a pull
-      # request. Weekly, stable, master and the two newest releases, which
-      # upstream tags YYYY.WW, so a new release needs no change here, and
-      # Phabricator, which Phacility still hosts
-      - name: Pick the Phorge versions
+      # stable on every change, or the versions of the ci:phorge-* and
+      # ci:phabricator-* labels on a pull request. Weekly, stable, master and
+      # the two newest releases, which upstream tags YYYY.WW, so a new release
+      # needs no change here, and Phabricator, which Phacility still hosts
+      - name: Pick the versions
         id: versions
         env:
           EVENT: ${{ github.event_name }}
@@ -84,7 +87,9 @@ jobs:
             # shellcheck disable=SC2086
             versions=$(printf '%s\n' $INPUT | jq -Rnc '[inputs]')
           else
-            versions=$(jq -c '[.[]? | select(startswith("ci:phorge-")) | ltrimstr("ci:phorge-")]
+            # ci:phorge-2025.51 is the version 2025.51, ci:phabricator-stable phabricator-stable
+            versions=$(jq -c '[.[]? | if startswith("ci:phorge-") then ltrimstr("ci:phorge-")
+                elif startswith("ci:phabricator-") then ltrimstr("ci:") else empty end]
               | if . == [] then ["stable"] else . end' <<<"$LABELS")
           fi
 
@@ -127,7 +132,7 @@ jobs:
             decide true "Deploying: a $EVENT run is never gated."
           fi
 
-          if label=$(jq -er 'map(select(. == "ci:k8s" or startswith("ci:phorge-"))) | first' <<<"$LABELS"); then
+          if label=$(jq -er 'map(select(. == "ci:k8s" or startswith("ci:phorge-") or startswith("ci:phabricator-"))) | first' <<<"$LABELS"); then
             decide true "$(printf 'Deploying: the pull request is labelled `%s`.' "$label")"
           fi
 
@@ -161,7 +166,8 @@ jobs:
     # Other labels do not change what runs
     if: >-
       !contains(fromJSON('["labeled", "unlabeled"]'), github.event.action) ||
-      github.event.label.name == 'ci:k8s' || startsWith(github.event.label.name, 'ci:phorge-')
+      github.event.label.name == 'ci:k8s' || startsWith(github.event.label.name, 'ci:phorge-') ||
+      startsWith(github.event.label.name, 'ci:phabricator-')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1

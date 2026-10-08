@@ -33,7 +33,7 @@ What fails, on which versions, and why. Everything not listed works on every ver
 
 The `Kubernetes` workflow deploys a Phorge, or Phabricator, built from upstream at a branch or tag, on the newest PHP it runs on, and runs the `tests/k8s` and `tests/e2e` suites against it. Each version uploads its JUnit results as the artifact `test-results-<version>`. [Phorge Setup](phorge-setup.md#phorge-versions) explains how the versions are built.
 
-- Every pull request tests `stable`, or the versions of its `ci:phorge-*` labels.
+- Every pull request tests `stable`, or the versions of its `ci:phorge-*` and `ci:phabricator-*` labels.
 - The weekly run tests `stable`, `master`, the two newest Phorge releases and `phabricator-stable`.
 - A full measurement tests every version:
 
