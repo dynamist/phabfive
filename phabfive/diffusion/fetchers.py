@@ -147,8 +147,9 @@ def fill_hosting(phab, repos):
         try:
             answered = phab.repository.query(phids=phids)
         except PhabfiveAPIException as e:
+            # What earlier batches answered still stands, only the rest is unknown
             log.debug(f"repository.query did not answer, hosting is unknown: {e}")
-            return repos
+            break
 
         hosted.update({row["phid"]: row["isHosted"] for row in answered or []})
 
