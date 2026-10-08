@@ -18,6 +18,7 @@ nav:
     - Retries: 'retries.md'
     - Development: 'development.md'
     - Phorge Setup: 'phorge-setup.md'
+    - Support Matrix: 'support-matrix.md'
     - Release Process: 'releasing.md'
 
 watch:

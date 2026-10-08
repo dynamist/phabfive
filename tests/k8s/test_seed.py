@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """The seed modules created what docs/phorge-setup.md promises."""
 
+from tests.phorge_versions import phorge_older_than
+
 
 def test_users(conduit, seed, admin_username):
     usernames = [admin_username, *(user["username"] for user in seed["users"])]
@@ -165,8 +167,10 @@ def test_repositories(conduit, seed):
         fields = by_callsign[record["callsign"]]["fields"]
         assert fields["vcs"] == "git"
         assert fields["status"] == "active"
-        # Hosted, so nothing about these repositories needs the network
-        assert fields["isHosted"], record["callsign"]
+        # Hosted, so nothing about these repositories needs the network. Only
+        # Phorge 2025.51 and newer report it
+        if not phorge_older_than("2025.51"):
+            assert fields["isHosted"], record["callsign"]
 
 
 def test_branches_and_tags_are_on_disk(conduit, seed):

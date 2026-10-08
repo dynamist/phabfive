@@ -106,6 +106,19 @@ this label, not run the job.
 `Validate manifests` is never gated by the changed files - it is five seconds, and it is what
 catches a broken overlay on a pull request that skips the deployment.
 
+## Support Matrix
+
+`docs/support-matrix.md` states which Phorge and Phabricator versions phabfive works with, and
+what fails where and why. Keep it true:
+
+- A change that makes a feature work, or stop working, on some version updates its Known Gaps
+  row in the same pull request, and the `phorge_older_than()` expectation in `tests/e2e` with it
+- A change that relies on a Conduit method, constraint or field checks which versions have it.
+  `make up VERSION=phabricator` is the stand-in for Phacility-hosted Phabricator, which is live
+  production and only ever gets read-only probes
+- After a new Phorge release, or a change to `scripts/phorge-build-args.sh`, run the full
+  measurement the doc describes and update the Versions table and the run it cites
+
 ## Architecture
 
 ### Public API (`__init__.py`)

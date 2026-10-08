@@ -95,6 +95,7 @@ A spec is one file that says what should exist, or what to look for, across appl
 
 - **[Caching](caching.md)** - What shell completion caches, where, for how long, and how to clear it
 - **[Retries](retries.md)** - Which Conduit calls are retried, how long they wait, and what is never retried
+- **[Support Matrix](support-matrix.md)** - Which Phorge and Phabricator versions phabfive works with, and what fails where
 
 ### Development
 

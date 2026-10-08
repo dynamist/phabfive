@@ -12,7 +12,13 @@ from urllib.parse import urlparse
 import requests
 from ruamel.yaml import YAML
 
-from tests.e2e.conftest import phorge_older_than
+from tests.phorge_versions import (
+    NO_IS_HOSTED,
+    NO_STATUS_CONSTRAINT,
+    OLD_LOCKOUT_WORDING,
+    missing_before,
+    phorge_older_than,
+)
 
 
 def test_whoami(phabfive, live_env):
@@ -123,6 +129,7 @@ def test_create_in_a_space(phabfive, create_task, space_name):
     assert task["Space"] == space_name("S3")
 
 
+@OLD_LOCKOUT_WORDING
 def test_task_edit_sets_the_two_policies_it_can(
     phabfive, phabfive_raw, conduit, create_task
 ):
@@ -288,6 +295,7 @@ def test_jsonl_is_one_task_per_line(phabfive, create_task):
     ]
 
 
+@NO_IS_HOSTED
 def test_repo_show_describes_a_seeded_repository(phabfive):
     """GUNNAR is hosted, with history, per phorge/seed/data/repositories.json."""
     [repo] = phabfive(
@@ -363,6 +371,7 @@ def test_repo_show_takes_several_repositories(phabfive):
     assert [r["Repository"]["Callsign"] for r in repos] == ["GUNNAR", "SPIKE"]
 
 
+@NO_STATUS_CONSTRAINT
 def test_repo_show_formats_agree(phabfive, settled_repositories):
     """The whole point of the command: one record, five ways of writing it.
 
@@ -422,6 +431,7 @@ def test_a_listed_repository_is_the_record_show_answers_with(phabfive):
     assert shown in listed
 
 
+@NO_STATUS_CONSTRAINT
 def test_repo_list_formats_agree(phabfive, settled_repositories):
     """Four runs of the CLI again, so the same settling applies."""
     from ruamel.yaml import YAML
@@ -459,6 +469,7 @@ def test_repo_show_falls_back_to_rich_for_table(phabfive):
     assert output.startswith("- Link: ")
 
 
+@OLD_LOCKOUT_WORDING
 def test_repo_edit_sets_every_policy(
     phabfive, phabfive_raw, conduit, create_repository
 ):
@@ -928,6 +939,9 @@ def test_search_publishes_relations_when_asked(phabfive, create_task, conduit):
     assert "Parents" not in search()[child]
 
 
+@missing_before(
+    "2024.35", "task titles are not limited to 255 characters, so none is refused"
+)
 def test_a_spec_whose_object_is_refused_reports_what_exists(
     phabfive_raw, conduit, tmp_path
 ):
@@ -1170,6 +1184,7 @@ def test_each_command_refuses_the_other_kind_by_name(phabfive_raw, tmp_path):
     assert refused_search.stdout.strip() == ""
 
 
+@NO_STATUS_CONSTRAINT
 def test_search_runs_every_object_type_one_spec_holds(phabfive_raw, tmp_path):
     """One file, a task search and a project search, in document order."""
     spec = tmp_path / "readiness.yaml"
