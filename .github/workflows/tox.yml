@@ -46,7 +46,9 @@ jobs:
           fi
 
           # Fail open, a full run is cheaper than a break that reaches main
-          if ! changed=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[].filename'); then
+          # A rename counts under its old path too: moving phabfive/SKILL.md to
+          # docs/ removes a file the package ships, wherever it lands
+          if ! changed=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)'); then
             scope false "Every test: could not list the changed files, so not guessing."
           fi
 

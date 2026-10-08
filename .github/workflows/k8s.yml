@@ -142,7 +142,9 @@ jobs:
 
           # Fail open. Four minutes wasted is cheaper than a deployment break
           # that reaches main because the API blipped and the gate said no.
-          if ! changed=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[].filename'); then
+          # A rename counts under its old path too, so moving a file out of
+          # phabfive/ or k8s/ still deploys, wherever it lands
+          if ! changed=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)'); then
             decide true 'Deploying: could not list the changed files, so not guessing.'
           fi
 
