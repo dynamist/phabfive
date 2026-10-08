@@ -33,6 +33,7 @@ from typer.testing import CliRunner
 from phabfive.cli import app
 from phabfive.cli.output import is_machine_format
 from phabfive.core import Phabfive
+from tests import click_layer
 
 runner = CliRunner()
 
@@ -396,7 +397,7 @@ class TestManiphestComment:
         with (
             patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest),
             # CliRunner swaps in its own stdin, so a patch of sys.stdin is lost
-            patch("click.testing._NamedTextIOWrapper.isatty", return_value=True),
+            patch.object(click_layer.NamedTextIOWrapper, "isatty", return_value=True),
             patch(
                 "phabfive.cli.editor.edit_text", return_value="from the editor\n"
             ) as edit_text,
@@ -413,7 +414,7 @@ class TestManiphestComment:
         with (
             patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest),
             # CliRunner swaps in its own stdin, so a patch of sys.stdin is lost
-            patch("click.testing._NamedTextIOWrapper.isatty", return_value=True),
+            patch.object(click_layer.NamedTextIOWrapper, "isatty", return_value=True),
             patch("phabfive.cli.editor.edit_text", return_value=None),
         ):
             result = runner.invoke(app, ["--format=rich", "maniphest", "comment", "T7"])

@@ -5,10 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
-from click.shell_completion import ShellComplete
 
 # phabfive imports
 from phabfive.cli import app, completers
+from tests.click_layer import ShellComplete
 from phabfive.constants import PROJECT_COLORS, PROJECT_ICONS, USER_ROLES
 
 
