@@ -219,7 +219,8 @@ class Conduit:
         How a failed call is tried again. The defaults when omitted.
     """
 
-    __slots__ = ("_factory", "_client", "_retry")
+    # __weakref__ so phabfive.capabilities can remember what this client accepts
+    __slots__ = ("_factory", "_client", "_retry", "__weakref__")
 
     def __init__(self, factory, retry=None):
         object.__setattr__(self, "_factory", factory)

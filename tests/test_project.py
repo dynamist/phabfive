@@ -1119,3 +1119,133 @@ class TestUnknownIconWarning:
 
         assert self.WARNING not in result.stderr
         assert phab.project.search.call_count == 1
+
+
+class PhabricatorPhab(FakePhab):
+    """FakePhab answering the way Phabricator and Phorge before 2025.51 do.
+
+    project.search refuses a status constraint and reports no status, while
+    the legacy project.query takes one.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.statuses = {p["phid"]: p["fields"].pop("status") for p in self.projects}
+
+    def _project_search(self, constraints=None, **kwargs):
+        from phabfive.exceptions import PhabfiveAPIException
+
+        if "status" in (constraints or {}):
+            raise PhabfiveAPIException(
+                "ERR-CONDUIT-CORE",
+                'Constraint "status" is not a valid constraint for this query.',
+            )
+
+        answer = super()._project_search(
+            {**(constraints or {}), "status": "all"}, **kwargs
+        )
+        # Copies, as Conduit answers anew each time
+        answer["data"] = copy.deepcopy(answer["data"])
+        for project in answer["data"]:
+            project["fields"].pop("status", None)
+        return answer
+
+    def _project_query(self, phids=None, status=None, **kwargs):
+        answer = super()._project_query(phids=phids, **kwargs)
+
+        if status == "status-archived":
+            answer["data"] = {
+                phid: record
+                for phid, record in answer["data"].items()
+                if self.statuses[phid] == "archived"
+            }
+        for phid, record in answer["data"].items():
+            record["phid"] = phid
+        return answer
+
+
+class TestWithoutStatusConstraint:
+    """A server whose project.search has no status: filtered here instead."""
+
+    @pytest.fixture
+    def old(self):
+        return PhabricatorPhab(ALL, users=[ADMIN, DEPLOYBOT])
+
+    def _names(self, result):
+        return sorted(record["Project"]["Name"] for record in result["projects"])
+
+    def test_active_by_default(self, old):
+        result = _app(old).search(spaces=["*"])
+
+        assert "Old Project" not in self._names(result)
+        assert {r["Project"]["Status"] for r in result["projects"]} == {"active"}
+
+    def test_archived(self, old):
+        result = _app(old).search(status="archived", spaces=["*"])
+
+        assert self._names(result) == ["Old Project"]
+        assert result["projects"][0]["Project"]["Status"] == "archived"
+
+    def test_any_sends_no_status_and_still_names_each(self, old):
+        result = _app(old).search(status="any", spaces=["*"])
+
+        assert len(result["projects"]) == len(ALL)
+        assert {
+            r["Project"]["Name"]: r["Project"]["Status"] for r in result["projects"]
+        }["Old Project"] == "archived"
+        assert "status" not in old.project.search.call_args.kwargs["constraints"]
+
+    def test_a_limit_counts_matches_not_rows(self, old):
+        """Paged at two, the one archived project is on the last page."""
+        old.page_size = 2
+
+        result = _app(old).search(status="archived", spaces=["*"], limit=1)
+
+        assert self._names(result) == ["Old Project"]
+
+    def test_the_refusal_is_remembered_for_the_client(self, old):
+        app = _app(old)
+        app.search(spaces=["*"])
+        old.project.search.reset_mock()
+
+        app.search(spaces=["*"])
+
+        sent = [
+            call.kwargs["constraints"] for call in old.project.search.call_args_list
+        ]
+        assert sent and all("status" not in constraints for constraints in sent)
+
+    def test_show_names_the_status(self, old):
+        result = _app(old).show(["#old_project", "#development"])
+
+        assert [r["Project"]["Status"] for r in result["projects"]] == [
+            "archived",
+            "active",
+        ]
+
+    def test_icons_in_use_reads_every_project(self, old):
+        from phabfive.project.core import icons_in_use
+
+        assert "milestone" not in icons_in_use(old)
+        assert "status" not in old.project.search.call_args.kwargs["constraints"]
+
+    def test_another_error_is_not_taken_for_a_missing_constraint(self, old):
+        from phabfive.exceptions import PhabfiveAPIException
+
+        old.project.search.side_effect = PhabfiveAPIException(
+            "ERR-CONDUIT-CORE", "Something else went wrong."
+        )
+
+        with pytest.raises(PhabfiveDataException, match="Something else"):
+            _app(old).search()
+
+    def test_phorge_is_asked_what_it_always_was(self, phab):
+        """One search with the status, and no project.query for it."""
+        result = _app(phab).search(status="archived", spaces=["*"])
+
+        assert self._names(result) == ["Old Project"]
+        phab.project.search.assert_called_once()
+        assert phab.project.search.call_args.kwargs["constraints"]["status"] == (
+            "archived"
+        )
+        phab.project.query.assert_not_called()

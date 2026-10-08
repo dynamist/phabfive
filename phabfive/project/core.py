@@ -41,7 +41,13 @@ from phabfive.policy import (
     resolve_policy_names,
     resolve_policy_value,
 )
-from phabfive.project.fetchers import fetch_projects, fetch_users_by_phid, name_spaces
+from phabfive.project.fetchers import (
+    fetch_projects,
+    fetch_users_by_phid,
+    fill_project_status,
+    name_spaces,
+    search_projects,
+)
 from phabfive.project.formatters import (
     build_project_display_data,
     describe_project,
@@ -265,11 +271,7 @@ def icons_in_use(phab):
     list
         PROJECT_ICONS, then any further icon in use, sorted
     """
-    from phabfive.pagination import search_all_pages
-
-    projects = search_all_pages(
-        phab.project.search, constraints={"status": PROJECT_STATUS_ALL}
-    )
+    projects = search_projects(phab, constraints={"status": PROJECT_STATUS_ALL})
     in_use = {
         icon
         for project in projects
@@ -323,6 +325,9 @@ class Project(Phabfive):
         """
         policy_names = None
         users = None
+
+        # Phabricator reports no status, so it is read from project.query
+        fill_project_status(self.phab, projects)
 
         if show_policy:
             policy_names = resolve_policy_names(

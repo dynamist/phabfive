@@ -42,13 +42,6 @@ def missing_before(release, reason):
     )
 
 
-# project.search and diffusion.repository.search take a status constraint, which
-# phabfive always sends
-NO_STATUS_CONSTRAINT = missing_before(
-    "2025.51",
-    "project.search and diffusion.repository.search have no status constraint",
-)
-
 # Repositories report isHosted, without which phabfive calls a hosted one not hosted
 NO_IS_HOSTED = missing_before("2025.51", "repositories have no isHosted field")
 

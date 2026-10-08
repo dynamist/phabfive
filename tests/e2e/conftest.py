@@ -196,13 +196,9 @@ def conduit(live_env):
 def _repositories_not_inactive(conduit):
     """Every repository the instance still runs daemons for.
 
-    `constraints[status]=open` is the server-side half of that. Each
-    record's status is checked as well, because Conduit answers a
-    constraint value it does not recognise by ignoring it rather than by
-    failing - `constraints[status]=active` silently returns all 57
-    repositories where `open` returns the 18 active ones - so one wrong
-    word would otherwise put the permanent importers straight back into
-    the wait. The check is `!= "inactive"` rather than `== "active"` so
+    Filtered on each record's status rather than with a `status`
+    constraint, which Phabricator and Phorge before 2025.51 do not have.
+    The check is `!= "inactive"` rather than `== "active"` so
     that a record whose status this cannot read is kept: an unknown
     status has to mean keep waiting, or a renamed field would quietly
     turn the wait into a no-op and make the tests that depend on it flaky
@@ -217,7 +213,7 @@ def _repositories_not_inactive(conduit):
     after = None
 
     while True:
-        params = {"constraints[status]": "open"}
+        params = {}
         if after is not None:
             params["after"] = after
 

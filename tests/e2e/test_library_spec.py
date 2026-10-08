@@ -22,8 +22,6 @@ import pytest
 import phabfive
 from phabfive.spec import validate_online
 
-from tests.phorge_versions import NO_STATUS_CONSTRAINT
-
 
 @pytest.fixture
 def credentials(live_env):
@@ -318,7 +316,6 @@ def test_a_search_spec_naming_a_user_who_does_not_exist_says_so_once(
     assert missing in str(error.value)
 
 
-@NO_STATUS_CONSTRAINT
 def test_a_mixed_spec_runs_every_type_from_a_dict(credentials, isolated):
     """One document, four object types, one client - and no command."""
     from phabfive.search import records_of, run_spec
@@ -355,7 +352,6 @@ def test_a_mixed_spec_runs_every_type_from_a_dict(credentials, isolated):
         assert records == result.records
 
 
-@NO_STATUS_CONSTRAINT
 def test_a_search_spec_runs_with_nothing_of_the_command_loaded(live_env, tmp_path):
     """Out of process, because the e2e suite has already imported the CLI."""
     code = (

@@ -14,7 +14,6 @@ from ruamel.yaml import YAML
 
 from tests.phorge_versions import (
     NO_IS_HOSTED,
-    NO_STATUS_CONSTRAINT,
     OLD_LOCKOUT_WORDING,
     missing_before,
     phorge_older_than,
@@ -371,7 +370,6 @@ def test_repo_show_takes_several_repositories(phabfive):
     assert [r["Repository"]["Callsign"] for r in repos] == ["GUNNAR", "SPIKE"]
 
 
-@NO_STATUS_CONSTRAINT
 def test_repo_show_formats_agree(phabfive, settled_repositories):
     """The whole point of the command: one record, five ways of writing it.
 
@@ -431,7 +429,6 @@ def test_a_listed_repository_is_the_record_show_answers_with(phabfive):
     assert shown in listed
 
 
-@NO_STATUS_CONSTRAINT
 def test_repo_list_formats_agree(phabfive, settled_repositories):
     """Four runs of the CLI again, so the same settling applies."""
     from ruamel.yaml import YAML
@@ -1184,7 +1181,6 @@ def test_each_command_refuses_the_other_kind_by_name(phabfive_raw, tmp_path):
     assert refused_search.stdout.strip() == ""
 
 
-@NO_STATUS_CONSTRAINT
 def test_search_runs_every_object_type_one_spec_holds(phabfive_raw, tmp_path):
     """One file, a task search and a project search, in document order."""
     spec = tmp_path / "readiness.yaml"

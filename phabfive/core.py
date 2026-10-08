@@ -393,6 +393,23 @@ class Phabfive:
                 setattr(child, name, getattr(parent, name))
         return child
 
+    def supports_constraint(self, method, key, value):
+        """Whether the ``*.search`` method `method` takes the constraint `key`.
+
+        Neither Phorge nor Phabricator reports a version, so this sends a
+        one-row search constrained on `key` set to `value`, once per client;
+        see `phabfive.capabilities`.
+        """
+        from phabfive.capabilities import supports_constraint
+
+        return supports_constraint(self.phab, method, key, value)
+
+    def supports_method(self, method):
+        """Whether the server has the Conduit method `method`, asked once."""
+        from phabfive.capabilities import supports_method
+
+        return supports_method(self.phab, method)
+
     def _client_factory(self):
         """Return the recipe for this instance's Conduit client.
 
