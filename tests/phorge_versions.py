@@ -21,7 +21,7 @@ def phorge_older_than(release):
     branch (stable, master), or no version at all, counts as current.
     """
     version = os.environ.get("PHORGE_VERSION", "")
-    if version.startswith("phabricator"):
+    if version.startswith("phabricator-"):
         return True
     if not re.fullmatch(r"\d{4}\.\d+", version):
         return False

@@ -15,7 +15,7 @@ Last measured on 2026-09-28, [run 36415788571](https://github.com/dynamist/phabf
 | Phorge 2022.37 to 2025.18 | 8.0 to 8.4 | Partly, see [Known Gaps](#known-gaps) |
 | Phabricator (`stable` and `master`, as Phacility left it in 2022) | 8.0 | Partly, see [Known Gaps](#known-gaps) |
 
-Phacility still hosts Phabricator for some customers. The `phabricator` version tested here is its public `stable` branch, and a hosted instance answers the same Conduit methods with the same constraints, but may carry patches that were never published.
+Phacility still hosts Phabricator for some customers. The `phabricator-stable` version tested here is its public `stable` branch, and a hosted instance answers the same Conduit methods with the same constraints, but may carry patches that were never published.
 
 ## Known Gaps
 
@@ -34,12 +34,12 @@ What fails, on which versions, and why. Everything not listed works on every ver
 The `Kubernetes` workflow deploys a Phorge, or Phabricator, built from upstream at a branch or tag, on the newest PHP it runs on, and runs the `tests/k8s` and `tests/e2e` suites against it. Each version uploads its JUnit results as the artifact `test-results-<version>`. [Phorge Setup](phorge-setup.md#phorge-versions) explains how the versions are built.
 
 - Every pull request tests `stable`, or the versions of its `ci:phorge-*` labels.
-- The weekly run tests `stable`, `master`, the two newest Phorge releases and `phabricator`.
+- The weekly run tests `stable`, `master`, the two newest Phorge releases and `phabricator-stable`.
 - A full measurement tests every version:
 
 ```bash
-versions="stable master phabricator phabricator-master $(git ls-remote --tags --refs https://github.com/phorgeit/phorge.git | sed -n 's|.*refs/tags/||p' | grep -E '^[0-9]{4}\.[0-9]+$' | sort -V | tr '\n' ' ')"
+versions="stable master phabricator-stable phabricator-master $(git ls-remote --tags --refs https://github.com/phorgeit/phorge.git | sed -n 's|.*refs/tags/||p' | grep -E '^[0-9]{4}\.[0-9]+$' | sort -V | tr '\n' ' ')"
 gh workflow run k8s.yml -f versions="$versions"
 ```
 
-A test that fails on an older version because that version lacks something is expected to fail there, through `phorge_older_than()` in `tests/e2e/conftest.py`, rather than skipped, so a gap that closes shows up as an unexpected pass.
+A test that fails on an older version because that version lacks something is expected to fail there, through `missing_before()` in `tests/phorge_versions.py`, rather than skipped, so a gap that closes shows up as an unexpected pass.
