@@ -16,7 +16,20 @@ ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/relea
 
 RUN install-php-extensions mbstring iconv mysqli curl pcntl gd zip apcu opcache
 
-RUN apt update && apt install -y git default-mysql-client python3-pygments
+RUN apt update && apt install -y git default-mysql-client python3-pygments openssh-server sudo && \
+    rm -f /etc/ssh/ssh_host_*
+
+# git over SSH (see phorge/sshd/): sshd lets in only the VCS user `git`, Phorge's
+# ssh-auth names the keys it accepts and ssh-exec serves the request. The
+# repositories belong to www-data, the daemon user (phd.user), so ssh-exec runs
+# git as www-data through sudo. The password is NP rather than locked, sshd
+# refuses a locked account even when it only takes keys.
+RUN useradd --system --shell /bin/sh --home-dir /var/lib/git --create-home git && \
+    usermod -p NP git
+COPY sshd/sudoers /etc/sudoers.d/phorge-git
+COPY sshd/sshd_config /etc/ssh/sshd_config.phorge
+COPY --chmod=0755 sshd/phorge-ssh-hook.sh /usr/libexec/phorge-ssh-hook.sh
+RUN chmod 0440 /etc/sudoers.d/phorge-git && visudo -cf /etc/sudoers.d/phorge-git
 
 # Enable Apache modules
 RUN a2enmod rewrite
@@ -60,8 +73,8 @@ RUN chmod +x /usr/local/bin/lib/*
 RUN mkdir -p /app/phorge/conf/local /app/repo /app/files && \
     chown -R www-data:www-data /app/phorge /app/repo /app/files
 
-# Expose port 80
-EXPOSE 80
+# Apache, and sshd in the container started with `entrypoint.sh sshd`
+EXPOSE 80 22
 
 # Entry point
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -9,6 +9,19 @@ spec:
     - name: http
       port: 80
 ---
+# git over SSH. No Ingress reaches it, Traefik's ports belong to the shared
+# cluster: `make ssh-forward` port-forwards to it instead.
+apiVersion: v1
+kind: Service
+metadata:
+  name: phorge-ssh
+spec:
+  selector:
+    app.kubernetes.io/name: phorge
+  ports:
+    - name: ssh
+      port: 22
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -37,10 +50,14 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: phorge
+      annotations:
+        # What `kubectl exec/logs deploy/phorge` reach without -c
+        kubectl.kubernetes.io/default-container: web
     spec:
       enableServiceLinks: false
       containers:
-        - name: phorge
+        - name: web
+          args: [web]
           image: dynamist/phorge
           envFrom:
             - configMapRef:
@@ -88,7 +105,60 @@ spec:
             - name: data
               mountPath: /var/lib/phabfive
               subPath: state
+            # local.json, written here and read by sshd
+            - name: conf
+              mountPath: /app/phorge/conf/local
+            # Registered on the admin by the sshkeys seed module
+            - name: ssh-key
+              mountPath: /etc/phorge-seed/ssh
+              readOnly: true
+        # Same image, serving git over SSH once web has configured Phorge
+        - name: sshd
+          image: dynamist/phorge
+          args: [sshd]
+          ports:
+            - name: ssh
+              containerPort: 22
+          # Waits for web, whose first start upgrades storage and seeds
+          startupProbe:
+            tcpSocket:
+              port: ssh
+            periodSeconds: 5
+            failureThreshold: 180
+          readinessProbe:
+            tcpSocket:
+              port: ssh
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: ssh
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            # The repositories git reads and writes, as www-data through sudo
+            - name: data
+              mountPath: /app/repo
+              subPath: repo
+            # The host key, see entrypoint.sh
+            - name: data
+              mountPath: /var/lib/phabfive
+              subPath: state
+            - name: conf
+              mountPath: /app/phorge/conf/local
       volumes:
+        - name: conf
+          emptyDir: {}
+        - name: ssh-key
+          secret:
+            secretName: phorge-ssh-key
+            # Only the public half, the private one stays in k8s/base/ssh/
+            optional: true
         - name: data
           persistentVolumeClaim:
             claimName: phorge-data

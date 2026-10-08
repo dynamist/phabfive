@@ -1,0 +1,3 @@
+# ssh-exec runs as the VCS user git, and runs git as the daemon user that owns
+# the repositories (phd.user). -E keeps the environment the commit hook reads.
+git ALL=(www-data) SETENV: NOPASSWD: /usr/bin/git, /usr/bin/git-upload-pack, /usr/bin/git-receive-pack

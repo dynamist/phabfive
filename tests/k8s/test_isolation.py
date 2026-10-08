@@ -65,6 +65,9 @@ CONDUIT_CLIENTS = {"dynatron"}
     "host,port,admitted",
     [
         ("phorge.phorge.svc.cluster.local", 80, CONDUIT_CLIENTS),
+        # git over SSH is reached through port-forward only, which enters the
+        # pod's own network namespace and needs no NetworkPolicy
+        ("phorge-ssh.phorge.svc.cluster.local", 22, set()),
         ("mariadb.phorge.svc.cluster.local", 3306, set()),
     ],
 )
