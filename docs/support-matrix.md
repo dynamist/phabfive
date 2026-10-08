@@ -42,4 +42,10 @@ versions="stable master phabricator-stable phabricator-master $(git ls-remote --
 gh workflow run k8s.yml -f versions="$versions"
 ```
 
+When the run is done, `scripts/support_matrix.py` turns it into a grid of the tests that do not pass on every version, and shows the end of the log of any version that did not deploy. Write this page from that grid:
+
+```bash
+python3 scripts/support_matrix.py <run id>
+```
+
 A test that fails on an older version because that version lacks something is expected to fail there, through `missing_before()` in `tests/phorge_versions.py`, rather than skipped, so a gap that closes shows up as an unexpected pass.
