@@ -2,7 +2,9 @@
 """The shape of a credential's machine-readable record, and which secrets it carries."""
 
 import json
+from unittest.mock import MagicMock, patch
 
+import pytest
 from ruamel.yaml import YAML
 
 from phabfive.passphrase.display import (
@@ -82,3 +84,78 @@ class TestSecretPolicy:
         display_passphrase_json(_credential())
 
         assert json.loads(capsys.readouterr().out)["Credential"]["Secret"] == ""
+
+    def test_a_hidden_secret_is_no_key_rather_than_an_empty_one(self, capsys):
+        """An empty Secret would read as a credential whose secret is empty."""
+        display_passphrase_json(_credential(), show_secrets=False)
+
+        assert "Secret" not in json.loads(capsys.readouterr().out)["Credential"]
+
+
+class TestShowCommand:
+    """`passphrase show` fetches and prints the secret only when asked."""
+
+    def _invoke(self, args):
+        from typer.testing import CliRunner
+
+        from phabfive.cli import app
+
+        mock_app = MagicMock()
+        mock_app.get_passphrases.return_value = [
+            _credential(secret="hunter2", public_key="ssh-rsa AAAA")
+        ]
+        with patch(
+            "phabfive.cli.passphrase._get_passphrase_app", return_value=mock_app
+        ):
+            result = CliRunner().invoke(app, args)
+        return result, mock_app
+
+    def test_the_secret_is_not_even_fetched_by_default(self):
+        result, mock_app = self._invoke(["--format=json", "passphrase", "show", "K1"])
+
+        assert result.exit_code == 0
+        assert mock_app.get_passphrases.call_args.kwargs == {
+            "need_secrets": False,
+            "need_public_keys": True,
+        }
+        assert "Secret" not in json.loads(result.stdout)["Credential"]
+
+    @pytest.mark.parametrize("output_format", ["rich", "tree"])
+    def test_rich_and_tree_say_the_secret_is_hidden(self, output_format):
+        from io import StringIO
+
+        from rich.console import Console
+
+        from phabfive.passphrase.display import display_passphrase
+
+        out = StringIO()
+        instance = MagicMock()
+        instance.get_console.return_value = Console(file=out, width=200)
+
+        display_passphrase(
+            _credential(_link="K1"), output_format, instance, show_secrets=False
+        )
+
+        assert "Secret: hidden (use --show-secret)" in out.getvalue()
+
+    @pytest.mark.parametrize("flag", ["--show-secret", "-s"])
+    def test_show_secret_reveals_it(self, flag):
+        result, mock_app = self._invoke(
+            ["--format=json", "passphrase", "show", "K1", flag]
+        )
+
+        assert mock_app.get_passphrases.call_args.kwargs["need_secrets"] is True
+        assert json.loads(result.stdout)["Credential"]["Secret"] == "hunter2"
+
+    def test_value_without_show_secret_is_refused_before_connecting(self):
+        result, mock_app = self._invoke(["--format=value", "passphrase", "show", "K1"])
+
+        assert result.exit_code == 1
+        assert "--show-secret" in result.output
+        mock_app.get_passphrases.assert_not_called()
+
+    @pytest.mark.parametrize("flag", ["-n", "-P", "--no-secret"])
+    def test_the_old_flags_are_gone(self, flag):
+        result, _ = self._invoke(["passphrase", "show", "K1", flag])
+
+        assert result.exit_code == 2

@@ -2,6 +2,15 @@
 
 ## Upgrade Notes
 
+* **Breaking change: `passphrase show` hides the secret unless `--show-secret` (`-s`) is
+  given.** It used to print it unless `--no-secret` was, which put a secret into
+  scrollback, screen shares and agent transcripts by default. Without `--show-secret`
+  the secret is not even fetched, yaml and json leave the `Secret` key out, rich and tree
+  say it is hidden, and `--format=value` is refused. `--no-secret` and its `-n` are gone,
+  and `--no-public-key` lost its `-P`. Write `phabfive K1 -s`, or
+  `phabfive --format=value K1 -s` to pipe the secret, the same `--show-secret` that
+  `passphrase search` takes
+
 * **Breaking change: `--has-parents` and `--has-subtasks` are gone.** Write
   `--parent=@some` and `--subtask=@some`, and in a search spec `parent: "@some"` for
   `has-parents: true` and `parent: "@none"` for `has-parents: false`. A spec that still
@@ -22,6 +31,9 @@
   program no longer has to split `Bad response status: 503` itself
 
 ## New Features
+
+* **`maniphest search` takes `-P` for `--show-policy`.** `-P` now means `--show-policy`
+  on every command that has the flag
 
 * **`--show-relations` on `maniphest search` and `maniphest show`.** Fills each task's
   `Parents`, `Subtasks` and `Commits`, also as `show-relations: true` in a search spec,

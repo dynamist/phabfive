@@ -21,7 +21,12 @@ def _format_timestamp(ts):
     return None
 
 
-def display_passphrase_rich(console, passphrase_dict, phabfive_instance):
+_SECRET_HIDDEN = "hidden (use --show-secret)"
+
+
+def display_passphrase_rich(
+    console, passphrase_dict, phabfive_instance, secret_hidden=False
+):
     """Display a passphrase in YAML-like format using Rich.
 
     Parameters
@@ -32,6 +37,8 @@ def display_passphrase_rich(console, passphrase_dict, phabfive_instance):
         Passphrase data dictionary with _link, url, type, name, username, secret
     phabfive_instance : Phabfive
         Instance to access format_link() and url
+    secret_hidden : bool
+        Say that the secret was not fetched, rather than leaving it out silently
     """
     link = passphrase_dict.get("_link")
     passphrase_type = passphrase_dict.get("type", "Unknown")
@@ -53,7 +60,9 @@ def display_passphrase_rich(console, passphrase_dict, phabfive_instance):
         console.print(f"  Username: {username}")
 
     # Print Secret (only when present and non-empty)
-    if "secret" in passphrase_dict and secret:
+    if secret_hidden:
+        console.print(Text.assemble("  Secret: ", (_SECRET_HIDDEN, "dim")))
+    elif "secret" in passphrase_dict and secret:
         if "\n" in secret:
             console.print("  Secret: |-")
             for line in secret.splitlines():
@@ -80,7 +89,9 @@ def display_passphrase_rich(console, passphrase_dict, phabfive_instance):
         console.print(f"  Modified: {modified}")
 
 
-def display_passphrase_tree(console, passphrase_dict, phabfive_instance):
+def display_passphrase_tree(
+    console, passphrase_dict, phabfive_instance, secret_hidden=False
+):
     """Display a passphrase in tree format using Rich Tree.
 
     Parameters
@@ -91,6 +102,8 @@ def display_passphrase_tree(console, passphrase_dict, phabfive_instance):
         Passphrase data dictionary with _link, url, type, name, username, secret
     phabfive_instance : Phabfive
         Instance to access format_link() and url
+    secret_hidden : bool
+        Say that the secret was not fetched, rather than leaving it out silently
     """
     link = passphrase_dict.get("_link")
     passphrase_type = passphrase_dict.get("type", "Unknown")
@@ -109,7 +122,9 @@ def display_passphrase_tree(console, passphrase_dict, phabfive_instance):
         tree.add(f"Username: {username}")
 
     # Show secret only if present and non-empty
-    if "secret" in passphrase_dict and secret:
+    if secret_hidden:
+        tree.add(Text.assemble("Secret: ", (_SECRET_HIDDEN, "dim")))
+    elif "secret" in passphrase_dict and secret:
         secret_stripped = secret.strip()
         # For multi-line secrets, use subtree
         if "\n" in secret_stripped:
@@ -158,7 +173,7 @@ def build_passphrase_record(cred, show_secrets=True, always_secret=False):
         Whether to include the secret, when the credential carries one
     always_secret : bool
         Always include a Secret key, empty when the credential carries none.
-        What a single ``passphrase show`` has always printed for yaml and json.
+        What a single ``passphrase show --show-secret`` prints for yaml and json.
 
     Returns
     -------
@@ -215,7 +230,7 @@ def _dump_yaml(records):
     print(stream.getvalue(), end="")
 
 
-def display_passphrase_yaml(passphrase_dict):
+def display_passphrase_yaml(passphrase_dict, show_secrets=True):
     """Display passphrase as strict YAML via ruamel.yaml.
 
     Guaranteed conformant YAML output for piping to yq/jq.
@@ -225,11 +240,14 @@ def display_passphrase_yaml(passphrase_dict):
     ----------
     passphrase_dict : dict
         Passphrase data dictionary with url, type, name, username, secret
+    show_secrets : bool
+        Whether to include the secret. A hidden one leaves no Secret key, so it
+        cannot be mistaken for an empty secret
     """
-    _dump_yaml([build_passphrase_record(passphrase_dict, always_secret=True)])
+    _dump_yaml([build_passphrase_record(passphrase_dict, show_secrets, show_secrets)])
 
 
-def display_passphrase_json(passphrase_dict):
+def display_passphrase_json(passphrase_dict, show_secrets=True):
     """Display passphrase as JSON.
 
     Machine-readable JSON output for piping to jq or other tools.
@@ -239,8 +257,11 @@ def display_passphrase_json(passphrase_dict):
     ----------
     passphrase_dict : dict
         Passphrase data dictionary with url, type, name, username, secret
+    show_secrets : bool
+        Whether to include the secret. A hidden one leaves no Secret key, so it
+        cannot be mistaken for an empty secret
     """
-    output = build_passphrase_record(passphrase_dict, always_secret=True)
+    output = build_passphrase_record(passphrase_dict, show_secrets, show_secrets)
     # Intentional: a top-level object, not an array, for a single credential.
     # The print stays in this module rather than in phabfive/json_output.py so
     # the clear-text-logging suppression covers only the code that is meant to
@@ -260,7 +281,9 @@ def display_passphrase_value(passphrase_dict):
     print(passphrase_dict.get("secret", ""))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
 
 
-def display_passphrase(passphrase_dict, output_format, phabfive_instance):
+def display_passphrase(
+    passphrase_dict, output_format, phabfive_instance, show_secrets=True
+):
     """Display passphrase in the specified format.
 
     Parameters
@@ -271,24 +294,33 @@ def display_passphrase(passphrase_dict, output_format, phabfive_instance):
         One of 'rich', 'tree', 'yaml', 'json', 'jsonl', or 'value'
     phabfive_instance : Phabfive
         Instance to access formatting helpers
+    show_secrets : bool
+        Whether the secret was fetched and is to be shown
     """
     console = phabfive_instance.get_console()
 
     try:
         if output_format == "value":
-            display_passphrase_value(passphrase_dict)
+            if show_secrets:
+                display_passphrase_value(passphrase_dict)
         elif output_format == "tree":
-            display_passphrase_tree(console, passphrase_dict, phabfive_instance)
+            display_passphrase_tree(
+                console, passphrase_dict, phabfive_instance, not show_secrets
+            )
         elif output_format in ("yaml", "strict"):
-            display_passphrase_yaml(passphrase_dict)
+            display_passphrase_yaml(passphrase_dict, show_secrets)
         elif output_format == "json":
-            display_passphrase_json(passphrase_dict)
+            display_passphrase_json(passphrase_dict, show_secrets)
         elif output_format == "jsonl":
             # Deliberately the list builder: jsonl emits the same object shape
             # whether one credential was asked for or several
-            display_passphrases_json([passphrase_dict], output_format="jsonl")
+            display_passphrases_json(
+                [passphrase_dict], show_secrets, output_format="jsonl"
+            )
         else:  # "rich" (default)
-            display_passphrase_rich(console, passphrase_dict, phabfive_instance)
+            display_passphrase_rich(
+                console, passphrase_dict, phabfive_instance, not show_secrets
+            )
     except BrokenPipeError:
         # Handle pipe closed by consumer (e.g., head, less)
         sys.stderr.close()
@@ -321,7 +353,9 @@ def display_passphrases(
                     print(cred.get("secret", ""))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
         elif output_format == "tree":
             for cred in credentials:
-                display_passphrase_tree(console, cred, phabfive_instance)
+                display_passphrase_tree(
+                    console, cred, phabfive_instance, not show_secrets
+                )
         elif output_format in ("yaml", "strict"):
             display_passphrases_yaml(credentials, show_secrets)
         elif output_format in ("json", "jsonl"):
@@ -330,7 +364,9 @@ def display_passphrases(
             )
         else:  # "rich" (default)
             for cred in credentials:
-                display_passphrase_rich(console, cred, phabfive_instance)
+                display_passphrase_rich(
+                    console, cred, phabfive_instance, not show_secrets
+                )
     except BrokenPipeError:
         sys.stderr.close()
         sys.exit(0)

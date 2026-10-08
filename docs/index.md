@@ -43,18 +43,21 @@ and the container image.
 ### Basic Usage
 
 ```bash
-# Get a secret from Passphrase (monogram shortcut)
+# Show a Passphrase credential (monogram shortcut), secret hidden
 phabfive K123
+
+# Reveal the secret too
+phabfive K123 --show-secret
 
 # Search and filter credentials
 phabfive passphrase search "deploy"
 phabfive passphrase search --type=password
 
 # Show multiple secrets at once
-phabfive passphrase show K1 K2 K3
+phabfive passphrase show K1 K2 K3 --show-secret
 
-# Pull one secret out of a structured record
-phabfive --format=json passphrase show K4 | jq -r '.Credential.Secret'
+# Pipe one secret into something else
+phabfive --format=value passphrase show K4 --show-secret
 
 # Search pastes
 phabfive paste search "deploy"

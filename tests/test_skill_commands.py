@@ -40,7 +40,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from phabfive.cli import app
+from phabfive.cli import app, preprocess_monograms
 from phabfive.constants import MONOGRAM_SHORTCUT
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -164,6 +164,8 @@ def test_a_documented_command_line_resolves(case):
     root = typer.main.get_command(app)
 
     for tokens in _invocations(line):
+        # `phabfive K1 -s` is `passphrase show K1 -s` by the time Typer parses it
+        tokens = preprocess_monograms(["phabfive", *tokens])[1:]
         command = root
         walked = ["phabfive"]
         seen_argument = False

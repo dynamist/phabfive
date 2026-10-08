@@ -156,7 +156,7 @@ class TestSimpleStillWorks:
         mock_get_app.return_value = mock_app
 
         argv = preprocess_format_alias(
-            ["phabfive", "--format=simple", "passphrase", "show", "K1"]
+            ["phabfive", "--format=simple", "passphrase", "show", "K1", "-s"]
         )
         result = runner.invoke(app, argv[1:])
 

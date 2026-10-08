@@ -769,7 +769,7 @@ def search(
         False, "--show-metadata", help="Display filter match metadata"
     ),
     show_policy: bool = typer.Option(
-        False, "--show-policy", help="Display each task's policies"
+        False, "--show-policy", "-P", help="Display each task's policies"
     ),
     show_relations: bool = typer.Option(
         False,
