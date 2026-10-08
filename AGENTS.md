@@ -117,7 +117,9 @@ what fails where and why. Keep it true:
   `make up VERSION=phabricator-stable` is the stand-in for Phacility-hosted Phabricator, which is live
   production and only ever gets read-only probes
 - After a new Phorge release, or a change to `scripts/phorge-build-args.sh`, run the full
-  measurement the doc describes and update the Versions table and the run it cites
+  measurement the doc describes, read the run with `python3 scripts/support_matrix.py <run id>`,
+  and update the Versions table and the run it cites. A strict xfail that passes shows as `X`:
+  a gap has closed, so remove its marker and its Known Gaps row
 
 ## Architecture
 
