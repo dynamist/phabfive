@@ -68,6 +68,14 @@
 
 ## Bug Fixes
 
+* **A hosted repository is reported as hosted on Phabricator and Phorge before
+  2025.51.** Their `diffusion.repository.search` has no `isHosted`, and phabfive read a
+  repository without a read-write URI as not hosted - which a hosted repository that
+  answers with no URIs is. `Repository.Hosted` now comes from the frozen
+  `repository.query` there, which reports the same stored flag, and is empty (`null` in
+  JSON) when that cannot answer either, rather than `false`. `Can Push` is then shown as
+  stored, and `repo edit --can-push` warns that hosting is unknown
+
 * **`--column` moves the card on every board `--tag` names.** A task has a position on
   each board it is on, so a move says which boards it applies to: none needed when the
   task is on exactly one, and one `--tag` per board otherwise. `--tag=A,B --column=Done`

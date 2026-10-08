@@ -52,37 +52,31 @@ def ref_names(refs, ref_type="branch"):
 
 def repository_is_hosted(repo):
     """
-    Whether Phabricator serves this repository itself.
+    Whether Phabricator serves this repository itself, if the instance says.
 
-    Phorge reports this as ``isHosted`` and that is what is read. The
-    fallback is for an instance that does not: hosting is what a read-write
-    URI means, a repository that follows a remote carrying an observed URI
-    and read-only built-ins instead. It is a fallback rather than the rule
-    because the URIs attachment can come back empty on a repository that
-    is hosted - a freshly seeded one does - and an empty list must not be
-    read as "not hosted" when the instance has already said otherwise.
+    Read off ``isHosted``, which Phorge reports from 2025.51 and
+    :func:`phabfive.diffusion.fetchers.fill_hosting` adds on an older
+    instance that can still be asked. Without it the answer is unknown
+    rather than a guess from the URIs: a hosted repository can answer with
+    no URIs at all, and an old one can be neither hosted nor observing.
 
     Parameters
     ----------
     repo : dict
-        A repository record, fetched with attachments={"uris": True}
+        A repository record
 
     Returns
     -------
-    bool
-        True if Phabricator hosts the repository
+    bool or None
+        True if Phabricator hosts the repository, False if it does not,
+        None if the instance did not say
     """
     fields = repo.get("fields", {})
 
-    if "isHosted" in fields:
-        return bool(fields["isHosted"])
+    if "isHosted" not in fields:
+        return None
 
-    uris = repo.get("attachments", {}).get("uris", {}).get("uris", [])
-
-    return any(
-        uri.get("fields", {}).get("io", {}).get("effective") == "readwrite"
-        for uri in uris
-    )
+    return bool(fields["isHosted"])
 
 
 def format_policy(policy, policy_names=None, hosted=True):
@@ -98,11 +92,13 @@ def format_policy(policy, policy_names=None, hosted=True):
         carry a PHID rather than a keyword - a project, a user or a custom
         rule - and this is what names it. Left out, or missing an entry, the
         PHID is shown as it stands rather than guessed at.
-    hosted : bool, optional
+    hosted : bool or None, optional
         Whether Phabricator serves the repository itself, from
         repository_is_hosted. A push policy on a repository that follows a
         remote is stored but inert, and is reported as POLICY_NOT_HOSTED
-        rather than as a value that reads as if it were in force.
+        rather than as a value that reads as if it were in force. None is
+        unknown, and shows the policy as it is stored: whether it is in
+        force is no more known than whether the repository is hosted.
 
     Returns
     -------
@@ -132,7 +128,7 @@ def format_policy(policy, policy_names=None, hosted=True):
             policy.get(REPO_POLICY_FIELDS["edit"]), policy_names
         ),
         "Can Push": policy_label(policy.get(REPO_POLICY_FIELDS["push"]), policy_names)
-        if hosted
+        if hosted is not False
         else POLICY_NOT_HOSTED,
     }
 

@@ -657,12 +657,20 @@ def repo_edit(
     # remote today can be made hosted tomorrow, and the policy it was given
     # takes effect then. Until it is, nothing consults it, which is why
     # Phorge's own Policies panel prints "Not a Hosted Repository" in place
-    # of the value and phabfive follows it.
-    if can_push is not None and not repository_is_hosted(repo_record):
+    # of the value and phabfive follows it. An instance that does not say
+    # whether the repository is hosted gets the same caution, worded as one.
+    hosted = repository_is_hosted(repo_record)
+    if can_push is not None and hosted is False:
         typer.echo(
             f"WARNING: {label} is not a hosted repository, so a push policy "
             "has no effect on it. It is stored, and applies if the "
             "repository becomes hosted.",
+            err=True,
+        )
+    elif can_push is not None and hosted is None:
+        typer.echo(
+            f"WARNING: this instance does not say whether {label} is hosted. "
+            "A push policy only has an effect on a hosted repository.",
             err=True,
         )
 

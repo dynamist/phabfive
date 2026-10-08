@@ -9,6 +9,7 @@ import pytest
 from phabfive.constants import FORMAT_ALIASES
 from phabfive.diffusion import Diffusion
 from phabfive.exceptions import (
+    PhabfiveAPIException,
     PhabfiveConfigException,
     PhabfiveDataException,
     PhabfiveNameCollisionException,
@@ -102,6 +103,7 @@ def _listing(repos):
     diffusion.url = "http://phorge.localhost"
     diffusion.format_link = lambda url, text: url
     diffusion.phab.phid.query.return_value = {}
+    diffusion.phab.repository.query.return_value = []
 
     return diffusion
 
@@ -1604,6 +1606,20 @@ class TestRepoEditCli:
 
         assert "not a hosted repository" not in result.stderr
 
+    def test_unknown_hosting_is_warned_about_as_unknown(self):
+        """An instance that does not say gets a caution, not a claim."""
+        record = _repo("oldname")
+        del record["fields"]["isHosted"]
+
+        result, diffusion = self._invoke(
+            ["R42", "--can-push=admin", "--dry-run"], record=record
+        )
+
+        assert result.exit_code == 0
+        assert "does not say whether" in result.stderr
+        assert "not a hosted repository" not in result.stderr
+        diffusion.build_repo_edit.assert_called_once()
+
     def test_only_a_push_policy_is_warned_about(self):
         """View and edit apply whether or not the repository is hosted."""
         result, _ = self._invoke(
@@ -2566,8 +2582,8 @@ def _show_repo(
     """A repository as diffusion.repository.search answers with it.
 
     ``is_hosted`` is left out of the record unless it is given, because an
-    instance old enough not to report isHosted is a case the hosting
-    fallback exists for and several tests exercise.
+    instance old enough not to report isHosted is a case several tests
+    exercise.
     """
     fields = {
         "name": name,
@@ -2633,6 +2649,8 @@ def _showable(repos, branches=None, tags=None):
     diffusion.phab.diffusion.branchquery.return_value = branches or []
     diffusion.phab.diffusion.tagsquery.return_value = tags or []
     diffusion.phab.phid.query.return_value = {}
+    # What fill_hosting asks when isHosted is missing; nothing to say by default
+    diffusion.phab.repository.query.return_value = []
 
     return diffusion
 
@@ -2658,7 +2676,7 @@ class TestRepoShowRecord:
         assert record["_url"] == "http://phorge.localhost/source/phabfive/"
 
     def test_the_repository_section_names_every_way_in(self):
-        repo = _show_repo(callsign="PHAB")
+        repo = _show_repo(callsign="PHAB", is_hosted=False)
         record = _showable([repo]).repo_show(["R5"])["repositories"][0]
 
         assert record["Repository"] == {
@@ -2835,20 +2853,112 @@ class TestRepoShowRecord:
 
         assert record["Repository"]["Hosted"] is True
 
-    def test_hosting_falls_back_to_the_uris_when_unreported(self):
-        """For an instance old enough not to report the field at all."""
-        hosted = _show_repo(
+    def test_hosting_is_asked_of_repository_query_when_unreported(self):
+        """Phabricator, and Phorge before 2025.51, report it only there."""
+        hosted = _show_repo(repo_id=5)
+        observed = _show_repo(repo_id=6, name="other", short_name="other")
+        diffusion = _showable([hosted, observed])
+        diffusion.phab.repository.query.return_value = [
+            {"phid": "PHID-REPO-5", "isHosted": True},
+            {"phid": "PHID-REPO-6", "isHosted": False},
+        ]
+
+        records = diffusion.repo_show(["R5", "R6"])["repositories"]
+
+        assert [record["Repository"]["Hosted"] for record in records] == [True, False]
+        diffusion.phab.repository.query.assert_called_once_with(
+            phids=["PHID-REPO-5", "PHID-REPO-6"]
+        )
+
+    def test_an_instance_that_reports_hosting_is_not_asked_again(self):
+        diffusion = _showable([_show_repo(is_hosted=True)])
+
+        diffusion.repo_show(["R5"])
+
+        diffusion.phab.repository.query.assert_not_called()
+
+    def test_hosting_is_unknown_when_repository_query_cannot_answer(self):
+        """An instance without the frozen method, or one that refuses it."""
+        diffusion = _showable([_show_repo()])
+        diffusion.phab.repository.query.side_effect = PhabfiveAPIException(
+            "ERR-CONDUIT-CORE", "Conduit method does not exist"
+        )
+
+        record = diffusion.repo_show(["R5"], show_policy=True)["repositories"][0]
+
+        assert record["Repository"]["Hosted"] is None
+        # Not known to be inert, so shown as stored rather than as not hosted
+        assert record["Policy"]["Can Push"] == "All Users"
+
+    def test_hosting_is_not_guessed_from_the_uris(self):
+        """A hosted repository can answer with no URIs, and an old one can be
+        neither hosted nor observing, so the URIs are no stand-in."""
+        readwrite = _show_repo(
             uris=[_show_uri("http://phorge/source/x.git", io="readwrite")]
         )
-        observed = _show_repo(uris=[_show_uri("git@github.com:o/x.git", io="observe")])
+        observing = _show_repo(uris=[_show_uri("git@github.com:o/x.git", io="observe")])
 
-        assert "isHosted" not in hosted["fields"]
-        assert _showable([hosted]).repo_show(["R5"])["repositories"][0]["Repository"][
-            "Hosted"
+        for repo in (readwrite, observing, _show_repo(uris=[])):
+            record = _showable([repo]).repo_show(["R5"])["repositories"][0]
+            assert record["Repository"]["Hosted"] is None
+
+    @pytest.mark.parametrize(
+        "output_format", ["rich", "tree", "yaml", "json", "jsonl", "table", "value"]
+    )
+    def test_unknown_hosting_reads_as_unreported_in_every_format(
+        self, output_format, capsys
+    ):
+        """Empty, the way a Short Name the instance does not report is.
+
+        rich and yaml write a bare `Hosted:`, which reads back as null, json
+        and jsonl write null, tree an empty value and table an empty cell -
+        never false, which is a different answer. value falls back to rich.
+        """
+        import json
+        from io import StringIO
+
+        from rich.console import Console
+        from ruamel.yaml import YAML
+
+        from phabfive.diffusion.display import display_repositories
+
+        unknown = _show_repo(repo_id=5)
+        hosted = _show_repo(repo_id=6, name="other", short_name="other")
+        diffusion = _showable([unknown, hosted])
+        diffusion.format_link = lambda url, text, **kw: text
+        diffusion.phab.repository.query.return_value = [
+            {"phid": "PHID-REPO-6", "isHosted": True}
         ]
-        assert not _showable([observed]).repo_show(["R5"])["repositories"][0][
-            "Repository"
-        ]["Hosted"]
+        result = diffusion.repo_show(["R5", "R6"])
+
+        terminal = StringIO()
+        instance = MagicMock()
+        instance.get_console.return_value = Console(
+            file=terminal, width=200, color_system=None
+        )
+
+        display_repositories(result, output_format, instance, tabular=True)
+        out = capsys.readouterr().out + terminal.getvalue()
+
+        if output_format in ("json", "jsonl"):
+            records = (
+                json.loads(out)
+                if output_format == "json"
+                else [json.loads(line) for line in out.splitlines()]
+            )
+            assert [r["Repository"]["Hosted"] for r in records] == [None, True]
+        elif output_format in ("rich", "yaml", "value"):
+            records = YAML(typ="safe").load(out)
+            assert [r["Repository"]["Hosted"] for r in records] == [None, True]
+        elif output_format == "tree":
+            assert "Hosted: \n" in out
+            assert "Hosted: true" in out
+        else:
+            header, first, second = out.splitlines()
+            start = header.index("Hosted")
+            end = header.index("Importing")
+            assert first[start:end].strip() == ""
+            assert second[start:end].strip() == "true"
 
     def test_the_optional_sections_are_absent_until_asked_for(self):
         record = _showable([_show_repo()]).repo_show(["R5"])["repositories"][0]
@@ -4853,3 +4963,105 @@ class TestTableFormatCli:
         )
 
         assert len(table) - 1 == len(json.loads("\n".join(as_json)))
+
+
+class TestFillHosting:
+    """isHosted from repository.query, for an instance whose search lacks it."""
+
+    @staticmethod
+    def _unreported(count):
+        return [_show_repo(repo_id=i) for i in range(1, count + 1)]
+
+    def test_only_what_is_missing_is_asked_about(self):
+        from phabfive.diffusion.fetchers import fill_hosting
+
+        reported = _show_repo(repo_id=1, is_hosted=False)
+        unreported = _show_repo(repo_id=2)
+        phab = MagicMock()
+        phab.repository.query.return_value = [{"phid": "PHID-REPO-2", "isHosted": True}]
+
+        fill_hosting(phab, [reported, unreported])
+
+        phab.repository.query.assert_called_once_with(phids=["PHID-REPO-2"])
+        assert reported["fields"]["isHosted"] is False
+        assert unreported["fields"]["isHosted"] is True
+
+    def test_asks_a_page_at_a_time(self):
+        """repository.query answers 100 rows unless told otherwise."""
+        from phabfive.diffusion.fetchers import fill_hosting
+
+        repos = self._unreported(150)
+        phab = MagicMock()
+        phab.repository.query.side_effect = lambda phids: [
+            {"phid": phid, "isHosted": True} for phid in phids
+        ]
+
+        fill_hosting(phab, repos)
+
+        assert [
+            len(c.kwargs["phids"]) for c in phab.repository.query.call_args_list
+        ] == [
+            100,
+            50,
+        ]
+        assert all(repo["fields"]["isHosted"] is True for repo in repos)
+
+    def test_a_repository_left_out_of_the_answer_stays_unknown(self):
+        from phabfive.diffusion.fetchers import fill_hosting
+
+        [repo] = self._unreported(1)
+        phab = MagicMock()
+        phab.repository.query.return_value = []
+
+        fill_hosting(phab, [repo])
+
+        assert "isHosted" not in repo["fields"]
+
+    def test_a_refusal_leaves_every_repository_unknown(self):
+        from phabfive.diffusion.fetchers import fill_hosting
+
+        repos = self._unreported(2)
+        phab = MagicMock()
+        phab.repository.query.side_effect = PhabfiveAPIException(
+            "ERR-CONDUIT-CORE", "Conduit method does not exist"
+        )
+
+        fill_hosting(phab, repos)
+
+        assert all("isHosted" not in repo["fields"] for repo in repos)
+
+    def test_repo_list_fills_the_listed_repositories_only(self):
+        diffusion = _listing(
+            [_show_repo(repo_id=1), _show_repo(repo_id=2, status="inactive")]
+        )
+        diffusion.phab.repository.query.return_value = [
+            {"phid": "PHID-REPO-1", "isHosted": True}
+        ]
+
+        [record] = diffusion.repo_list(status=["active"])["repositories"]
+
+        assert record["Repository"]["Hosted"] is True
+        diffusion.phab.repository.query.assert_called_once_with(phids=["PHID-REPO-1"])
+
+    def test_repo_list_asks_for_uris_only_to_show_them(self):
+        """Hosting no longer comes from the URIs, so they are not fetched for it."""
+        diffusion = _listing([_show_repo(is_hosted=True)])
+
+        diffusion.repo_list()
+        diffusion.repo_list(show_uris=True)
+
+        attachments = [
+            c.kwargs["attachments"]
+            for c in diffusion.phab.diffusion.repository.search.call_args_list
+        ]
+        assert attachments == [{}, {"uris": True}]
+
+    def test_the_record_repo_edit_reads_is_filled(self):
+        diffusion = _listing([_show_repo(repo_id=5)])
+        diffusion.phab.repository.query.return_value = [
+            {"phid": "PHID-REPO-5", "isHosted": False}
+        ]
+
+        repo = diffusion.get_repo_record("R5")
+
+        assert repo["fields"]["isHosted"] is False
