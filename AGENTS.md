@@ -61,9 +61,9 @@ in the `test` group or a narrow `# type: ignore[code]`, never `ignore_errors`.
 
 ## The Kubernetes Check Is Gated
 
-`Kubernetes / Deploy and test Phorge <version> in k3d` builds a k3d cluster and a Phorge image, so
-it costs about four minutes, and `coexistence` far more. The `decide` job in
-`.github/workflows/k8s.yml` decides whether a pull request pays for it:
+`Kubernetes / Deploy and test Phorge <version> in k3d` (or `Phabricator <branch>`) builds a k3d
+cluster and a Phorge image, so it costs about four minutes, and `coexistence` far more. The
+`decide` job in `.github/workflows/k8s.yml` decides whether a pull request pays for it:
 
 - a push to `main`, the weekly `schedule` or a `workflow_dispatch` run always deploys
 - the `ci:k8s` label, or a `ci:phorge-*` label, always deploys, draft or not
@@ -73,7 +73,7 @@ it costs about four minutes, and `coexistence` far more. The `decide` job in
   `pyproject.toml`, `uv.lock` or `.github/workflows/k8s.yml`
 
 The job summary always states which rule fired. So **a green pull request does not mean the CLI was
-exercised against a real Phorge** - check whether `Deploy and test Phorge ... in k3d` ran, and add
+exercised against a real Phorge** - check whether `Deploy and test ... in k3d` ran, and add
 `ci:k8s` if you need it:
 
 ```bash
