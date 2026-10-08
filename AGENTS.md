@@ -116,6 +116,11 @@ what fails where and why. Keep it true:
 - A change that relies on a Conduit method, constraint or field checks which versions have it.
   `make up VERSION=phabricator-stable` is the stand-in for Phacility-hosted Phabricator, which is live
   production and only ever gets read-only probes
+- Where a version lacks a constraint or method, ask `phabfive/capabilities.py` rather than
+  guessing at a version: nothing reports one over Conduit. A call site that already sends the
+  constraint sends it as before, and only on `rejects_constraint` remembers that and falls back,
+  so a server that has it is asked exactly what it always was - `search_projects` in
+  `phabfive/project/fetchers.py` is the pattern
 - After a new Phorge release, or a change to `scripts/phorge-build-args.sh`, run the full
   measurement the doc describes, read the run with `python3 scripts/support_matrix.py <run id>`,
   and update the Versions table and the run it cites. A strict xfail that passes shows as `X`:

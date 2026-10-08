@@ -9,7 +9,6 @@ import uuid
 import pytest
 
 from tests.phorge_versions import (
-    NO_STATUS_CONSTRAINT,
     OLD_LOCKOUT_WORDING,
     missing_before,
 )
@@ -42,12 +41,16 @@ def _id(record):
 
 
 def _count_projects(conduit):
-    """Every project on the instance, counted by paging project.search directly."""
+    """Every project on the instance, counted by paging project.search directly.
+
+    No status constraint, which is every status - and the only way to ask a
+    Phabricator, which has none.
+    """
     total = 0
     after = None
 
     while True:
-        params = {"constraints[status]": "all", "limit": 100}
+        params = {"limit": 100}
         if after:
             params["after"] = after
         result = conduit("project.search", **params)
@@ -190,7 +193,6 @@ def test_a_self_lockout_is_a_sentence(create_project, phabfive_raw):
     assert "Nothing was changed" in result.stderr
 
 
-@NO_STATUS_CONSTRAINT
 def test_audit_lists_every_project_one_per_line(phabfive_raw, conduit):
     """`phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0`"""
     result = phabfive_raw(

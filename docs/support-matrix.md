@@ -19,11 +19,12 @@ Phacility still hosts Phabricator for some customers. The `phabricator-stable` v
 
 ## Known Gaps
 
-What fails, on which versions, and why. Everything not listed works on every version above: tasks (search, show, create, edit, batch edit), pastes, users, passphrase, spaces, specs, and every output format.
+What fails, on which versions, and why. Everything not listed works on every version above: tasks (search, show, create, edit, batch edit), projects (search, show, audit), repositories (list, show), pastes, users, passphrase, spaces, specs, and every output format.
+
+Phabricator and Phorge before 2025.51 have no `status` constraint on `project.search` or `diffusion.repository.search`, and report no status in a `project.search` result. phabfive sends the constraint all the same, and when it is refused remembers that for the rest of the run and filters on the client instead, reading which projects are archived from `project.query`. A project search that asks for one status may then read every project rather than stop at its limit.
 
 | What | Fails on | Why |
 |------|----------|-----|
-| `diffusion repo list`, `diffusion repo show`, `project audit`, and search specs of projects or repositories | Phabricator, Phorge before 2025.51 | phabfive sends a `status` constraint to `project.search` and `diffusion.repository.search`, which these versions do not have |
 | The `Hosted` field of a repository | Phabricator, Phorge before 2025.51 | There is no `isHosted` field, and phabfive reports such a repository as not hosted |
 | A policy change that would lock you out is explained in one sentence | Phabricator, Phorge before 2025.51 | The change is refused either way, but these versions word the error differently, and phabfive shows it as it is |
 | `project create --milestone-of` | Phabricator, Phorge before 2026.27 | Phorge answers HTTP 500, a bug fixed upstream in 2026.27 |
