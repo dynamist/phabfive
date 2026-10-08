@@ -421,7 +421,7 @@ VALIDATORS = {
 }
 VALIDATION_HINTS = {
     "PHAB_URL": "example: https://we.phorge.it/api/",
-    "PHAB_API_URL": "example: http://phorge.phorge.svc.cluster.local/api/",
+    "PHAB_API_URL": "example: http://web.phorge.svc.cluster.local/api/",
     "PHAB_WEB_URL": "the address a reader opens, no /api/ suffix, example: https://we.phorge.it",
 }
 MISSING_CONFIG_HINTS = {

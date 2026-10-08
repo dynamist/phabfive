@@ -96,6 +96,12 @@ fi
 # they never need sudo. A non-empty phd.user is also what makes Phorge
 # advertise built-in ssh:// URIs, on PHORGE_SSH_HOST and PHORGE_SSH_PORT, the
 # address a client reaches sshd at (`make ssh-forward`), not the pod's.
+# The image has the one VCS user git, which sshd_config, the sudoers rule and
+# the AuthorizedKeysCommand hook all name, so another user could never log in.
+if [ -n "$PHORGE_SSH_USER" ] && [ "$PHORGE_SSH_USER" != git ]; then
+  echo "ERROR: PHORGE_SSH_USER is '${PHORGE_SSH_USER}', it can only be git, or empty to turn SSH off"
+  exit 1
+fi
 if [ -n "$PHORGE_SSH_USER" ]; then
   ./bin/config set phd.user www-data
   ./bin/config set diffusion.ssh-user "$PHORGE_SSH_USER"

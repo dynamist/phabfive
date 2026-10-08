@@ -32,10 +32,11 @@ VERSION ?= $(shell cat $(BUILD_DIR)/version 2>/dev/null || echo stable)
 PHP ?=
 
 # The admin's SSH key, generated on first deploy and registered by the sshkeys
-# seed module. SSH_PORT is PHORGE_SSH_PORT of k8s/base/config.env, where Phorge
-# says the clone URIs are, so it is where `make ssh-forward` listens.
+# seed module. SSH_PORT is PHORGE_SSH_PORT, where Phorge says the clone URIs
+# are, so it is where `make ssh-forward` listens: config.local.env overrides
+# k8s/base/config.env, as it does in the deployment.
 SSH_KEY := k8s/base/ssh/admin
-SSH_PORT := 2222
+SSH_PORT := $(or $(lastword $(shell sed -n 's/^PHORGE_SSH_PORT=//p' k8s/base/config.env k8s/overlays/local/config.local.env 2>/dev/null)),2222)
 GIT_SSH_COMMAND = ssh -i $(CURDIR)/$(SSH_KEY) -o UserKnownHostsFile=$(CURDIR)/$(BUILD_DIR)/known_hosts -o StrictHostKeyChecking=accept-new
 
 # Same URL as k8s/base/config.env, so the cache clearing below targets the
@@ -217,12 +218,12 @@ shell: check-tools ## open shell in the phorge pod
 creds: check-tools ## print credentials of the running phorge
 	@$(KUBECTL) exec deploy/phorge -- /usr/local/bin/lib/banner.sh
 
-ssh-forward: check-tools ## forward localhost:2222 to phorge's sshd, for git over SSH (runs until interrupted)
+ssh-forward: check-tools ## forward localhost:PHORGE_SSH_PORT (2222) to phorge's sshd, for git over SSH (runs until interrupted)
 	@echo "git over SSH, while this runs:"
 	@echo "  GIT_SSH_COMMAND='$(GIT_SSH_COMMAND)' \\"
 	@echo "    git clone ssh://git@phorge.localhost:$(SSH_PORT)/source/gunnar-firmware.git"
 	@# Both loopbacks, a resolver may answer phorge.localhost with ::1 first
-	$(KUBECTL) port-forward --address 127.0.0.1,::1 svc/phorge-ssh $(SSH_PORT):22
+	$(KUBECTL) port-forward --address 127.0.0.1,::1 svc/ssh $(SSH_PORT):22
 
 ##@ Test
 

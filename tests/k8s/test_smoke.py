@@ -64,7 +64,7 @@ def whoami_as_host(kubectl, host):
 
 
 def test_service_name_is_answered(kubectl):
-    body = whoami_as_host(kubectl, "phorge.phorge.svc.cluster.local")
+    body = whoami_as_host(kubectl, "web.phorge.svc.cluster.local")
     assert json.loads(body)["result"]["userName"] == "admin"
 
 

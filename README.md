@@ -225,7 +225,7 @@ reaches Phorge at a Service name, while the report it renders is read by people
 whose browsers cannot resolve one. Configure the two halves instead:
 
 ```bash
-export PHAB_API_URL=http://phorge.phorge.svc.cluster.local/api/  # what phabfive calls
+export PHAB_API_URL=http://web.phorge.svc.cluster.local/api/  # what phabfive calls
 export PHAB_WEB_URL=https://phorge.example.com                   # what links point at
 ```
 

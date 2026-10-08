@@ -12,7 +12,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: phorge
+                name: web
                 port:
                   name: http
     # Phorge serves uploaded files from a separate domain (security.alternate-file-domain)
@@ -23,6 +23,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: phorge
+                name: web
                 port:
                   name: http
