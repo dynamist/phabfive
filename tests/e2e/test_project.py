@@ -9,7 +9,6 @@ import uuid
 import pytest
 
 from tests.phorge_versions import (
-    OLD_LOCKOUT_WORDING,
     missing_before,
 )
 
@@ -183,7 +182,6 @@ def test_a_taken_hashtag_is_refused_on_a_dry_run(phabfive_raw):
     assert "same hashtag" in result.stderr
 
 
-@OLD_LOCKOUT_WORDING
 def test_a_self_lockout_is_a_sentence(create_project, phabfive_raw):
     record = create_project()
 
