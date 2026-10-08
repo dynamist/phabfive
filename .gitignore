@@ -129,6 +129,8 @@ dmypy.json
 .k8s/
 test-results/
 k8s/overlays/local/config.local.env
+# The admin SSH key `make deploy` generates
+k8s/base/ssh/
 
 # Throwaway venv built by "make smoke"
 .smoke/

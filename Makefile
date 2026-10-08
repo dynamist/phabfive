@@ -1,4 +1,4 @@
-.PHONY: help install tools test smoke docs format lock upgrade clean cleanpy cleanall cleantox cleanvenv sdist bdist image check-runtime check-tools clear-cache cluster destroy phorge-image deploy up down reset logs ps shell creds validate test-k8s test-e2e ci-deploy ci-test
+.PHONY: help install tools test smoke docs format lock upgrade clean cleanpy cleanall cleantox cleanvenv sdist bdist image check-runtime check-tools clear-cache cluster destroy phorge-image deploy up down reset logs ps shell creds ssh-forward validate test-k8s test-e2e ci-deploy ci-test
 
 # Detect container runtime (prefer podman)
 CONTAINER_RUNTIME = $(or \
@@ -30,6 +30,13 @@ BUILD_DIR := .k8s
 VERSION ?= $(shell cat $(BUILD_DIR)/version 2>/dev/null || echo stable)
 # PHP series to build on (8.0, 8.3, 8.4, 8.5), empty for the newest VERSION runs on
 PHP ?=
+
+# The admin's SSH key, generated on first deploy and registered by the sshkeys
+# seed module. SSH_PORT is PHORGE_SSH_PORT of k8s/base/config.env, where Phorge
+# says the clone URIs are, so it is where `make ssh-forward` listens.
+SSH_KEY := k8s/base/ssh/admin
+SSH_PORT := 2222
+GIT_SSH_COMMAND = ssh -i $(CURDIR)/$(SSH_KEY) -o UserKnownHostsFile=$(CURDIR)/$(BUILD_DIR)/known_hosts -o StrictHostKeyChecking=accept-new
 
 # Same URL as k8s/base/config.env, so the cache clearing below targets the
 # instance in the cluster
@@ -167,7 +174,11 @@ phorge-image: check-tools ## build the phorge image of VERSION (stable, master, 
 	$(K3D) image import -c $(CLUSTER) $(PHORGE_IMAGE):$$tag; \
 	echo $$tag > $(BUILD_DIR)/image-tag
 
-deploy: check-tools ## apply the manifests of OVERLAY (local or ci) with the imported image
+$(SSH_KEY):
+	@mkdir -p $(@D)
+	ssh-keygen -q -t ed25519 -N '' -C phabfive-dev -f $@
+
+deploy: check-tools $(SSH_KEY) ## apply the manifests of OVERLAY (local or ci) with the imported image
 	@test -f $(BUILD_DIR)/image-tag || { echo "Error: no image imported yet, run make phorge-image"; exit 1; }
 	@touch k8s/overlays/local/config.local.env
 	@printf '%s\n' \
@@ -189,6 +200,8 @@ down: check-tools ## stop phorge and mariadb, keep data
 
 reset: check-tools ## DELETE the phorge namespace with all its data and clear its completion cache
 	mise exec -- kubectl --context $(KUBE_CONTEXT) delete namespace $(NAMESPACE) --ignore-not-found --wait
+	@# The host key went with the data, and the next instance gets a new admin key
+	rm -f $(SSH_KEY) $(SSH_KEY).pub $(BUILD_DIR)/known_hosts
 	@$(MAKE) --no-print-directory clear-cache
 
 logs: check-tools ## follow phorge logs
@@ -204,9 +217,16 @@ shell: check-tools ## open shell in the phorge pod
 creds: check-tools ## print credentials of the running phorge
 	@$(KUBECTL) exec deploy/phorge -- /usr/local/bin/lib/banner.sh
 
+ssh-forward: check-tools ## forward localhost:2222 to phorge's sshd, for git over SSH (runs until interrupted)
+	@echo "git over SSH, while this runs:"
+	@echo "  GIT_SSH_COMMAND='$(GIT_SSH_COMMAND)' \\"
+	@echo "    git clone ssh://git@phorge.localhost:$(SSH_PORT)/source/gunnar-firmware.git"
+	@# Both loopbacks, a resolver may answer phorge.localhost with ::1 first
+	$(KUBECTL) port-forward --address 127.0.0.1,::1 svc/phorge-ssh $(SSH_PORT):22
+
 ##@ Test
 
-validate: ## validate the rendered manifests of all overlays
+validate: $(SSH_KEY) ## validate the rendered manifests of all overlays
 	@touch k8s/overlays/local/config.local.env
 	@for overlay in k8s/overlays/*/; do \
 		mise exec -- kubectl kustomize $$overlay | mise exec -- kubeconform -strict -summary || exit 1; \

@@ -19,11 +19,13 @@ rollout=$!
 trap 'kill $rollout 2>/dev/null || true' EXIT
 
 while kill -0 "$rollout" 2>/dev/null; do
-  reason=$("${kubectl[@]}" get pods -l app.kubernetes.io/name=phorge -o jsonpath='{range .items[*]}{.metadata.deletionTimestamp}{"\t"}{.status.containerStatuses[*].state.waiting.reason}{"\n"}{end}' 2>/dev/null |
-    awk -F'\t' '$1 == "" && $2 ~ /^(CrashLoopBackOff|ErrImagePull|ImagePullBackOff|CreateContainerConfigError)$/ { print $2; exit }') || true
-  if [ -n "$reason" ]; then
-    echo "Error: the phorge pod cannot start (${reason}), the end of its last run:" >&2
-    "${kubectl[@]}" logs deploy/phorge --previous --tail=40 >&2 || true
+  # A pod per line, not being deleted, and its containers' name=reason
+  waiting=$("${kubectl[@]}" get pods -l app.kubernetes.io/name=phorge -o jsonpath='{range .items[*]}{.metadata.deletionTimestamp}{"\t"}{range .status.containerStatuses[*]}{.name}={.state.waiting.reason}{" "}{end}{"\n"}{end}' 2>/dev/null |
+    awk -F'\t' '$1 == "" { n = split($2, containers, " "); for (i = 1; i <= n; i++) { split(containers[i], c, "="); if (c[2] ~ /^(CrashLoopBackOff|ErrImagePull|ImagePullBackOff|CreateContainerConfigError)$/) { print c[1], c[2]; exit } } }') || true
+  if [ -n "$waiting" ]; then
+    read -r container reason <<<"$waiting"
+    echo "Error: the phorge pod cannot start, container ${container} is in ${reason}, the end of its last run:" >&2
+    "${kubectl[@]}" logs deploy/phorge -c "$container" --previous --tail=40 >&2 || true
     exit 1
   fi
   sleep 5

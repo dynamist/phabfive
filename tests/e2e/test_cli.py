@@ -543,12 +543,32 @@ def test_repo_list_url_is_a_deprecated_alias(phabfive_raw):
     assert all("URIs" in repo for repo in json.loads(result.stdout))
 
 
+def test_uri_list_shows_the_built_in_ssh_uris(phabfive_raw):
+    """A hosted repository lists the URIs Phorge generates for it, over SSH.
+
+    The dev instance serves git over SSH, so Phorge advertises a read-write
+    SSH URI per way of naming the repository. The HTTP ones stay hidden:
+    the seeded repositories are not public and HTTP auth is off.
+    """
+    result = phabfive_raw("--format", "json", "diffusion", "uri", "list", "GUNNAR")
+
+    assert result.returncode == 0
+    uris = json.loads(result.stdout)
+    assert uris
+    for uri in uris:
+        assert uri["URI"].startswith("ssh://"), uri["URI"]
+        assert uri["Origin"] == "built-in"
+        assert uri["I/O"]["Effective"] == "readwrite"
+
+
 def test_uri_list_on_a_repository_without_uris(phabfive_raw):
-    """An empty result, not a failure: the seeded repositories carry no URIs.
+    """An empty result, not a failure: no URIs were added to the seeded repositories.
 
     An empty list, so stdout is still a JSON document (#522).
     """
-    result = phabfive_raw("--format", "json", "diffusion", "uri", "list", "GUNNAR")
+    result = phabfive_raw(
+        "--format", "json", "diffusion", "uri", "list", "GUNNAR", "--external"
+    )
 
     assert result.returncode == 0
     assert json.loads(result.stdout) == []

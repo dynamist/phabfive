@@ -1,6 +1,42 @@
 #!/bin/bash
 set -e
 
+# One image, two containers in the phorge pod:
+#
+#   entrypoint.sh web   configure Phorge, upgrade storage, seed, run the daemons and Apache
+#   entrypoint.sh sshd  serve git over SSH, once web has configured Phorge
+#
+# Phorge reads its configuration from conf/local/local.json, which web writes
+# into a volume both containers mount there. web touches READY when the
+# configuration is written and the database is upgraded, sshd waits for it.
+MODE=${1:-web}
+READY=/app/phorge/conf/local/.ready
+
+if [ "$MODE" = sshd ]; then
+  echo "Waiting for the web container to configure Phorge..."
+  until [ -e "$READY" ]; do
+    sleep 2
+  done
+
+  # On the volume, so clients' known_hosts survive a restart
+  HOST_KEY=/var/lib/phabfive/ssh/ssh_host_ed25519_key
+  if [ ! -s "$HOST_KEY" ]; then
+    mkdir -p "$(dirname "$HOST_KEY")"
+    ssh-keygen -q -t ed25519 -N '' -C phorge -f "$HOST_KEY"
+  fi
+
+  mkdir -p /run/sshd
+  echo "Starting sshd..."
+  exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config.phorge
+elif [ "$MODE" != web ]; then
+  echo "Usage: entrypoint.sh [web|sshd]" >&2
+  exit 2
+fi
+
+# A restarted web container rewrites the configuration, a restarted sshd
+# container should not start on the old one meanwhile
+rm -f "$READY"
+
 # Default values
 MYSQL_HOST=${MYSQL_HOST:-mariadb}
 MYSQL_PORT=${MYSQL_PORT:-3306}
@@ -52,6 +88,30 @@ if [ -n "$PHORGE_ALLOWED_URIS" ]; then
     "$(php -r 'echo json_encode(preg_split("/\s+/", trim(getenv("PHORGE_ALLOWED_URIS"))));')"
 else
   ./bin/config delete phabricator.allowed-uris >/dev/null 2>&1 || true
+fi
+
+# git over SSH, served by the sshd container. phd.user names the user the
+# repositories belong to: ssh-exec runs as PHORGE_SSH_USER and runs git as
+# phd.user through sudo. Apache and the daemons already run as www-data, so
+# they never need sudo. A non-empty phd.user is also what makes Phorge
+# advertise built-in ssh:// URIs, on PHORGE_SSH_HOST and PHORGE_SSH_PORT, the
+# address a client reaches sshd at (`make ssh-forward`), not the pod's.
+if [ -n "$PHORGE_SSH_USER" ]; then
+  ./bin/config set phd.user www-data
+  ./bin/config set diffusion.ssh-user "$PHORGE_SSH_USER"
+  for option in "diffusion.ssh-host $PHORGE_SSH_HOST" "diffusion.ssh-port $PHORGE_SSH_PORT"; do
+    # shellcheck disable=SC2086
+    set -- $option
+    if [ -n "$2" ]; then
+      ./bin/config set "$1" "$2"
+    else
+      ./bin/config delete "$1" >/dev/null 2>&1 || true
+    fi
+  done
+else
+  for option in phd.user diffusion.ssh-user diffusion.ssh-host diffusion.ssh-port; do
+    ./bin/config delete "$option" >/dev/null 2>&1 || true
+  done
 fi
 
 # Set title if provided - using ui.logo instead of phabricator.title which doesn't exist in Phorge
@@ -115,14 +175,14 @@ print_banner
 
 # Start daemons in background, as the user Apache serves Conduit with. As root
 # they create /app/repo/<id> owned by root, and every git-backed ref query then
-# fails with "detected dubious ownership". Phorge's own phd.user is not the way
-# to do this: it switches with sudo, which is not installed, and a non-empty
-# phd.user also makes Phorge advertise built-in SSH clone URIs this instance has
-# no sshd to serve.
+# fails with "detected dubious ownership". Started as phd.user rather than
+# letting phd switch to it, which would take a sudo rule for root as well.
 echo "Starting Phorge daemons..."
 mkdir -p /var/tmp/phd
 chown -R www-data:www-data /var/tmp/phd
 runuser -u www-data -- ./bin/phd start
+
+touch "$READY"
 
 # Start Apache in foreground
 exec apache2-foreground

@@ -175,6 +175,11 @@ print_banner() {
   echo "🌍 Your new Phorge is waiting for you at:"
   echo "   $PHORGE_URL"
   echo ""
+  if [ -n "${PHORGE_SSH_USER:-}" ]; then
+    echo "🔗 git over SSH, after 'make ssh-forward' (key: k8s/base/ssh/admin):"
+    echo "   ssh://${PHORGE_SSH_USER}@${PHORGE_SSH_HOST:-phorge.localhost}:${PHORGE_SSH_PORT:-22}/source/<short name>.git"
+    echo ""
+  fi
   echo "💡 TIP: The API token works immediately without logging in!"
   echo "   PHAB_URL=${PHORGE_URL}/api/ PHAB_TOKEN=${PHORGE_ADMIN_TOKEN} phabfive user whoami"
   echo "================================"

@@ -1,0 +1,23 @@
+# sshd for git over SSH, from Phorge's resources/sshd/sshd_config.phorge.example.
+# Only the VCS user logs in, only with a key Phorge knows, and only to run
+# ssh-exec, which ssh-auth forces for every key it returns.
+
+AuthorizedKeysCommand /usr/libexec/phorge-ssh-hook.sh
+AuthorizedKeysCommandUser git
+AllowUsers git
+
+# The host key persists on the volume, so known_hosts survives a restart
+HostKey /var/lib/phabfive/ssh/ssh_host_ed25519_key
+
+Port 22
+PermitRootLogin no
+AllowAgentForwarding no
+AllowTcpForwarding no
+X11Forwarding no
+PrintMotd no
+PrintLastLog no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+AuthorizedKeysFile none
+
+PidFile /run/sshd-phorge.pid
