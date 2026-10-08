@@ -106,6 +106,12 @@ this label, not run the job.
 `Validate manifests` is never gated by the changed files - it is five seconds, and it is what
 catches a broken overlay on a pull request that skips the deployment.
 
+The `Tests` workflow is scoped the same way: a pull request that only changes documentation
+(`docs/`, `mkdocs.yml`, top-level `*.md`, the issue and pull request templates) runs only Ubuntu on
+3.13 - which still runs the tests that read the docs, lint and `mkdocs build --strict` - and no
+fresh install. `phabfive/SKILL.md` ships in the package, so it is not documentation here. A push to
+`main` always runs every leg.
+
 ## Support Matrix
 
 `docs/support-matrix.md` states which Phorge and Phabricator versions phabfive works with, and
