@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       versions:
-        description: Phorge branches or tags to test, space separated, phabricator for Phabricator (blank for stable, master, the two newest releases and phabricator)
+        description: Phorge branches or tags to test, space separated, phabricator-stable for Phabricator (blank for stable, master, the two newest releases and phabricator-stable)
         required: false
         default: ""
 
@@ -79,7 +79,7 @@ jobs:
             releases=$(git ls-remote --tags --refs https://github.com/phorgeit/phorge.git |
               sed -n 's|.*refs/tags/||p' | grep -E '^[0-9]{4}\.[0-9]+$' | sort -V | tail -2)
             # shellcheck disable=SC2086
-            versions=$(printf '%s\n' stable master $releases phabricator | jq -Rnc '[inputs]')
+            versions=$(printf '%s\n' stable master $releases phabricator-stable | jq -Rnc '[inputs]')
           elif [ "$EVENT" = workflow_dispatch ]; then
             # shellcheck disable=SC2086
             versions=$(printf '%s\n' $INPUT | jq -Rnc '[inputs]')
@@ -96,10 +96,9 @@ jobs:
 
           echo "Phorge versions: $versions" | tee -a "$GITHUB_STEP_SUMMARY"
           # The deploy matrix, each version with the name its check shows:
-          # phabricator is Phabricator stable, phabricator-master Phabricator master
+          # phabricator-stable is "Phabricator stable", 2025.51 "Phorge 2025.51"
           matrix=$(jq -c 'map({version: ., name: (
-              if . == "phabricator" then "Phabricator stable"
-              elif startswith("phabricator-") then "Phabricator \(ltrimstr("phabricator-"))"
+              if startswith("phabricator-") then "Phabricator \(ltrimstr("phabricator-"))"
               else "Phorge \(.)" end)})' <<<"$versions")
           echo "matrix=$matrix" >>"$GITHUB_OUTPUT"
 

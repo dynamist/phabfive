@@ -85,7 +85,7 @@ test `stable`. A pull request labelled `ci:phorge-<branch or tag>` tests exactly
 instead - any ref Phorge and Arcanist both have works once the label exists, `master` and the
 release tags are created. The weekly and manual runs test `stable`, `master`, the two newest
 release tags, found at run time, so a new Phorge release needs no workflow change, and
-`phabricator` - Phabricator as Phacility left it, the closest stand-in for a Phacility-hosted
+`phabricator-stable` - Phabricator as Phacility left it, the closest stand-in for a Phacility-hosted
 instance, which may carry patches that were never published. `master` runs
 with `continue-on-error`: its breakage is a heads-up, not a failure.
 
@@ -114,7 +114,7 @@ what fails where and why. Keep it true:
 - A change that makes a feature work, or stop working, on some version updates its Known Gaps
   row in the same pull request, and the `phorge_older_than()` expectation in `tests/e2e` with it
 - A change that relies on a Conduit method, constraint or field checks which versions have it.
-  `make up VERSION=phabricator` is the stand-in for Phacility-hosted Phabricator, which is live
+  `make up VERSION=phabricator-stable` is the stand-in for Phacility-hosted Phabricator, which is live
   production and only ever gets read-only probes
 - After a new Phorge release, or a change to `scripts/phorge-build-args.sh`, run the full
   measurement the doc describes and update the Versions table and the run it cites

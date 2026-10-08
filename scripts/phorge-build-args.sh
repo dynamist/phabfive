@@ -3,9 +3,9 @@
 #
 #   stable, master   a branch, at its current commit
 #   2025.51          a release tag
-#   phabricator      Phabricator, which Phorge was forked from, at its stable
-#                    branch (phabricator-master for master). Phacility still
-#                    hosts it, and it has not changed since 2022
+#   phabricator-stable  Phabricator, which Phorge was forked from, at a branch
+#                       (phabricator-master for master). Phacility still hosts
+#                       it, and it has not changed since 2022
 #
 # Any branch or tag works, as long as Phorge and Arcanist both have it, which
 # upstream keeps true for its branches and release tags. The commits are
@@ -21,8 +21,8 @@ version=${1:?usage: $0 VERSION [PHP]}
 php=${2:-}
 
 # Where Phorge, or Phabricator, and Arcanist come from, and at which ref
-if [[ $version =~ ^phabricator(-(.+))?$ ]]; then
-  ref=${BASH_REMATCH[2]:-stable}
+if [[ $version =~ ^phabricator-(.+)$ ]]; then
+  ref=${BASH_REMATCH[1]}
   phorge_repo=https://github.com/phacility/phabricator
   arcanist_repo=https://github.com/phacility/arcanist
 else
@@ -47,7 +47,7 @@ older() {
 # (8.4), 2025.18 has `case ...;` (8.5). Phabricator is older than all of them.
 # A branch, or a newer release, runs on the newest.
 php_for() {
-  if [[ $1 == phabricator* ]]; then
+  if [[ $1 == phabricator-* ]]; then
     echo 8.0
   elif ! [[ $1 =~ ^[0-9]{4}\.[0-9]+$ ]]; then
     echo 8.5
@@ -73,7 +73,7 @@ commit() {
       $2 ~ /^refs\/heads\// { branch = $1 }
       END { print branch ? branch : peeled ? peeled : tagged }' <<<"$refs")
   if [ -z "$sha" ]; then
-    log "Error: no branch or tag ${ref} in ${repo}, use e.g. stable, master, 2025.51 or phabricator"
+    log "Error: no branch or tag ${ref} in ${repo}, use e.g. stable, master, 2025.51 or phabricator-stable"
     exit 1
   fi
   echo "$sha"
