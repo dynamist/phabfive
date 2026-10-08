@@ -191,14 +191,13 @@ class TestSpecFileCompletion:
     def test_tab_on_the_option_offers_spec_files_only(
         self, command_name, tmp_path, monkeypatch
     ):
-        import click
-
         (tmp_path / "sprint-tasks.yaml").touch()
         (tmp_path / "notes.md").touch()
         monkeypatch.chdir(tmp_path)
 
         option = self._option(command_name, "-f")
-        context = click.Context(click.Command(command_name))
+        command = self._command(command_name)
+        context = command.context_class(command)
 
         offered = option.shell_complete(context, "s")
 
@@ -213,14 +212,13 @@ class TestSpecFileCompletion:
         under it sharing a mistaken assumption is how that survived a full
         CI matrix.
         """
-        import click
-
         (tmp_path / "specs").mkdir()
         (tmp_path / "specs" / "sprint.yaml").touch()
         monkeypatch.chdir(tmp_path)
 
         option = self._option("apply", "-f")
-        context = click.Context(click.Command("apply"))
+        command = self._command("apply")
+        context = command.context_class(command)
 
         assert [one.value for one in option.shell_complete(context, "sp")] == ["specs/"]
         assert [one.value for one in option.shell_complete(context, "specs/")] == [
@@ -282,10 +280,10 @@ class TestSpecFileCompletionInEveryShell:
     """
 
     def _complete(self, shell, monkeypatch, line, tmp_path):
-        import click
         import typer
 
         from phabfive.cli import app
+        from tests.click_layer import get_completion_class
 
         words = line.split(" ")
 
@@ -309,7 +307,7 @@ class TestSpecFileCompletionInEveryShell:
         monkeypatch.chdir(tmp_path)
 
         command = typer.main.get_command(app)  # registers the classes
-        completion_class = click.shell_completion.get_completion_class(shell)
+        completion_class = get_completion_class(shell)
         completion = completion_class(command, {}, "phabfive", "_PHABFIVE_COMPLETE")
 
         return completion.complete()

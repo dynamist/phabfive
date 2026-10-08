@@ -3,10 +3,10 @@
 # 3rd party imports
 import pytest
 import typer
-from click.shell_completion import ShellComplete
 
 # phabfive imports
 from phabfive.cli import app
+from tests.click_layer import ShellComplete
 
 SUBCOMMANDS = [
     "edit",

@@ -3,13 +3,13 @@
 # 3rd party imports
 from unittest.mock import MagicMock, patch
 
-import click
 import pytest
 import typer
 
 # phabfive imports
 from phabfive.cli import app, completers
 from phabfive.cli.shell_completion import escape_for_bash, install_bash_escaping
+from tests.click_layer import get_completion_class
 
 
 @pytest.mark.parametrize(
@@ -38,7 +38,7 @@ def _bash_complete(monkeypatch, comp_words):
     monkeypatch.setenv("COMP_CWORD", str(len(words) - 1))
 
     command = typer.main.get_command(app)  # registers the completion classes
-    bash = click.shell_completion.get_completion_class("bash")
+    bash = get_completion_class("bash")
     completion = bash(command, {}, "phabfive", "_PHABFIVE_COMPLETE")
 
     phab = MagicMock()

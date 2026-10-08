@@ -192,9 +192,9 @@ class TestTheCache:
 def _offered(args, incomplete):
     """What shell completion offers for a value, through the real CLI."""
     import typer
-    from click.shell_completion import ShellComplete
 
     from phabfive.cli import app
+    from tests.click_layer import ShellComplete
 
     command = typer.main.get_command(app)
     completion = ShellComplete(command, {}, "phabfive", "_PHABFIVE_COMPLETE")
