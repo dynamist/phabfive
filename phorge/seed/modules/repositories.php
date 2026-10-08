@@ -126,6 +126,13 @@ final class PhabfiveRepositoriesSeedModule extends PhabfiveSeedModule {
       ->setRepository($repository)
       ->pullRepository();
 
+    // Phabricator runs that "git init" as phd.user through sudo, so the
+    // repository may already belong to the daemon user, and git refuses to
+    // write into it as root. Take it for the history, and hand it back below.
+    if (fileowner($path) !== posix_geteuid()) {
+      execx('chown -R %s %s', posix_geteuid().':'.posix_getegid(), $path);
+    }
+
     $branches = idx($record, 'branches', array());
     if ($branches) {
       $this->writeHistory($path, $branches, $author);
