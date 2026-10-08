@@ -38,7 +38,7 @@ make test-e2e                        # end-to-end tests of the CLI against the d
 # Test against local Phorge (safe to run data-altering operations)
 PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
 
-# Merge PRs (rebase only - merge and squash are disabled)
+# Merge PRs (rebase only - merge and squash are disabled), after Greptile's review, see below
 gh pr merge --rebase --delete-branch
 ```
 
@@ -58,6 +58,23 @@ mypy runs with `no_implicit_reexport`, as a consumer's mypy does, so a module re
 says so with `__all__` or `import x as x`. Untyped third-party modules are allowed by name in
 `[[tool.mypy.overrides]]` (only `phabricator` and `ptpython`); anything else gets a stub package
 in the `test` group or a narrow `# type: ignore[code]`, never `ignore_errors`.
+
+## Before Merging
+
+Greptile reviews every pull request, and a green CI run says nothing about what it found. Read its
+review before merging:
+
+```bash
+gh api repos/dynamist/phabfive/pulls/<number>/comments --jq '.[] | "\(.path):\(.line) \(.body)"'
+gh pr view <number> --comments   # the summary, with its confidence score and last reviewed commit
+```
+
+- The summary's "Last reviewed commit" must be the head you are merging. After a push, wait for
+  the re-review
+- An unresolved P1 or P2 finding blocks the merge like a failing check: fix it, or reply in its
+  thread why it does not apply
+- A finding often has siblings - the same mistake in another workflow or module. Look for them
+  before calling it fixed
 
 ## The Kubernetes Check Is Gated
 
