@@ -2,7 +2,7 @@
 
 Which Phorge and Phabricator versions phabfive works with, and what does not work where. Every row here comes from running phabfive's test suites against that version, see [How This Is Tested](#how-this-is-tested).
 
-Last measured on 2026-10-08, [run 37768364218](https://github.com/dynamist/phabfive/actions/runs/37768364218).
+Last measured on [2026-10-08](https://github.com/dynamist/phabfive/actions/runs/37768364218).
 
 ## Versions
 
