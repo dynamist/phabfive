@@ -326,6 +326,18 @@ def policy_label(value, names=None):
     return value
 
 
+#: How a self-lockout is worded: Phorge from 2025.51 on, then Phabricator and
+#: the Phorge releases before it
+_LOCKOUT_PHRASES = (
+    "no longer allow you",
+    "because you would no longer be able to",
+)
+
+
+def _is_lockout(text):
+    return any(phrase in text for phrase in _LOCKOUT_PHRASES)
+
+
 def policy_lockout_message(error):
     """The sentence to report when Phorge refused an edit as a self-lockout.
 
@@ -335,6 +347,17 @@ def policy_lockout_message(error):
         Validation errors:
           - The view policy of this object would no longer allow you to view
             the object.
+
+    Phabricator, and Phorge before 2025.51, refuse it the same way in other
+    words, which name the capability just the same:
+
+          - You can not select this view policy, because you would no longer
+            be able to view the object.
+
+    Only the view and the edit policy are checked this way - a join or a push
+    policy that excludes you is accepted - and both share one template, so
+    recognising the two phrasings recognises every lockout, whichever version
+    answered.
 
     Worth catching, because the stack trace around it says nothing the
     sentence does not, and because an unknown keyword arrives here too - the
@@ -354,13 +377,13 @@ def policy_lockout_message(error):
     """
     text = str(error)
 
-    if "no longer allow you" not in text:
+    if not _is_lockout(text):
         return None
 
     reasons = [
         line.strip().lstrip("-").strip()
         for line in text.splitlines()
-        if "no longer allow you" in line
+        if _is_lockout(line)
     ]
 
     detail = " ".join(reasons) or text.strip()

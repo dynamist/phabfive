@@ -26,7 +26,6 @@ Phabricator and Phorge before 2025.51 have no `status` constraint on `project.se
 | What | Fails on | Why |
 |------|----------|-----|
 | The `Hosted` field of a repository | Phabricator, Phorge before 2025.51 | There is no `isHosted` field, and phabfive reports such a repository as not hosted |
-| A policy change that would lock you out is explained in one sentence | Phabricator, Phorge before 2025.51 | The change is refused either way, but these versions word the error differently, and phabfive shows it as it is |
 | `project create --milestone-of` | Phabricator, Phorge before 2026.27 | Phorge answers HTTP 500, a bug fixed upstream in 2026.27 |
 | A repository's link is `/source/<name>/` | Phabricator, Phorge before 2026.27 | There is no `browseUri` field, and phabfive links `/R<id>` instead, which works the same |
 

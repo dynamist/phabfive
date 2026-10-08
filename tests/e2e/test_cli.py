@@ -14,7 +14,6 @@ from ruamel.yaml import YAML
 
 from tests.phorge_versions import (
     NO_IS_HOSTED,
-    OLD_LOCKOUT_WORDING,
     missing_before,
     phorge_older_than,
 )
@@ -128,7 +127,6 @@ def test_create_in_a_space(phabfive, create_task, space_name):
     assert task["Space"] == space_name("S3")
 
 
-@OLD_LOCKOUT_WORDING
 def test_task_edit_sets_the_two_policies_it_can(
     phabfive, phabfive_raw, conduit, create_task
 ):
@@ -185,12 +183,12 @@ def test_task_edit_sets_the_two_policies_it_can(
     assert "No changes" in result.stderr
     assert json.loads(result.stdout)[0]["Link"].endswith(f"/{task_id}")
 
-    # And Phorge refuses to let the viewer lock themselves out, which is
-    # reported as the sentence it answered with
+    # And Phorge refuses to let the viewer lock themselves out, which every
+    # version words differently and phabfive reports as its own sentence
     result = phabfive_raw("maniphest", "edit", task_id, "--visible-to=no-one", "--yes")
 
     assert result.returncode == 1
-    assert "would no longer allow you" in result.stderr
+    assert "Nothing was changed" in result.stderr
     assert "Traceback" not in result.stderr
 
 
@@ -241,7 +239,7 @@ def test_a_policy_outside_the_grammar_never_reaches_the_instance(
 
     assert result.returncode == 1
     assert "--visible-to must be one of" in result.stderr
-    assert "would no longer allow you" not in result.stderr
+    assert "Nothing was changed" not in result.stderr
 
 
 def test_task_formats_agree_on_the_policy_section(phabfive, create_task):
@@ -466,7 +464,6 @@ def test_repo_show_falls_back_to_rich_for_table(phabfive):
     assert output.startswith("- Link: ")
 
 
-@OLD_LOCKOUT_WORDING
 def test_repo_edit_sets_every_policy(
     phabfive, phabfive_raw, conduit, create_repository
 ):
@@ -527,14 +524,14 @@ def test_repo_edit_sets_every_policy(
     assert "No changes" in result.stderr
     assert json.loads(result.stdout)[0]["Repository"]["Short Name"] == repo
 
-    # And Phorge refuses to let the viewer lock themselves out, which is
-    # reported as the sentence it answered with
+    # And Phorge refuses to let the viewer lock themselves out, which every
+    # version words differently and phabfive reports as its own sentence
     result = phabfive_raw(
         "diffusion", "repo", "edit", repo, "--visible-to=no-one", "--yes"
     )
 
     assert result.returncode == 1
-    assert "would no longer allow you" in result.stderr
+    assert "Nothing was changed" in result.stderr
     assert "Traceback" not in result.stderr
 
 

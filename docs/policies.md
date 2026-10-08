@@ -502,7 +502,18 @@ phabfive diffusion repo edit R42 --visible-to=no-one --yes
 ERROR: The view policy of this object would no longer allow you to view the object. Nothing was changed; choose a policy that still includes you.
 ```
 
-Both exit 1.
+Both exit 1. Phabricator, and Phorge before 2025.51, word the refusal
+differently, and phabfive ends it with the same sentence:
+
+```
+ERROR: You can not select this view policy, because you would no longer be able to view the object. Nothing was changed; choose a policy that still includes you.
+```
+
+So match on `Nothing was changed; choose a policy that still includes you.`
+rather than on Phorge's words. `project edit` reports it the same way. Only
+the view and the edit policy are checked: a join or push policy that leaves you
+out is accepted, and so is any policy on a paste, which its author can always
+view and edit.
 
 What counts as a lockout is Phorge's judgement, not phabfive's, and it accounts
 for capabilities you hold for other reasons. A task's assignee always keeps view

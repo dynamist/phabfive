@@ -44,8 +44,3 @@ def missing_before(release, reason):
 
 # Repositories report isHosted, without which phabfive calls a hosted one not hosted
 NO_IS_HOSTED = missing_before("2025.51", "repositories have no isHosted field")
-
-# A self-lockout is refused as "would no longer allow you", which phabfive recognises
-OLD_LOCKOUT_WORDING = missing_before(
-    "2025.51", "a self-lockout is refused in words phabfive does not recognise"
-)

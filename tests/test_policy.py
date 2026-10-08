@@ -341,6 +341,33 @@ class TestLockout:
         assert "Nothing was changed" in message
         assert "Validation errors" not in message
 
+    @pytest.mark.parametrize("capability", ["view", "edit"])
+    def test_phabricators_wording_becomes_the_same_sentence(self, capability):
+        """Phabricator, and Phorge before 2025.51, word it differently."""
+        message = policy_lockout_message(
+            "ERR-CONDUIT-CORE: Validation errors:\n"
+            f"  - You can not select this {capability} policy, because you would "
+            f"no longer be able to {capability} the object."
+        )
+
+        assert message == (
+            f"You can not select this {capability} policy, because you would no "
+            f"longer be able to {capability} the object. Nothing was changed; "
+            "choose a policy that still includes you."
+        )
+
+    def test_both_policies_refused_at_once_are_both_named(self):
+        message = policy_lockout_message(
+            "ERR-CONDUIT-CORE: Validation errors:\n"
+            "  - You can not select this view policy, because you would no "
+            "longer be able to view the object.\n"
+            "  - You can not select this edit policy, because you would no "
+            "longer be able to edit the object."
+        )
+
+        assert "view the object. You can not select this edit policy" in message
+        assert "Validation errors" not in message
+
     def test_any_other_error_is_left_to_the_caller(self):
         assert policy_lockout_message("ERR-CONDUIT-CORE: no such repository") is None
 
