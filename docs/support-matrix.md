@@ -21,7 +21,7 @@ Phacility still hosts Phabricator for some customers. The `phabricator-stable` v
 
 What fails, on which versions, and why. Everything not listed works on every version above: tasks (search, show, create, edit, batch edit), projects (search, show, audit), repositories (list, show), pastes, users, passphrase, spaces, specs, and every output format.
 
-Phabricator and Phorge before 2025.51 have no `status` constraint on `project.search` or `diffusion.repository.search`, and report no status in a `project.search` result. phabfive sends the constraint all the same, and when it is refused remembers that for the rest of the run and filters on the client instead, reading which projects are archived from `project.query`. A project search that asks for one status may then read every project rather than stop at its limit.
+Phabricator and Phorge before 2025.51 have no `status` constraint on `project.search` or `diffusion.repository.search`, and report no status in a `project.search` result. For projects, phabfive sends the constraint all the same, and when it is refused remembers that for the rest of the run and filters on the client instead, reading which projects are archived from `project.query`. A project search that asks for one status may then read every project rather than stop at its limit. Repositories are always filtered on the client, on the `status` every version reports, so they never send the constraint.
 
 | What | Fails on | Why |
 |------|----------|-----|
