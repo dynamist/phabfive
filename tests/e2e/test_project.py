@@ -8,7 +8,11 @@ import uuid
 # 3rd party imports
 import pytest
 
-from tests.e2e.conftest import phorge_older_than
+from tests.phorge_versions import (
+    NO_STATUS_CONSTRAINT,
+    OLD_LOCKOUT_WORDING,
+    missing_before,
+)
 
 
 @pytest.fixture
@@ -131,11 +135,10 @@ def test_an_edit_that_changes_nothing_says_so(create_project, phabfive_raw):
     assert json.loads(result.stdout)[0]["Project"]["Color"] == "blue"
 
 
-@pytest.mark.xfail(
-    phorge_older_than("2026.27"),
-    reason="project.edit crashes creating a milestone before Phorge 2026.27, which looks "
-    "the parent up by the PHID of a project it has not loaded yet",
-    strict=True,
+@missing_before(
+    "2026.27",
+    "project.edit crashes creating a milestone, looking the parent up by the PHID "
+    "of a project it has not loaded yet",
 )
 def test_subprojects_and_milestones(create_project, phabfive):
     parent = create_project()
@@ -177,6 +180,7 @@ def test_a_taken_hashtag_is_refused_on_a_dry_run(phabfive_raw):
     assert "same hashtag" in result.stderr
 
 
+@OLD_LOCKOUT_WORDING
 def test_a_self_lockout_is_a_sentence(create_project, phabfive_raw):
     record = create_project()
 
@@ -186,6 +190,7 @@ def test_a_self_lockout_is_a_sentence(create_project, phabfive_raw):
     assert "Nothing was changed" in result.stderr
 
 
+@NO_STATUS_CONSTRAINT
 def test_audit_lists_every_project_one_per_line(phabfive_raw, conduit):
     """`phabfive --format=jsonl project search --status=any --space='*' --show-policy -l 0`"""
     result = phabfive_raw(
