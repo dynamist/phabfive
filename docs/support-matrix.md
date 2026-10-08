@@ -2,7 +2,7 @@
 
 Which Phorge and Phabricator versions phabfive works with, and what does not work where. Every row here comes from running phabfive's test suites against that version, see [How This Is Tested](#how-this-is-tested).
 
-Last measured on 2026-09-28, [run 36415788571](https://github.com/dynamist/phabfive/actions/runs/36415788571).
+Last measured on 2026-10-08, [run 37768364218](https://github.com/dynamist/phabfive/actions/runs/37768364218).
 
 ## Versions
 
@@ -12,8 +12,10 @@ Last measured on 2026-09-28, [run 36415788571](https://github.com/dynamist/phabf
 | Phorge `stable` | 8.5 | Supported |
 | Phorge 2026.27 | 8.5 | Supported |
 | Phorge 2025.51 | 8.5 | Supported, except creating milestones (a Phorge bug) |
-| Phorge 2022.37 to 2025.18 | 8.0 to 8.4 | Partly, see [Known Gaps](#known-gaps) |
-| Phabricator (`stable` and `master`, as Phacility left it in 2022) | 8.0 | Partly, see [Known Gaps](#known-gaps) |
+| Phorge 2025.18 | 8.4 | Supported, except creating milestones (a Phorge bug) |
+| Phorge 2023.32 to 2024.35 | 8.3 | Supported, except creating milestones (a Phorge bug) |
+| Phorge 2022.37 to 2023.23 | 8.0 | Supported, except creating milestones (a Phorge bug) |
+| Phabricator (`stable` and `master`, as Phacility left it in 2022) | 8.0 | Supported, except creating milestones (a Phabricator bug) |
 
 Phacility still hosts Phabricator for some customers. The `phabricator-stable` version tested here is its public `stable` branch, and a hosted instance answers the same Conduit methods with the same constraints, but may carry patches that were never published.
 
@@ -27,6 +29,7 @@ Phabricator and Phorge before 2025.51 have no `status` constraint on `project.se
 |------|----------|-----|
 | `project create --milestone-of` | Phabricator, Phorge before 2026.27 | Phorge answers HTTP 500, a bug fixed upstream in 2026.27 |
 | A repository's link is `/source/<name>/` | Phabricator, Phorge before 2026.27 | There is no `browseUri` field, and phabfive links `/R<id>` instead, which works the same |
+| A task title over 255 characters is refused | Phabricator, Phorge before 2024.35 | These versions accept it, so a create spec that relies on the refusal creates the task |
 
 A repository's `Hosted` works everywhere, by another route before 2025.51: those versions have no `isHosted` in `diffusion.repository.search`, so phabfive asks the frozen `repository.query`, which reports the same stored flag. Were that ever unavailable, `Hosted` is empty (`null` in JSON) rather than `false`.
 
