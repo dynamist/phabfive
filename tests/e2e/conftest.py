@@ -61,7 +61,7 @@ def phabfive_raw(live_env):
     result still fails.
     """
 
-    def run(*args):
+    def run(*args, input=None):
         return subprocess.run(
             [
                 sys.executable,
@@ -70,6 +70,7 @@ def phabfive_raw(live_env):
                 *args,
             ],
             env=live_env,
+            input=input,
             capture_output=True,
             text=True,
             timeout=120,

@@ -723,6 +723,79 @@ def test_paste_edit_adds_and_removes_subscribers(phabfive, conduit):
     assert _subscribers(conduit, "paste.search", number) == {"mikael.wallin"}
 
 
+def _comments(conduit, monogram):
+    """The raw text of every comment on one task or paste, oldest first."""
+    transactions = conduit("transaction.search", objectIdentifier=monogram)["data"]
+    return [
+        comment["content"]["raw"]
+        for transaction in reversed(transactions)
+        if transaction["type"] == "comment"
+        for comment in transaction["comments"]
+    ]
+
+
+def test_comment_dry_run_posts_nothing(phabfive, phabfive_raw, conduit, create_task):
+    task_id, _title = create_task()
+
+    result = phabfive_raw(
+        "--format=rich", "maniphest", "comment", task_id, "probe", "--dry-run"
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"[DRY RUN] Would comment on {task_id}" in result.stdout
+    assert "    probe" in result.stdout
+
+    # The monogram shortcut, under a machine format: stdout stays empty
+    result = phabfive_raw("--format=json", task_id, "probe", "--dry-run")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert f"[DRY RUN] Would comment on {task_id}" in result.stderr
+
+    assert _comments(conduit, task_id) == []
+
+    # The same command without --dry-run does post, so the count above
+    # measured something
+    phabfive("maniphest", "comment", task_id, "probe")
+    assert _comments(conduit, task_id) == ["probe"]
+
+
+def test_comment_dry_run_on_a_missing_task_fails(phabfive_raw):
+    result = phabfive_raw("maniphest", "comment", "T999999", "probe", "--dry-run")
+    assert result.returncode == 1
+    assert "[DRY RUN]" not in result.stdout
+
+
+def test_paste_comment_dry_run_posts_nothing(phabfive, phabfive_raw, conduit):
+    [created] = phabfive(
+        "paste",
+        "create",
+        f"e2e paste {uuid.uuid4().hex[:8]}",
+        "--content=line one",
+        "--yes",
+        json_output=True,
+    )
+    monogram = urlparse(created["Link"]).path.strip("/")
+
+    result = phabfive_raw(
+        "--format=rich", "paste", "comment", monogram, "probe", "--dry-run"
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"[DRY RUN] Would comment on {monogram}" in result.stdout
+    assert _comments(conduit, monogram) == []
+
+    # Leading indentation from stdin is a remarkup code block, and survives
+    result = phabfive_raw(
+        "paste", "comment", monogram, "-", input="intro\n\n    code block\n\n"
+    )
+    assert result.returncode == 0, result.stderr
+    assert _comments(conduit, monogram) == ["intro\n\n    code block"]
+
+
+def test_paste_comment_dry_run_on_a_missing_paste_fails(phabfive_raw):
+    result = phabfive_raw("paste", "comment", "P999999", "probe", "--dry-run")
+    assert result.returncode == 1
+    assert "not found" in result.stderr
+
+
 # --------------------------------------------------------------------------
 # Create specs against a live instance (#483, #482, #485)
 # --------------------------------------------------------------------------
