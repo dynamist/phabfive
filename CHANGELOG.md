@@ -78,7 +78,20 @@
   wait, fails it at once, since no daemon updates it. A program gets the same from `Diffusion.wait_for_import` and
   `wait_for_commits`, which raise the new `PhabfiveTimeoutException`. #557
 
+* **`maniphest comment` and `paste comment` take `--dry-run`.** A comment notifies the
+  subscribers as soon as it lands and takes an admin to remove, and these were the only
+  write commands that could not be previewed. The text is read as usual - argument, `-`
+  for stdin or `$EDITOR` - and the task or paste is looked up, so a missing one still
+  exits 1, and then it is printed as it would be posted, on stderr under a
+  machine-readable format so that stdout stays empty. With the monogram shortcut the flag
+  goes after the text: `phabfive T123 "text" --dry-run`. #577
+
 ## Bug Fixes
+
+* **`paste comment -` keeps the leading indentation of its text.** It stripped
+  whitespace from both ends of what it read from stdin, so a comment opening with an
+  indented line lost the remarkup code block it started. It now only trims the end, as
+  `maniphest comment` does, and trims text written in `$EDITOR` the same way. #577
 
 * **A hosted repository is reported as hosted on Phabricator and Phorge before
   2025.51.** Their `diffusion.repository.search` has no `isHosted`, and phabfive read a
