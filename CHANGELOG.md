@@ -103,6 +103,17 @@
   `phorge.localhost answered HTTP 503 Service Unavailable`. `PhabfiveConnectionException`
   carries the `host` and the `status` for a program to read
 
+## Other Notes
+
+* The skill `phabfive --skill` prints says to build comment and description text with a
+  quoted heredoc (`<<'EOF'`). Remarkup writes inline code in backticks, and an agent that
+  used `<<EOF` had the shell run them: one comment got a test run's output pasted into
+  it, another lost every inline-code word, and neither can be deleted through phabfive.
+  It names the options that read `-` from stdin and the ones that do not (`--comment=-`
+  posts a dash), and no longer says `comment` lacks `--dry-run`. The heredoc examples in
+  the skill, `docs/` and the readme are now run in bash by the tests, against a stand-in
+  `phabfive`, and fail unless their text arrives unchanged; an unquoted heredoc fails too
+
 
 # 0.11.0 (2026-09-24)
 

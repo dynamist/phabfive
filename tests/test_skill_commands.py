@@ -33,8 +33,12 @@ Nothing is executed and nothing is asked of an instance: this is click's own
 resolution walk over the command tree.
 """
 
+import json
 import re
 import shlex
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -325,3 +329,147 @@ def test_a_spec_example_validates_offline(body):
     assert problems == [], "\n".join(
         f"{one.severity}: {one.object}: {one.reason} [{one.code}]" for one in problems
     )
+
+
+#: A heredoc whose delimiter is not quoted: `<<EOF` and `<<-EOF`, not
+#: `<<'EOF'` or `<<"EOF"`. A here-string (`<<<`) is not one.
+UNQUOTED_HEREDOC = re.compile(r"(?<!<)<<-?\s*[A-Za-z_]")
+
+
+def _heredocs(path):
+    """Every heredoc opened inside a fenced block of one file."""
+    found = []
+
+    for _, body in FENCED.findall(path.read_text(encoding="utf-8")):
+        for line in body.splitlines():
+            if "<<" in line and "<<<" not in line:
+                found.append((path, line.strip()))
+
+    return found
+
+
+HEREDOCS = [case for path in PROSE_FILES for case in _heredocs(path)]
+
+
+def test_the_documentation_has_heredocs():
+    """Guard the guard: the skill shows the quoted heredoc it asks for."""
+    assert any(path == SKILL for path, _ in HEREDOCS)
+
+
+@pytest.mark.parametrize(
+    "case", HEREDOCS, ids=[f"{p.name}:{line[:50]}" for p, line in HEREDOCS]
+)
+def test_a_heredoc_quotes_its_delimiter(case):
+    """Remarkup writes inline code in backticks, and an unquoted heredoc runs
+    them: an agent that copied `<<EOF` pasted 245 lines of pytest output into
+    one Phorge comment, and lost every inline-code word from another. A
+    comment cannot be deleted through phabfive, so every example quotes it.
+    """
+    path, line = case
+
+    assert not UNQUOTED_HEREDOC.search(line), (
+        f"{path.relative_to(REPO_ROOT)}: {line!r} opens an unquoted heredoc; "
+        "write <<'EOF'"
+    )
+
+
+#: A quoted heredoc, and the delimiter that closes it.
+QUOTED_HEREDOC = re.compile(r"""<<-?\s*(['"])([A-Za-z_]\w*)\1""")
+
+#: Stands in for `phabfive` on PATH: records what the shell handed it, the
+#: arguments and stdin, as one JSON line, and does nothing else.
+STUB = """#!{python}
+import json, os, sys
+with open(os.environ["PHABFIVE_STUB_LOG"], "a", encoding="utf-8") as log:
+    log.write(json.dumps({{"argv": sys.argv[1:], "stdin": sys.stdin.read()}}) + "\\n")
+"""
+
+
+def _quoted_heredoc_blocks():
+    """Every `bash` block that feeds a quoted heredoc to `phabfive`, with the
+    text each of its heredocs holds, as written."""
+    found = []
+
+    for path in PROSE_FILES:
+        for language, body in FENCED.findall(path.read_text(encoding="utf-8")):
+            if language != "bash" or "phabfive" not in body:
+                continue
+
+            texts = []
+            lines = body.splitlines()
+
+            for number, line in enumerate(lines):
+                opened = QUOTED_HEREDOC.search(line)
+
+                if opened:
+                    end = lines.index(opened.group(2), number + 1)
+                    texts.append("\n".join(lines[number + 1 : end]))
+
+            if texts:
+                found.append((path, body, texts))
+
+    return found
+
+
+QUOTED_HEREDOC_BLOCKS = _quoted_heredoc_blocks()
+
+
+def test_the_skill_shows_a_quoted_heredoc_feeding_phabfive():
+    """Guard the guard: the walk below found the skill's examples."""
+    assert any(path == SKILL for path, _, _ in QUOTED_HEREDOC_BLOCKS)
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or shutil.which("bash") is None,
+    reason="runs the examples in bash",
+)
+@pytest.mark.parametrize(
+    "case",
+    QUOTED_HEREDOC_BLOCKS,
+    ids=[f"{p.name}:{texts[0][:40]}" for p, _, texts in QUOTED_HEREDOC_BLOCKS],
+)
+def test_a_heredoc_example_delivers_its_text_verbatim(case, tmp_path):
+    """Run the example in bash, against a `phabfive` that only records what it
+    was given, and find every heredoc's text in it unchanged - backticks, `$`
+    and braces included, whether it arrived as an argument or on stdin.
+
+    This is what the advice is for: copying the example is what an agent
+    does, so the example has to be one that cannot mangle the comment.
+    """
+    path, body, texts = case
+    stub = tmp_path / "phabfive"
+    stub.write_text(STUB.format(python=sys.executable), encoding="utf-8")
+    stub.chmod(0o755)
+    log = tmp_path / "calls.jsonl"
+
+    result = subprocess.run(
+        ["bash", "-e", "-c", body],
+        env={
+            "PATH": f"{tmp_path}:/usr/bin:/bin",
+            "PHABFIVE_STUB_LOG": str(log),
+            "HOME": str(tmp_path),
+        },
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    received = [arg for call in calls for arg in call["argv"]]
+    received += [call["stdin"].rstrip("\n") for call in calls]
+
+    for text in texts:
+        assert text in received, (
+            f"{path.relative_to(REPO_ROOT)}: the heredoc text {text!r} did not "
+            f"reach phabfive as written; it got {received!r}"
+        )
+
+        # And no call got it in pieces, as an unquoted "$body" splits it
+        words = set(text.split()) if len(text.split()) > 1 else set()
+        pieces = [arg for arg in received if arg in words]
+
+        assert not pieces, (
+            f"{path.relative_to(REPO_ROOT)}: a call got {text!r} split into "
+            f"words {pieces!r}; quote the variable"
+        )
