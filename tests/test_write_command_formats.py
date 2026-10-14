@@ -30,7 +30,7 @@ import pytest
 from typer.testing import CliRunner
 
 # phabfive imports
-from phabfive.cli import app
+from phabfive.cli import app, preprocess_monograms
 from phabfive.cli.output import is_machine_format
 from phabfive.core import Phabfive
 from tests import click_layer
@@ -368,6 +368,67 @@ class TestManiphestComment:
 
         assert result.exit_code == 0, result.output
         maniphest.add_task_comment.assert_called_once_with("T7", "line one\n  line two")
+
+    def test_dry_run_posts_nothing(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app,
+                ["--format=rich", "maniphest", "comment", "T7", "hello", "--dry-run"],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert (
+            "[DRY RUN] Would comment on T7 (https://phorge.example.com/T7):"
+            in result.stdout
+        )
+        assert "    hello" in result.stdout
+        maniphest.add_task_comment.assert_not_called()
+
+    def test_a_machine_dry_run_leaves_stdout_empty(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app,
+                ["--format=json", "maniphest", "comment", "T7", "hello", "--dry-run"],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert result.stdout.strip() == ""
+        assert "[DRY RUN] Would comment on T7" in result.stderr
+        maniphest.add_task_comment.assert_not_called()
+        maniphest.task_show.assert_not_called()
+
+    def test_a_dry_run_previews_stdin_as_it_would_be_posted(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app,
+                ["--format=rich", "maniphest", "comment", "T7", "-", "--dry-run"],
+                input="line one\n\n    code block\n\n",
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "    line one\n\n        code block\n" in result.stdout
+        maniphest.add_task_comment.assert_not_called()
+
+    def test_monogram_shortcut_takes_dry_run(self):
+        maniphest = a_maniphest(task_id=7)
+
+        with patch("phabfive.cli.maniphest._get_maniphest_app", return_value=maniphest):
+            result = runner.invoke(
+                app,
+                preprocess_monograms(
+                    ["phabfive", "--format=rich", "T7", "hello", "--dry-run"]
+                )[1:],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "[DRY RUN] Would comment on T7" in result.stdout
+        maniphest.add_task_comment.assert_not_called()
 
     def test_empty_stdin_posts_nothing(self):
         maniphest = a_maniphest(task_id=7)
@@ -737,6 +798,76 @@ class TestPasteComment:
             )
 
         assert result.stdout.strip() == "https://phorge.example.com/P7"
+
+    def test_dash_keeps_leading_indentation(self):
+        paste = a_paste(paste_id=7)
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                ["--format=rich", "paste", "comment", "P7", "-"],
+                input="    code block\n\n",
+            )
+
+        assert result.exit_code == 0, result.output
+        paste.add_paste_comment.assert_called_once_with(7, "    code block")
+
+    def test_dry_run_posts_nothing(self):
+        paste = a_paste(paste_id=7)
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app, ["--format=rich", "paste", "comment", "P7", "hello", "--dry-run"]
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "[DRY RUN] Would comment on P7" in result.stdout
+        assert "    hello" in result.stdout
+        paste.get_paste_data.assert_called_once_with(7)
+        paste.add_paste_comment.assert_not_called()
+
+    def test_a_machine_dry_run_leaves_stdout_empty(self):
+        paste = a_paste(paste_id=7)
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app, ["--format=json", "paste", "comment", "P7", "hello", "--dry-run"]
+            )
+
+        assert result.exit_code == 0, result.output
+        assert result.stdout.strip() == ""
+        assert "[DRY RUN] Would comment on P7" in result.stderr
+        paste.add_paste_comment.assert_not_called()
+
+    def test_a_dry_run_on_a_missing_paste_fails(self):
+        from phabfive.exceptions import PhabfiveDataException
+
+        paste = a_paste(paste_id=7)
+        paste.get_paste_data.side_effect = PhabfiveDataException("Paste P7 not found")
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app, ["paste", "comment", "P7", "hello", "--dry-run"]
+            )
+
+        assert result.exit_code == 1
+        assert "Paste P7 not found" in result.stderr
+        paste.add_paste_comment.assert_not_called()
+
+    def test_monogram_shortcut_takes_dry_run(self):
+        paste = a_paste(paste_id=7)
+
+        with patch("phabfive.cli.paste._get_paste_app", return_value=paste):
+            result = runner.invoke(
+                app,
+                preprocess_monograms(
+                    ["phabfive", "--format=rich", "P7", "hello", "--dry-run"]
+                )[1:],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "[DRY RUN] Would comment on P7" in result.stdout
+        paste.add_paste_comment.assert_not_called()
 
 
 class TestDiffusionRepoCreate:

@@ -158,7 +158,8 @@ phabfive T123 "looks fine to me"   # posts a comment on T123
 ```
 
 For `T` and `P`, `phabfive <monogram> <text>` expands to `<app> comment <monogram> <text>`
-and writes immediately. Prefer the explicit form whenever you mean to read:
+and writes immediately. `--dry-run` after the text previews the comment and posts nothing.
+Prefer the explicit form whenever you mean to read:
 
 ```bash
 phabfive --format=json maniphest show T123

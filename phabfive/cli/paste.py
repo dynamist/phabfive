@@ -861,7 +861,10 @@ def comment(
     ctx: typer.Context,
     paste_id: str = typer.Argument(..., help="Paste monogram (e.g., P123)"),
     text: Optional[str] = typer.Argument(
-        None, help="Comment text (omit to open $EDITOR)"
+        None, help="Comment text (use - to read from stdin, or omit to open $EDITOR)"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview without posting the comment"
     ),
 ) -> None:
     """Add a comment to a paste.
@@ -871,6 +874,7 @@ def comment(
         phabfive paste comment P1 "Great paste!"
         phabfive paste comment P1  # opens $EDITOR
         echo "comment" | phabfive paste comment P1 -
+        phabfive paste comment P1 "Looks good" --dry-run
         phabfive P1 "Quick comment"  # monogram shortcut
     """
     from phabfive.cli.editor import edit_text
@@ -899,7 +903,8 @@ def comment(
         if sys.stdin.isatty():
             sys.stderr.write("Error: '-' requires input from stdin\n")
             raise typer.Exit(1)
-        final_text = sys.stdin.read().strip()
+        # rstrip only: leading indentation is a remarkup code block
+        final_text = sys.stdin.read().rstrip()
     elif text is not None:
         final_text = text
     else:
@@ -907,17 +912,27 @@ def comment(
         if not sys.stdin.isatty():
             sys.stderr.write("Error: Provide comment text or run interactively\n")
             raise typer.Exit(1)
-        final_text = edit_text("", prefix="paste-comment-", suffix=".remarkup")
-        if final_text is None:
+        edited = edit_text("", prefix="paste-comment-", suffix=".remarkup")
+        if edited is None:
             print("Comment cancelled", file=preview)
             raise typer.Exit(0)
+        final_text = edited.rstrip()
 
-    if not final_text:
+    if not final_text.strip():
         sys.stderr.write("Error: Comment cannot be empty\n")
         raise typer.Exit(1)
 
     # Add the comment
     try:
+        if dry_run:
+            # Look the paste up anyway, so a dry run fails where the comment would
+            paste.get_paste_data(numeric_id)
+            url = paste.get_paste_url(numeric_id)
+            print(f"[DRY RUN] Would comment on P{numeric_id} ({url}):", file=preview)
+            for line in final_text.split("\n"):
+                print(f"    {line}".rstrip(), file=preview)
+            return
+
         paste.add_paste_comment(numeric_id, final_text)
 
         if machine:

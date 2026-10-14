@@ -251,17 +251,22 @@ def comment(
     comment_text: Optional[str] = typer.Argument(
         None, help="Comment text (use - to read from stdin, or omit to open $EDITOR)"
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview without posting the comment"
+    ),
 ) -> None:
     """Add a comment to a Maniphest task.
 
     A machine-readable format answers with the task's record, the one
-    `maniphest show` gives, rather than with the link on its own.
+    `maniphest show` gives, rather than with the link on its own. A dry run
+    has no record to give, so its preview goes to stderr there.
 
     \b
     Examples:
         phabfive maniphest comment T1 "Done, see rP1234"
         phabfive maniphest comment T1  # opens $EDITOR
         printf 'line one\\nline two\\n' | phabfive maniphest comment T1 -
+        phabfive maniphest comment T1 "Done" --dry-run
         phabfive T1 "Quick comment"  # monogram shortcut
     """
     from phabfive.cli.editor import edit_text
@@ -298,9 +303,19 @@ def comment(
         typer.echo("Error: Comment cannot be empty", err=True)
         raise typer.Exit(1)
 
-    maniphest.add_task_comment(ticket_id, final_text)
-
     task_id = int(ticket_id[1:])
+
+    if dry_run:
+        # Look the task up anyway, so a dry run fails where the comment would
+        ticket = maniphest.get_task_info(task_id)
+        print(
+            f"[DRY RUN] Would comment on {ticket_id} ({ticket['uri']}):", file=preview
+        )
+        for line in final_text.split("\n"):
+            print(f"    {line}".rstrip(), file=preview)
+        return
+
+    maniphest.add_task_comment(ticket_id, final_text)
 
     if is_machine_format(_get_output_format(ctx)):
         _show_tasks_after_write(ctx, maniphest, [task_id])

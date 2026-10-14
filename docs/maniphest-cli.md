@@ -230,9 +230,14 @@ phabfive maniphest comment T123
 
 # Monogram shortcut
 phabfive T123 "This is my comment"
+
+# Preview what would be posted, and check that the task exists, without posting
+printf 'Done.\n\n    code block\n' | phabfive maniphest comment T123 - --dry-run
 ```
 
-The command will output the task URI after successfully adding the comment.
+The command will output the task URI after successfully adding the comment. `--dry-run`
+works the same way on `paste comment`. With the monogram shortcut, put it after the text:
+`phabfive T123 "text" --dry-run`.
 
 ### Create Tasks from a Spec
 
