@@ -223,7 +223,11 @@ Add a comment to a task:
 phabfive maniphest comment T123 "This is my comment"
 
 # Read the comment from stdin, for multi-line text
-printf 'Done.\n\nSee rP1234 for the fix.\n' | phabfive maniphest comment T123 -
+phabfive maniphest comment T123 - <<'EOF'
+Done.
+
+See rP1234 for the fix in `api_frontend.py`.
+EOF
 
 # Omit the text to write it in $EDITOR
 phabfive maniphest comment T123
@@ -232,8 +236,30 @@ phabfive maniphest comment T123
 phabfive T123 "This is my comment"
 
 # Preview what would be posted, and check that the task exists, without posting
-printf 'Done.\n\n    code block\n' | phabfive maniphest comment T123 - --dry-run
+phabfive maniphest comment T123 - --dry-run <<'EOF'
+Done.
+
+    code block
+EOF
 ```
+
+Quote the heredoc's delimiter (`<<'EOF'`, not `<<EOF`). Remarkup writes inline code in
+backticks, and an unquoted heredoc, like a double-quoted string, lets the shell run
+them as commands and paste their output into the comment, or drop them, and expand
+every `$`. To keep the text in a variable, build it the same way and pass it quoted:
+
+```bash
+body=$(cat <<'EOF'
+Fixed in `api_frontend.py`; see {T123}. Cost: $0.
+EOF
+)
+phabfive maniphest comment T123 "$body" --dry-run
+```
+
+`-` reads stdin for the comment text, for `--description` on `maniphest create`,
+`maniphest edit` and `edit`, and for `--content` on `paste create` and `paste edit`.
+`--comment` on `edit` and `maniphest edit` takes its value as written, so `--comment=-`
+posts a dash; pass it `"$body"`.
 
 The command will output the task URI after successfully adding the comment. `--dry-run`
 works the same way on `paste comment`. With the monogram shortcut, put it after the text:

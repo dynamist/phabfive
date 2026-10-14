@@ -168,6 +168,40 @@ phabfive --format=json maniphest show T123
 Expansion only happens when the monogram is the first positional argument, so
 `phabfive maniphest parents T123` is left alone.
 
+## Text through the shell: a quoted heredoc
+
+Comments, descriptions and titles are Remarkup, and Remarkup writes inline code in
+backticks. An unquoted heredoc (`<<EOF`) or a double-quoted string hands those backticks
+to the shell, which runs them as commands and pastes their output in, or deletes them,
+and expands every `$`. A posted comment cannot be removed through phabfive. Build any
+multi-line or Remarkup text in a variable with a **quoted** heredoc (`<<'EOF'`), and pass
+it as one quoted argument:
+
+```bash
+body=$(cat <<'EOF'
+Fixed in `api_frontend.py`; see {T123}. Cost: $0.
+EOF
+)
+phabfive maniphest comment T123 "$body" --dry-run
+phabfive maniphest comment T123 "$body"
+```
+
+Or feed the same heredoc to stdin, where these read `-` as "read the text from stdin":
+the comment text of `maniphest comment` and `paste comment` (also `phabfive T123 -`),
+`--description` on `maniphest create`, `maniphest edit` and `edit`, and `--content` on
+`paste create` and `paste edit`:
+
+```bash
+phabfive maniphest create "Title" --description=- --dry-run <<'EOF'
+Calls `api.load()` once per request.
+EOF
+```
+
+`--comment` on `edit` and `maniphest edit`, and `--description` on `project create` and
+`project edit`, do not: `--comment=-` posts a comment that is a single dash. Give those
+`"$body"` instead. A one-line text with backticks or `$` goes in single quotes. Dry-run a
+comment you built in the shell and read the preview before posting it.
+
 ## Read a task completely
 
 A plain `maniphest show` looks like the whole task but omits the discussion. Comments,
@@ -421,8 +455,8 @@ names both ends of the change rather than showing a PHID:
 seeing or editing the task yourself, and that refusal is reported as a sentence.
 There is no `--can-interact`: see the `Policy` section above.
 
-`--dry-run` exists on every write command except the `comment` ones, which stay
-immediate because a comment is cheap to correct. Under `--format=json`, `jsonl` or
+`--dry-run` exists on every write command, `comment` included: a comment notifies
+subscribers at once and takes an administrator to remove. Under `--format=json`, `jsonl` or
 `yaml` a dry run's preview is on stderr and stdout is empty. Preview first on anything that
 cannot be undone: a repository cannot be removed once created, and
 `diffusion uri create` **demotes every URI already on the repository** to
@@ -450,7 +484,9 @@ URL that nothing asked it to touch. Its `--dry-run` names each URI it would demo
 Feed long text through stdin instead of an editor:
 
 ```bash
-printf '%s\n' "$body" | phabfive maniphest edit T123 --description=-
+phabfive maniphest edit T123 --description=- <<'EOF'
+New description, with `inline code` kept intact.
+EOF
 ```
 
 ### Directional edits
@@ -910,6 +946,9 @@ message says which.
 - Pass `--show-comments` before concluding anything about a task's discussion or decisions.
 - Attach commits to tasks with `--attach`, never by pasting a URL or hash into a comment.
   In text, write `{T123}` rather than `T123` or a URL where the title gives useful context.
+- Build multi-line or Remarkup text with a quoted heredoc (`<<'EOF'`), never `<<EOF` or a
+  double-quoted literal: the shell runs backticks and expands `$`. Pass it as `"$body"`,
+  or on stdin to an option that reads `-`, and dry-run the comment first.
 - Pass `--format=json`, `--format=jsonl` or `--format=yaml` before parsing, and put it
   before the subcommand.
 - Add `--space='*'` before reporting that a task or project does not exist.
