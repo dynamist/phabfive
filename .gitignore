@@ -134,3 +134,7 @@ k8s/base/ssh/
 
 # Throwaway venv built by "make smoke"
 .smoke/
+
+# nix
+result*
+.direnv*
