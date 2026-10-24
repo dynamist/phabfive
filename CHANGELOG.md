@@ -88,6 +88,12 @@
 
 ## Bug Fixes
 
+* **A write that is not idempotent no longer warns `FutureWarning`.** Its retry was
+  built with an empty `allowed_methods`, which urllib3 2.x reads as "retry any method"
+  and warns will mean the opposite in v3. It was never sent twice, since its read and
+  status retries were already 0, but a read timeout came back wrapped as if it had been
+  retried. It now allows only GET, which Conduit never sends. #582
+
 * **`paste comment -` keeps the leading indentation of its text.** It stripped
   whitespace from both ends of what it read from stdin, so a comment opening with an
   indented line lost the remarkup code block it started. It now only trims the end, as
