@@ -593,8 +593,7 @@ class TestCommands:
         assert {("--untag", False), ("--remove-tag", True), ("--add-tag", True)} <= (
             options(phabfive_edit)
         )
-        # `maniphest edit` also has the hidden --title for a positional title
-        assert options(maniphest_edit) - {("--title", True)} == options(phabfive_edit)
+        assert options(maniphest_edit) == options(phabfive_edit)
 
 
 class _Result(dict):

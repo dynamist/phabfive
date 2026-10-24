@@ -158,6 +158,31 @@ def resolve_assume_yes(yes, force, interactive=False):
     return assume_yes
 
 
+def merge_title(positional, option):
+    """Combine a positional TITLE with --title, refusing two different titles.
+
+    Either form may be given alone, and an empty one counts as not given.
+    Both are accepted when they agree, and refused when they do not, rather
+    than one silently winning (#580).
+
+    Args:
+        positional (str): Value of the positional TITLE, or None
+        option (str): Value of --title, or None
+
+    Returns:
+        str: The title to set, or None if neither was given
+
+    Raises:
+        ValueError: If both were given and differ
+    """
+    if positional and option and positional != option:
+        raise ValueError(
+            f"TITLE {positional!r} and --title {option!r} differ, give only one"
+        )
+
+    return positional or option
+
+
 def open_tty():
     """Open the controlling terminal for reading and writing.
 

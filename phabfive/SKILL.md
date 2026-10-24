@@ -373,6 +373,12 @@ An option that adds or removes several values - `--tag`/`--untag` and
 `--tag=Backend,QA` is `--tag=Backend --tag=QA`. Use `,`, not `+`, which is deprecated there
 and means AND only in a search filter.
 
+Rename a task or a paste with `--title` (`-t`): `phabfive maniphest edit T123 --title="..."`,
+`phabfive paste edit P42 --title="..."`. Prefer it to the positional form
+(`maniphest edit T123 "New title"`), which reads a title that looks like a monogram as another
+task to edit. `maniphest create` and `paste create` take `--title` too. Giving both forms with
+different titles is refused.
+
 `--assign` sets the assignee and `--unassign` removes it (`phabfive edit T123 --unassign`); the two
 cannot be combined.
 

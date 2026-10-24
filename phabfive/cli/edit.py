@@ -36,6 +36,13 @@ def edit_command(
         None,
         help="Object monogram(s) to edit (e.g., T123 or T123,T124,T125). Routes to app-specific edit command. If omitted, reads YAML from stdin.",
     ),
+    title: Optional[str] = typer.Option(
+        None,
+        "--title",
+        "-t",
+        help="New title; use this instead of a positional title in scripts, "
+        "or when the title looks like a monogram",
+    ),
     priority: Optional[str] = typer.Option(
         None,
         "--priority",
@@ -221,8 +228,13 @@ def edit_command(
 
     For piped input, this command reads YAML from stdin.
 
+    A new title is --title (-t), or a positional title after the monogram
+    as in maniphest edit: phabfive edit T123 "New title".
+
     \b
     Examples:
+        phabfive edit T123 "New title"
+        phabfive edit T123 --title="T6 follow-up"
         phabfive edit T123 --priority=raise --status=resolved
         phabfive maniphest search --tag "Backend" | phabfive edit --column=Done
         phabfive edit T123 --tag="Sprint" --column=forward --comment="Moving forward"
@@ -250,6 +262,7 @@ def edit_command(
         edit_handler,
         object_id=object_id,
         output_format=_get_output_format(ctx),
+        title=title,
         priority=priority,
         status=status,
         tag=[*(tag or []), *(add_tag or [])],
