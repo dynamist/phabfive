@@ -55,6 +55,13 @@
       "groupName": "python test tooling"
     },
     {
+      "description": "Held below 4.67 while requires-python includes 3.10: tox 4.67 requires Python 3.11, so a >=4.67 floor in the dev group makes uv lock unsatisfiable for the 3.10 split. Lift when 3.10 is dropped.",
+      "matchPackageNames": [
+        "tox"
+      ],
+      "allowedVersions": "<4.67"
+    },
+    {
       "description": "Group all GitHub Actions bumps into one PR",
       "matchManagers": [
         "github-actions"
