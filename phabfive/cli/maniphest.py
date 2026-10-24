@@ -39,7 +39,7 @@ from phabfive.cli.output import (
 from phabfive.cli.spec_flags import with_spec_option
 from phabfive.commits import COMMIT_GRAMMAR
 from phabfive.constants import MONOGRAMS
-from phabfive.cli.editor import resolve_assume_yes
+from phabfive.cli.editor import merge_title, resolve_assume_yes
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
@@ -330,13 +330,13 @@ def comment(
 def create(
     ctx: typer.Context,
     title: Optional[str] = typer.Argument(
-        None, help="Task title (required unless using --with)"
+        None, help="Task title (required unless using --with), or give --title"
     ),
     title_opt: Optional[str] = typer.Option(
         None,
         "--title",
-        hidden=True,
-        help="Task title (hidden, use positional argument instead)",
+        "-t",
+        help="Task title; use this instead of the positional TITLE in scripts",
     ),
     with_template: Optional[str] = with_spec_option("create"),
     description: Optional[str] = typer.Option(
@@ -450,6 +450,7 @@ def create(
     \b
     Examples:
         phabfive maniphest create "Fix bug"
+        phabfive maniphest create --title="T6 follow-up" --description="..."
         phabfive maniphest create "New feature" --assign=@me
         phabfive maniphest create "Task" --priority=high --tag=Sprint
         phabfive maniphest create "Task" --tag=Sprint,QA --subscribe=@me,alice
@@ -471,6 +472,7 @@ def create(
 
     try:
         force = resolve_assume_yes(yes, force, interactive)
+        final_title = merge_title(title, title_opt)
     except ValueError as e:
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
@@ -485,9 +487,6 @@ def create(
     output_format = _get_output_format(ctx)
     machine = is_machine_format(output_format)
     preview = sys.stderr if machine else sys.stdout
-
-    # Merge positional and option title (positional takes precedence)
-    final_title = title or title_opt
 
     if with_template:
         # Spec mode, which is `phabfive apply -f` under its old name.
@@ -1032,13 +1031,14 @@ def edit(
         ...,
         metavar="TASK_IDS... [TITLE]",
         help="Task monogram(s) (e.g., T123 T124 or T123,T124,T125), "
-        "optionally followed by a new title",
+        "optionally followed by a new title (or give --title)",
     ),
     title_opt: Optional[str] = typer.Option(
         None,
         "--title",
-        hidden=True,
-        help="New title (hidden, use positional argument instead)",
+        "-t",
+        help="New title; use this instead of the positional TITLE in scripts, "
+        "or when the title looks like a monogram",
     ),
     priority: Optional[str] = typer.Option(
         None,
@@ -1221,6 +1221,7 @@ def edit(
     \b
     Examples:
         phabfive maniphest edit T123 "New Title"
+        phabfive maniphest edit T123 --title="T6 follow-up"
         phabfive maniphest edit T123  # opens $EDITOR for description
         phabfive maniphest edit T123 --priority=high
         phabfive maniphest edit T123 T124 --status=resolved
@@ -1237,7 +1238,7 @@ def edit(
     # Greedy monogram parsing: leading args that are task monograms (or
     # comma-separated lists of them) are task IDs; the first non-matching
     # arg is the new title. A title that looks like a monogram must be set
-    # via the hidden --title option.
+    # via --title.
     maniphest_pattern = f"^{MONOGRAMS['maniphest']}$"
     task_parts: List[str] = []
     positional_title: Optional[str] = None
@@ -1262,11 +1263,9 @@ def edit(
 
     task_ids = ",".join(task_parts)
 
-    # Merge positional and option title (positional takes precedence)
-    final_title = positional_title or title_opt
-
     # Delegate to Edit class for processing
     try:
+        final_title = merge_title(positional_title, title_opt)
         force = resolve_assume_yes(yes, force, interactive)
     except ValueError as e:
         sys.stderr.write(f"Error: {e}\n")

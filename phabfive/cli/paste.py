@@ -36,7 +36,7 @@ from phabfive.exceptions import (
 )
 from phabfive.users import resolve_user_phid, resolve_user_phids
 from phabfive.cli.completers import complete_policy
-from phabfive.cli.editor import resolve_assume_yes
+from phabfive.cli.editor import merge_title, resolve_assume_yes
 from phabfive.policy import POLICY_GRAMMAR, validate_policy_value
 from phabfive.options import any_list_value, split_list_option
 from phabfive.ordering import complete_order_value
@@ -289,16 +289,18 @@ def search(
 def create(
     ctx: typer.Context,
     title: Optional[str] = typer.Argument(
-        None, help="Title for Paste (required unless using --with)"
+        None, help="Title for Paste (required unless using --with), or give --title"
     ),
     file: Optional[str] = typer.Argument(
-        None, help="File with content (optional if using --content or $EDITOR)"
+        None,
+        help="File with content (optional if using --content or $EDITOR); "
+        "with --title, the only positional argument",
     ),
     title_opt: Optional[str] = typer.Option(
         None,
         "--title",
-        hidden=True,
-        help="Title for Paste (hidden, use positional argument instead)",
+        "-t",
+        help="Title for Paste; use this instead of the positional TITLE in scripts",
     ),
     with_template: Optional[str] = with_spec_option("create"),
     content: Optional[str] = typer.Option(
@@ -354,6 +356,7 @@ def create(
     \b
     Examples:
         phabfive paste create "My Script" script.py
+        phabfive paste create --title="My Script" script.py
         phabfive paste create "Notes" --content="Some text"
         echo "content" | phabfive paste create "From stdin" --content=-
         phabfive paste create "Code" --language=python  # opens $EDITOR
@@ -383,8 +386,14 @@ def create(
         sys.stderr.write(f"ERROR: {e}\n")
         raise typer.Exit(1)
 
+    # With --title, a lone positional argument is the file: `paste create
+    # --title=X script.py` would otherwise read script.py as a second title
+    if title_opt and file is None:
+        title, file = None, title
+
     try:
         assume_yes = resolve_assume_yes(yes, False, interactive)
+        final_title = merge_title(title, title_opt)
     except ValueError as e:
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
@@ -406,8 +415,6 @@ def create(
         run_create_spec(ctx, paste, spec, with_template, dry_run=dry_run)
         return
 
-    # Merge positional and option title (positional takes precedence)
-    final_title = title or title_opt
     if not final_title:
         sys.stderr.write("Error: Title is required\n")
         raise typer.Exit(1)
@@ -609,12 +616,14 @@ def show(
 def edit(
     ctx: typer.Context,
     paste_id: str = typer.Argument(..., help="Paste monogram (e.g., P123)"),
-    title: Optional[str] = typer.Argument(None, help="New title for the paste"),
+    title: Optional[str] = typer.Argument(
+        None, help="New title for the paste, or give --title"
+    ),
     title_opt: Optional[str] = typer.Option(
         None,
         "--title",
-        hidden=True,
-        help="New title (hidden, use positional argument instead)",
+        "-t",
+        help="New title; use this instead of the positional TITLE in scripts",
     ),
     content: Optional[str] = typer.Option(
         None,
@@ -700,6 +709,7 @@ def edit(
     \b
     Examples:
         phabfive paste edit P1 "New Title"
+        phabfive paste edit P1 --title="New Title"
         phabfive paste edit P1 --language=python
         phabfive paste edit P1 --content="Updated content"
         echo "new content" | phabfive paste edit P1 --content=-
@@ -713,6 +723,7 @@ def edit(
 
     try:
         force = resolve_assume_yes(yes, force, interactive)
+        final_title = merge_title(title, title_opt)
     except ValueError as e:
         sys.stderr.write(f"Error: {e}\n")
         raise typer.Exit(1)
@@ -723,9 +734,6 @@ def edit(
     output_format = _get_output_format(ctx)
     machine = is_machine_format(output_format)
     preview = sys.stderr if machine else sys.stdout
-
-    # Merge positional and option title (positional takes precedence)
-    final_title = title or title_opt
 
     # Validate paste ID format
     paste_pattern = f"^{MONOGRAMS['paste']}$"

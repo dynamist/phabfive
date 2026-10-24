@@ -32,6 +32,13 @@
 
 ## New Features
 
+* **`--title` (`-t`) shows in the help of `maniphest create/edit` and `paste create/edit`,
+  and `phabfive edit` takes it too.**
+  It was hidden, so `--help` gave no sign that a task or a paste can be renamed, nor a way
+  to set a title that looks like a monogram: `maniphest edit T5 T6` edits two tasks, while
+  `maniphest edit T5 --title=T6` renames T5. With `--title`, the one positional argument of
+  `paste create` is the file. `phabfive --skill` says how to rename. #580
+
 * **`maniphest search` takes `-P` for `--show-policy`.** `-P` now means `--show-policy`
   on every command that has the flag
 
@@ -93,6 +100,9 @@
   and warns will mean the opposite in v3. It was never sent twice, since its read and
   status retries were already 0, but a read timeout came back wrapped as if it had been
   retried. It now allows only GET, which Conduit never sends. #582
+
+* **A positional title and a different `--title` are refused.** The positional one won and
+  `--title` was dropped without a word; now the command exits 1 naming both. #580
 
 * **`paste comment -` keeps the leading indentation of its text.** It stripped
   whitespace from both ends of what it read from stdin, so a comment opening with an

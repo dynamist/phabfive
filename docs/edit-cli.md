@@ -99,7 +99,8 @@ phabfive edit T123,T456 --tag="Sprint" --column=Done
 
 Note: with space-separated IDs, the first argument that is not a task
 monogram is treated as the new title (`phabfive edit T123 T456 "New Title"`).
-A title that itself looks like a monogram must be set with `--title`.
+A title that itself looks like a monogram must be set with `--title` (`-t`),
+and a positional title next to a different `--title` is refused.
 
 ### Batch Mode (Piped Input)
 
