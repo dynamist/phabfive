@@ -56,6 +56,12 @@ BACKOFF_BASE = 0.25
 #: asking again gets the same one.
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
+#: `allowed_methods` for a write that must not be repeated. Conduit only
+#: POSTs, so this matches nothing it sends. It cannot be empty: urllib3 2.x
+#: reads an empty collection as "any method", and warns that v3 will change
+#: that, while None means "any method" on purpose.
+_NO_CONDUIT_METHODS = frozenset({"GET"})
+
 #: Conduit method names that only read, matched on the last dotted part:
 #: `maniphest.search`, `diffusion.branchquery`, `maniphest.querystatuses`,
 #: `maniphest.gettasktransactions`.
@@ -226,7 +232,8 @@ class RetryPolicy:
         sent, while a read error or a retryable status is retried only for a
         method in `allowed_methods`. So a read, or a write inside
         `idempotent_writes()`, allows POST, and any other write allows
-        nothing.
+        only GET, which Conduit never sends - so a read error on it is
+        raised as it is, not retried.
         """
         safe = is_read(method) or retries_writes()
         return _retry_class()(
@@ -235,7 +242,7 @@ class RetryPolicy:
             read=self.retries if safe else 0,
             status=self.retries if safe else 0,
             other=0,
-            allowed_methods=frozenset({"POST"}) if safe else frozenset(),
+            allowed_methods=frozenset({"POST"}) if safe else _NO_CONDUIT_METHODS,
             status_forcelist=RETRY_STATUSES,
             # The last response is handed back, and the client reports its
             # status, rather than urllib3 raising MaxRetryError about it.

@@ -239,6 +239,30 @@ class TestWrites:
 
         assert len(transport.requests) == 3
 
+    def test_a_write_does_not_allow_post(self, recwarn):
+        """An empty allowed_methods would mean any method, and warn. #582"""
+        retry = RetryPolicy().urllib3_retry("maniphest.edit")
+
+        assert not retry._is_method_retryable("POST")
+        assert not [w for w in recwarn if issubclass(w.category, FutureWarning)]
+
+    @pytest.mark.parametrize("idempotent", [False, True])
+    def test_a_read_and_an_idempotent_write_allow_post(self, idempotent):
+        method = "maniphest.edit" if idempotent else "maniphest.search"
+        with idempotent_writes(idempotent):
+            retry = RetryPolicy().urllib3_retry(method)
+
+        assert retry._is_method_retryable("POST")
+
+    def test_a_read_timeout_is_raised_as_it_is(self, wire, sleeps):
+        """Not wrapped in a MaxRetryError, as if it had been retried."""
+        wire(READ_TIMEOUT)
+
+        with pytest.raises(PhabfiveConnectionException) as caught:
+            conduit().maniphest.edit(objectIdentifier="T1", transactions=self.COMMENT)
+        error = caught.value.__cause__
+        assert isinstance(error.args[0], ReadTimeoutError)
+
     def test_idempotent_writes_can_be_declined_per_call(self, wire, sleeps):
         transport = wire(READ_TIMEOUT)
 
