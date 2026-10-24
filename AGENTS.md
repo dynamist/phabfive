@@ -38,7 +38,7 @@ make test-e2e                        # end-to-end tests of the CLI against the d
 # Test against local Phorge (safe to run data-altering operations)
 PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
 
-# Merge PRs (rebase only - merge and squash are disabled), after Greptile's review, see below
+# Merge PRs (rebase only - merge and squash are disabled), see Before Merging below
 gh pr merge --rebase --delete-branch
 ```
 
@@ -61,22 +61,21 @@ in the `test` group or a narrow `# type: ignore[code]`, never `ignore_errors`.
 
 ## Before Merging
 
-Greptile reviews every pull request except Renovate's, and a green CI run says nothing about what
-it found. Read its review before merging:
+No bot reviews pull requests: Greptile is no longer active in this repo, so do not wait for a
+review from it. CI is the only automated gate, and `main` has no required checks, so
+`gh pr merge` does not wait for it either:
 
 ```bash
-gh api repos/dynamist/phabfive/pulls/<number>/comments --paginate --jq '.[] | "\(.path):\(.line) \(.body)"'
-gh pr view <number> --comments   # the summary, with its confidence score and last reviewed commit
+gh pr checks <number>            # every check must pass, or be skipped for a stated reason
 ```
 
-- The summary's "Last reviewed commit" must be the head you are merging. After a push, wait for
-  the re-review
-- An unresolved P1 or P2 finding blocks the merge like a failing check: fix it, or reply in its
-  thread why it does not apply
-- A finding often has siblings - the same mistake in another workflow or module. Look for them
-  before calling it fixed
-- Renovate's pull requests are deliberately not reviewed (`excludeAuthors` in
-  `.greptile/config.json`), so CI alone decides those
+- A green run does not mean the CLI met a real Phorge - see the next section for when
+  `Deploy and test ... in k3d` is skipped, and add `ci:k8s` when a change needs it
+- A failure on one leg of the matrix that hit the job timeout is usually a flaky runner: rerun
+  the failed jobs (`gh run rerun <run id> --failed`) before investigating
+- Renovate's pull requests are decided by CI alone. Leave one whose `renovate/stability-days`
+  status is pending until Renovate clears it: some update in it is younger than
+  `minimumReleaseAge`
 
 ## The Kubernetes Check Is Gated
 
