@@ -134,6 +134,12 @@
 
 ## Other Notes
 
+* The local Phorge's API token no longer disappears when nobody uses it in the first
+  hour. The seeder made it a `cli` token, which Phorge expires an hour after it is
+  created unless it is used, and the daemons then deleted it, so `make up` followed by
+  an idle hour left `api-supersecr3tapikeyfordevelop1` rejected. The seed now makes it
+  permanent, as the bash scripts before it did, and makes an existing one permanent on
+  the next start; `make down && make up` repairs an instance that already lost it
 * The skill `phabfive --skill` prints says to build comment and description text with a
   quoted heredoc (`<<'EOF'`). Remarkup writes inline code in backticks, and an agent that
   used `<<EOF` had the shell run them: one comment got a test run's output pasted into

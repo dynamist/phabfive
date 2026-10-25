@@ -205,3 +205,56 @@ def test_one_repository_is_empty_and_one_has_history(seed):
     records = seed["repositories"]["repositories"]
     assert [bool(record.get("branches")) for record in records].count(True) >= 1
     assert [bool(record.get("branches")) for record in records].count(False) >= 1
+
+
+SEED_SCRIPT = "/usr/local/share/phabfive-seed/seed.php"
+TOKEN_EXPIRES = (
+    "SELECT IFNULL(expires, 'never') FROM conduit_token WHERE token = :token"
+)
+
+
+def token_sql(kubectl, statement):
+    """Run SQL on phabricator_conduit from the Phorge pod.
+
+    `:token` in `statement` is the admin token, quoted. The shell fills it in
+    from the pod's environment, so the test cannot disagree with the seed.
+    """
+    statement = statement.replace(":token", "'$PHORGE_ADMIN_TOKEN'")
+    script = (
+        'mysql -h"$MYSQL_HOST" -u"$MYSQL_USER" -p"$MYSQL_PASS" -N '
+        f'-D phabricator_conduit -e "{statement}"'
+    )
+    return kubectl("exec", "deploy/phorge", "--", "sh", "-c", script).stdout.strip()
+
+
+def seed_auth(kubectl):
+    kubectl("exec", "deploy/phorge", "--", "php", SEED_SCRIPT, "auth")
+
+
+def test_api_token_never_expires(kubectl):
+    """The seed's token is permanent, whether it creates it or finds it.
+
+    A "cli" token expires an hour after it is made unless it is used, and the
+    daemons then delete it, which is how an idle instance lost its token. Using
+    the token also makes it permanent, so by now the stored row says nothing
+    about the seed: this deletes the token and runs the seed again, then gives
+    it an expiry and runs the seed again.
+    """
+    try:
+        token_sql(kubectl, "DELETE FROM conduit_token WHERE token = :token")
+        seed_auth(kubectl)
+        assert token_sql(kubectl, TOKEN_EXPIRES) == "never", "created with an expiry"
+
+        token_sql(
+            kubectl,
+            "UPDATE conduit_token SET expires = UNIX_TIMESTAMP() + 3600 "
+            "WHERE token = :token",
+        )
+        seed_auth(kubectl)
+        assert token_sql(kubectl, TOKEN_EXPIRES) == "never", "expiry left in place"
+    finally:
+        # The seed creates the token again if a step above lost it
+        seed_auth(kubectl)
+        token_sql(
+            kubectl, "UPDATE conduit_token SET expires = NULL WHERE token = :token"
+        )
