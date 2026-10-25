@@ -55,8 +55,16 @@ final class PhabfiveAuthSeedModule extends PhabfiveSeedModule {
       if (property_exists($token, 'tokenName')) {
         $token->setTokenName('phabfive-dev');
       }
+      // A "cli" token expires an hour after it is made unless it is used,
+      // and the daemons then delete it, so an instance nobody calls in its
+      // first hour loses its token. Make it permanent, as using it would
+      $token->setExpires(null);
       $token->save();
       $this->log(pht('Created API token.'));
+    } else if ($token->getExpires()) {
+      $token->setExpires(null);
+      $token->save();
+      $this->log(pht('Made the API token permanent.'));
     }
   }
 
