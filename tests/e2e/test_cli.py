@@ -9,6 +9,7 @@ import uuid
 from urllib.parse import urlparse
 
 # 3rd party imports
+import pytest
 import requests
 from ruamel.yaml import YAML
 
@@ -1089,6 +1090,95 @@ def test_a_create_spec_refuses_passphrases_offline(phabfive_raw, tmp_path):
     # The section's body is counted, never echoed: it is credential material
     assert problem["value"] == "1 item(s)"
     assert "not-a-real-secret" not in result.stdout
+
+
+def _seeded_credentials(phabfive):
+    """The seeded credentials by name, each with its monogram and seed record.
+
+    Found by name rather than assumed to be K1-K5, so a credential someone
+    added by hand cannot shift what a test reads.
+    """
+    from pathlib import Path
+
+    seed = json.loads(
+        (
+            Path(__file__).parents[2] / "phorge" / "seed" / "data" / "credentials.json"
+        ).read_text()
+    )
+    found = {}
+    for record in seed:
+        [match] = [
+            r
+            for r in phabfive(
+                "passphrase", "search", record["name"], "--limit", "0", json_output=True
+            )
+            if r["Credential"]["Name"] == record["name"]
+        ]
+        found[record["name"]] = {**record, "id": match["Link"].rsplit("/", 1)[1]}
+    return found
+
+
+def test_passphrase_show_prints_description_and_username(phabfive):
+    """#592: a credential says what it is for, without reading its secret."""
+    for cred in _seeded_credentials(phabfive).values():
+        record = phabfive("passphrase", "show", cred["id"], json_output=True)
+        credential = record["Credential"]
+
+        assert credential["Description"] == cred["description"]
+        assert credential.get("Username") == cred.get("username")
+        assert credential["ConduitAccess"] is cred["conduit"]
+        assert "Secret" not in credential
+
+
+def test_passphrase_show_reads_the_secrets_phorge_returns(phabfive):
+    creds = _seeded_credentials(phabfive)
+
+    for name in ("Artifact registry login", "Build agent token"):
+        out = phabfive(
+            "--format", "value", "passphrase", "show", creds[name]["id"], "-s"
+        )
+
+        assert out == creds[name]["secret"] + "\n"
+
+
+@pytest.mark.parametrize(
+    "name, reason",
+    [
+        ("Mirror key, no Conduit access", "does not allow Conduit access"),
+        ("Deployment notes", "does not return a note's text over Conduit"),
+    ],
+)
+def test_passphrase_show_fails_on_a_secret_phorge_does_not_return(
+    phabfive, phabfive_raw, name, reason
+):
+    """#593: no placeholder for the secret, the reason on stderr, exit 1."""
+    cred = _seeded_credentials(phabfive)[name]
+
+    result = phabfive_raw("--format", "json", "passphrase", "show", cred["id"], "-s")
+
+    assert result.returncode == 1
+    assert json.loads(result.stdout)["Credential"]["Secret"] is None
+    assert reason in result.stderr
+    assert f"/{cred['id']}" in result.stderr
+
+    value = phabfive_raw("--format", "value", "passphrase", "show", cred["id"], "-s")
+
+    assert value.returncode == 1
+    assert value.stdout == ""
+
+
+def test_passphrase_show_prints_the_readable_and_still_fails(phabfive, phabfive_raw):
+    creds = _seeded_credentials(phabfive)
+    denied = creds["Mirror key, no Conduit access"]["id"]
+    token = creds["Build agent token"]
+
+    result = phabfive_raw(
+        "--format", "value", "passphrase", "show", denied, token["id"], "-s"
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == token["secret"] + "\n"
+    assert f"/{denied}" in result.stderr
 
 
 def _imported_commits(conduit, callsign):

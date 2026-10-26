@@ -51,6 +51,9 @@ def show(
     """Retrieve credentials from Passphrase by ID.
 
     The secret is neither fetched nor shown unless --show-secret is given.
+    A secret Phorge does not return - Conduit access is off, the credential
+    is locked, or it is a note - is an error naming the credential's URL,
+    and the exit status is 1 even when other credentials were shown.
 
     \b
     Examples:
@@ -103,6 +106,15 @@ def show(
 
     except (PhabfiveDataException, PhabfiveRemoteException) as e:
         typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    # A secret asked for and not returned fails the command, after the
+    # credentials that could be read were printed, so `$(phabfive K1 -s)`
+    # can never take the reason for the secret and still succeed
+    unreadable = [cred["secret_error"] for cred in data if "secret_error" in cred]
+    for reason in unreadable:
+        typer.echo(f"ERROR: {reason}", err=True)
+    if unreadable:
         raise typer.Exit(1)
 
 
@@ -212,6 +224,12 @@ def search(
         display_passphrases_list(
             credentials, output_format, passphrase, show_secrets=show_secret
         )
+
+        # A search lists what exists, so a secret it could not read is a
+        # warning rather than a failure - `show` is the command that fails
+        for cred in credentials:
+            if "secret_error" in cred:
+                typer.echo(f"WARNING: {cred['secret_error']}", err=True)
 
     except (
         PhabfiveConfigException,
