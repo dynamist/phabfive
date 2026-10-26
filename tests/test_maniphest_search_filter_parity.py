@@ -96,8 +96,7 @@ def frozen_clock():
     constraints that differ by 1 and a parity assertion fails for a
     reason that has nothing to do with parity.
     """
-    with patch("phabfive.maniphest.core.days_ago_to_timestamp") as clock:
-        clock.side_effect = lambda days: 1_700_000_000 - int(days) * 86400
+    with patch("phabfive.spec.times._now", return_value=1_700_000_000):
         yield
 
 

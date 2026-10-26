@@ -349,7 +349,7 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--created-after",
         constraint="createdStart",
-        help="Tasks created within TIME, e.g. 1h, 7d, 2w.",
+        help="Tasks created within TIME or since a date, e.g. 7d, 2w, 2026-07-01.",
     ),
     Field(
         name="created-before",
@@ -358,7 +358,7 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--created-before",
         constraint="createdEnd",
-        help="Tasks created more than TIME ago.",
+        help="Tasks created more than TIME ago, or before a date.",
     ),
     Field(
         name="updated-after",
@@ -367,7 +367,7 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--updated-after",
         constraint="modifiedStart",
-        help="Tasks updated within TIME, e.g. 1h, 7d, 2w.",
+        help="Tasks updated within TIME or since a date, e.g. 7d, 2w, 2026-07-01.",
     ),
     Field(
         name="updated-before",
@@ -376,7 +376,7 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--updated-before",
         constraint="modifiedEnd",
-        help="Tasks updated more than TIME ago.",
+        help="Tasks updated more than TIME ago, or before a date.",
     ),
     Field(
         name="visible-to",
@@ -643,7 +643,7 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--closed-after",
         constraint="closedStart",
-        help="Tasks closed within TIME, e.g. 1h, 7d, 2w.",
+        help="Tasks closed within TIME or since a date, e.g. 7d, 2w, 2026-07-01.",
     ),
     Field(
         name="closed-before",
@@ -652,7 +652,7 @@ FIELDS: tuple[Field, ...] = (
         verbs=_SEARCH,
         cli="--closed-before",
         constraint="closedEnd",
-        help="Tasks closed more than TIME ago.",
+        help="Tasks closed more than TIME ago, or before a date.",
     ),
     # --- project, search -------------------------------------------------
     #

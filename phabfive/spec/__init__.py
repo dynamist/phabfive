@@ -39,10 +39,10 @@ public still: `SpecFormat`, `detect_format`, `load_documents` and
 helpers - `transition_pattern`, `policy_pattern`, `monogram_pattern`,
 `monogram_list_pattern` - in `phabfive.spec.schema`; `Resolver`,
 `ResolveResult`, `ReferenceIndex`, `index_references`, `field_kind` and
-`DEFAULT_RESOLVERS` in `phabfive.spec.online`; `parse_time_with_unit` in
-`phabfive.spec.times`; `plan_search`, `plan_searches`, `run_search` and
-`task_ids` in `phabfive.spec.search`; `CreateItem`, `CreateRecord`,
-`CreateReport`, `plan_create`, `apply_plan` and `apply_item` in
+`DEFAULT_RESOLVERS` in `phabfive.spec.online`; `parse_time`,
+`parse_absolute_time` and `parse_time_with_unit` in `phabfive.spec.times`;
+`plan_search`, `plan_searches`, `run_search` and `task_ids` in
+`phabfive.spec.search`; `CreateItem`, `CreateRecord`, `CreateReport`, `plan_create`, `apply_plan` and `apply_item` in
 `phabfive.spec.create`; and the engine - `resolve_variables`,
 `render_tree`, `render_string` - in `phabfive.spec.variables`. Each module's own `__all__`
 is the full list.

@@ -92,8 +92,9 @@ JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 SEARCH_ITEM_KEYS = ("type",) + LEGACY_SEARCH_KEYS
 
 #: What `1h`, `7d`, `2w` or a bare `14` looks like: a non-negative number
-#: with an optional unit, and whatever whitespace around it
-#: `phabfive.spec.times.parse_time_with_unit` strips before reading it.
+#: with an optional unit, or an absolute `2026-07-01` / `2026-07-01T09:30`,
+#: and whatever whitespace around it `phabfive.spec.times.parse_time` strips
+#: before reading it.
 #:
 #: This is the *documented* grammar, and it is deliberately narrower than
 #: that parser, whose backward-compatible "a bare number is days" branch
@@ -102,8 +103,17 @@ SEARCH_ITEM_KEYS = ("type",) + LEGACY_SEARCH_KEYS
 #: them - and nothing rejects them either, because the offline pass calls
 #: the parser rather than matching this pattern. The published document is
 #: thus never *wider* than phabfive, which is the direction that matters for
-#: an editor or a CI job that has only the schema.
-TIME_PATTERN = r"^[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*(?:[hdwmyHDWMY])?[ \t]*$"
+#: an editor or a CI job that has only the schema - with one exception a
+#: regular expression cannot avoid: it knows a month has at most 31 days but
+#: not which month has fewer, so `2026-02-30` matches here and is refused as
+#: a `bad-time` by the offline pass.
+TIME_PATTERN = (
+    r"^[ \t]*(?:"
+    r"[0-9]+(?:\.[0-9]+)?[ \t]*(?:[hdwmyHDWMY])?"
+    r"|[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
+    r"(?:[T ](?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?)?"
+    r")[ \t]*$"
+)
 
 # The value half of one transition condition. `:` separates the condition
 # type from the value and the value from the direction, `+` ANDs conditions

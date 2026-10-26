@@ -419,10 +419,10 @@ A `search:` mapping's keys are those of its item's `type:`.
 | `assigned` | user reference | &mdash; | &mdash; | `assigned` | Assignee: a username, @me, @none for unassigned, or a user PHID. |
 | `author` | user reference | &mdash; | &mdash; | `authorPHIDs` | Author: a username, @me, or a user PHID. |
 | `space` | Space reference | &mdash; | &mdash; | `spaces` | Space monogram, name or pattern; wildcards allowed. |
-| `created-after` | time | &mdash; | &mdash; | `createdStart` | Tasks created within TIME, e.g. 1h, 7d, 2w. |
-| `created-before` | time | &mdash; | &mdash; | `createdEnd` | Tasks created more than TIME ago. |
-| `updated-after` | time | &mdash; | &mdash; | `modifiedStart` | Tasks updated within TIME, e.g. 1h, 7d, 2w. |
-| `updated-before` | time | &mdash; | &mdash; | `modifiedEnd` | Tasks updated more than TIME ago. |
+| `created-after` | time | &mdash; | &mdash; | `createdStart` | Tasks created within TIME or since a date, e.g. 7d, 2w, 2026-07-01. |
+| `created-before` | time | &mdash; | &mdash; | `createdEnd` | Tasks created more than TIME ago, or before a date. |
+| `updated-after` | time | &mdash; | &mdash; | `modifiedStart` | Tasks updated within TIME or since a date, e.g. 7d, 2w, 2026-07-01. |
+| `updated-before` | time | &mdash; | &mdash; | `modifiedEnd` | Tasks updated more than TIME ago, or before a date. |
 | `visible-to` | policy | &mdash; | &mdash; | &mdash; | Only tasks whose view policy is exactly this. |
 | `editable-by` | policy | &mdash; | &mdash; | &mdash; | Only tasks whose edit policy is exactly this. |
 | `column` | pattern | &mdash; | &mdash; | `columnPHIDs` | Column transition filter, e.g. in:Backlog or never:Done. |
@@ -443,8 +443,8 @@ A `search:` mapping's keys are those of its item's `type:`.
 | `subtask` | monogram: `T123` | yes | &mdash; | `subtaskIDs` | Parents of these tasks; @some for any subtask, @none for none. |
 | `commit` | enum: `@some`, `@none` | &mdash; | &mdash; | &mdash; | @some for tasks with a commit attached, @none for none. |
 | `closed-by` | user reference | yes | &mdash; | `closerPHIDs` | Tasks closed by a user: a username, @me, or a user PHID. |
-| `closed-after` | time | &mdash; | &mdash; | `closedStart` | Tasks closed within TIME, e.g. 1h, 7d, 2w. |
-| `closed-before` | time | &mdash; | &mdash; | `closedEnd` | Tasks closed more than TIME ago. |
+| `closed-after` | time | &mdash; | &mdash; | `closedStart` | Tasks closed within TIME or since a date, e.g. 7d, 2w, 2026-07-01. |
+| `closed-before` | time | &mdash; | &mdash; | `closedEnd` | Tasks closed more than TIME ago, or before a date. |
 
 <!-- END GENERATED keys task/search -->
 

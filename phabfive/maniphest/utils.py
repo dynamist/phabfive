@@ -28,7 +28,7 @@ def time_constraint(value, key):
     """A TIME value as the epoch second a ``*.search`` constraint compares to.
 
     ``created-after``, ``created-before`` and their kin are written the same
-    way for every application - "1h", "7d", "2w" - and reach three different
+    way for every application - "1h", "7d", "2w", "2026-07-01" - and reach three different
     endpoints as the same UNIX second, so the reading is here rather than
     copied into each app's constraint builder.
 
@@ -52,13 +52,13 @@ def time_constraint(value, key):
         spec holding two bad times says which one it is talking about.
     """
     from phabfive.exceptions import PhabfiveInputException
-    from phabfive.spec.times import parse_time_with_unit
+    from phabfive.spec.times import parse_time
 
     if value in (None, ""):
         return None
 
     try:
-        return days_ago_to_timestamp(parse_time_with_unit(value))
+        return parse_time(value)
     except PhabfiveInputException as e:
         raise PhabfiveInputException(f"{key}: {e}")
 
