@@ -3,6 +3,7 @@
 """Main Maniphest class that orchestrates all submodules."""
 
 import dataclasses
+import datetime
 import itertools
 import logging
 import functools
@@ -1836,6 +1837,208 @@ class Maniphest(Phabfive):
             show_policy=show_policy,
             search_params=search_params,
         )
+
+    def task_stats(
+        self,
+        since,
+        until=None,
+        period="week",
+        by=None,
+        all_closed=False,
+        text_query=None,
+        tag=None,
+        exclude_task_ids=None,
+        assigned=None,
+        author=None,
+        space=None,
+        updated_after=None,
+        updated_before=None,
+        ids=None,
+        phids=None,
+        subscriber=None,
+        subtype=None,
+        parent=None,
+        subtask=None,
+        commit=None,
+        closed_by=None,
+        visible_to=None,
+        editable_by=None,
+        column_patterns=None,
+        priority_patterns=None,
+        status_patterns=None,
+    ):
+        """Tasks created and closed per period, one record per period.
+
+        Two searches over the whole range, not one per period: one by
+        creation date and one by close date, each with every filter
+        :meth:`task_search` would apply. The tasks are then bucketed by
+        `phabfive.maniphest.stats.build_stats`, whose docstring states the
+        rules: calendar periods in local time, a task counted once however
+        many matched projects it is in, the closed-status rule, reopened
+        tasks, percentiles and points.
+
+        Parameters
+        ----------
+        since       (str|date): Start of the range, inclusive, in the TIME
+                    grammar: a date such as "2026-07-01", or a relative time
+                    such as "12w". A date gives whole periods; a relative
+                    time starts the first period part-way through.
+        until       (str|date, optional): End of the range, exclusive, in the
+                    same grammar. Defaults to now.
+        period      (str): "week" (ISO weeks), "month" or "quarter".
+        by          (str, optional): Split each period by "owner", "project",
+                    "subtype" or "closer". A task in two projects counts in
+                    each project's group.
+        all_closed  (bool): Count every closed status as closed. By default
+                    only the instance's resolved status - the status map's
+                    defaultClosedStatus - is, so Invalid, Duplicate and
+                    Wontfix do not inflate the throughput.
+
+        Every other parameter is :meth:`task_search`'s filter of the same
+        name. The status scope defaults to "any", since a task created in the
+        range counts whether or not it is still open.
+
+        Returns
+        -------
+        list of dict
+            One record per period, or per period and group with `by`.
+
+        Raises
+        ------
+        PhabfiveInputException
+            A time, period or grouping that is not one, or a range that ends
+            before it starts.
+        """
+        from phabfive.maniphest.stats import GROUPINGS, PERIODS, build_stats
+
+        if period not in PERIODS:
+            raise PhabfiveInputException(
+                f"Invalid period: '{period}'. Expected one of: {', '.join(PERIODS)}"
+            )
+        if by is not None and by not in GROUPINGS:
+            raise PhabfiveInputException(
+                f"Invalid grouping: '{by}'. Expected one of: {', '.join(GROUPINGS)}"
+            )
+        if since in (None, ""):
+            raise PhabfiveInputException("since: a start of the range is required")
+
+        try:
+            start = datetime.datetime.fromtimestamp(parse_time(since))
+        except PhabfiveInputException as e:
+            raise PhabfiveInputException(f"since: {e}") from e
+        try:
+            end = (
+                datetime.datetime.fromtimestamp(parse_time(until))
+                if until not in (None, "")
+                else datetime.datetime.now().replace(microsecond=0)
+            )
+        except PhabfiveInputException as e:
+            raise PhabfiveInputException(f"until: {e}") from e
+
+        if end <= start:
+            raise PhabfiveInputException(
+                f"until ({end:%Y-%m-%d %H:%M}) is not after since "
+                f"({start:%Y-%m-%d %H:%M})"
+            )
+
+        # Statuses are resolved before anything is fetched, so an instance
+        # that cannot answer fails before two whole searches are paid for.
+        if all_closed:
+            closed_statuses = self._get_closed_statuses()
+        else:
+            closed_statuses = [
+                self._get_api_status_map().get("defaultClosedStatus") or "resolved"
+            ]
+
+        filters = {
+            "text_query": text_query,
+            "tag": tag,
+            "exclude_task_ids": exclude_task_ids,
+            "assigned": assigned,
+            "author": author,
+            "space": space,
+            "updated_after": updated_after,
+            "updated_before": updated_before,
+            "ids": ids,
+            "phids": phids,
+            "subscriber": subscriber,
+            "subtype": subtype,
+            "parent": parent,
+            "subtask": subtask,
+            "commit": commit,
+            "closed_by": closed_by,
+            "visible_to": visible_to,
+            "editable_by": editable_by,
+            "column_patterns": column_patterns,
+            "priority_patterns": priority_patterns,
+            "status_patterns": status_patterns,
+            # A scope of "any" for every status group naming none of its
+            # own: a task created in the range counts whether or not it has
+            # been closed since.
+            "include_closed": True,
+        }
+
+        # Phorge's createdEnd and closedEnd are inclusive, and the range is
+        # half-open, so the item sitting exactly on `end` is dropped again
+        # by build_stats rather than asked for one second short.
+        log.info(f"Counting tasks created from {start} to {end}")
+        created = self._match_tasks(
+            created_after=start, created_before=end, **filters
+        ).tasks
+        log.info(f"Counting tasks closed from {start} to {end}")
+        closed = self._match_tasks(
+            closed_after=start, closed_before=end, **filters
+        ).tasks
+
+        names = self._stats_group_names(created + closed, by)
+
+        return build_stats(
+            created,
+            closed,
+            since=start,
+            until=end,
+            period=period,
+            by=by,
+            closed_statuses=closed_statuses,
+            names=names,
+        )
+
+    def _stats_group_names(self, tasks, by):
+        """PHID to the name a `--by` group is published under, in one request.
+
+        A user is published by username and a project by name. A PHID the
+        lookup does not answer for keeps its PHID, which is still a group.
+        """
+        if by == "owner":
+            phids = {(t.get("fields") or {}).get("ownerPHID") for t in tasks}
+        elif by == "closer":
+            phids = {(t.get("fields") or {}).get("closerPHID") for t in tasks}
+        elif by == "project":
+            phids = {
+                phid
+                for t in tasks
+                for phid in (
+                    ((t.get("attachments") or {}).get("projects") or {}).get(
+                        "projectPHIDs"
+                    )
+                    or []
+                )
+            }
+        else:
+            return {}
+
+        phids.discard(None)
+        if not phids:
+            return {}
+
+        found = self.phab.phid.query(phids=sorted(phids))
+        found = getattr(found, "response", found) or {}
+
+        return {
+            phid: info.get("name") or phid
+            for phid, info in found.items()
+            if isinstance(info, dict)
+        }
 
     def _match_tasks(
         self,

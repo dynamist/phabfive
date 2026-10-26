@@ -119,3 +119,31 @@ class TestTheSearchSendsTheDate:
 
         with pytest.raises(PhabfiveInputException, match="^created-after: Invalid"):
             time_constraint("2026-02-30", "created-after")
+
+
+class TestAnUnquotedDateInASpec:
+    """YAML and TOML read `2026-07-01` as a date object, not a string."""
+
+    @pytest.mark.parametrize(
+        "text, fmt",
+        [
+            ("kind: search\nsearch:\n  created-after: 2026-07-01\n", "yaml"),
+            ('kind = "search"\n[search]\ncreated-after = 2026-07-01\n', "toml"),
+            ("kind: search\nsearch:\n  closed-before: 2026-07-01 09:30:00\n", "yaml"),
+        ],
+    )
+    def test_it_validates_clean(self, text, fmt):
+        from phabfive.spec.loader import parse_spec
+        from phabfive.spec.validate import validate_offline
+
+        assert validate_offline(parse_spec(text, format=fmt)) == []
+
+    def test_a_date_object_is_its_midnight(self):
+        assert parse_time(datetime.date(2026, 7, 1)) == int(
+            datetime.datetime(2026, 7, 1).timestamp()
+        )
+
+    def test_a_datetime_object_is_itself(self):
+        moment = datetime.datetime(2026, 7, 1, 9, 30)
+
+        assert parse_time(moment) == int(moment.timestamp())

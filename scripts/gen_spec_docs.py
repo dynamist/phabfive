@@ -81,7 +81,7 @@ PAIRS: tuple[tuple[str, str], ...] = tuple(
     (object_type, verb)
     for verb in ("create", "search")
     for object_type in ("task", "project", "paste", "passphrase")
-)
+) + (("task-stats", "search"),)
 
 #: What each problem code means, and which layer reports it. A code is a
 #: promise to whoever branches on it, so it is documented here rather than in

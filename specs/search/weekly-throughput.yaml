@@ -1,0 +1,35 @@
+# How a project's backlog is trending, week by week.
+#
+#   phabfive search -f specs/search/weekly-throughput.yaml
+#   phabfive search -f specs/search/weekly-throughput.yaml --set project=QA --set weeks=26
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: weekly-throughput
+  description: >-
+    How a project's backlog is trending: tasks created and resolved each ISO
+    week, the net change, and how long the resolved ones took. Set `project`
+    to count another one, and `weeks` to look further back.
+  version: "1"
+  author: phabfive
+variables:
+  project: {default: Development}
+  weeks: {default: 12}
+searches:
+  - type: task-stats
+    title: "📈 Created and resolved per week"
+    description: "Throughput: Invalid, Duplicate and Wontfix are not counted as closed"
+    search:
+      tag: "{{ project }}"
+      since: "{{ weeks }}w"
+      period: week
+
+  - type: task-stats
+    title: "👥 Closed per owner"
+    description: "Every closed status, split by who owns the task"
+    search:
+      tag: "{{ project }}"
+      since: "{{ weeks }}w"
+      period: month
+      by: owner
+      all-closed: true
