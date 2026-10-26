@@ -42,6 +42,7 @@ from phabfive.policy import (
     resolve_policy_value,
 )
 from phabfive.project.fetchers import (
+    fetch_board_columns,
     fetch_projects,
     fetch_users_by_phid,
     fill_project_status,
@@ -51,6 +52,7 @@ from phabfive.project.fetchers import (
 from phabfive.project.formatters import (
     build_project_display_data,
     describe_project,
+    format_column,
     project_member_phids,
 )
 from phabfive.project.resolvers import resolve_project
@@ -316,12 +318,15 @@ class Project(Phabfive):
         show_members=False,
         show_metadata=False,
         show_description=True,
+        columns=None,
     ):
         """The display records for a set of projects, one lookup per kind.
 
         Spaces are always named; policies and members only when asked for,
         each at the cost of one batched lookup for the whole set however
-        many projects it holds.
+        many projects it holds. Columns are fetched by the caller, a board
+        at a time, since project.column.search has no batched form worth
+        the name.
         """
         policy_names = None
         users = None
@@ -359,11 +364,47 @@ class Project(Phabfive):
             ),
             policy_names=policy_names,
             users=users,
+            columns=columns,
             show_policy=show_policy,
             show_members=show_members,
             show_metadata=show_metadata,
             show_description=show_description,
         )
+
+    def board_columns(self, project, show_hidden=False):
+        """A project's workboard columns, as the records `show` lists.
+
+        Parameters
+        ----------
+        project : dict
+            The project.search result item
+        show_hidden : bool, optional
+            Include the columns hidden from the board. Left out by default,
+            the way the board leaves them out.
+
+        Returns
+        -------
+        list or None
+            Column records (see format_column) in board order, or None when
+            the project has no workboard - no column at all, hidden or not.
+            Turning a workboard on creates its default column, so a board
+            always has one.
+
+        Raises
+        ------
+        PhabfiveDataException
+            If the columns cannot be fetched
+        """
+        columns, proxies = fetch_board_columns(self.phab, project["phid"])
+
+        if not columns:
+            return None
+
+        return [
+            format_column(column, proxies)
+            for column in columns
+            if show_hidden or not column.get("fields", {}).get("isHidden")
+        ]
 
     def show(
         self,
@@ -372,6 +413,8 @@ class Project(Phabfive):
         show_members=False,
         show_metadata=False,
         show_description=True,
+        show_columns=False,
+        show_hidden=False,
     ):
         """Show one or more projects in full.
 
@@ -387,11 +430,18 @@ class Project(Phabfive):
             Include that section
         show_description : bool, optional
             Include the description
+        show_columns : bool, optional
+            Include the workboard columns, in board order
+        show_hidden : bool, optional
+            Include the columns hidden from the board too, and imply
+            show_columns
 
         Returns
         -------
         dict
-            {"projects": [...], "missing_ids": [...]}
+            {"projects": [...], "missing_ids": [...], "no_workboard": [...]}.
+            "no_workboard" names each project shown with show_columns that
+            has no workboard, whose Columns are None rather than a list.
         """
         attachments = {"members": True} if show_members else None
 
@@ -411,15 +461,32 @@ class Project(Phabfive):
             if all(project["phid"] != seen["phid"] for seen in found):
                 found.append(project)
 
+        columns = None
+        no_workboard = []
+
+        if show_columns or show_hidden:
+            columns = {}
+            for project in found:
+                listed = self.board_columns(project, show_hidden=show_hidden)
+                if listed is None:
+                    no_workboard.append(describe_project(project))
+                else:
+                    columns[project["phid"]] = listed
+
         projects = self._display_data(
             found,
             show_policy=show_policy,
             show_members=show_members,
             show_metadata=show_metadata,
             show_description=show_description,
+            columns=columns,
         )
 
-        return {"projects": projects, "missing_ids": missing_ids}
+        return {
+            "projects": projects,
+            "missing_ids": missing_ids,
+            "no_workboard": no_workboard,
+        }
 
     def search(
         self,

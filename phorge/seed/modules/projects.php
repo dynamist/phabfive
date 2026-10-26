@@ -28,6 +28,11 @@ final class PhabfiveProjectsSeedModule extends PhabfiveSeedModule {
         $this->log(pht('Created "%s".', $record['name']));
       }
 
+      foreach (idx($record, 'hidden_columns', array()) as $name) {
+        $this->ensureHiddenColumn($project, $name);
+      }
+
+      $milestones = array();
       foreach (idx($record, 'milestones', array()) as $milestone_record) {
         $milestone = $this->loadProject($milestone_record['name'], $project);
         if (!$milestone) {
@@ -38,8 +43,74 @@ final class PhabfiveProjectsSeedModule extends PhabfiveSeedModule {
             $milestone_record['name'],
             $record['name']));
         }
+        $milestones[] = $milestone;
+      }
+
+      $this->ensureProxyColumns($project, $milestones);
+    }
+  }
+
+  /**
+   * Phorge stores no column of a workboard as hidden until someone hides one
+   * from the board, so the seed hides one itself, at the end of the board.
+   */
+  private function ensureHiddenColumn(PhabricatorProject $project, $name) {
+    $columns = $this->loadColumns($project);
+    foreach ($columns as $column) {
+      if ($column->getName() === $name) {
+        return;
       }
     }
+
+    PhabricatorProjectColumn::initializeNewColumn($this->getActor())
+      ->setProjectPHID($project->getPHID())
+      ->setSequence($this->nextSequence($columns))
+      ->setName($name)
+      ->setStatus(PhabricatorProjectColumn::STATUS_HIDDEN)
+      ->save();
+
+    $this->log(pht('Hid column "%s" in "%s".', $name, $project->getName()));
+  }
+
+  /**
+   * A milestone's column on its parent's board. Phorge creates it the first
+   * time the board is drawn (PhabricatorBoardLayoutEngine), which a seeded
+   * instance nobody has opened yet never does, so project.column.search
+   * would not list it. This creates it the same way.
+   */
+  private function ensureProxyColumns(PhabricatorProject $project, array $children) {
+    $columns = $this->loadColumns($project);
+    $proxied = mpull($columns, null, 'getProxyPHID');
+
+    foreach ($children as $child) {
+      if (isset($proxied[$child->getPHID()])) {
+        continue;
+      }
+
+      $column = PhabricatorProjectColumn::initializeNewColumn($this->getActor())
+        ->setProjectPHID($project->getPHID())
+        ->setProxyPHID($child->getPHID())
+        ->setSequence($this->nextSequence($columns))
+        ->save();
+      $columns[] = $column;
+
+      $this->log(pht(
+        'Added the column of "%s" to "%s".',
+        $child->getName(),
+        $project->getName()));
+    }
+  }
+
+  private function loadColumns(PhabricatorProject $project) {
+    return id(new PhabricatorProjectColumnQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withProjectPHIDs(array($project->getPHID()))
+      ->execute();
+  }
+
+  private function nextSequence(array $columns) {
+    $sequences = mpull($columns, 'getSequence');
+    return $sequences ? max($sequences) + 1 : 0;
   }
 
   private function createWorkboard(PhabricatorProject $project, array $columns) {

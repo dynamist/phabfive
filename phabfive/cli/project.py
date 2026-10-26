@@ -165,6 +165,16 @@ def project_show(
         "--show-members",
         help="Display the project's members, with their roles",
     ),
+    show_columns: bool = typer.Option(
+        False,
+        "--show-columns",
+        help="Display the project's workboard columns, in board order",
+    ),
+    show_hidden: bool = typer.Option(
+        False,
+        "--show-hidden",
+        help="Include the columns hidden from the board (implies --show-columns)",
+    ),
     show_metadata: bool = typer.Option(
         False, "--show-metadata", "-M", help="Display metadata about the project"
     ),
@@ -183,12 +193,19 @@ def project_show(
     "admin", "disabled" and so on - which is what tells a bot account from a
     person in a script.
 
+    The columns are listed as the board shows them, left to right, with the
+    names `--column` takes. A milestone's or subproject's column carries that
+    project's name, and names it under Proxy. A column hidden from the board
+    is left out unless --show-hidden asks for it, and a project with no
+    workboard is said so on stderr.
+
     \b
     Examples:
         phabfive project show '#development'
         phabfive project show 13 --show-metadata
         phabfive project show '#qa,#development'
         phabfive project show '#humans' --show-members
+        phabfive project show '#development' --show-columns
         phabfive --format=json project show '#qa' --show-policy
     """
     from phabfive.project.display import display_projects
@@ -207,12 +224,19 @@ def project_show(
             show_members=show_members,
             show_metadata=show_metadata,
             show_description=not no_description,
+            show_columns=show_columns,
+            show_hidden=show_hidden,
         )
     except PhabfiveDataException as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
     display_projects(result, _get_output_format(ctx), project)
+
+    # Columns is null on such a project; this says why, on stderr so that
+    # stdout stays the records alone.
+    for name in result.get("no_workboard", []):
+        typer.echo(f"{name} has no workboard", err=True)
 
     # A project that does not exist is a failed lookup, not an empty result.
     # Exit non-zero even when some of the requested projects were shown, so

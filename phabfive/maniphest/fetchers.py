@@ -684,34 +684,38 @@ def get_column_info(phab, board_phid):
     Returns
     -------
     dict
-        Mapping of column PHID to {"name": str, "sequence": int}
-        Empty dict if board has no workboard or columns
+        Mapping of column PHID to {"name": str, "sequence": int,
+        "position": int, "isHidden": bool, "isDefaultColumn": bool,
+        "proxyPHID": str or None}, in board order. "sequence" is the API's;
+        "position" is the column's place on the board, which differs from
+        it once the board has a milestone column (see
+        `phabfive.project.fetchers.board_order`). Empty dict if board has no
+        workboard or columns
     """
+    from phabfive.project.fetchers import fetch_board_columns
+
     column_info = {}
 
     try:
-        # Use project.column.search to get all columns for the board
-        result = phab.project.column.search(constraints={"projects": [board_phid]})
-
-        if not result.get("data"):
-            log.debug(f"No columns found for board {board_phid}")
-            return column_info
-
-        # Build column info mapping
-        for col in result["data"]:
-            column_phid = col.get("phid")
-            if column_phid:
-                column_info[column_phid] = {
-                    "name": col["fields"].get("name", "Unknown"),
-                    "sequence": col["fields"].get(
-                        "sequence", 0
-                    ),  # Sequence determines order
-                }
-
-        log.debug(f"Loaded {len(column_info)} columns for board {board_phid}")
-
+        columns, _ = fetch_board_columns(phab, board_phid)
     except Exception as e:
         log.warning(f"Failed to fetch column info for board {board_phid}: {e}")
+        return column_info
+
+    for position, col in enumerate(columns):
+        column_phid = col.get("phid")
+        if column_phid:
+            fields = col.get("fields", {})
+            column_info[column_phid] = {
+                "name": fields.get("name", "Unknown"),
+                "sequence": fields.get("sequence", 0),
+                "position": position,
+                "isHidden": bool(fields.get("isHidden")),
+                "isDefaultColumn": bool(fields.get("isDefaultColumn")),
+                "proxyPHID": fields.get("proxyPHID"),
+            }
+
+    log.debug(f"Loaded {len(column_info)} columns for board {board_phid}")
 
     return column_info
 

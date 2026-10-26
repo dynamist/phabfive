@@ -235,10 +235,16 @@ phabfive edit T123 --tag="Sprint" --column=backward
 ```
 
 **Column Navigation Behavior:**
-- Columns are ordered by their `sequence` field
-- `forward` moves to the next column in sequence
-- `backward` moves to the previous column in sequence
+- Columns are in board order, the order `project show --show-columns` lists them in
+- `forward` moves to the next column on the board
+- `backward` moves to the previous column on the board
+- Hidden columns, and the columns of milestones and subprojects, are stepped over:
+  moving into a milestone's column puts the task in the milestone. Either can still
+  be named, e.g. `--column="Sprint 1"`
 - At boundaries (first/last column), the task stays in place
+
+A name that is not on the board is refused, with the board's columns in order and a
+pointer to `phabfive project show <board> --show-columns`, which lists them.
 
 **Example workflow:**
 ```

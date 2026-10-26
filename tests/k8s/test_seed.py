@@ -49,6 +49,48 @@ def test_projects_and_milestones(conduit, seed):
             assert found, f"milestone {milestone['name']} of {parent['name']} missing"
 
 
+def test_hidden_and_milestone_columns(conduit, seed):
+    """A board with a hidden column and a milestone's column, for #588.
+
+    Phorge creates a milestone's column on its parent's board only when the
+    board is first drawn, so without the seed creating it project.column.search
+    would not list it on an instance nobody has opened.
+    """
+    projects = conduit("project.search", limit=100)["data"]
+    tops = {
+        project["fields"]["name"]: project
+        for project in projects
+        if not project["fields"]["milestone"]
+    }
+
+    for record in seed["projects"]["projects"]:
+        hidden = record.get("hidden_columns", [])
+        milestones = [milestone["name"] for milestone in record.get("milestones", [])]
+        if not hidden and not milestones:
+            continue
+
+        board = tops[record["name"]]
+        columns = conduit(
+            "project.column.search", constraints={"projects": [board["phid"]]}
+        )["data"]
+        by_name = {column["fields"]["name"]: column["fields"] for column in columns}
+
+        for name in hidden:
+            assert by_name[name]["isHidden"] is True, (record["name"], name)
+
+        children = {
+            project["phid"]
+            for project in projects
+            if project["fields"]["milestone"]
+            and project["fields"]["parent"]["phid"] == board["phid"]
+        }
+        proxies = {column["fields"]["proxyPHID"] for column in columns} - {None}
+        assert proxies == children, record["name"]
+
+        for name in milestones:
+            assert by_name[name]["proxyPHID"] in children, (record["name"], name)
+
+
 def test_teams(conduit, seed):
     names = [team["name"] for team in seed["teams"]]
     # project.search has no "names" constraint, so the list is filtered here

@@ -3621,35 +3621,49 @@ class Maniphest(Phabfive):
                     "Could not determine current column position"
                 )
 
-            current_seq = current_info["sequence"]
+            # Step along the board's own columns as it shows them. A hidden
+            # column is not on the board, and a milestone's or subproject's
+            # column is a different project: moving into one tags the task
+            # into it, which no "next column" means. Either is still
+            # reachable by name, and either is a place to step *from*.
+            # A mapping built by hand may carry only name and sequence.
+            def position(col_data):
+                return col_data.get("position", col_data.get("sequence", 0))
 
-            # Navigate by sorting columns by sequence
-            sorted_cols = sorted(column_info.items(), key=lambda x: x[1]["sequence"])
+            current_position = position(current_info)
+            steps = [
+                (position(col_data), col_phid)
+                for col_phid, col_data in column_info.items()
+                if not col_data.get("isHidden") and not col_data.get("proxyPHID")
+            ]
 
             if column_name.lower() in ("forward", "next"):
-                for col_phid, col_data in sorted_cols:
-                    if col_data["sequence"] > current_seq:
-                        return col_phid
-                # Already at end, stay
-                return current_column_phid
+                ahead = [step for step in steps if step[0] > current_position]
+                # Already at the end, stay
+                return min(ahead)[1] if ahead else current_column_phid
 
-            else:  # backward, previous
-                for col_phid, col_data in reversed(sorted_cols):
-                    if col_data["sequence"] < current_seq:
-                        return col_phid
-                # Already at start, stay
-                return current_column_phid
+            # backward, previous
+            behind = [step for step in steps if step[0] < current_position]
+            # Already at the start, stay
+            return max(behind)[1] if behind else current_column_phid
 
         else:
-            # Exact column name - search by name
+            # Exact column name, the first in board order. A hidden column
+            # is found too: hiding one does not stop a task moving into it.
             for col_phid, col_data in column_info.items():
                 if col_data["name"].lower() == column_name.lower():
                     return col_phid
 
-            # Not found
-            available = [col_data["name"] for col_data in column_info.values()]
+            # Not found. Offered in board order, as the board shows them.
+            available = [
+                col_data["name"]
+                for col_data in column_info.values()
+                if not col_data.get("isHidden")
+            ]
             raise PhabfiveNotFoundException(
-                f"Column '{column_name}' not found on board. Available: {available}"
+                f"Column '{column_name}' not found on board. "
+                f"Available: {available}. List them with: "
+                f"phabfive project show {board_phid} --show-columns"
             )
 
 

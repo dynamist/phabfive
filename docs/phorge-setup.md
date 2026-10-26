@@ -85,6 +85,19 @@ Two milestones with the same name and the same 5-column workboards:
 
 Since they share a name, `--tag "Sprint 1"` only reaches one of them. Use the project ID (from `/project/view/<id>/`) or PHID to target a specific milestone, e.g. `--tag 9`.
 
+Each milestone also has a column on its parent's board, named after it and listed
+last, so the Development and QA boards end with a "Sprint 1" column. Phorge creates a
+milestone's column the first time the board is drawn in a browser, and the seed
+creates it instead, so that `project.column.search` lists it on an instance nobody
+has opened.
+
+The Development board also has a hidden column, **Won't Do**, after Done. Together
+they are what `project show --show-columns` and `--column=forward` are tested on:
+
+```bash
+phabfive project show '#development' --show-hidden
+```
+
 ### Teams
 
 Eight projects used as groups rather than for work: Management Team, Sales Team,

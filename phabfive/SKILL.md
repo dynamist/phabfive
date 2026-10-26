@@ -506,7 +506,19 @@ phabfive edit T123 --tag="Sprint 42" --column=forward
 ```
 
 `raise`/`lower` walk the priority ladder and skip Triage. `forward`/`backward` move by
-workboard column order and stay put at either end.
+workboard column order and stay put at either end. They step over hidden columns and
+over the columns of milestones and subprojects, which would move the task into that
+project.
+
+To move a task to a named column, look the board's columns up first rather than
+guess a name like "Review" or "Doing" - the name must match exactly:
+
+```bash
+phabfive --format=json project show '#backend' --show-columns | jq -r '.[0].Columns[].Name'
+phabfive edit T123 --tag=Backend --column="In Review"
+```
+
+A name not on the board is refused, and the error lists the board's columns in order.
 
 If a task is on more than one board, `--column` without `--tag` fails and the error lists
 ready-to-run commands, one per board. Read those instead of guessing which board was meant.
@@ -730,6 +742,7 @@ repository has a short name, so prefer the monogram when scripting.
 ```bash
 phabfive --format=json project show '#development'
 phabfive --format=json project show '#humans' --show-members
+phabfive --format=json project show '#development' --show-columns
 phabfive --format=json project show 13 --show-policy --show-metadata
 phabfive --format=table project search
 phabfive --format=json project search --member=@me
@@ -761,6 +774,12 @@ on - which is how to tell a bot account from a person:
 phabfive --format=json project show '#humans' --show-members \
   | jq -r '.[0].Members[] | select(.Roles | index("bot") | not) | .Username'
 ```
+
+`Columns` (`--show-columns`) lists the workboard's columns in board order, each as
+`Name` - what `--column` takes - `Sequence`, `Hidden`, `Default` (where new tasks land)
+and `Proxy`, the milestone or subproject a column stands for (its name is the column's
+name). Hidden columns are left out unless `--show-hidden` is given, which implies
+`--show-columns`. A project with no workboard has `Columns: null` and a note on stderr.
 
 `project search` answers with those same records, sorted by name. `--status` picks
 `active` (the default), `archived` or `any`; `--all` is a deprecated alias for

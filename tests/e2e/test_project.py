@@ -212,3 +212,68 @@ def test_audit_lists_every_project_one_per_line(phabfive_raw, conduit):
         set(record["Policy"]) == {"Visible To", "Editable By", "Joinable By"}
         for record in records
     )
+
+
+#: The seeded Development board as it shows, per phorge/seed/data/projects.json:
+#: its columns, then the column of its milestone. "Won't Do" is hidden.
+DEVELOPMENT_COLUMNS = ["Backlog", "Up Next", "In Progress", "In Review", "Done"]
+
+
+def test_show_columns_lists_the_board_in_order(phabfive):
+    [record] = phabfive(
+        "project", "show", "#development", "--show-columns", json_output=True
+    )
+
+    columns = record["Columns"]
+    assert [column["Name"] for column in columns] == [
+        *DEVELOPMENT_COLUMNS,
+        "Sprint 1",
+    ]
+    assert columns[0]["Default"] is True
+    assert columns[-1]["Proxy"].startswith("Sprint 1 (ID ")
+    assert not any(column["Hidden"] for column in columns)
+
+
+def test_show_hidden_adds_the_hidden_column(phabfive):
+    [record] = phabfive(
+        "project", "show", "#development", "--show-hidden", json_output=True
+    )
+
+    hidden = [column["Name"] for column in record["Columns"] if column["Hidden"]]
+    assert hidden == ["Won't Do"]
+
+
+def test_show_columns_of_a_project_with_no_workboard(phabfive_raw):
+    """The teams are seeded without workboards."""
+    result = phabfive_raw(
+        "--format=json", "project", "show", "#management_team", "--show-columns"
+    )
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)[0]["Columns"] is None
+    assert "#management_team has no workboard" in result.stderr
+
+
+def test_column_steps_past_neither_hidden_nor_milestone_columns(
+    create_task, phabfive, phabfive_raw
+):
+    """forward from Done stays put; a wrong name lists the board in order."""
+    task_id, _ = create_task("--tag", "Development")
+
+    def column():
+        [task] = phabfive("maniphest", "show", task_id, json_output=True)
+        return task["Boards"]["Development"]["Column"]
+
+    phabfive("edit", task_id, "--tag=Development", "--column=Done")
+    phabfive("edit", task_id, "--tag=Development", "--column=forward")
+    assert column() == "Done"
+
+    phabfive("edit", task_id, "--tag=Development", "--column=Won't Do")
+    assert column() == "Won't Do"
+    phabfive("edit", task_id, "--tag=Development", "--column=backward")
+    assert column() == "Done"
+
+    result = phabfive_raw("edit", task_id, "--tag=Development", "--column=Review")
+    assert result.returncode != 0
+    assert str([*DEVELOPMENT_COLUMNS, "Sprint 1"]) in result.stderr
+    assert "--show-columns" in result.stderr
