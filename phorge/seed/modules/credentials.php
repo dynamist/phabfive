@@ -11,7 +11,7 @@
  * PassphraseSecret, then point the credential at it with a transaction.
  *
  * K2 is created with Conduit access off on purpose. Reading its secret has to
- * fail - `passphrase show K2` answers "Access denied" - while attaching it to
+ * fail - `passphrase show K2 -s` exits 1 and names the URL - while attaching it to
  * a repository URI still works, because that needs only the PHID and the type.
  * Between them the five cover what Diffusion asks of a credential: the wrong
  * type (K1, a note), an unreadable secret (K2) and the happy path (K3).

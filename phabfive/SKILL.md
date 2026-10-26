@@ -264,7 +264,15 @@ take.
 The defaults differ per app: `paste show` prints the content by default, and
 `passphrase show` neither fetches nor prints the **secret** unless `--show-secret` (`-s`)
 is passed. Pass it only when the user asked for the value, and never echo a retrieved
-secret into a summary, a commit message or a file.
+secret into a summary, a commit message or a file. To find out what a credential is
+for, read its `Description` and `Username`, which are shown without `--show-secret`.
+
+A secret Phorge does not return is an error, not a value: `Secret` is `null`, the
+reason and the credential's URL go to stderr, and the exit status is 1 even when other
+credentials asked for in the same command were printed. That happens when Conduit
+access is off (`ConduitAccess: false`, which is shown without `--show-secret`), when
+the credential is locked or its secret destroyed, and always for a note, whose text
+`passphrase.query` never returns. Tell the user to read it in the web UI instead.
 
 ## Spaces hide objects that exist
 

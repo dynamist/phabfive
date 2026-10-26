@@ -42,6 +42,7 @@ class TestRecordShape:
             "Name",
             "Type",
             "Username",
+            "Description",
             "Secret",
             "Created",
             "Modified",

@@ -107,6 +107,28 @@
 
 ## Bug Fixes
 
+* **`passphrase show --show-secret` fails on a secret Phorge does not return.** A
+  credential without Conduit access printed `[Access denied - enable Conduit access in
+  web UI]` as its secret, and a note printed an empty one, both with exit status 0, so
+  `phabfive --format=value K1 -s > token` stored the error text, or nothing, as the
+  credential. Now `Secret` is `null` in yaml, json and jsonl, rich and tree say it is
+  unavailable, `--format=value` prints nothing for it, and the reason goes to stderr
+  with the credential's URL and the exit status is 1 - also when other credentials
+  asked for in the same command were printed. A note's text is never returned:
+  `passphrase.query` has no material for that type on any Phorge or Phabricator, so it
+  can only be read in the web UI. A locked or destroyed credential fails the same way.
+  `passphrase search --show-secret` warns about each one instead of failing. In the
+  library, `get_secret()` raises `PhabfiveDataException`, and `get_passphrases()`
+  gives such a credential `secret: None` and the reason in `secret_error`. #593
+
+* **`passphrase show` prints the credential's `Description`, and whether it allows
+  Conduit access.** Both in the `Credential` block in every format, neither needs
+  `--show-secret`: `Description` (empty when there is none) and `ConduitAccess`
+  (`true` or `false`; rich and tree print `ConduitAccess: disabled` only when it is
+  off). `Username` was already shown when the credential has one. `passphrase search`
+  carries both too. A legacy SSH private key file credential now shows its secret, the
+  path on disk Phorge sends it as, rather than an empty one. #592
+
 * **`--column=forward` and `backward` step over hidden and milestone columns.** They
   stepped by `Sequence` through every column, so `forward` from the last column went
   into a hidden one, and on from there into a milestone's column, which moves the task

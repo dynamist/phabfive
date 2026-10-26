@@ -27,6 +27,86 @@ CREDENTIAL_TYPE_FILTERS = {
     "note": ["note"],
 }
 
+# Map API type to display type
+TYPE_LABELS = {
+    "password": "Password",
+    "token": "Token",
+    "ssh-generated-key": "SSH Key",
+    "ssh-key-text": "SSH Key",
+    "ssh-key-file": "SSH Key",
+    "note": "Note",
+}
+
+# The key passphrase.query puts each type's secret under. A note has none:
+# Phorge never returns a note's text over Conduit
+SECRET_KEYS = {
+    "password": "password",
+    "token": "token",
+    "ssh-generated-key": "privateKey",
+    "ssh-key-text": "privateKey",
+    "ssh-key-file": "file",
+}
+
+
+def _material(data):
+    """The credential's material, which Conduit sends as [] when empty."""
+    material = data.get("material", {})
+    return material if isinstance(material, dict) else {}
+
+
+def conduit_access(data):
+    """Whether Conduit may read the credential's secret.
+
+    passphrase.query says so whether or not secrets were asked for, with a
+    noAPIAccess key - set when the owner never allowed Conduit access, and
+    for every locked credential.
+    """
+    return "noAPIAccess" not in _material(data)
+
+
+def extract_secret(data, url):
+    """The secret a passphrase.query record carries, or why it carries none.
+
+    Parameters
+    ----------
+    data : dict
+        One credential from passphrase.query, asked with needSecrets=1
+    url : str
+        The credential's web UI URL, named in the reason
+
+    Returns
+    -------
+    tuple
+        (secret, None), or (None, reason) when there is no secret to return.
+        Never an empty or placeholder string standing in for one.
+    """
+    material = _material(data)
+    monogram = f"K{data['id']}"
+    credential_type = data.get("type", "")
+
+    if "noAPIAccess" in material:
+        return None, (
+            f"{monogram} does not allow Conduit access to its secret, "
+            f"allow it at {url} (a locked credential never does)"
+        )
+
+    if "destroyed" in material:
+        return None, f"The secret of {monogram} has been destroyed, see {url}"
+
+    key = SECRET_KEYS.get(credential_type)
+    if key is None:
+        what = "a note's text" if credential_type == "note" else "this secret"
+        return None, (
+            f"Phorge does not return {what} over Conduit, "
+            f"read {monogram} in the web UI at {url}"
+        )
+
+    secret = material.get(key)
+    if secret is None:
+        return None, f"Phorge returned no secret for {monogram}, see {url}"
+
+    return secret, None
+
 
 class Passphrase(Phabfive):
     def _validate_identifier(self, id_):
@@ -49,13 +129,16 @@ class Passphrase(Phabfive):
             - _link: Rich Text (OSC8 hyperlink for rich/tree formats)
             - type: str (Password, Token, SSH Key, Note)
             - name: str (credential name)
+            - description: str (empty when there is none)
             - username: str or None (only for Password type)
             - secret: str (the actual secret value)
 
         Raises
         ------
         PhabfiveDataException
-            If ID is invalid, no data found, or access denied
+            If ID is invalid, no data found, or Phorge does not return the
+            secret: Conduit access is off, the credential is locked or its
+            secret destroyed, or it is a note
         PhabfiveRemoteException
             If API call fails
         """
@@ -84,46 +167,21 @@ class Passphrase(Phabfive):
         # Get the first (and only) entry
         data = next(iter(response["data"].values()))
 
-        # Check for API access denial
-        material = data.get("material", {})
-
-        # Handle material being a list (empty) or dict
-        if isinstance(material, list):
-            material = {}
-
-        if "noAPIAccess" in material:
-            raise PhabfiveDataException(
-                f"Access denied, visit {self.url}/K{numeric_id} to allow Conduit",
-            )
-
-        # Map API type to display type
-        type_map = {
-            "password": "Password",
-            "token": "Token",
-            "ssh-generated-key": "SSH Key",
-            "ssh-key-text": "SSH Key",
-            "note": "Note",
-        }
-
-        # Extract secret from material (different key per type)
-        secret = (
-            material.get("password")  # nosec-B105
-            or material.get("token")
-            or material.get("privateKey")
-            or material.get("note")
-            or ""
-        )
-
         monogram = f"K{data['id']}"
         url = f"{self.url}/{monogram}"
+        secret, reason = extract_secret(data, url)
+        if reason:
+            raise PhabfiveDataException(reason)
+
         credential_type = data.get("type", "")
 
         return {
             "id": monogram,
             "url": url,
             "_link": self.format_link(url, monogram),
-            "type": type_map.get(credential_type, credential_type or "Unknown"),
+            "type": TYPE_LABELS.get(credential_type, credential_type or "Unknown"),
             "name": data.get("name", ""),
+            "description": data.get("description") or "",
             "username": data.get("username"),
             "secret": secret,
         }
@@ -237,41 +295,7 @@ class Passphrase(Phabfive):
         dict
             Formatted credential data
         """
-        # Map API type to display type
-        type_map = {
-            "password": "Password",
-            "token": "Token",
-            "ssh-generated-key": "SSH Key",
-            "ssh-key-text": "SSH Key",
-            "note": "Note",
-        }
-
-        material = data.get("material", {})
-        if isinstance(material, list):
-            material = {}
-
-        # Extract secret from material (different key per type)
-        secret = None
-        if need_secrets:
-            if "noAPIAccess" in material:
-                secret = "[Access denied - enable Conduit access in web UI]"
-            else:
-                secret = (
-                    material.get("password")  # nosec-B105
-                    or material.get("token")
-                    or material.get("privateKey")
-                    or material.get("note")
-                    or ""
-                )
-
-        # Extract public key for SSH credentials
-        public_key = None
-        if need_public_keys and data.get("type") in (
-            "ssh-generated-key",
-            "ssh-key-text",
-        ):
-            public_key = material.get("publicKey")
-
+        material = _material(data)
         monogram = f"K{data['id']}"
         url = f"{self.url}/{monogram}"
         credential_type = data.get("type", "")
@@ -280,13 +304,28 @@ class Passphrase(Phabfive):
             "id": monogram,
             "url": url,
             "_link": self.format_link(url, monogram),
-            "type": type_map.get(credential_type, credential_type or "Unknown"),
+            "type": TYPE_LABELS.get(credential_type, credential_type or "Unknown"),
             "name": data.get("name", ""),
+            "description": data.get("description") or "",
             "username": data.get("username"),
+            "conduit_access": conduit_access(data),
         }
 
         if need_secrets:
-            result["secret"] = secret
+            # None rather than a placeholder when there is no secret, so
+            # nothing downstream can mistake the reason for the value
+            result["secret"], reason = extract_secret(data, url)
+            if reason:
+                result["secret_error"] = reason
+
+        # Extract public key for SSH credentials
+        public_key = None
+        if need_public_keys and credential_type in (
+            "ssh-generated-key",
+            "ssh-key-text",
+            "ssh-key-file",
+        ):
+            public_key = material.get("publicKey")
 
         if need_public_keys and public_key:
             result["public_key"] = public_key
@@ -398,7 +437,9 @@ class Passphrase(Phabfive):
         Returns
         -------
         list
-            List of credential dictionaries
+            List of credential dictionaries. With need_secrets, a credential
+            whose secret Phorge did not return has ``secret`` None and the
+            reason in ``secret_error``, so the others are still returned
 
         Raises
         ------

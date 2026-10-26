@@ -22,6 +22,12 @@ def _format_timestamp(ts):
 
 
 _SECRET_HIDDEN = "hidden (use --show-secret)"
+_SECRET_UNAVAILABLE = "unavailable (see the error)"
+
+
+def _secret_unavailable(passphrase_dict):
+    """Whether the secret was asked for and Phorge did not return one."""
+    return "secret" in passphrase_dict and passphrase_dict["secret"] is None
 
 
 def display_passphrase_rich(
@@ -59,9 +65,24 @@ def display_passphrase_rich(
     if username:
         console.print(f"  Username: {username}")
 
+    # Print Description (only when present)
+    description = passphrase_dict.get("description", "")
+    if description:
+        if "\n" in description:
+            console.print("  Description: |-")
+            for line in description.splitlines():
+                console.print(f"    {line}")
+        else:
+            console.print(f"  Description: {description}")
+
+    if passphrase_dict.get("conduit_access") is False:
+        console.print("  ConduitAccess: disabled")
+
     # Print Secret (only when present and non-empty)
     if secret_hidden:
         console.print(Text.assemble("  Secret: ", (_SECRET_HIDDEN, "dim")))
+    elif _secret_unavailable(passphrase_dict):
+        console.print(Text.assemble("  Secret: ", (_SECRET_UNAVAILABLE, "dim")))
     elif "secret" in passphrase_dict and secret:
         if "\n" in secret:
             console.print("  Secret: |-")
@@ -121,9 +142,23 @@ def display_passphrase_tree(
     if username:
         tree.add(f"Username: {username}")
 
+    description = passphrase_dict.get("description", "").strip()
+    if description:
+        if "\n" in description:
+            description_branch = tree.add("Description:")
+            for line in description.splitlines():
+                description_branch.add(line)
+        else:
+            tree.add(f"Description: {description}")
+
+    if passphrase_dict.get("conduit_access") is False:
+        tree.add("ConduitAccess: disabled")
+
     # Show secret only if present and non-empty
     if secret_hidden:
         tree.add(Text.assemble("Secret: ", (_SECRET_HIDDEN, "dim")))
+    elif _secret_unavailable(passphrase_dict):
+        tree.add(Text.assemble("Secret: ", (_SECRET_UNAVAILABLE, "dim")))
     elif "secret" in passphrase_dict and secret:
         secret_stripped = secret.strip()
         # For multi-line secrets, use subtree
@@ -175,6 +210,11 @@ def build_passphrase_record(cred, show_secrets=True, always_secret=False):
         Always include a Secret key, empty when the credential carries none.
         What a single ``passphrase show --show-secret`` prints for yaml and json.
 
+    A secret that was asked for and that Phorge did not return is ``None``,
+    and so ``null`` - kept as a key rather than left out, so the record is
+    shaped the same whether or not the secret could be read, and never an
+    empty string that reads as an empty secret.
+
     Returns
     -------
     dict
@@ -189,6 +229,11 @@ def build_passphrase_record(cred, show_secrets=True, always_secret=False):
     username = cred.get("username")
     if username:
         credential["Username"] = username
+
+    credential["Description"] = cred.get("description", "")
+
+    if "conduit_access" in cred:
+        credential["ConduitAccess"] = cred["conduit_access"]
 
     if always_secret:
         credential["Secret"] = cred.get("secret", "")
@@ -213,8 +258,8 @@ def build_passphrase_record(cred, show_secrets=True, always_secret=False):
 def _yaml_record(record):
     """Write a record's multi-line key material as YAML block scalars."""
     credential = dict(record["Credential"])
-    for key in ("Secret", "PublicKey"):
-        if "\n" in credential.get(key, ""):
+    for key in ("Description", "Secret", "PublicKey"):
+        if "\n" in (credential.get(key) or ""):
             credential[key] = PreservedScalarString(credential[key])
 
     return {**record, "Credential": credential}
@@ -277,6 +322,10 @@ def display_passphrase_value(passphrase_dict):
     passphrase_dict : dict
         Passphrase data dictionary with secret
     """
+    if _secret_unavailable(passphrase_dict):
+        # Nothing to print: the reason goes to stderr, never in its place
+        return
+
     # Intentional: This function's purpose is to output secrets for piping
     print(passphrase_dict.get("secret", ""))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
 
@@ -348,7 +397,7 @@ def display_passphrases(
     try:
         if output_format == "value":
             for cred in credentials:
-                if show_secrets and "secret" in cred:
+                if show_secrets and "secret" in cred and not _secret_unavailable(cred):
                     # Intentional: Output secrets for piping
                     print(cred.get("secret", ""))  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
         elif output_format == "tree":
