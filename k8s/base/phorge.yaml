@@ -159,7 +159,7 @@ spec:
         - name: ssh-key
           secret:
             secretName: phorge-ssh-key
-            # Only the public half, the private one stays in k8s/base/ssh/
+            # Only the public half of k8s/base/ssh/phabfive-insecure
             optional: true
         - name: data
           persistentVolumeClaim:

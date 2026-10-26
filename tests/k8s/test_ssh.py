@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """git over SSH, through the sshd container and `kubectl port-forward`.
 
-Reached the way `make ssh-forward` reaches it, with the admin key `make deploy`
-generated and the sshkeys seed module registered.
+Reached the way `make ssh-forward` reaches it, with the known dev key
+k8s/base/ssh/phabfive-insecure that the sshkeys seed module registered.
 """
 
 # python std lib
 import os
+import shutil
 import socket
 import subprocess
 import time
@@ -17,7 +18,7 @@ import pytest
 
 from tests.k8s.conftest import KUBE_CONTEXT, NAMESPACE, ROOT
 
-ADMIN_KEY = ROOT / "k8s/base/ssh/admin"
+ADMIN_KEY = ROOT / "k8s/base/ssh/phabfive-insecure"
 SSH_HOST = "phorge.localhost"
 SSH_PORT = 2222
 
@@ -61,8 +62,12 @@ def ssh_port():
 def git(ssh_port, tmp_path):
     """Run git with ssh pointed at the forwarded port, as `key` (the admin's by default)."""
     known_hosts = tmp_path / "known_hosts"
+    # ssh refuses a private key others can read, and git checks it out 0644
+    admin_key = tmp_path / "phabfive-insecure"
+    shutil.copyfile(ADMIN_KEY, admin_key)
+    admin_key.chmod(0o600)
 
-    def run(*args, key=ADMIN_KEY, check=True, cwd=None):
+    def run(*args, key=admin_key, check=True, cwd=None):
         command = (
             f"ssh -i {key} -o IdentitiesOnly=yes -o BatchMode=yes"
             f" -o UserKnownHostsFile={known_hosts} -o StrictHostKeyChecking=accept-new"

@@ -200,6 +200,16 @@
 
 ## Other Notes
 
+* The local Phorge's admin SSH key is a known key, committed as
+  `k8s/base/ssh/phabfive-insecure` the way the API token is, instead of one `make deploy`
+  generated into whichever worktree deployed. Every worktree can now use git over SSH,
+  and run `tests/k8s/test_ssh.py`, against the one shared instance, and `make reset`
+  keeps the key. ssh refuses a private key others can read, so `make deploy` and
+  `make ssh-forward` copy it to `.k8s/phabfive-insecure` with mode 0600. A running
+  instance picks the new key up on its next start, next to the old one. `make creds`
+  prints the whole `GIT_SSH_COMMAND`, with `StrictHostKeyChecking=accept-new`, since every
+  `make reset` brings a new host key
+
 * The local Phorge seeds a hidden column, "Won't Do", on the Development board, and
   creates the column of each milestone on its parent's board, which Phorge otherwise
   creates only when the board is first opened in a browser. #588

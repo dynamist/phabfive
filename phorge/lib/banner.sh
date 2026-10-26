@@ -176,8 +176,9 @@ print_banner() {
   echo "   $PHORGE_URL"
   echo ""
   if [ -n "${PHORGE_SSH_USER:-}" ]; then
-    echo "🔗 git over SSH, after 'make ssh-forward' (key: k8s/base/ssh/admin):"
-    echo "   ssh://${PHORGE_SSH_USER}@${PHORGE_SSH_HOST:-phorge.localhost}:${PHORGE_SSH_PORT:-22}/source/<short name>.git"
+    echo "🔗 git over SSH, after 'make ssh-forward', from the phabfive checkout:"
+    echo "   GIT_SSH_COMMAND='ssh -i .k8s/phabfive-insecure -o UserKnownHostsFile=.k8s/known_hosts -o StrictHostKeyChecking=accept-new' \\"
+    echo "     git clone ssh://${PHORGE_SSH_USER}@${PHORGE_SSH_HOST:-phorge.localhost}:${PHORGE_SSH_PORT:-22}/source/<short name>.git"
     echo ""
   fi
   echo "💡 TIP: The API token works immediately without logging in!"

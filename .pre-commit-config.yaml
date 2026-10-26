@@ -30,6 +30,8 @@ repos:
       - id: detect-aws-credentials
         args: [--allow-missing-credentials]
       - id: detect-private-key
+        # The local Phorge's dev key, public on purpose, see k8s/base/ssh/README.md
+        exclude: ^k8s/base/ssh/phabfive-insecure$
       - id: end-of-file-fixer
         exclude: |
           (?x)

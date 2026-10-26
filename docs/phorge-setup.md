@@ -221,8 +221,12 @@ client can read it: `passphrase show K1 -s` fails the way K2 does.
 Phorge serves git over SSH as well as HTTP, from a second container in the
 same pod: `web` runs Apache and the daemons, `sshd` runs OpenSSH with Phorge's
 `ssh-auth` as its `AuthorizedKeysCommand`. The admin account has an SSH key,
-which `make deploy` generates into `k8s/base/ssh/admin` (gitignored) and the
-`sshkeys` seed module registers.
+which the `sshkeys` seed module registers: `k8s/base/ssh/phabfive-insecure`, a
+known key committed to the repository like the API token, so every worktree and
+every instance use the same one. **It is public, never authorize it anywhere
+else.** ssh refuses a private key others can read, and git checks files out
+readable, so `make deploy` and `make ssh-forward` copy it to
+`.k8s/phabfive-insecure` with mode 0600, and that copy is the one to use.
 
 No port on the host reaches sshd. The cluster's published ports are shared by
 every Dynamist dev app (`k8s/cluster/k3d.yaml`), so instead `make ssh-forward`
@@ -231,7 +235,7 @@ and prints the command to use:
 
 ```bash
 make ssh-forward     # in one terminal
-GIT_SSH_COMMAND="ssh -i $PWD/k8s/base/ssh/admin -o UserKnownHostsFile=$PWD/.k8s/known_hosts -o StrictHostKeyChecking=accept-new" \
+GIT_SSH_COMMAND="ssh -i $PWD/.k8s/phabfive-insecure -o UserKnownHostsFile=$PWD/.k8s/known_hosts -o StrictHostKeyChecking=accept-new" \
   git clone ssh://git@phorge.localhost:2222/source/gunnar-firmware.git
 ```
 
@@ -248,8 +252,9 @@ and forces each to run `ssh-exec` as its owner, and `ssh-exec` runs git through
 A push runs Phorge's commit hook, so the new commits are known at once.
 
 The sshd host key is kept on the volume, so `known_hosts` stays valid across
-`make down`/`make up`. `make reset` deletes it, the admin key and
-`.k8s/known_hosts` together.
+`make down`/`make up`. `make reset` deletes it and `.k8s/known_hosts`
+together, and `StrictHostKeyChecking=accept-new` records the next instance's
+host key on first contact. The admin key stays the same.
 
 Seeded repositories have dangerous change protection on, so a pushed branch
 cannot be deleted again over SSH. Push to a repository of your own for
@@ -411,7 +416,7 @@ phorge/seed/
 | `tasks` | users, projects, spaces | tasks, through `maniphest.edit` |
 | `credentials` | auth | Passphrase credentials, through Phorge's editors |
 | `repositories` | auth, users | hosted git repositories and their history, through `diffusion.repository.edit` |
-| `sshkeys` | auth | the admin's SSH key from `k8s/base/ssh/admin.pub`, through Phorge's editor |
+| `sshkeys` | auth | the admin's SSH key from `k8s/base/ssh/phabfive-insecure.pub`, through Phorge's editor |
 
 Every module is idempotent - it creates only what is missing - so restarting the
 pod duplicates nothing. `PHORGE_SEED` is `all` by default; to seed only part of
