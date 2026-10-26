@@ -30,6 +30,7 @@ import contextlib
 import re
 
 from phabfive.exceptions import PhabfiveAPIException, PhabfiveConnectionException
+from phabfive.profiler import profiler
 from phabfive.retry import RetryPolicy, describe_status, is_read, retries_writes
 
 
@@ -87,6 +88,14 @@ def _host(resource):
     if not isinstance(url, str):
         return None
     return urlparse(url).netloc or None
+
+
+def _url(resource, method):
+    """The address a Conduit method is called at, for the profile."""
+    url = getattr(getattr(resource, "api", None), "host", None)
+    if not isinstance(url, str):
+        return method
+    return url.rstrip("/") + "/" + method
 
 
 def _unanswered(error):
@@ -180,7 +189,10 @@ class Endpoint:
         method = f"{resource.method}.{resource.endpoint}"
         _mount_retry(resource, method, object.__getattribute__(self, "_retry"))
         unsafe = not (is_read(method) or retries_writes())
-        with translated_errors(write=method if unsafe else None, host=_host(resource)):
+        with (
+            profiler.network(method, _url(resource, method), kwargs),
+            translated_errors(write=method if unsafe else None, host=_host(resource)),
+        ):
             return resource(**kwargs)
 
     def __repr__(self):

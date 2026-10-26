@@ -14,6 +14,7 @@ from time import monotonic
 from phabfive import retry
 from phabfive.commits import MIN_HASH_LENGTH
 from phabfive.exceptions import PhabfiveInputException, PhabfiveTimeoutException
+from phabfive.profiler import profiler
 
 #: How long a wait lasts unless told otherwise, in seconds
 DEFAULT_TIMEOUT = 300
@@ -90,7 +91,8 @@ def poll(check, timeout, describe):
         if remaining <= 0:
             raise PhabfiveTimeoutException(describe(pending), pending)
 
-        retry._sleep(min(interval, remaining))
+        with profiler.sleep("waiting for the repository"):
+            retry._sleep(min(interval, remaining))
         interval = min(interval * 2, MAX_INTERVAL)
 
 

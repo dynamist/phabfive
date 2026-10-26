@@ -524,7 +524,12 @@ def create(
                 # The prompt follows the preview onto stderr under a machine
                 # format, so that answering it cannot land in the stream the
                 # caller is parsing.
-                if not typer.confirm("Create task with this description?", err=machine):
+                from phabfive.profiler import profiler
+
+                question = "Create task with this description?"
+                with profiler.user_input(question):
+                    confirmed = typer.confirm(question, err=machine)
+                if not confirmed:
                     print("Cancelled", file=preview)
                     raise typer.Exit(0)
 

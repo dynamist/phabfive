@@ -961,6 +961,16 @@ secrets or task content. `phabfive cache info` reports counts and sizes without 
 values; `phabfive cache clear` drops them. Set `PHAB_CACHE=0` to disable. Nothing here
 touches the server.
 
+## Profiling a slow command
+
+`phabfive --profile <command>` records where the command's time went - each Conduit
+call, retry backoff, prompt and log record - and says on stderr where it saved the
+profile. Tokens and written text are left out of it. Read it with
+`phabfive --format=json profile --summary`: time per activity (`Time`), Conduit calls
+per method with failures and their slowest call (`Conduit`), retry and pacing sleeps
+(`Sleeps`), and warnings (`Problems`). Never run `phabfive profile` without `--summary`
+or `--list` unattended: it opens a browser and waits for it to fetch the file.
+
 ## Exit codes
 
 - `0` success. Also a search that matched nothing, and a search given no criteria.

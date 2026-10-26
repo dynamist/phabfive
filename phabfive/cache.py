@@ -33,6 +33,7 @@ from phabfive.constants import (
     CACHE_TTL_DEFAULT,
     CACHE_TTLS,
 )
+from phabfive.profiler import profiler
 
 # 3rd party imports
 import appdirs
@@ -187,6 +188,17 @@ def _entry_path(directory, namespace, key):
 def get(namespace, key, ttl=None, directory=None):
     """Return the cached value for key, or MISS.
 
+    See _get for what counts as a miss.
+    """
+    with profiler.cache("read", namespace) as marker:
+        value = _get(namespace, key, ttl, directory)
+        marker["outcome"] = "miss" if value is MISS else "hit"
+        return value
+
+
+def _get(namespace, key, ttl, directory):
+    """Return the cached value for key, or MISS.
+
     MISS covers every way this can fail to produce the value that was stored:
     no entry, an expired one, a schema from another phabfive, a digest
     collision, a truncated write, or a directory that cannot be read.
@@ -225,6 +237,12 @@ def get(namespace, key, ttl=None, directory=None):
 
 def set(namespace, key, value, ttl=None, directory=None):
     """Store a value, best effort. Never raises, never reports failure."""
+    with profiler.cache("write", namespace):
+        _set(namespace, key, value, ttl, directory)
+
+
+def _set(namespace, key, value, ttl, directory):
+    """The body of set(), without the profile marker."""
     try:
         if directory is None:
             directory = instance_dir()

@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 
+from phabfive.profiler import profiler
+
 
 def get_editor():
     """Get the user's preferred editor."""
@@ -35,7 +37,9 @@ def edit_text(initial_text="", prefix="", suffix=".remarkup"):
 
     try:
         editor = get_editor()
-        result = subprocess.run([editor, temp_path])
+        with profiler.command([editor]) as marker:
+            result = subprocess.run([editor, temp_path])
+            marker["exitCode"] = result.returncode
 
         if result.returncode != 0:
             return None
@@ -222,6 +226,12 @@ def prompt_each(monogram, stream=None):
     """
     prompt = f"Apply {monogram}? [y,n,a,q,?] "
 
+    with profiler.user_input(prompt.strip()):
+        return _read_review_key(prompt, stream)
+
+
+def _read_review_key(prompt, stream):
+    """Prompt until one of REVIEW_KEYS is answered; the loop of prompt_each."""
     while True:
         if stream is None:
             sys.stdout.write(prompt)
@@ -276,7 +286,9 @@ def confirm_apply(assume_yes, prompt="Apply changes?"):
         return (False, 1)
 
     try:
-        if typer.confirm(prompt):
+        with profiler.user_input(prompt):
+            confirmed = typer.confirm(prompt)
+        if confirmed:
             return (True, None)
         else:
             return (False, 0)

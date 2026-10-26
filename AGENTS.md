@@ -271,7 +271,7 @@ Config precedence (later overrides earlier):
 1. Hard-coded defaults
 2. `/etc/phabfive.yaml`
 3. `/etc/phabfive.d/*.yaml`
-4. `~/.config/phabfive.yaml` (PHAB_URL/PHAB_TOKEN deprecated here, use for PHAB_SPACE/PHAB_FALLBACK/PHAB_CACHE/PHAB_CACHE_TTL/PHAB_CACHE_DIR/PHAB_RETRY/PHAB_BACKOFF_MAX/PHAB_PACE)
+4. `~/.config/phabfive.yaml` (PHAB_URL/PHAB_TOKEN deprecated here, use for PHAB_SPACE/PHAB_FALLBACK/PHAB_CACHE/PHAB_CACHE_TTL/PHAB_CACHE_DIR/PHAB_RETRY/PHAB_BACKOFF_MAX/PHAB_PACE/PHAB_PROFILE/PHAB_PROFILE_KEEP/PHAB_PROFILE_DIR/PHAB_PROFILER_ORIGIN)
 5. `~/.config/phabfive.d/*.yaml`
 6. `.arcconfig` in git root (provides PHAB_URL from `phabricator.uri`)
 7. `~/.arcrc` (provides PHAB_TOKEN for matched URL)
@@ -324,6 +324,30 @@ nothing is discovered.
   as well as 2.x, since `urllib3>=1.26` is the declared floor
 - `Pacer` (`PHAB_PACE`) spaces out the writes of a batch edit, in `edit_tasks_batch` and
   `Edit.apply_all`
+
+### Profiling (`profiler.py`, `cli/profile.py`)
+
+- `--profile` or `PHAB_PROFILE` records a command as a Firefox Profiler processed profile
+  (format version in `PROCESSED_PROFILE_VERSION`); `phabfive profile` serves it once from
+  127.0.0.1 to `PHAB_PROFILER_ORIGIN` through `/from-url/`. docs/profiling.md is the
+  user-facing description
+- **Licensing: written only from the public Firefox Profiler format** (its docs and type
+  definitions), as Apache-2.0. Never copy or translate code from the profiler itself or
+  from another tool that writes these profiles - both are MPL-2.0. The module docstring
+  says so; keep it true
+- The module-level `profiler` is off until `cli/profile.py:ProfileSession` starts it, and
+  every hook is a no-op while it is off, so a program importing phabfive never records.
+  Hooks sit in `conduit.Endpoint.__call__` (network), `retry` and `diffusion/waiting.py`
+  (sleep, around `_sleep` rather than inside it, so test fakes keep their one-argument
+  signature), `cache.get`/`set`, `cli/editor.py`, `cli/apps.py` and `cli/log_setup.py`
+- Whatever is recorded must stay shareable: Conduit parameters go through
+  `describe_params`, which drops private keys and keeps only a transaction's type, and
+  log messages through `redact_text`. A prompt records its question, never its answer.
+  A new hook that records free text needs the same treatment
+- The samples are generated from the markers by `build_segments`, not sampled, so the
+  timeline colours by what the run waited on
+- `tests/conftest.py` sets `PHAB_PROFILE=0` and a temporary `PHAB_PROFILE_DIR` for every
+  test, and switches the recorder off afterwards
 
 ### Editing (`edit/`)
 

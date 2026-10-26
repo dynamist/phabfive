@@ -15,6 +15,8 @@ SUBCOMMANDS = [
     # with `edit` and ahead of the groups.
     "apply",
     "search",
+    # Opens a recorded profile, a command like the two above
+    "profile",
     "cache",
     "passphrase",
     "diffusion",
@@ -54,7 +56,7 @@ class TestRootCompletion:
         assert "T" in _values(["--format", "json"], "")
 
     def test_typed_prefix_completes_subcommands_only(self):
-        assert _values([], "p") == ["passphrase", "paste", "project"]
+        assert _values([], "p") == ["profile", "passphrase", "paste", "project"]
 
     @pytest.mark.parametrize("letter", ["T", "K", "P", "R"])
     def test_bare_letter_is_not_offered(self, letter):

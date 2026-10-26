@@ -145,6 +145,9 @@ def smoke_env(home: str, url: str = DEAD_URL) -> dict:
     # point it back at a real directory.
     env.pop("PHAB_CACHE_DIR", None)
     env.pop("PHAB_SPACE", None)
+    # Or record every check's run, somewhere outside HOME
+    for key in ("PHAB_PROFILE", "PHAB_PROFILE_DIR", "PHAB_PROFILE_KEEP"):
+        env.pop(key, None)
     return env
 
 
@@ -483,6 +486,39 @@ def check_offline_command(executable, arguments, home, timeout):
     return "clean connection error"
 
 
+def check_profile(executable, home, timeout):
+    """Record an offline run with --profile, then find it with profile --list.
+
+    The recorder hooks into the Conduit client, the retry policy and logging,
+    so a run that fails to connect still passes through most of it, and
+    building and writing the profile is the rest.
+    """
+    env = {"PHAB_PROFILE_DIR": os.path.join(home, "profiles")}
+    code, output = run(
+        executable,
+        ["--profile", "--format=json", "user", "whoami"],
+        home,
+        timeout,
+        env_extra=env,
+    )
+    for marker in IMPORT_FAILURES:
+        if marker in output:
+            raise Failure(f"broke on an import\n{indent(output)}")
+    if "Profile saved to" not in output:
+        raise Failure(f"no profile was saved\n{indent(output)}")
+
+    code, output = run(
+        executable,
+        ["--format=value", "profile", "--list"],
+        home,
+        timeout,
+        env_extra=env,
+    )
+    if code != 0 or "profile-" not in output:
+        raise Failure(f"profile --list did not find it\n{indent(output)}")
+    return "recorded and listed"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     target = parser.add_mutually_exclusive_group(required=True)
@@ -565,6 +601,10 @@ def main() -> int:
                 home,
                 args.timeout,
             ),
+        ),
+        (
+            "--profile (offline)",
+            lambda home: check_profile(executable, home, args.timeout),
         ),
     ]
 

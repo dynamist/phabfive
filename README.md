@@ -24,6 +24,7 @@ Cross-cutting features:
 - **Bare values** - `--format=value` prints the secret, the paste content or the monograms with nothing around them, for piping
 - **Agent skill** - `phabfive --skill` prints a ready-to-use skill file for AI agents
 - **Quiet by default** - `-v` reports which filters a search actually applied
+- **Profiling** - `--profile` records where a command's time went; `phabfive profile --summary` sums it up in the terminal, `phabfive profile` opens it in the Firefox Profiler
 
 For complete documentation, see [Read the Docs](https://phabfive.readthedocs.io/).
 
@@ -356,6 +357,7 @@ are not library code at all.
 ## Documentation
 
 - **[Full CLI Reference](https://phabfive.readthedocs.io)** - Complete command documentation
+- **[Profiling](docs/profiling.md)** - Record a slow command and open it in the Firefox Profiler
 - **[Development Guide](docs/development.md)** - Set up dev environment, run tests, local Phorge/Phabricator setup
 - **[Release Process](docs/releasing.md)** - How to build and publish releases
 

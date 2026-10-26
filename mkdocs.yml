@@ -16,6 +16,7 @@ nav:
     - Searching with Specs: 'search-specs.md'
     - Caching: 'caching.md'
     - Retries: 'retries.md'
+    - Profiling: 'profiling.md'
     - Development: 'development.md'
     - Phorge Setup: 'phorge-setup.md'
     - Support Matrix: 'support-matrix.md'

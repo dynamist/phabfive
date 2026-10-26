@@ -38,6 +38,7 @@ from typing import cast
 
 from phabfive.constants import DEFAULTS
 from phabfive.exceptions import PhabfiveConfigException
+from phabfive.profiler import profiler
 
 log = logging.getLogger(__name__)
 
@@ -320,7 +321,8 @@ def _retry_class():
                 f"{self.policy.retries} in {delay:.1f}s"
             )
             if delay > 0:
-                _sleep(delay)
+                with profiler.sleep(f"retry {attempt}: {self.method_name}"):
+                    _sleep(delay)
 
     _RETRY_CLASS = PolicyRetry
     return _RETRY_CLASS
@@ -348,7 +350,8 @@ class Pacer:
         if self.seconds and self._last is not None:
             remaining = self.seconds - (time.monotonic() - self._last)
             if remaining > 0:
-                _sleep(remaining)
+                with profiler.sleep("PHAB_PACE"):
+                    _sleep(remaining)
         self._last = time.monotonic()
 
 

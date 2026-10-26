@@ -52,6 +52,17 @@ def init_logging(log_level):
         },
     }
 
+    # A recorded run keeps every record in its profile, debug included,
+    # while the console still shows only what was asked for
+    from phabfive.profiler import profiler
+
+    if profiler.enabled:
+        logging_conf["root"]["level"] = "DEBUG"
+        logging_conf["root"]["handlers"].append("profile")
+        logging_conf["handlers"]["profile"] = {
+            "()": "phabfive.profiler.ProfilerHandler",
+        }
+
     logging.config.dictConfig(logging_conf)
 
     # anyconfig narrates every file it looks for; the command has its own
