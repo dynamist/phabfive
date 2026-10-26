@@ -2,6 +2,7 @@
 
 """Main Maniphest class that orchestrates all submodules."""
 
+import dataclasses
 import itertools
 import logging
 import functools
@@ -63,12 +64,11 @@ from phabfive.maniphest.resolvers import (
 )
 from phabfive.maniphest.utils import (
     PHORGE_ORDER_KEYS,
-    days_ago_to_timestamp,
     sort_tasks,
 )
 from phabfive.pagination import iter_pages, search_all_pages
 from phabfive.spec.registry import constraint_for, field_by_name, fields_for
-from phabfive.spec.times import parse_time_with_unit
+from phabfive.spec.times import parse_time
 from phabfive.ordering import parse_order
 from phabfive.maniphest.validators import (
     validate_assignment,
@@ -111,6 +111,23 @@ def _once_per_instance(method):
             return value
 
     return wrapper
+
+
+@dataclasses.dataclass
+class TaskMatches:
+    """What `Maniphest._match_tasks` found: the tasks and what the display reads.
+
+    The maps are keyed by task id and are empty unless a transition filter
+    ran or history was asked for.
+    """
+
+    tasks: list
+    task_transitions_map: dict = dataclasses.field(default_factory=dict)
+    priority_transitions_map: dict = dataclasses.field(default_factory=dict)
+    status_transitions_map: dict = dataclasses.field(default_factory=dict)
+    matching_boards_map: dict = dataclasses.field(default_factory=dict)
+    matching_priority_map: dict = dataclasses.field(default_factory=dict)
+    matching_status_map: dict = dataclasses.field(default_factory=dict)
 
 
 #: The constraints `task_search` sends only as an optimisation, and which it
@@ -1610,6 +1627,8 @@ class Maniphest(Phabfive):
                       Supports units: h (hours), d (days), w (weeks), m (months), y (years).
         updated_before (str|int, optional): Tasks updated more than TIME ago (e.g., "7d", "2w", "1m") or days as int.
                       Supports units: h (hours), d (days), w (weeks), m (months), y (years).
+                      Every time filter also takes an absolute date in local time,
+                      "2026-07-01" or "2026-07-01T09:30"; see phabfive.spec.times.
         closed_after  (str|int, optional): Tasks closed within TIME, as created_after.
         closed_before (str|int, optional): Tasks closed more than TIME ago.
         ids           (str|list, optional): Only these tasks ("T1,T2", ["T1"], 1), with every
@@ -1665,6 +1684,209 @@ class Maniphest(Phabfive):
                       Applied after ordering, so it keeps the top N of the requested order.
         order         (str, optional): Result ordering as "<field>[:asc|:desc]", e.g.
                       "updated:asc". Defaults to "priority", matching Phorge's own default.
+        """
+        matches = self._match_tasks(
+            text_query=text_query,
+            tag=tag,
+            include_task_ids=include_task_ids,
+            exclude_task_ids=exclude_task_ids,
+            assigned=assigned,
+            author=author,
+            space=space,
+            created_after=created_after,
+            created_before=created_before,
+            updated_after=updated_after,
+            updated_before=updated_before,
+            closed_after=closed_after,
+            closed_before=closed_before,
+            ids=ids,
+            phids=phids,
+            subscriber=subscriber,
+            subtype=subtype,
+            parent=parent,
+            subtask=subtask,
+            commit=commit,
+            closed_by=closed_by,
+            visible_to=visible_to,
+            editable_by=editable_by,
+            column_patterns=column_patterns,
+            priority_patterns=priority_patterns,
+            status_patterns=status_patterns,
+            show_history=show_history,
+            include_closed=include_closed,
+            order=order,
+        )
+        result_data = matches.tasks
+        task_transitions_map = matches.task_transitions_map
+        priority_transitions_map = matches.priority_transitions_map
+        status_transitions_map = matches.status_transitions_map
+        matching_boards_map = matches.matching_boards_map
+        matching_priority_map = matches.matching_priority_map
+        matching_status_map = matches.matching_status_map
+
+        # Build search params for metadata embedding
+        search_params = None
+        if show_metadata:
+            search_params = {}
+            if tag:
+                search_params["tag"] = tag
+            if text_query:
+                search_params["text_query"] = text_query
+            if assigned:
+                search_params["assigned"] = assigned
+            if author:
+                search_params["author"] = author
+            if space:
+                search_params["space"] = space
+            if visible_to:
+                search_params["visible_to"] = visible_to
+            if editable_by:
+                search_params["editable_by"] = editable_by
+            if updated_after:
+                search_params["updated_after"] = updated_after
+            if updated_before:
+                search_params["updated_before"] = updated_before
+            if created_after:
+                search_params["created_after"] = created_after
+            if created_before:
+                search_params["created_before"] = created_before
+            if include_task_ids:
+                search_params["include"] = ",".join(
+                    f"T{tid}" for tid in include_task_ids
+                )
+            if exclude_task_ids:
+                search_params["exclude"] = ",".join(
+                    f"T{tid}" for tid in exclude_task_ids
+                )
+
+        # Apply limit if specified
+        if limit and len(result_data) > limit:
+            result_data = result_data[:limit]
+
+        # Force-include tasks from --include: merged after post-filtering and
+        # after the limit so they always survive; deduplicated by task id.
+        if include_task_ids:
+            # Paged, because one maniphest.search answers with at most 100
+            # tasks and a cursor: --include with more than a hundred ids
+            # used to read the first page and silently drop the rest.
+            included_tasks = search_all_pages(
+                self._search_page,
+                constraints={"ids": list(include_task_ids)},
+                attachments={"columns": True},
+            )
+
+            found_ids = {t["id"] for t in included_tasks}
+            for tid in include_task_ids:
+                if tid not in found_ids:
+                    log.error(f"Task T{tid} not found")
+
+            # The API returns tasks in its own order (newest first); append
+            # in the order the tasks were given to --include
+            requested_order = {tid: i for i, tid in enumerate(include_task_ids)}
+            included_tasks.sort(
+                key=lambda t: requested_order.get(t["id"], len(requested_order))
+            )
+
+            existing_ids = {t["id"] for t in result_data}
+            for item in included_tasks:
+                if item["id"] in existing_ids:
+                    # Already matched the search; keep the single copy
+                    continue
+                result_data.append(item)
+                if show_history and item.get("phid"):
+                    all_fetched_transactions = self._fetch_all_transactions(
+                        item["phid"],
+                        need_columns=True,
+                        need_priority=True,
+                        need_status=True,
+                    )
+                    if all_fetched_transactions.get("columns"):
+                        task_transitions_map[item["id"]] = all_fetched_transactions[
+                            "columns"
+                        ]
+                    if all_fetched_transactions.get("priority"):
+                        priority_transitions_map[item["id"]] = all_fetched_transactions[
+                            "priority"
+                        ]
+                    if all_fetched_transactions.get("status"):
+                        status_transitions_map[item["id"]] = all_fetched_transactions[
+                            "status"
+                        ]
+
+        # After --limit and --include, so only the tasks that are published
+        # are asked about, and the ones --include added are too.
+        parents_map, subtasks_map, commits_map = (
+            self._fetch_relations(result_data) if show_relations else (None, None, None)
+        )
+
+        # Use shared method to build task data
+        return self._build_task_display_data(
+            result_data,
+            task_transitions_map=task_transitions_map,
+            priority_transitions_map=priority_transitions_map,
+            status_transitions_map=status_transitions_map,
+            parents_map=parents_map,
+            subtasks_map=subtasks_map,
+            commits_map=commits_map,
+            matching_boards_map=matching_boards_map,
+            matching_priority_map=matching_priority_map,
+            matching_status_map=matching_status_map,
+            show_history=show_history,
+            show_metadata=show_metadata,
+            show_policy=show_policy,
+            search_params=search_params,
+        )
+
+    def _match_tasks(
+        self,
+        text_query=None,
+        tag=None,
+        include_task_ids=None,
+        exclude_task_ids=None,
+        assigned=None,
+        author=None,
+        space=None,
+        created_after=None,
+        created_before=None,
+        updated_after=None,
+        updated_before=None,
+        closed_after=None,
+        closed_before=None,
+        ids=None,
+        phids=None,
+        subscriber=None,
+        subtype=None,
+        parent=None,
+        subtask=None,
+        commit=None,
+        closed_by=None,
+        visible_to=None,
+        editable_by=None,
+        column_patterns=None,
+        priority_patterns=None,
+        status_patterns=None,
+        show_history=False,
+        include_closed=False,
+        order=None,
+    ):
+        """Every task the search filters match, before anything is displayed.
+
+        The filter half of :meth:`task_search`, which is everything between
+        its arguments and its records: the server constraints, the per-project
+        merge that de-duplicates by task, the policy, commit and transition
+        filters, ordering and ``exclude_task_ids``. What it leaves to the
+        caller is presentation - ``limit``, ``include_task_ids`` (which only
+        decides here whether a general search is run at all), relations and
+        the display records - which is what lets :meth:`task_stats` count
+        exactly the tasks ``maniphest search`` would list.
+
+        Parameters are :meth:`task_search`'s, with the same meaning.
+
+        Returns
+        -------
+        TaskMatches
+            The raw ``maniphest.search`` items, ordered, and the transition
+            and match maps the display reads.
         """
         # Validation - require at least one filter. A scope keyword alone
         # (--status=any) counts, as a status pattern always has, and so does
@@ -1766,22 +1988,20 @@ class Maniphest(Phabfive):
         updated_after_original = updated_after
         updated_before_original = updated_before
 
+        # A relative TIME counts back from now, an absolute one is a moment
+        # in local time; parse_time reads both (phabfive.spec.times).
         if created_after:
-            created_after_days = parse_time_with_unit(created_after)
-            created_after = days_ago_to_timestamp(created_after_days)
+            created_after = parse_time(created_after)
         if created_before:
-            created_before_days = parse_time_with_unit(created_before)
-            created_before = days_ago_to_timestamp(created_before_days)
+            created_before = parse_time(created_before)
         if updated_after:
-            updated_after_days = parse_time_with_unit(updated_after)
-            updated_after = days_ago_to_timestamp(updated_after_days)
+            updated_after = parse_time(updated_after)
         if updated_before:
-            updated_before_days = parse_time_with_unit(updated_before)
-            updated_before = days_ago_to_timestamp(updated_before_days)
+            updated_before = parse_time(updated_before)
         if closed_after:
-            closed_after = days_ago_to_timestamp(parse_time_with_unit(closed_after))
+            closed_after = parse_time(closed_after)
         if closed_before:
-            closed_before = days_ago_to_timestamp(parse_time_with_unit(closed_before))
+            closed_before = parse_time(closed_before)
 
         # Resolve the user filters - convert @me or username(s) to PHID(s)
         assigned_phids = self._resolve_user_filter_phids(
@@ -2218,123 +2438,19 @@ class Maniphest(Phabfive):
                             "status"
                         ]
 
-        # Build search params for metadata embedding
-        search_params = None
-        if show_metadata:
-            search_params = {}
-            if tag:
-                search_params["tag"] = tag
-            if text_query:
-                search_params["text_query"] = text_query
-            if assigned:
-                search_params["assigned"] = assigned
-            if author:
-                search_params["author"] = author
-            if space:
-                search_params["space"] = space
-            if visible_to:
-                search_params["visible_to"] = visible_to
-            if editable_by:
-                search_params["editable_by"] = editable_by
-            if updated_after_original:
-                search_params["updated_after"] = updated_after_original
-            if updated_before_original:
-                search_params["updated_before"] = updated_before_original
-            if created_after_original:
-                search_params["created_after"] = created_after_original
-            if created_before_original:
-                search_params["created_before"] = created_before_original
-            if include_task_ids:
-                search_params["include"] = ",".join(
-                    f"T{tid}" for tid in include_task_ids
-                )
-            if exclude_task_ids:
-                search_params["exclude"] = ",".join(
-                    f"T{tid}" for tid in exclude_task_ids
-                )
-
-        # Remove excluded tasks before the limit so freed slots fill with
-        # other matches; IDs that didn't match anything are ignored.
+        # Remove excluded tasks; IDs that didn't match anything are ignored.
         if exclude_task_ids:
             excluded = set(exclude_task_ids)
             result_data = [t for t in result_data if t["id"] not in excluded]
 
-        # Apply limit if specified
-        if limit and len(result_data) > limit:
-            result_data = result_data[:limit]
-
-        # Force-include tasks from --include: merged after post-filtering and
-        # after the limit so they always survive; deduplicated by task id.
-        if include_task_ids:
-            # Paged, because one maniphest.search answers with at most 100
-            # tasks and a cursor: --include with more than a hundred ids
-            # used to read the first page and silently drop the rest.
-            included_tasks = search_all_pages(
-                self._search_page,
-                constraints={"ids": list(include_task_ids)},
-                attachments={"columns": True},
-            )
-
-            found_ids = {t["id"] for t in included_tasks}
-            for tid in include_task_ids:
-                if tid not in found_ids:
-                    log.error(f"Task T{tid} not found")
-
-            # The API returns tasks in its own order (newest first); append
-            # in the order the tasks were given to --include
-            requested_order = {tid: i for i, tid in enumerate(include_task_ids)}
-            included_tasks.sort(
-                key=lambda t: requested_order.get(t["id"], len(requested_order))
-            )
-
-            existing_ids = {t["id"] for t in result_data}
-            for item in included_tasks:
-                if item["id"] in existing_ids:
-                    # Already matched the search; keep the single copy
-                    continue
-                result_data.append(item)
-                if show_history and item.get("phid"):
-                    all_fetched_transactions = self._fetch_all_transactions(
-                        item["phid"],
-                        need_columns=True,
-                        need_priority=True,
-                        need_status=True,
-                    )
-                    if all_fetched_transactions.get("columns"):
-                        task_transitions_map[item["id"]] = all_fetched_transactions[
-                            "columns"
-                        ]
-                    if all_fetched_transactions.get("priority"):
-                        priority_transitions_map[item["id"]] = all_fetched_transactions[
-                            "priority"
-                        ]
-                    if all_fetched_transactions.get("status"):
-                        status_transitions_map[item["id"]] = all_fetched_transactions[
-                            "status"
-                        ]
-
-        # After --limit and --include, so only the tasks that are published
-        # are asked about, and the ones --include added are too.
-        parents_map, subtasks_map, commits_map = (
-            self._fetch_relations(result_data) if show_relations else (None, None, None)
-        )
-
-        # Use shared method to build task data
-        return self._build_task_display_data(
-            result_data,
+        return TaskMatches(
+            tasks=result_data,
             task_transitions_map=task_transitions_map,
             priority_transitions_map=priority_transitions_map,
             status_transitions_map=status_transitions_map,
-            parents_map=parents_map,
-            subtasks_map=subtasks_map,
-            commits_map=commits_map,
             matching_boards_map=matching_boards_map,
             matching_priority_map=matching_priority_map,
             matching_status_map=matching_status_map,
-            show_history=show_history,
-            show_metadata=show_metadata,
-            show_policy=show_policy,
-            search_params=search_params,
         )
 
     def add_task_comment(self, ticket_identifier, comment_string):

@@ -691,22 +691,34 @@ def search(
         autocompletion=complete_policy,
     ),
     created_after: Optional[str] = typer.Option(
-        None, "--created-after", help="Tasks created within TIME (e.g., 1h, 7d, 2w)"
+        None,
+        "--created-after",
+        help="Tasks created within TIME or since a date (e.g., 7d, 2w, 2026-07-01)",
     ),
     created_before: Optional[str] = typer.Option(
-        None, "--created-before", help="Tasks created more than TIME ago"
+        None,
+        "--created-before",
+        help="Tasks created more than TIME ago, or before a date",
     ),
     updated_after: Optional[str] = typer.Option(
-        None, "--updated-after", help="Tasks updated within TIME (e.g., 1h, 7d, 2w)"
+        None,
+        "--updated-after",
+        help="Tasks updated within TIME or since a date (e.g., 7d, 2w, 2026-07-01)",
     ),
     updated_before: Optional[str] = typer.Option(
-        None, "--updated-before", help="Tasks updated more than TIME ago"
+        None,
+        "--updated-before",
+        help="Tasks updated more than TIME ago, or before a date",
     ),
     closed_after: Optional[str] = typer.Option(
-        None, "--closed-after", help="Tasks closed within TIME (e.g., 1h, 7d, 2w)"
+        None,
+        "--closed-after",
+        help="Tasks closed within TIME or since a date (e.g., 7d, 2w, 2026-07-01)",
     ),
     closed_before: Optional[str] = typer.Option(
-        None, "--closed-before", help="Tasks closed more than TIME ago"
+        None,
+        "--closed-before",
+        help="Tasks closed more than TIME ago, or before a date",
     ),
     closed_by: Optional[str] = typer.Option(
         None,

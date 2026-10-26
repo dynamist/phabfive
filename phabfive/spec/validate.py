@@ -87,7 +87,7 @@ from phabfive.spec.registry import (
     fields_for,
 )
 from phabfive.spec.schema import SEARCH_ITEM_KEYS
-from phabfive.spec.times import parse_time_with_unit
+from phabfive.spec.times import parse_absolute_time, parse_time_with_unit
 from phabfive.spec.variables import (
     build_dependency_graph,
     declared_value,
@@ -775,10 +775,13 @@ def _check_each_string(
 def _check_time(
     object_path: str, field_path: str, field: Field, value: Any
 ) -> list[Problem]:
-    """`1h`, `7d`, `2w`, or a bare number of days.
+    """`1h`, `7d`, `2w`, a bare number of days, or a date like `2026-07-01`.
 
-    Parsed by `phabfive.spec.times.parse_time_with_unit`, which is the same
-    function `maniphest search --created-after` runs - it lives in
+    Parsed by `phabfive.spec.times.parse_absolute_time` and
+    `parse_time_with_unit`, the two readers `parse_time` is made of and the
+    same ones `maniphest search --created-after` runs. Not by `parse_time`
+    itself, which goes on to subtract the days from the clock and so would
+    turn an accepted accident like `nan` into a crash. They live in
     `phabfive/spec/` precisely so that this pass can call it without
     importing `phabfive.maniphest`, and with it `phabfive.core` and the
     `phabricator` client, onto the one code path whose whole claim is that it
@@ -798,7 +801,8 @@ def _check_time(
                 field=field_path,
                 value=value,
                 reason=(
-                    f"{field.name} takes a time such as 1h, 7d or 2w, not a "
+                    f"{field.name} takes a time such as 1h, 7d, 2w or "
+                    f"2026-07-01, not a "
                     f"{_type_name(value)}"
                 ),
                 code="wrong-type",
@@ -806,7 +810,8 @@ def _check_time(
         ]
 
     try:
-        parse_time_with_unit(value)
+        if parse_absolute_time(value) is None:
+            parse_time_with_unit(value)
     except PhabfiveException as error:
         return [
             problem(
