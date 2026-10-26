@@ -32,13 +32,15 @@
 
 ## New Features
 
-* **`project show --show-columns` lists a project's workboard columns.** In board order,
-  each with the `Name` that `--column` takes, its `Sequence`, whether it is `Hidden`,
-  whether it is the `Default` column new tasks land in, and the milestone or subproject
-  it stands for as `Proxy`. Hidden columns are left out unless `--show-hidden` is given.
-  A project with no workboard has `Columns: null` and says so on stderr. On Phabricator and
-  Phorge before 2023.32, which do not report them, `Sequence`, `Hidden` and `Default` are
-  null and the columns are in creation order. `phabfive
+* **`project show` lists a project's workboard columns.** In board order, each with the
+  `Name` that `--column` takes, its `Sequence`, whether it is `Hidden`, whether it is the
+  `Default` column new tasks land in, and the milestone or subproject it stands for as
+  `Proxy`. `--columns` picks which: `active` (the default) the ones the board shows,
+  `hidden`, `any`, or `none` to leave them out and skip the request. A project with no
+  workboard has `Columns: null`. Every project shown shares one request. On Phabricator
+  and Phorge before 2023.32, which do not report them, `Sequence`, `Hidden` and `Default`
+  are null, the columns are in creation order, `active` lists every column with a warning
+  and `hidden` is refused. `phabfive
   --skill` tells agents to look a board's columns up before moving a task to a named one,
   rather than guess. #588
 
@@ -111,7 +113,7 @@
   into the milestone and off the board. They now step only through the columns the
   board shows of its own, in board order, where a milestone's columns come last; any
   column can still be named. A `--column` not on the board lists the visible columns in
-  board order rather than newest first, and points to `project show --show-columns`.
+  board order rather than newest first, and points to `project show`.
   Shell completion offers the columns in board order and without the hidden ones.
   Phabricator and Phorge before 2023.32 do not report column order, and there
   `forward`/`backward` never moved the task and said nothing; it is now refused, naming a

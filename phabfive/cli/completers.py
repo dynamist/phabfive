@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from phabfive import cache
 from phabfive.constants import (
+    COLUMNS_CHOICES,
     MANIPHEST_ORDER_DIRECTIONS,
     MANIPHEST_ORDER_FIELDS,
     PASTE_LANGUAGES,
@@ -1281,6 +1282,11 @@ def complete_project_color(incomplete: str) -> List[str]:
 def complete_project_status(incomplete: str) -> List[str]:
     """Complete the project status filter for project search --status."""
     return _complete_fixed(incomplete, PROJECT_STATUS_CHOICES)
+
+
+def complete_columns_scope(incomplete: str) -> List[str]:
+    """Complete which workboard columns project show --columns lists."""
+    return _complete_fixed(incomplete, COLUMNS_CHOICES)
 
 
 def complete_relation(incomplete: str) -> List[str]:

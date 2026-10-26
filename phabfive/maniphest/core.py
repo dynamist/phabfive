@@ -3622,8 +3622,7 @@ class Maniphest(Phabfive):
                     f"Cannot move T{task_id} {column_name.lower()}: the server "
                     f"does not report the order of a workboard's columns "
                     f"(Phabricator, or Phorge before 2023.32). Name the column "
-                    f"instead, see: phabfive project show {board_phid} "
-                    f"--show-columns"
+                    f"instead, see: phabfive project show {board_phid}"
                 )
 
             # Find current position
@@ -3676,7 +3675,7 @@ class Maniphest(Phabfive):
             raise PhabfiveNotFoundException(
                 f"Column '{column_name}' not found on board. "
                 f"Available: {available}. List them with: "
-                f"phabfive project show {board_phid} --show-columns"
+                f"phabfive project show {board_phid}"
             )
 
 

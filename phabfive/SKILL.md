@@ -514,7 +514,7 @@ To move a task to a named column, look the board's columns up first rather than
 guess a name like "Review" or "Doing" - the name must match exactly:
 
 ```bash
-phabfive --format=json project show '#backend' --show-columns | jq -r '.[0].Columns[].Name'
+phabfive --format=json project show '#backend' | jq -r '.[0].Columns[].Name'
 phabfive edit T123 --tag=Backend --column="In Review"
 ```
 
@@ -742,7 +742,7 @@ repository has a short name, so prefer the monogram when scripting.
 ```bash
 phabfive --format=json project show '#development'
 phabfive --format=json project show '#humans' --show-members
-phabfive --format=json project show '#development' --show-columns
+phabfive --format=json project show '#development' --columns=any
 phabfive --format=json project show 13 --show-policy --show-metadata
 phabfive --format=table project search
 phabfive --format=json project search --member=@me
@@ -762,8 +762,8 @@ name two projects share is refused, and the error lists the ID of each. There is
 monogram shortcut for projects.
 
 `project show` answers with a `Link` and a `Project` section - `Name`, `Hashtag`,
-`Status`, `Icon`, `Color`, `Parent`, `Milestone`, `Description` - and `Space`, plus
-`Policy` (`--show-policy` / `-P`), `Members` (`--show-members`) and `Metadata`
+`Status`, `Icon`, `Color`, `Parent`, `Milestone`, `Description` - `Space` and
+`Columns`, plus `Policy` (`--show-policy` / `-P`), `Members` (`--show-members`) and `Metadata`
 (`--show-metadata` / `-M`) when asked. Every project carries the same `Project` keys,
 a milestone included: `Hashtag` is null on a milestone and `Parent` is null on a root
 project. `Members` lists each member as `Username`, `Name` and `Roles`, the roles
@@ -775,11 +775,14 @@ phabfive --format=json project show '#humans' --show-members \
   | jq -r '.[0].Members[] | select(.Roles | index("bot") | not) | .Username'
 ```
 
-`Columns` (`--show-columns`) lists the workboard's columns in board order, each as
-`Name` - what `--column` takes - `Sequence`, `Hidden`, `Default` (where new tasks land)
-and `Proxy`, the milestone or subproject a column stands for (its name is the column's
-name). Hidden columns are left out unless `--show-hidden` is given, which implies
-`--show-columns`. A project with no workboard has `Columns: null` and a note on stderr.
+`Columns` lists the workboard's columns in board order, each as `Name` - what
+`--column` takes - `Sequence`, `Hidden`, `Default` (where new tasks land) and `Proxy`,
+the milestone or subproject a column stands for (its name is the column's name).
+`--columns` picks which: `active` (the default) the ones the board shows, `hidden`,
+`any`, or `none` to leave the section out. A project with no workboard has
+`Columns: null`. On Phabricator and Phorge before 2023.32, which do not report which
+column is hidden, `active` lists every column with a warning on stderr and `hidden` is
+refused.
 
 `project search` answers with those same records, sorted by name. `--status` picks
 `active` (the default), `archived` or `any`; `--all` is a deprecated alias for

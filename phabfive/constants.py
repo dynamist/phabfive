@@ -281,6 +281,17 @@ PROJECT_STATUS_CHOICES = [
 # How project.search spells "any status" in its own status constraint
 PROJECT_STATUS_ALL = "all"
 
+# Which workboard columns `project show --columns` lists. "active" and
+# "hidden" are Phorge's own words for a column's state
+# (PhabricatorProjectColumn::STATUS_ACTIVE and STATUS_HIDDEN), "any" is both,
+# the way `--status=any` is on the searches, and "none" leaves the columns
+# out without asking for them.
+COLUMNS_ACTIVE = "active"
+COLUMNS_HIDDEN = "hidden"
+COLUMNS_ANY = "any"
+COLUMNS_NONE = "none"
+COLUMNS_CHOICES = [COLUMNS_ACTIVE, COLUMNS_HIDDEN, COLUMNS_ANY, COLUMNS_NONE]
+
 # The icons a stock Phorge offers a project, for completion only. The set is
 # instance configuration (projects.icons) and no Conduit method reports it,
 # so completion adds whatever icons are actually in use, and the server is
@@ -596,6 +607,11 @@ __all__ = [
     "PASTE_STATUS_ACTIVE",
     "PASTE_STATUS_ARCHIVED",
     "PASTE_STATUS_CHOICES",
+    "COLUMNS_ACTIVE",
+    "COLUMNS_ANY",
+    "COLUMNS_CHOICES",
+    "COLUMNS_HIDDEN",
+    "COLUMNS_NONE",
     "POLICY_KEYWORDS",
     "POLICY_LABELS",
     "POLICY_NOT_HOSTED",

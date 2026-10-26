@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Workboard columns: `project show --show-columns`, and `--column` on edit (#588)."""
+"""Workboard columns: `project show --columns`, and `--column` on edit (#588)."""
 
 # python std lib
 import json
@@ -11,9 +11,17 @@ from unittest import mock
 import pytest
 
 # phabfive imports
-from phabfive.exceptions import PhabfiveDataException, PhabfiveNotFoundException
+from phabfive.exceptions import (
+    PhabfiveDataException,
+    PhabfiveInputException,
+    PhabfiveNotFoundException,
+)
 from phabfive.maniphest.fetchers import get_column_info
-from phabfive.project.fetchers import board_order, fetch_board_columns
+from phabfive.project.fetchers import (
+    board_order,
+    fetch_board_columns,
+    fetch_boards_columns,
+)
 from phabfive.project.formatters import format_column
 from tests.test_project import (
     ADMIN,
@@ -75,7 +83,10 @@ class ColumnPhab(FakePhab):
 
     def _column_search(self, constraints=None, **_):
         found = [
-            column
+            {
+                **column,
+                "fields": {**column["fields"], "project": {"phid": board}},
+            }
             for board in (constraints or {}).get("projects", [])
             for column in self.boards.get(board, [])
         ]
@@ -153,6 +164,14 @@ class TestFetchBoardColumns:
 
         phab.project.search.assert_not_called()
 
+    def test_several_boards_apart(self, phab):
+        phab.boards["PHID-PROJ-14"] = DEVELOPMENT_BOARD[2:]
+
+        columns, _ = fetch_boards_columns(phab, ["PHID-PROJ-12", "PHID-PROJ-14"])
+
+        assert _names(columns["PHID-PROJ-14"]) == BOARD_ORDER
+        assert len(columns["PHID-PROJ-12"]) == len(DEVELOPMENT_BOARD)
+
     def test_a_failure_is_not_an_empty_board(self, phab):
         phab.project.column.search.side_effect = RuntimeError("boom")
 
@@ -182,21 +201,28 @@ class TestFormatColumn:
 
 
 class TestShowColumns:
-    def test_not_asked_for_no_section_and_no_request(self, phab):
+    def test_active_by_default_in_board_order(self, phab):
         result = _app(phab).show(["#development"])
-
-        assert "Columns" not in result["projects"][0]
-        phab.project.column.search.assert_not_called()
-
-    def test_board_order_without_hidden_columns(self, phab):
-        result = _app(phab).show(["#development"], show_columns=True)
 
         columns = result["projects"][0]["Columns"]
         assert [column["Name"] for column in columns] == [*BOARD_ORDER, "Sprint 1"]
-        assert result["no_workboard"] == []
+        assert result["hidden_unknown"] == []
 
-    def test_show_hidden_includes_them_and_implies_columns(self, phab):
-        result = _app(phab).show(["#development"], show_hidden=True)
+    def test_hidden_lists_only_the_hidden_ones(self, phab):
+        result = _app(phab).show(["#development"], columns="hidden")
+
+        assert result["projects"][0]["Columns"] == [
+            {
+                "Name": "Won't Do",
+                "Sequence": 5,
+                "Hidden": True,
+                "Default": False,
+                "Proxy": None,
+            }
+        ]
+
+    def test_any_lists_both(self, phab):
+        result = _app(phab).show(["#development"], columns="any")
 
         columns = result["projects"][0]["Columns"]
         assert [column["Name"] for column in columns] == [
@@ -204,27 +230,44 @@ class TestShowColumns:
             "Won't Do",
             "Sprint 1",
         ]
-        assert columns[-2]["Hidden"] is True
 
-    def test_no_workboard_is_none_and_reported(self, phab):
-        result = _app(phab).show(["#humans"], show_columns=True)
+    def test_none_leaves_the_section_out_and_asks_nothing(self, phab):
+        result = _app(phab).show(["#development"], columns="none")
+
+        assert "Columns" not in result["projects"][0]
+        phab.project.column.search.assert_not_called()
+
+    def test_an_unknown_scope_is_refused(self, phab):
+        with pytest.raises(PhabfiveInputException, match="columns must be one of"):
+            _app(phab).show(["#development"], columns="all")
+
+    def test_no_workboard_is_none(self, phab):
+        result = _app(phab).show(["#humans"])
 
         assert result["projects"][0]["Columns"] is None
-        assert result["no_workboard"] == ["#humans"]
 
-    def test_only_hidden_columns_is_an_empty_list(self, phab):
+    def test_no_column_of_the_kind_is_an_empty_list(self, phab):
         phab.boards["PHID-PROJ-14"] = [_column(1, "Backlog", 0, hidden=True)]
 
-        result = _app(phab).show(["#qa"], show_columns=True)
+        result = _app(phab).show(["#qa"])
 
         assert result["projects"][0]["Columns"] == []
-        assert result["no_workboard"] == []
+
+    def test_one_request_for_every_board(self, phab):
+        phab.boards["PHID-PROJ-14"] = DEVELOPMENT_BOARD[2:]
+
+        result = _app(phab).show(["#development", "#qa", "#humans"])
+
+        assert phab.project.column.search.call_count == 1
+        names = [
+            [column["Name"] for column in record["Columns"] or []]
+            for record in result["projects"]
+        ]
+        assert names == [[*BOARD_ORDER, "Sprint 1"], BOARD_ORDER, []]
 
     def test_cli(self, phab, restore_output_format):
         result = _invoke(
-            phab,
-            ["--format=json", "project", "show", "#development,#humans"]
-            + ["--show-columns"],
+            phab, ["--format=json", "project", "show", "#development,#humans"]
         )
 
         assert result.exit_code == 0
@@ -237,7 +280,14 @@ class TestShowColumns:
             "Proxy": None,
         }
         assert records[1]["Columns"] is None
-        assert "#humans has no workboard" in result.stderr
+        assert result.stderr == ""
+
+    def test_cli_refuses_an_unknown_scope(self, phab):
+        result = _invoke(phab, ["project", "show", "#development", "--columns=all"])
+
+        assert result.exit_code == 1
+        assert "--columns must be one of: active, hidden, any, none" in result.stderr
+        phab.project.search.assert_not_called()
 
 
 class TestGetColumnInfo:
@@ -305,7 +355,7 @@ class TestNavigateColumn:
         message = str(error.value)
         assert f"Available: {[*BOARD_ORDER, 'Sprint 1']}" in message
         assert "Won't Do" not in message
-        assert "project show PHID-PROJ-12 --show-columns" in message
+        assert message.endswith("phabfive project show PHID-PROJ-12")
 
 
 def _legacy(column):
@@ -331,7 +381,7 @@ class TestServersWithoutColumnOrder:
         assert _names(columns) == [*BOARD_ORDER, "Won't Do", "Sprint 1"]
 
     def test_unknown_is_null_not_false(self, phab):
-        result = _app(phab).show(["#development"], show_columns=True)
+        result = _app(phab).show(["#development"])
 
         columns = result["projects"][0]["Columns"]
         # Nothing says which column is hidden, so every one is listed
@@ -343,6 +393,24 @@ class TestServersWithoutColumnOrder:
             "Default": None,
             "Proxy": None,
         }
+        assert result["hidden_unknown"] == ["#development"]
+
+    def test_any_needs_no_warning(self, phab):
+        result = _app(phab).show(["#development"], columns="any")
+
+        assert len(result["projects"][0]["Columns"]) == len(DEVELOPMENT_BOARD)
+        assert result["hidden_unknown"] == []
+
+    def test_hidden_is_refused_rather_than_guessed(self, phab):
+        with pytest.raises(PhabfiveDataException, match="does not report which"):
+            _app(phab).show(["#development"], columns="hidden")
+
+    def test_cli_warns_that_every_column_is_listed(self, phab, restore_output_format):
+        result = _invoke(phab, ["--format=json", "project", "show", "#development"])
+
+        assert result.exit_code == 0
+        assert len(json.loads(result.stdout)[0]["Columns"]) == len(DEVELOPMENT_BOARD)
+        assert "#development: the server does not report which" in result.stderr
 
     def test_a_step_is_refused_rather_than_guessed(self, phab):
         with pytest.raises(PhabfiveDataException, match="does not report the order"):
