@@ -685,12 +685,15 @@ def get_column_info(phab, board_phid):
     -------
     dict
         Mapping of column PHID to {"name": str, "sequence": int,
-        "position": int, "isHidden": bool, "isDefaultColumn": bool,
-        "proxyPHID": str or None}, in board order. "sequence" is the API's;
-        "position" is the column's place on the board, which differs from
-        it once the board has a milestone column (see
-        `phabfive.project.fetchers.board_order`). Empty dict if board has no
-        workboard or columns
+        "position": int, "ordered": bool, "isHidden": bool,
+        "isDefaultColumn": bool, "proxyPHID": str or None}, in board order.
+        "sequence" is the API's; "position" is the column's place on the
+        board, which differs from it once the board has a milestone column
+        (see `phabfive.project.fetchers.board_order`). Phabricator and
+        Phorge before 2023.32 report neither a sequence nor whether a column
+        is hidden or the default: there "ordered" is False, "sequence" is 0
+        and the two flags are None. Empty dict if board has no workboard or
+        columns
     """
     from phabfive.project.fetchers import fetch_board_columns
 
@@ -710,8 +713,9 @@ def get_column_info(phab, board_phid):
                 "name": fields.get("name", "Unknown"),
                 "sequence": fields.get("sequence", 0),
                 "position": position,
-                "isHidden": bool(fields.get("isHidden")),
-                "isDefaultColumn": bool(fields.get("isDefaultColumn")),
+                "ordered": "sequence" in fields,
+                "isHidden": fields.get("isHidden"),
+                "isDefaultColumn": fields.get("isDefaultColumn"),
                 "proxyPHID": fields.get("proxyPHID"),
             }
 

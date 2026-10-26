@@ -469,7 +469,7 @@ def _get_board_columns(tag_name: str) -> List[str]:
             return [
                 col["fields"]["name"]
                 for col in columns
-                if not col["fields"].get("isHidden")
+                if col["fields"].get("isHidden") is not True
             ]
     except Exception:
         return []

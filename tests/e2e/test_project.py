@@ -10,6 +10,7 @@ import pytest
 
 from tests.phorge_versions import (
     missing_before,
+    phorge_older_than,
 )
 
 
@@ -218,7 +219,13 @@ def test_audit_lists_every_project_one_per_line(phabfive_raw, conduit):
 #: its columns, then the column of its milestone. "Won't Do" is hidden.
 DEVELOPMENT_COLUMNS = ["Backlog", "Up Next", "In Progress", "In Review", "Done"]
 
+no_column_order = missing_before(
+    "2023.32",
+    "project.column.search reports no sequence, isHidden or isDefaultColumn",
+)
 
+
+@no_column_order
 def test_show_columns_lists_the_board_in_order(phabfive):
     [record] = phabfive(
         "project", "show", "#development", "--show-columns", json_output=True
@@ -234,6 +241,7 @@ def test_show_columns_lists_the_board_in_order(phabfive):
     assert not any(column["Hidden"] for column in columns)
 
 
+@no_column_order
 def test_show_hidden_adds_the_hidden_column(phabfive):
     [record] = phabfive(
         "project", "show", "#development", "--show-hidden", json_output=True
@@ -254,6 +262,7 @@ def test_show_columns_of_a_project_with_no_workboard(phabfive_raw):
     assert "#management_team has no workboard" in result.stderr
 
 
+@no_column_order
 def test_column_steps_past_neither_hidden_nor_milestone_columns(
     create_task, phabfive, phabfive_raw
 ):
@@ -277,3 +286,21 @@ def test_column_steps_past_neither_hidden_nor_milestone_columns(
     assert result.returncode != 0
     assert str([*DEVELOPMENT_COLUMNS, "Sprint 1"]) in result.stderr
     assert "--show-columns" in result.stderr
+
+
+@pytest.mark.skipif(
+    not phorge_older_than("2023.32"), reason="this server reports column order"
+)
+def test_column_step_is_refused_without_column_order(
+    create_task, phabfive, phabfive_raw
+):
+    """Where the order is unknown a step is refused, and a name still works."""
+    task_id, _ = create_task("--tag", "Development")
+
+    result = phabfive_raw("edit", task_id, "--tag=Development", "--column=forward")
+    assert result.returncode != 0
+    assert "does not report the order" in result.stderr
+
+    phabfive("edit", task_id, "--tag=Development", "--column=Done")
+    [task] = phabfive("maniphest", "show", task_id, json_output=True)
+    assert task["Boards"]["Development"]["Column"] == "Done"

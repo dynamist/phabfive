@@ -3591,7 +3591,8 @@ class Maniphest(Phabfive):
         PhabfiveNotFoundException
             If the column is not on the board
         PhabfiveDataException
-            If the task is in no column on the board to navigate from
+            If the task is in no column on the board to navigate from, or a
+            step is asked of a server that does not report column order
         """
         from phabfive.maniphest.fetchers import get_column_info
 
@@ -3614,6 +3615,17 @@ class Maniphest(Phabfive):
                     f"Task T{task_id} is not currently in any column on this board"
                 )
 
+            # Without the board's order a step would be a guess, and
+            # these servers used to answer one by staying put without a word
+            if not all(col.get("ordered", True) for col in column_info.values()):
+                raise PhabfiveDataException(
+                    f"Cannot move T{task_id} {column_name.lower()}: the server "
+                    f"does not report the order of a workboard's columns "
+                    f"(Phabricator, or Phorge before 2023.32). Name the column "
+                    f"instead, see: phabfive project show {board_phid} "
+                    f"--show-columns"
+                )
+
             # Find current position
             current_info = column_info.get(current_column_phid)
             if not current_info:
@@ -3634,7 +3646,8 @@ class Maniphest(Phabfive):
             steps = [
                 (position(col_data), col_phid)
                 for col_phid, col_data in column_info.items()
-                if not col_data.get("isHidden") and not col_data.get("proxyPHID")
+                if col_data.get("isHidden") is not True
+                and not col_data.get("proxyPHID")
             ]
 
             if column_name.lower() in ("forward", "next"):
@@ -3658,7 +3671,7 @@ class Maniphest(Phabfive):
             available = [
                 col_data["name"]
                 for col_data in column_info.values()
-                if not col_data.get("isHidden")
+                if col_data.get("isHidden") is not True
             ]
             raise PhabfiveNotFoundException(
                 f"Column '{column_name}' not found on board. "

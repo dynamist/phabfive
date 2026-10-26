@@ -306,3 +306,47 @@ class TestNavigateColumn:
         assert f"Available: {[*BOARD_ORDER, 'Sprint 1']}" in message
         assert "Won't Do" not in message
         assert "project show PHID-PROJ-12 --show-columns" in message
+
+
+def _legacy(column):
+    """The column as Phabricator and Phorge before 2023.32 report it."""
+    fields = {
+        key: value
+        for key, value in column["fields"].items()
+        if key not in ("sequence", "isHidden", "isDefaultColumn")
+    }
+    return {**column, "fields": fields}
+
+
+class TestServersWithoutColumnOrder:
+    """Phabricator and Phorge before 2023.32: no sequence, isHidden, isDefaultColumn."""
+
+    @pytest.fixture
+    def phab(self):
+        return ColumnPhab({"PHID-PROJ-12": [_legacy(c) for c in DEVELOPMENT_BOARD]})
+
+    def test_creation_order_with_the_milestone_last(self, phab):
+        columns, _ = fetch_board_columns(phab, "PHID-PROJ-12")
+
+        assert _names(columns) == [*BOARD_ORDER, "Won't Do", "Sprint 1"]
+
+    def test_unknown_is_null_not_false(self, phab):
+        result = _app(phab).show(["#development"], show_columns=True)
+
+        columns = result["projects"][0]["Columns"]
+        # Nothing says which column is hidden, so every one is listed
+        assert len(columns) == len(DEVELOPMENT_BOARD)
+        assert columns[0] == {
+            "Name": "Backlog",
+            "Sequence": None,
+            "Hidden": None,
+            "Default": None,
+            "Proxy": None,
+        }
+
+    def test_a_step_is_refused_rather_than_guessed(self, phab):
+        with pytest.raises(PhabfiveDataException, match="does not report the order"):
+            TestNavigateColumn()._navigate(phab, 16, "forward")
+
+    def test_a_name_still_works(self, phab):
+        assert TestNavigateColumn()._navigate(phab, 16, "Done") == "PHID-PCOL-20"

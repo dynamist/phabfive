@@ -380,7 +380,9 @@ class Project(Phabfive):
             The project.search result item
         show_hidden : bool, optional
             Include the columns hidden from the board. Left out by default,
-            the way the board leaves them out.
+            the way the board leaves them out. Phabricator and Phorge before
+            2023.32 do not say which columns are hidden, so there every
+            column is listed either way.
 
         Returns
         -------
@@ -403,7 +405,7 @@ class Project(Phabfive):
         return [
             format_column(column, proxies)
             for column in columns
-            if show_hidden or not column.get("fields", {}).get("isHidden")
+            if show_hidden or column.get("fields", {}).get("isHidden") is not True
         ]
 
     def show(

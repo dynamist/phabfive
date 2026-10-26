@@ -36,7 +36,9 @@
   each with the `Name` that `--column` takes, its `Sequence`, whether it is `Hidden`,
   whether it is the `Default` column new tasks land in, and the milestone or subproject
   it stands for as `Proxy`. Hidden columns are left out unless `--show-hidden` is given.
-  A project with no workboard has `Columns: null` and says so on stderr. `phabfive
+  A project with no workboard has `Columns: null` and says so on stderr. On Phabricator and
+  Phorge before 2023.32, which do not report them, `Sequence`, `Hidden` and `Default` are
+  null and the columns are in creation order. `phabfive
   --skill` tells agents to look a board's columns up before moving a task to a named one,
   rather than guess. #588
 
@@ -110,7 +112,10 @@
   board shows of its own, in board order, where a milestone's columns come last; any
   column can still be named. A `--column` not on the board lists the visible columns in
   board order rather than newest first, and points to `project show --show-columns`.
-  Shell completion offers the columns in board order and without the hidden ones. #588
+  Shell completion offers the columns in board order and without the hidden ones.
+  Phabricator and Phorge before 2023.32 do not report column order, and there
+  `forward`/`backward` never moved the task and said nothing; it is now refused, naming a
+  column still works. #588
 
 * **A write that is not idempotent no longer warns `FutureWarning`.** Its retry was
   built with an empty `allowed_methods`, which urllib3 2.x reads as "retry any method"

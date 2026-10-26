@@ -278,6 +278,10 @@ def board_order(columns, proxies=None):
     the milestone is, so a column added to the board later has a higher
     sequence than the milestones and still comes before them.
 
+    Phabricator and Phorge before 2023.32 report no sequence. Their own
+    columns are then in the order they were created, which is the board's
+    until someone reorders it, and the milestones still go last.
+
     Parameters
     ----------
     columns : list
@@ -301,6 +305,7 @@ def board_order(columns, proxies=None):
         if milestone is not None:
             return (1, milestone, column.get("id") or 0)
 
+        # Without a sequence every column ties, and the id decides
         return (0, fields.get("sequence") or 0, column.get("id") or 0)
 
     return sorted(columns, key=key)
