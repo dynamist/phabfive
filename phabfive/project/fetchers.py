@@ -266,3 +266,96 @@ def name_spaces(phab, phids):
     except Exception as e:
         log.warning(f"Failed to resolve space PHIDs: {e}")
         return {}
+
+
+def board_order(columns, proxies=None):
+    """Workboard columns in the order the board shows them.
+
+    project.column.search answers newest first. The board shows its own
+    columns and its subprojects' by sequence, then its milestones' after
+    them all, by milestone number (PhabricatorProjectColumn::getOrderingKey).
+    A milestone's column is created the first time the board is drawn after
+    the milestone is, so a column added to the board later has a higher
+    sequence than the milestones and still comes before them.
+
+    Parameters
+    ----------
+    columns : list
+        project.column.search result items
+    proxies : dict, optional
+        Proxy PHID to its project.search item. A proxy missing from it - one
+        the viewer may not see - is ordered as a column of the board's own.
+
+    Returns
+    -------
+    list
+        The same items, in board order
+    """
+    proxies = proxies or {}
+
+    def key(column):
+        fields = column.get("fields", {})
+        proxy = proxies.get(fields.get("proxyPHID")) or {}
+        milestone = (proxy.get("fields") or {}).get("milestone")
+
+        if milestone is not None:
+            return (1, milestone, column.get("id") or 0)
+
+        return (0, fields.get("sequence") or 0, column.get("id") or 0)
+
+    return sorted(columns, key=key)
+
+
+def fetch_board_columns(phab, board_phid):
+    """A project's workboard columns, in board order, with their proxies.
+
+    Every column, the hidden ones included: what to leave out is the
+    caller's to decide.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    board_phid : str
+        The project's PHID
+
+    Returns
+    -------
+    tuple
+        ``(columns, proxies)``: project.column.search result items in board
+        order, empty when the project has no workboard, and proxy PHID to
+        the project.search item of the milestone or subproject each column
+        stands for. One more request, and only for a board that has such a
+        column.
+
+    Raises
+    ------
+    PhabfiveDataException
+        If either lookup fails. An empty board would read as a project with
+        no workboard, which is a different answer.
+    """
+    try:
+        columns = search_all_pages(
+            phab.project.column.search, constraints={"projects": [board_phid]}
+        )
+    except Exception as e:
+        raise PhabfiveDataException(f"Failed to fetch workboard columns: {e}")
+
+    proxy_phids = sorted(
+        {
+            phid
+            for column in columns
+            if (phid := column.get("fields", {}).get("proxyPHID"))
+        }
+    )
+    proxies = {}
+
+    if proxy_phids:
+        # Every status: an archived milestone's column is still on the
+        # board, hidden
+        found = fetch_projects(
+            phab, constraints={"phids": proxy_phids, "status": PROJECT_STATUS_ALL}
+        )
+        proxies = {project["phid"]: project for project in found}
+
+    return board_order(columns, proxies), proxies

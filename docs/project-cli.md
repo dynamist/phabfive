@@ -86,6 +86,8 @@ The optional sections are:
 | --- | --- |
 | `--show-policy`, `-P` | `Policy`: `Visible To`, `Editable By`, `Joinable By`. See [Policies](policies.md) |
 | `--show-members` | `Members`: `Username`, `Name` and `Roles` of each member |
+| `--show-columns` | `Columns`: the workboard's columns, in board order. See [Workboard columns](#workboard-columns) |
+| `--show-hidden` | `Columns` with the hidden columns too; implies `--show-columns` |
 | `--show-metadata`, `-M` | `Metadata`: PHID, ID, parent and Space PHIDs, timestamps |
 | `--no-description`, `-n` | Leaves the description out |
 
@@ -115,6 +117,64 @@ For example, to list every person who can use the instance but is not in `#human
 comm -23 \
   <(phabfive --format=jsonl user search --not-role=bot,list,disabled -l 0 | jq -r .User.Username | sort) \
   <(phabfive --format=json project show '#humans' --show-members | jq -r '.[0].Members[].Username' | sort)
+```
+
+### Workboard columns
+
+`--show-columns` lists a project's workboard columns as the board shows them, left
+to right, with the names `--column` takes on `edit`, `maniphest edit` and
+`maniphest create`. Look them up rather than guess one: a name not on the board is
+refused.
+
+```bash
+phabfive project show '#development' --show-columns -n
+```
+
+```
+- Link: http://phorge.localhost/project/view/12/
+  Project:
+    ...
+  Columns:
+  - Name: Backlog
+    Sequence: 0
+    Hidden: false
+    Default: true
+    Proxy:
+  - Name: Up Next
+    Sequence: 1
+    ...
+  - Name: Done
+    Sequence: 4
+    Hidden: false
+    Default: false
+    Proxy:
+  - Name: Sprint 1
+    Sequence: 6
+    Hidden: false
+    Default: false
+    Proxy: Sprint 1 (ID 13)
+```
+
+| Key | Means |
+| --- | --- |
+| `Name` | The column's name. A milestone's or subproject's column has that project's name, as on the board, and an unnamed default column is `Backlog` |
+| `Sequence` | Phorge's own number for the column's place |
+| `Hidden` | Hidden from the board. Only listed with `--show-hidden` |
+| `Default` | The column a task lands in when it is put on the board |
+| `Proxy` | The milestone or subproject the column stands for: its hashtag, or its name and ID for a milestone. Empty on the board's own columns |
+
+The board puts its own columns and its subprojects' in `Sequence` order and its
+milestones' after them all, in milestone order, so a column added after a milestone
+has a higher `Sequence` and still comes before it. The list is in the board's order,
+not by `Sequence`.
+
+A project with no workboard has `Columns` empty (`null`), and `has no workboard` is
+written to stderr. A board whose columns are all hidden has `Columns: []`.
+
+To get just the names:
+
+```bash
+phabfive --format=json project show '#development' --show-columns | jq -r '.[0].Columns[].Name'
 ```
 
 ## Searching projects

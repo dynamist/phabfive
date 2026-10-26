@@ -6,6 +6,7 @@
     {"name": "Infrastructure", "description": "Servers, virtualization, and network management"},
     {"name": "Development", "description": "Development tools and environment setup",
      "members": ["mikael.wallin", "viola.larsson"],
+     "hidden_columns": ["Won't Do"],
      "milestones": [{"name": "Sprint 1"}]},
     {"name": "QA", "description": "Testing, quality assurance, and compliance validation",
      "milestones": [{"name": "Sprint 1"}]},

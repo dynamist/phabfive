@@ -452,6 +452,7 @@ def _get_board_columns(tag_name: str) -> List[str]:
     try:
         from phabfive.core import Phabfive
         from phabfive.maniphest.resolvers import resolve_project_phids
+        from phabfive.project.fetchers import fetch_board_columns
 
         with contextlib.redirect_stderr(io.StringIO()):
             pf = Phabfive()
@@ -462,16 +463,14 @@ def _get_board_columns(tag_name: str) -> List[str]:
 
             board_phid = phids[0]  # Use first match
 
-            # Fetch columns for this board
-            result = pf.phab.project.column.search(
-                constraints={"projects": [board_phid]}
-            )
+            # The columns the board shows, in its order
+            columns, _ = fetch_board_columns(pf.phab, board_phid)
 
-            if not result.get("data"):
-                return []
-
-            # Extract column names
-            return [col["fields"]["name"] for col in result["data"]]
+            return [
+                col["fields"]["name"]
+                for col in columns
+                if not col["fields"].get("isHidden")
+            ]
     except Exception:
         return []
 

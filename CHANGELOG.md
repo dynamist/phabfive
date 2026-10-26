@@ -32,6 +32,14 @@
 
 ## New Features
 
+* **`project show --show-columns` lists a project's workboard columns.** In board order,
+  each with the `Name` that `--column` takes, its `Sequence`, whether it is `Hidden`,
+  whether it is the `Default` column new tasks land in, and the milestone or subproject
+  it stands for as `Proxy`. Hidden columns are left out unless `--show-hidden` is given.
+  A project with no workboard has `Columns: null` and says so on stderr. `phabfive
+  --skill` tells agents to look a board's columns up before moving a task to a named one,
+  rather than guess. #588
+
 * **`--title` (`-t`) shows in the help of `maniphest create/edit` and `paste create/edit`,
   and `phabfive edit` takes it too.**
   It was hidden, so `--help` gave no sign that a task or a paste can be renamed, nor a way
@@ -95,6 +103,15 @@
 
 ## Bug Fixes
 
+* **`--column=forward` and `backward` step over hidden and milestone columns.** They
+  stepped by `Sequence` through every column, so `forward` from the last column went
+  into a hidden one, and on from there into a milestone's column, which moves the task
+  into the milestone and off the board. They now step only through the columns the
+  board shows of its own, in board order, where a milestone's columns come last; any
+  column can still be named. A `--column` not on the board lists the visible columns in
+  board order rather than newest first, and points to `project show --show-columns`.
+  Shell completion offers the columns in board order and without the hidden ones. #588
+
 * **A write that is not idempotent no longer warns `FutureWarning`.** Its retry was
   built with an empty `allowed_methods`, which urllib3 2.x reads as "retry any method"
   and warns will mean the opposite in v3. It was never sent twice, since its read and
@@ -133,6 +150,10 @@
   carries the `host` and the `status` for a program to read
 
 ## Other Notes
+
+* The local Phorge seeds a hidden column, "Won't Do", on the Development board, and
+  creates the column of each milestone on its parent's board, which Phorge otherwise
+  creates only when the board is first opened in a browser. #588
 
 * The local Phorge's API token no longer disappears when nobody uses it in the first
   hour. The seeder made it a `cli` token, which Phorge expires an hour after it is

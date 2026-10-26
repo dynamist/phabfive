@@ -100,6 +100,46 @@ def format_member(phid, user=None):
     }
 
 
+def format_column(column, proxies=None):
+    """
+    One workboard column, as a record.
+
+    Parameters
+    ----------
+    column : dict
+        The project.column.search result item
+    proxies : dict, optional
+        Proxy PHID to its project.search item, from
+        phabfive.project.fetchers.fetch_board_columns
+
+    Returns
+    -------
+    dict
+        {"Name", "Sequence", "Hidden", "Default", "Proxy"}. Name is what the
+        board shows: Phorge reports a milestone's or subproject's column by
+        that project's name, and the default column, when nobody named it,
+        as "Backlog". Proxy is the project the column stands for, told apart
+        the way describe_project tells one apart - a milestone shares its
+        name with the milestones of other projects - its PHID when the
+        viewer may not see it, and None on a column of the board's own.
+    """
+    fields = column.get("fields", {})
+    proxy_phid = fields.get("proxyPHID")
+    proxy = None
+
+    if proxy_phid:
+        found = (proxies or {}).get(proxy_phid)
+        proxy = describe_project(found) if found else proxy_phid
+
+    return {
+        "Name": fields.get("name", ""),
+        "Sequence": fields.get("sequence"),
+        "Hidden": bool(fields.get("isHidden")),
+        "Default": bool(fields.get("isDefaultColumn")),
+        "Proxy": proxy,
+    }
+
+
 def project_member_phids(project):
     """The PHIDs of a project's members, from its members attachment."""
     members = project.get("attachments", {}).get("members", {}).get("members", [])
@@ -114,6 +154,7 @@ def build_project_display_data(
     space_map=None,
     policy_names=None,
     users=None,
+    columns=None,
     show_policy=False,
     show_members=False,
     show_metadata=False,
@@ -147,6 +188,12 @@ def build_project_display_data(
         Policy PHID to its name
     users : dict, optional
         User PHID to user.search result item, for the members
+    columns : dict, optional
+        Project PHID to its column records, from format_column, already in
+        board order and already without what was not asked for. A project
+        missing from it has no workboard and gets None, which is not the
+        empty list of a board whose every column is hidden. None for the
+        whole argument means nobody asked, and leaves the section out.
     show_policy, show_members, show_metadata : bool, optional
         Include that section
     show_description : bool, optional
@@ -210,6 +257,9 @@ def build_project_display_data(
             record["Members"] = sorted(
                 members, key=lambda member: member["Username"].casefold()
             )
+
+        if columns is not None:
+            record["Columns"] = columns.get(project.get("phid"))
 
         if show_metadata:
             record["Metadata"] = {
