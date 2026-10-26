@@ -86,10 +86,11 @@ The optional sections are:
 | --- | --- |
 | `--show-policy`, `-P` | `Policy`: `Visible To`, `Editable By`, `Joinable By`. See [Policies](policies.md) |
 | `--show-members` | `Members`: `Username`, `Name` and `Roles` of each member |
-| `--show-columns` | `Columns`: the workboard's columns, in board order. See [Workboard columns](#workboard-columns) |
-| `--show-hidden` | `Columns` with the hidden columns too; implies `--show-columns` |
 | `--show-metadata`, `-M` | `Metadata`: PHID, ID, parent and Space PHIDs, timestamps |
 | `--no-description`, `-n` | Leaves the description out |
+
+`Columns`, the workboard's columns, is there unless `--columns=none` leaves it out. See
+[Workboard columns](#workboard-columns).
 
 `-M` means `--show-metadata` here, as it does on `diffusion repo show`, so
 `--show-members` has no short form.
@@ -121,13 +122,13 @@ comm -23 \
 
 ### Workboard columns
 
-`--show-columns` lists a project's workboard columns as the board shows them, left
+`project show` lists a project's workboard columns as the board shows them, left
 to right, with the names `--column` takes on `edit`, `maniphest edit` and
 `maniphest create`. Look them up rather than guess one: a name not on the board is
 refused.
 
 ```bash
-phabfive project show '#development' --show-columns -n
+phabfive project show '#development' -n
 ```
 
 ```
@@ -159,7 +160,7 @@ phabfive project show '#development' --show-columns -n
 | --- | --- |
 | `Name` | The column's name. A milestone's or subproject's column has that project's name, as on the board, and an unnamed default column is `Backlog` |
 | `Sequence` | Phorge's own number for the column's place |
-| `Hidden` | Hidden from the board. Only listed with `--show-hidden` |
+| `Hidden` | Hidden from the board. Only listed with `--columns=hidden` or `any` |
 | `Default` | The column a task lands in when it is put on the board |
 | `Proxy` | The milestone or subproject the column stands for: its hashtag, or its name and ID for a milestone. Empty on the board's own columns |
 
@@ -168,18 +169,31 @@ milestones' after them all, in milestone order, so a column added after a milest
 has a higher `Sequence` and still comes before it. The list is in the board's order,
 not by `Sequence`.
 
-A project with no workboard has `Columns` empty (`null`), and `has no workboard` is
-written to stderr. A board whose columns are all hidden has `Columns: []`.
+`--columns` says which columns are listed:
+
+| `--columns` | Lists |
+| --- | --- |
+| `active` (default) | The columns the board shows |
+| `hidden` | Only the columns hidden from the board |
+| `any` | Both |
+| `none` | No `Columns` at all, and no request for them |
+
+All the projects shown share one `project.column.search`, however many there are.
+
+A project with no workboard has `Columns` empty (`null`). A board with no column of
+the kind asked for, such as `--columns=hidden` on a board with none hidden, has
+`Columns: []`.
 
 Phabricator and Phorge before 2023.32 do not report a column's sequence, or whether it
 is hidden or the default. There the columns are listed in the order they were created,
-milestones last, with `Sequence`, `Hidden` and `Default` empty, and hidden columns are
-listed too. See the [Support Matrix](support-matrix.md#known-gaps).
+milestones last, with `Sequence`, `Hidden` and `Default` empty. The default
+`--columns=active` lists every column, hidden ones too, and says so on stderr;
+`--columns=hidden` is refused. See the [Support Matrix](support-matrix.md#known-gaps).
 
 To get just the names:
 
 ```bash
-phabfive --format=json project show '#development' --show-columns | jq -r '.[0].Columns[].Name'
+phabfive --format=json project show '#development' | jq -r '.[0].Columns[].Name'
 ```
 
 ## Searching projects

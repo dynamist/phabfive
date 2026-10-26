@@ -92,10 +92,10 @@ creates it instead, so that `project.column.search` lists it on an instance nobo
 has opened.
 
 The Development board also has a hidden column, **Won't Do**, after Done. Together
-they are what `project show --show-columns` and `--column=forward` are tested on:
+they are what `project show --columns` and `--column=forward` are tested on:
 
 ```bash
-phabfive project show '#development' --show-hidden
+phabfive project show '#development' --columns=any
 ```
 
 ### Teams

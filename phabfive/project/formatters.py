@@ -194,8 +194,9 @@ def build_project_display_data(
         Project PHID to its column records, from format_column, already in
         board order and already without what was not asked for. A project
         missing from it has no workboard and gets None, which is not the
-        empty list of a board whose every column is hidden. None for the
-        whole argument means nobody asked, and leaves the section out.
+        empty list of a board with no column of the kind asked for. None
+        for the whole argument means nobody asked, and leaves the section
+        out.
     show_policy, show_members, show_metadata : bool, optional
         Include that section
     show_description : bool, optional

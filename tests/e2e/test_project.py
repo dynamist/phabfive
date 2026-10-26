@@ -226,10 +226,8 @@ no_column_order = missing_before(
 
 
 @no_column_order
-def test_show_columns_lists_the_board_in_order(phabfive):
-    [record] = phabfive(
-        "project", "show", "#development", "--show-columns", json_output=True
-    )
+def test_show_lists_the_columns_the_board_shows_in_order(phabfive):
+    [record] = phabfive("project", "show", "#development", json_output=True)
 
     columns = record["Columns"]
     assert [column["Name"] for column in columns] == [
@@ -242,24 +240,62 @@ def test_show_columns_lists_the_board_in_order(phabfive):
 
 
 @no_column_order
-def test_show_hidden_adds_the_hidden_column(phabfive):
+def test_columns_hidden_lists_only_the_hidden_column(phabfive):
     [record] = phabfive(
-        "project", "show", "#development", "--show-hidden", json_output=True
+        "project", "show", "#development", "--columns=hidden", json_output=True
     )
 
-    hidden = [column["Name"] for column in record["Columns"] if column["Hidden"]]
-    assert hidden == ["Won't Do"]
+    assert [column["Name"] for column in record["Columns"]] == ["Won't Do"]
 
 
-def test_show_columns_of_a_project_with_no_workboard(phabfive_raw):
-    """The teams are seeded without workboards."""
+@no_column_order
+def test_columns_any_lists_both(phabfive_raw):
     result = phabfive_raw(
-        "--format=json", "project", "show", "#management_team", "--show-columns"
+        "--format=json", "project", "show", "#development", "--columns=any"
     )
+
+    columns = json.loads(result.stdout)[0]["Columns"]
+    assert [column["Name"] for column in columns] == [
+        *DEVELOPMENT_COLUMNS,
+        "Won't Do",
+        "Sprint 1",
+    ]
+    assert columns[-2]["Hidden"] is True
+    assert result.stderr == ""
+
+
+def test_columns_none_leaves_them_out(phabfive):
+    [record] = phabfive(
+        "project", "show", "#development", "--columns=none", json_output=True
+    )
+
+    assert "Columns" not in record
+
+
+def test_columns_of_a_project_with_no_workboard(phabfive_raw):
+    """The teams are seeded without workboards."""
+    result = phabfive_raw("--format=json", "project", "show", "#management_team")
 
     assert result.returncode == 0
     assert json.loads(result.stdout)[0]["Columns"] is None
-    assert "#management_team has no workboard" in result.stderr
+    assert result.stderr == ""
+
+
+@pytest.mark.skipif(
+    not phorge_older_than("2023.32"), reason="this server reports hidden columns"
+)
+def test_columns_without_knowing_which_are_hidden(phabfive_raw):
+    """Every column is listed with a warning, and only the hidden ones refused."""
+    result = phabfive_raw("--format=json", "project", "show", "#development")
+
+    assert result.returncode == 0
+    columns = json.loads(result.stdout)[0]["Columns"]
+    assert "Won't Do" in [column["Name"] for column in columns]
+    assert "does not report which columns are hidden" in result.stderr
+
+    result = phabfive_raw("project", "show", "#development", "--columns=hidden")
+    assert result.returncode != 0
+    assert "does not report which columns are hidden" in result.stderr
 
 
 @no_column_order
@@ -285,7 +321,7 @@ def test_column_steps_past_neither_hidden_nor_milestone_columns(
     result = phabfive_raw("edit", task_id, "--tag=Development", "--column=Review")
     assert result.returncode != 0
     assert str([*DEVELOPMENT_COLUMNS, "Sprint 1"]) in result.stderr
-    assert "--show-columns" in result.stderr
+    assert "List them with: phabfive project show PHID-PROJ-" in result.stderr
 
 
 @pytest.mark.skipif(

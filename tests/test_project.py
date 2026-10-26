@@ -119,6 +119,11 @@ class FakePhab:
         self.page_size = page_size
         self.project = MagicMock()
         self.project.search.side_effect = self._project_search
+        # No workboards: `project show` lists columns unless told otherwise
+        self.project.column.search.return_value = {
+            "data": [],
+            "cursor": {"after": None},
+        }
         self.project.edit.return_value = {"object": {"id": 99, "phid": "PHID-PROJ-new"}}
         self.user = MagicMock()
         self.user.search.side_effect = self._user_search

@@ -6,6 +6,11 @@ import logging
 
 
 from phabfive.constants import (
+    COLUMNS_ACTIVE,
+    COLUMNS_ANY,
+    COLUMNS_CHOICES,
+    COLUMNS_HIDDEN,
+    COLUMNS_NONE,
     PROJECT_COLORS,
     PROJECT_ICONS,
     PROJECT_MILESTONE_ICON,
@@ -42,7 +47,7 @@ from phabfive.policy import (
     resolve_policy_value,
 )
 from phabfive.project.fetchers import (
-    fetch_board_columns,
+    fetch_boards_columns,
     fetch_projects,
     fetch_users_by_phid,
     fill_project_status,
@@ -324,9 +329,8 @@ class Project(Phabfive):
 
         Spaces are always named; policies and members only when asked for,
         each at the cost of one batched lookup for the whole set however
-        many projects it holds. Columns are fetched by the caller, a board
-        at a time, since project.column.search has no batched form worth
-        the name.
+        many projects it holds. Columns are fetched by the caller, which
+        decides which of them to list.
         """
         policy_names = None
         users = None
@@ -371,42 +375,69 @@ class Project(Phabfive):
             show_description=show_description,
         )
 
-    def board_columns(self, project, show_hidden=False):
-        """A project's workboard columns, as the records `show` lists.
+    def board_columns(self, projects, columns=COLUMNS_ACTIVE):
+        """The workboard columns of projects, as the records `show` lists.
 
         Parameters
         ----------
-        project : dict
-            The project.search result item
-        show_hidden : bool, optional
-            Include the columns hidden from the board. Left out by default,
-            the way the board leaves them out. Phabricator and Phorge before
-            2023.32 do not say which columns are hidden, so there every
-            column is listed either way.
+        projects : list
+            project.search result items
+        columns : str, optional
+            Which columns: "active" (the default) the ones the board shows,
+            "hidden" the ones hidden from it, "any" both. Phabricator and
+            Phorge before 2023.32 do not say which columns are hidden, so
+            there "active" lists every column and says so, and "hidden" is
+            refused.
 
         Returns
         -------
-        list or None
-            Column records (see format_column) in board order, or None when
-            the project has no workboard - no column at all, hidden or not.
-            Turning a workboard on creates its default column, so a board
-            always has one.
+        tuple
+            ``(listed, hidden_unknown)``. listed maps a project's PHID to its
+            column records (see format_column) in board order, and leaves
+            out a project with no workboard - no column at all, hidden or
+            not. Turning a workboard on creates its default column, so a
+            board always has one. hidden_unknown names each project whose
+            columns were all listed for "active" because the server does not
+            say which are hidden.
 
         Raises
         ------
         PhabfiveDataException
-            If the columns cannot be fetched
+            If the columns cannot be fetched, or "hidden" was asked of a
+            server that does not report it
         """
-        columns, proxies = fetch_board_columns(self.phab, project["phid"])
+        boards, proxies = fetch_boards_columns(
+            self.phab, [project["phid"] for project in projects]
+        )
+        listed = {}
+        hidden_unknown = []
 
-        if not columns:
-            return None
+        for project in projects:
+            board = boards.get(project["phid"])
+            if not board:
+                continue
 
-        return [
-            format_column(column, proxies)
-            for column in columns
-            if show_hidden or column.get("fields", {}).get("isHidden") is not True
-        ]
+            known = all("isHidden" in column.get("fields", {}) for column in board)
+
+            if not known and columns == COLUMNS_HIDDEN:
+                raise PhabfiveDataException(
+                    f"Cannot list only the hidden columns of "
+                    f"{describe_project(project)}: the server does not report "
+                    f"which columns are hidden (Phabricator, or Phorge before "
+                    f"2023.32). '{COLUMNS_ANY}' lists every column"
+                )
+            if not known and columns == COLUMNS_ACTIVE:
+                hidden_unknown.append(describe_project(project))
+
+            listed[project["phid"]] = [
+                format_column(column, proxies)
+                for column in board
+                if columns == COLUMNS_ANY
+                or not known
+                or column["fields"]["isHidden"] == (columns == COLUMNS_HIDDEN)
+            ]
+
+        return listed, hidden_unknown
 
     def show(
         self,
@@ -415,8 +446,7 @@ class Project(Phabfive):
         show_members=False,
         show_metadata=False,
         show_description=True,
-        show_columns=False,
-        show_hidden=False,
+        columns=COLUMNS_ACTIVE,
     ):
         """Show one or more projects in full.
 
@@ -432,19 +462,31 @@ class Project(Phabfive):
             Include that section
         show_description : bool, optional
             Include the description
-        show_columns : bool, optional
-            Include the workboard columns, in board order
-        show_hidden : bool, optional
-            Include the columns hidden from the board too, and imply
-            show_columns
+        columns : str, optional
+            Which workboard columns to list, in board order: "active" (the
+            default), "hidden", "any", or "none" for no Columns section and
+            no request for it. See board_columns.
 
         Returns
         -------
         dict
-            {"projects": [...], "missing_ids": [...], "no_workboard": [...]}.
-            "no_workboard" names each project shown with show_columns that
-            has no workboard, whose Columns are None rather than a list.
+            {"projects": [...], "missing_ids": [...], "hidden_unknown": [...]}.
+            A project with no workboard has Columns None, which is not the
+            empty list of a board with no column of the kind asked for.
+            "hidden_unknown" is board_columns' own.
+
+        Raises
+        ------
+        PhabfiveInputException
+            If columns is not one of COLUMNS_CHOICES
+        PhabfiveDataException
+            If the columns cannot be fetched, see board_columns
         """
+        if columns not in COLUMNS_CHOICES:
+            raise PhabfiveInputException(
+                f"columns must be one of: {', '.join(COLUMNS_CHOICES)}"
+            )
+
         attachments = {"members": True} if show_members else None
 
         found = []
@@ -463,17 +505,11 @@ class Project(Phabfive):
             if all(project["phid"] != seen["phid"] for seen in found):
                 found.append(project)
 
-        columns = None
-        no_workboard = []
+        listed = None
+        hidden_unknown = []
 
-        if show_columns or show_hidden:
-            columns = {}
-            for project in found:
-                listed = self.board_columns(project, show_hidden=show_hidden)
-                if listed is None:
-                    no_workboard.append(describe_project(project))
-                else:
-                    columns[project["phid"]] = listed
+        if columns != COLUMNS_NONE:
+            listed, hidden_unknown = self.board_columns(found, columns=columns)
 
         projects = self._display_data(
             found,
@@ -481,13 +517,13 @@ class Project(Phabfive):
             show_members=show_members,
             show_metadata=show_metadata,
             show_description=show_description,
-            columns=columns,
+            columns=listed,
         )
 
         return {
             "projects": projects,
             "missing_ids": missing_ids,
-            "no_workboard": no_workboard,
+            "hidden_unknown": hidden_unknown,
         }
 
     def search(

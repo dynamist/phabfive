@@ -8,6 +8,7 @@ import typer
 
 from phabfive.cli.agents import AgentFooterGroup
 from phabfive.cli.completers import (
+    complete_columns_scope,
     complete_policy,
     complete_project_color,
     complete_project_status,
@@ -27,6 +28,8 @@ from phabfive.cli.output import (
 )
 from phabfive.cli.spec_flags import with_spec_option
 from phabfive.constants import (
+    COLUMNS_ACTIVE,
+    COLUMNS_CHOICES,
     PROJECT_MILESTONE_ICON,
     PROJECT_ORDER_DEFAULT,
     PROJECT_ORDER_DIRECTIONS,
@@ -165,15 +168,12 @@ def project_show(
         "--show-members",
         help="Display the project's members, with their roles",
     ),
-    show_columns: bool = typer.Option(
-        False,
-        "--show-columns",
-        help="Display the project's workboard columns, in board order",
-    ),
-    show_hidden: bool = typer.Option(
-        False,
-        "--show-hidden",
-        help="Include the columns hidden from the board (implies --show-columns)",
+    columns: str = typer.Option(
+        COLUMNS_ACTIVE,
+        "--columns",
+        help="Which workboard columns to list, in board order: active "
+        "(default), hidden, any, or none",
+        autocompletion=complete_columns_scope,
     ),
     show_metadata: bool = typer.Option(
         False, "--show-metadata", "-M", help="Display metadata about the project"
@@ -193,11 +193,12 @@ def project_show(
     "admin", "disabled" and so on - which is what tells a bot account from a
     person in a script.
 
-    The columns are listed as the board shows them, left to right, with the
-    names `--column` takes. A milestone's or subproject's column carries that
-    project's name, and names it under Proxy. A column hidden from the board
-    is left out unless --show-hidden asks for it, and a project with no
-    workboard is said so on stderr.
+    The workboard's columns are listed as the board shows them, left to
+    right, with the names `--column` takes. A milestone's or subproject's
+    column carries that project's name, and names it under Proxy. Only the
+    columns the board shows are listed: --columns=hidden lists the ones
+    hidden from it, --columns=any both, and --columns=none leaves them out.
+    A project with no workboard has no Columns (null).
 
     \b
     Examples:
@@ -205,10 +206,15 @@ def project_show(
         phabfive project show 13 --show-metadata
         phabfive project show '#qa,#development'
         phabfive project show '#humans' --show-members
-        phabfive project show '#development' --show-columns
+        phabfive project show '#development' --columns=any
         phabfive --format=json project show '#qa' --show-policy
     """
     from phabfive.project.display import display_projects
+
+    if columns not in COLUMNS_CHOICES:
+        choices = ", ".join(COLUMNS_CHOICES)
+        typer.echo(f"ERROR: --columns must be one of: {choices}", err=True)
+        raise typer.Exit(1)
 
     _setup_output_options(ctx)
     project = _get_project_app()
@@ -224,8 +230,7 @@ def project_show(
             show_members=show_members,
             show_metadata=show_metadata,
             show_description=not no_description,
-            show_columns=show_columns,
-            show_hidden=show_hidden,
+            columns=columns,
         )
     except PhabfiveDataException as e:
         typer.echo(f"ERROR: {e}", err=True)
@@ -233,10 +238,13 @@ def project_show(
 
     display_projects(result, _get_output_format(ctx), project)
 
-    # Columns is null on such a project; this says why, on stderr so that
-    # stdout stays the records alone.
-    for name in result.get("no_workboard", []):
-        typer.echo(f"{name} has no workboard", err=True)
+    # On stderr, so that stdout stays the records alone
+    for name in result.get("hidden_unknown", []):
+        typer.echo(
+            f"WARNING: {name}: the server does not report which columns are "
+            f"hidden, so every column is listed",
+            err=True,
+        )
 
     # A project that does not exist is a failed lookup, not an empty result.
     # Exit non-zero even when some of the requested projects were shown, so

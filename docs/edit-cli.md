@@ -235,7 +235,7 @@ phabfive edit T123 --tag="Sprint" --column=backward
 ```
 
 **Column Navigation Behavior:**
-- Columns are in board order, the order `project show --show-columns` lists them in
+- Columns are in board order, the order `project show` lists them in
 - `forward` moves to the next column on the board
 - `backward` moves to the previous column on the board
 - Hidden columns, and the columns of milestones and subprojects, are stepped over:
@@ -244,7 +244,7 @@ phabfive edit T123 --tag="Sprint" --column=backward
 - At boundaries (first/last column), the task stays in place
 
 A name that is not on the board is refused, with the board's columns in order and a
-pointer to `phabfive project show <board> --show-columns`, which lists them.
+pointer to `phabfive project show <board>`, which lists them.
 
 Phabricator and Phorge before 2023.32 do not report the order of a board's columns, so
 there `forward`/`backward` is refused and the column has to be named.

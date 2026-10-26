@@ -311,27 +311,28 @@ def board_order(columns, proxies=None):
     return sorted(columns, key=key)
 
 
-def fetch_board_columns(phab, board_phid):
-    """A project's workboard columns, in board order, with their proxies.
+def fetch_boards_columns(phab, board_phids):
+    """The workboard columns of several projects, in board order, with their proxies.
 
     Every column, the hidden ones included: what to leave out is the
-    caller's to decide.
+    caller's to decide. One project.column.search for all the boards,
+    however many there are.
 
     Parameters
     ----------
     phab : Phabricator
         Phabricator API client
-    board_phid : str
-        The project's PHID
+    board_phids : list
+        The projects' PHIDs
 
     Returns
     -------
     tuple
-        ``(columns, proxies)``: project.column.search result items in board
-        order, empty when the project has no workboard, and proxy PHID to
-        the project.search item of the milestone or subproject each column
-        stands for. One more request, and only for a board that has such a
-        column.
+        ``(columns, proxies)``: board PHID to its project.column.search
+        result items in board order, without the projects that have no
+        workboard, and proxy PHID to the project.search item of the
+        milestone or subproject each column stands for. One more request,
+        and only when some board has such a column.
 
     Raises
     ------
@@ -339,9 +340,13 @@ def fetch_board_columns(phab, board_phid):
         If either lookup fails. An empty board would read as a project with
         no workboard, which is a different answer.
     """
+    board_phids = list(dict.fromkeys(board_phids))
+    if not board_phids:
+        return {}, {}
+
     try:
-        columns = search_all_pages(
-            phab.project.column.search, constraints={"projects": [board_phid]}
+        found_columns = search_all_pages(
+            phab.project.column.search, constraints={"projects": board_phids}
         )
     except Exception as e:
         raise PhabfiveDataException(f"Failed to fetch workboard columns: {e}")
@@ -349,7 +354,7 @@ def fetch_board_columns(phab, board_phid):
     proxy_phids = sorted(
         {
             phid
-            for column in columns
+            for column in found_columns
             if (phid := column.get("fields", {}).get("proxyPHID"))
         }
     )
@@ -363,4 +368,35 @@ def fetch_board_columns(phab, board_phid):
         )
         proxies = {project["phid"]: project for project in found}
 
-    return board_order(columns, proxies), proxies
+    # Asked for one board, every column is that board's
+    only = board_phids[0] if len(board_phids) == 1 else None
+    columns = {}
+    for column in found_columns:
+        board = (column.get("fields", {}).get("project") or {}).get("phid") or only
+        columns.setdefault(board, []).append(column)
+
+    return {
+        board: board_order(listed, proxies) for board, listed in columns.items()
+    }, proxies
+
+
+def fetch_board_columns(phab, board_phid):
+    """One project's workboard columns, in board order, with their proxies.
+
+    See fetch_boards_columns.
+
+    Returns
+    -------
+    tuple
+        ``(columns, proxies)``: project.column.search result items in board
+        order, empty when the project has no workboard, and proxy PHID to
+        the project.search item each column stands for
+
+    Raises
+    ------
+    PhabfiveDataException
+        If either lookup fails
+    """
+    columns, proxies = fetch_boards_columns(phab, [board_phid])
+
+    return columns.get(board_phid, []), proxies
