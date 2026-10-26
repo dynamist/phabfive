@@ -171,6 +171,11 @@ not by `Sequence`.
 A project with no workboard has `Columns` empty (`null`), and `has no workboard` is
 written to stderr. A board whose columns are all hidden has `Columns: []`.
 
+Phabricator and Phorge before 2023.32 do not report a column's sequence, or whether it
+is hidden or the default. There the columns are listed in the order they were created,
+milestones last, with `Sequence`, `Hidden` and `Default` empty, and hidden columns are
+listed too. See the [Support Matrix](support-matrix.md#known-gaps).
+
 To get just the names:
 
 ```bash

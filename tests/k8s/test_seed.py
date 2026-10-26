@@ -76,7 +76,11 @@ def test_hidden_and_milestone_columns(conduit, seed):
         by_name = {column["fields"]["name"]: column["fields"] for column in columns}
 
         for name in hidden:
-            assert by_name[name]["isHidden"] is True, (record["name"], name)
+            # Reported only from 2023.32 on; the column exists either way
+            if phorge_older_than("2023.32"):
+                assert name in by_name, (record["name"], name)
+            else:
+                assert by_name[name]["isHidden"] is True, (record["name"], name)
 
         children = {
             project["phid"]

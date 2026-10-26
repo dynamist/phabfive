@@ -246,6 +246,9 @@ phabfive edit T123 --tag="Sprint" --column=backward
 A name that is not on the board is refused, with the board's columns in order and a
 pointer to `phabfive project show <board> --show-columns`, which lists them.
 
+Phabricator and Phorge before 2023.32 do not report the order of a board's columns, so
+there `forward`/`backward` is refused and the column has to be named.
+
 **Example workflow:**
 ```
 Backlog (seq: 0) → In Progress (seq: 1) → Review (seq: 2) → Done (seq: 3)

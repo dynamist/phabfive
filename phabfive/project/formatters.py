@@ -122,6 +122,8 @@ def format_column(column, proxies=None):
         the way describe_project tells one apart - a milestone shares its
         name with the milestones of other projects - its PHID when the
         viewer may not see it, and None on a column of the board's own.
+        Sequence, Hidden and Default are None on Phabricator and Phorge
+        before 2023.32, which do not report them: unknown, not false.
     """
     fields = column.get("fields", {})
     proxy_phid = fields.get("proxyPHID")
@@ -134,8 +136,8 @@ def format_column(column, proxies=None):
     return {
         "Name": fields.get("name", ""),
         "Sequence": fields.get("sequence"),
-        "Hidden": bool(fields.get("isHidden")),
-        "Default": bool(fields.get("isDefaultColumn")),
+        "Hidden": fields.get("isHidden"),
+        "Default": fields.get("isDefaultColumn"),
         "Proxy": proxy,
     }
 
