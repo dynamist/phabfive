@@ -1039,3 +1039,41 @@ def display_users(user_dicts, output_format, phabfive_instance):
         # Quietly exit - this is normal behavior
         sys.stderr.close()
         sys.exit(0)
+
+
+def display_task_stats(records, output_format, phabfive_instance):
+    """Display `maniphest stats` records: a table in the terminal.
+
+    One record per period is a grid by nature, so ``rich`` - the default -
+    prints the same table ``--format=table`` does, and ``tree`` falls back
+    to it too. ``yaml``, ``json`` and ``jsonl`` publish the records as they
+    are, ``jsonl`` one period per line, through `phabfive.json_output`.
+
+    Parameters
+    ----------
+    records : list
+        The records `Maniphest.task_stats` answered with
+    output_format : str
+        One of 'rich', 'tree', 'yaml', 'json', 'jsonl', 'table' or 'value'
+    phabfive_instance : Phabfive
+        Instance to access the console
+    """
+    from phabfive.record_display import display_records_yaml
+
+    if not records:
+        display_empty(output_format)
+        return
+
+    def table():
+        display_records_table(phabfive_instance.get_console(), records)
+
+    render_records(
+        output_format,
+        {
+            "json": lambda: emit_records(records, "json"),
+            "jsonl": lambda: emit_records(records, "jsonl"),
+            "yaml": lambda: display_records_yaml(records),
+            "table": table,
+            "rich": table,
+        },
+    )

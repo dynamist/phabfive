@@ -78,7 +78,7 @@ class TestRootCompletion:
         assert "--format" in _values([], "--f")
 
     def test_subcommand_completion_unchanged(self):
-        assert _values(["maniphest"], "s") == ["show", "search", "subtasks"]
+        assert _values(["maniphest"], "s") == ["show", "search", "stats", "subtasks"]
 
 
 class TestCompletionAfterMonogram:

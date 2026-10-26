@@ -83,8 +83,9 @@ class TestDeclarations:
         transition grammar over a task's history when it filters and one
         priority name when it creates, and `parent:` is a task monogram on
         the search side and a project on the create side. `status` stays the
-        one exception the rule allows within a verb - a pattern on a task and
-        a plain enum of three on a project.
+        one exception the rule allows within a verb - a pattern on a task, a
+        plain enum of three on a project, and a pattern again on task-stats,
+        whose default scope is "any" rather than "open".
         """
         by_key = {}
         for field in FIELDS:
@@ -112,9 +113,9 @@ class TestDeclarations:
                 ("visible-to", "create"),
             )
         } == {
-            "text_query": ["passphrase", "paste", "project", "task"],
+            "text_query": ["passphrase", "paste", "project", "task", "task-stats"],
             "limit": ["passphrase", "paste", "project", "task"],
-            "author": ["paste", "task"],
+            "author": ["paste", "task", "task-stats"],
             "show-policy": ["project", "task"],
             "title": ["paste", "task"],
             "projects": ["paste", "task"],

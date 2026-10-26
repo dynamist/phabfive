@@ -86,8 +86,10 @@ def parse_absolute_time(time_value):
 
     Parameters
     ----------
-    time_value : str, int, float, or None
-        ``YYYY-MM-DD``, ``YYYY-MM-DDTHH:MM`` or ``YYYY-MM-DD HH:MM:SS``.
+    time_value : str, int, float, datetime.date, or None
+        ``YYYY-MM-DD``, ``YYYY-MM-DDTHH:MM`` or ``YYYY-MM-DD HH:MM:SS``. A
+        program may hand in a `datetime.datetime`, which is returned as it
+        is, or a `datetime.date`, which is its midnight.
 
     Returns
     -------
@@ -108,6 +110,12 @@ def parse_absolute_time(time_value):
     >>> parse_absolute_time("7d") is None
     True
     """
+    if isinstance(time_value, datetime.datetime):
+        return time_value
+
+    if isinstance(time_value, datetime.date):
+        return datetime.datetime.combine(time_value, datetime.time())
+
     if time_value is None or isinstance(time_value, (bool, int, float)):
         return None
 
@@ -140,8 +148,10 @@ def parse_time(time_value):
 
     Parameters
     ----------
-    time_value : str, int, float, or None
-        ``7d``, ``2w``, ``14``, ``2026-07-01`` or ``2026-07-01T09:30``.
+    time_value : str, int, float, datetime.date, or None
+        ``7d``, ``2w``, ``14``, ``2026-07-01`` or ``2026-07-01T09:30``, or a
+        `datetime.datetime` or `datetime.date` from a program. A naive one
+        is local time.
 
     Returns
     -------

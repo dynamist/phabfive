@@ -60,12 +60,15 @@ from phabfive.spec.registry import (
 )
 from phabfive.spec.search import (
     PARAM_DEFAULTS,
+    SEARCH_PARAMS,
     SearchPlan,
     SearchPlanError,
     SearchResult,
     check_search_params,
     plan_search,
     run_search,
+    task_ids,
+    transition_filter,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
@@ -276,6 +279,61 @@ def _passphrase_params(app: Any, values: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+#: The `task-stats` keys passed through to `Maniphest.task_stats` as
+#: written, keyed as a spec spells them. The task filters are
+#: `SEARCH_PARAMS`'s own entries, so a filter is spelled the same way for a
+#: search and a count; the four range keys are a count's alone.
+_STATS_KEYS = (
+    "text_query",
+    "tag",
+    "assigned",
+    "author",
+    "space",
+    "visible-to",
+    "editable-by",
+    "updated-after",
+    "updated-before",
+    "ids",
+    "phids",
+    "subscriber",
+    "subtype",
+    "parent",
+    "subtask",
+    "commit",
+    "closed-by",
+)
+_STATS_RANGE = ("since", "until", "period", "by")
+
+
+def _task_stats_params(app: Any, values: Mapping[str, Any]) -> dict[str, Any]:
+    """`Maniphest.task_stats`'s keyword arguments.
+
+    The transition patterns and `exclude:` are read by the same functions a
+    task search reads them with, so a pattern that does not parse is refused
+    in the same words, and `status:` is parsed against this instance.
+    """
+    from phabfive.transitions import parse_column_patterns, parse_priority_patterns
+
+    params: dict[str, Any] = {
+        SEARCH_PARAMS[key]: values.get(key) for key in _STATS_KEYS
+    }
+    params.update({key: values.get(key) for key in _STATS_RANGE})
+    params["period"] = params["period"] or "week"
+    params["all_closed"] = bool(values.get("all-closed"))
+    params["exclude_task_ids"] = task_ids(values.get("exclude"))
+    params["column_patterns"] = transition_filter(
+        values.get("column"), "column", parse_column_patterns
+    )
+    params["priority_patterns"] = transition_filter(
+        values.get("priority"), "priority", parse_priority_patterns
+    )
+    params["status_patterns"] = transition_filter(
+        values.get("status"), "status", app.parse_status_patterns_with_api
+    )
+
+    return params
+
+
 #: One row per object type. Appended to, never reordered.
 _SEARCH_RUNNERS = {
     "task": SearchRunner(
@@ -338,6 +396,21 @@ _SEARCH_RUNNERS = {
         records_key=None,
         criteria=("query", "credential_type"),
         text_key=("query",),
+    ),
+    "task-stats": SearchRunner(
+        object_type="task-stats",
+        module="phabfive.maniphest",
+        app="Maniphest",
+        method="task_stats",
+        keys=_STATS_KEYS
+        + _STATS_RANGE
+        + ("all-closed", "exclude", "column", "priority", "status"),
+        build=_task_stats_params,
+        # The method answers with the per-period records themselves.
+        records_key=None,
+        # A count needs a range to count over; every other filter narrows it.
+        criteria=("since",),
+        text_key=("text_query",),
     ),
 }
 

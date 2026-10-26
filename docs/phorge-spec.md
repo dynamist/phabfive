@@ -185,7 +185,7 @@ document search three applications.
 | `kind:` | Body keys | What it holds |
 |---|---|---|
 | `create` | `tasks:`, `projects:`, `pastes:` | One section per object type, each a list of items. An item creates something when it names it: a paste by its `title:`; a project by its `name:`; a task by its `title:`. |
-| `search` | `searches:` | One list of items, each naming what it searches with its own `type:`: `passphrase`, `paste`, `project`, `task`. `type:` defaults to `task`. |
+| `search` | `searches:` | One list of items, each naming what it searches with its own `type:`: `passphrase`, `paste`, `project`, `task`, `task-stats`. `type:` defaults to `task`. |
 
 Refused by name rather than ignored: `passphrases:` &mdash; passphrases cannot be created: Phorge exposes no passphrase.edit endpoint. Credentials must be created in the web UI. Passphrase search specs are supported.
 
@@ -376,7 +376,7 @@ for itself what it searches.
 
 | Key | Meaning |
 |---|---|
-| `type` | What this item searches: `passphrase`, `paste`, `project`, `task`. Defaults to `task`. |
+| `type` | What this item searches: `passphrase`, `paste`, `project`, `task`, `task-stats`. Defaults to `task`. |
 | `title` | A banner for *this search's* results. Not the file's name. |
 | `description` | What this search is for, shown with the banner. |
 | `search` | The filters, whose keys are this `type:`'s search keys. |
@@ -492,6 +492,75 @@ A `search:` mapping's keys are those of its item's `type:`.
 | `type` | text | &mdash; | &mdash; | &mdash; | Credential type: password, token, key or note. |
 
 <!-- END GENERATED keys passphrase/search -->
+
+#### task-stats
+
+Tasks **counted** rather than listed. A `task-stats` item answers with one
+record per calendar period of its range - and, with `by:`, one per period and
+group - holding the tasks created and closed in it. The task filters mean what
+they mean on a `task` item. `since:` and `until:` take the place of the
+`created-*` and `closed-*` times, and there is no `include:`, `limit:`,
+`order:` or `show-*`, none of which says anything about a count.
+
+A reader counts by these rules:
+
+- **Two searches.** `since:` and `until:` are sent twice, as
+  `createdStart`/`createdEnd` and as `closedStart`/`closedEnd`, each over the
+  whole range - never one search per period. The range is half-open: `since:`
+  counts, `until:` does not, and `until:` absent means now.
+- **Periods** are ISO weeks starting on Monday, calendar months or calendar
+  quarters, in the reader's local time, labelled `2026-W27`, `2026-07` and
+  `2026-Q3`. The first and last are clipped to the range, and every period in
+  it has a record, an empty one included. A date as `since:` gives whole
+  periods; a relative time starts the first one part-way through.
+- **Once per task.** A task matched through several projects counts once per
+  period and group, by PHID. With `by: project` it counts once in each of its
+  projects' groups.
+- **Closed** is the instance's default closed status only, unless
+  `all-closed: true` counts every closed status. `Net` is created minus closed
+  as counted.
+- **Reopened tasks.** A task's close date is its most recent one, so a task
+  closed, reopened and closed again counts once, in the period of its last
+  close, and a task reopened and still open is not counted as closed.
+- **Time to close** is the median and the 85th percentile of close date minus
+  creation date, in days, over the tasks counted as closed in the period,
+  interpolated linearly between closest ranks. Not the mean, which a few very
+  old tasks skew.
+- **Points** added and completed are left out of every record, rather than
+  reported as 0, when no task found carries points at all.
+
+<!-- BEGIN GENERATED keys task-stats/search -->
+
+| Key | Value | Repeatable | Default | Sent as | Meaning |
+|---|---|---|---|---|---|
+| `text_query` | text | &mdash; | &mdash; | `query` | Free-text search in the title and description. |
+| `tag` | project reference | &mdash; | &mdash; | `projects` | Project, workboard, hashtag, ID or PHID; wildcards allowed. |
+| `exclude` | monogram: `T123` | yes | &mdash; | &mdash; | Tasks to drop from the results even when the filters match. |
+| `assigned` | user reference | &mdash; | &mdash; | `assigned` | Assignee: a username, @me, @none for unassigned, or a user PHID. |
+| `author` | user reference | &mdash; | &mdash; | `authorPHIDs` | Author: a username, @me, or a user PHID. |
+| `space` | Space reference | &mdash; | &mdash; | `spaces` | Space monogram, name or pattern; wildcards allowed. |
+| `updated-after` | time | &mdash; | &mdash; | `modifiedStart` | Tasks updated within TIME or since a date, e.g. 7d, 2w, 2026-07-01. |
+| `updated-before` | time | &mdash; | &mdash; | `modifiedEnd` | Tasks updated more than TIME ago, or before a date. |
+| `visible-to` | policy | &mdash; | &mdash; | &mdash; | Only tasks whose view policy is exactly this. |
+| `editable-by` | policy | &mdash; | &mdash; | &mdash; | Only tasks whose edit policy is exactly this. |
+| `column` | pattern | &mdash; | &mdash; | `columnPHIDs` | Column transition filter, e.g. in:Backlog or never:Done. |
+| `priority` | pattern | &mdash; | &mdash; | `priorities` | Priority transition filter, e.g. in:High or from:Low. |
+| `ids` | monogram: `T123` | yes | &mdash; | `ids` | Only these tasks, with every other filter still applied. |
+| `phids` | text | yes | &mdash; | `phids` | Only these task PHIDs, with every other filter still applied. |
+| `subscriber` | user reference | yes | &mdash; | `subscribers` | Tasks a user is subscribed to: a username, @me, or a PHID. |
+| `subtype` | text | yes | &mdash; | `subtypes` | Task subtype key, e.g. 'default' or one this instance defines. |
+| `parent` | monogram: `T123` | yes | &mdash; | `parentIDs` | Subtasks of these tasks; @some for any parent, @none for none. |
+| `subtask` | monogram: `T123` | yes | &mdash; | `subtaskIDs` | Parents of these tasks; @some for any subtask, @none for none. |
+| `commit` | enum: `@some`, `@none` | &mdash; | &mdash; | &mdash; | @some for tasks with a commit attached, @none for none. |
+| `closed-by` | user reference | yes | &mdash; | `closerPHIDs` | Tasks closed by a user: a username, @me, or a user PHID. |
+| `since` | time | &mdash; | &mdash; | &mdash; | Start of the range, inclusive: a date such as 2026-07-01, or 12w. |
+| `until` | time | &mdash; | &mdash; | &mdash; | End of the range, exclusive, as since. Defaults to now. |
+| `period` | enum: `week`, `month`, `quarter` | &mdash; | `week` | &mdash; | ISO weeks, calendar months or quarters, in local time. |
+| `by` | enum: `owner`, `project`, `subtype`, `closer` | &mdash; | &mdash; | &mdash; | Split each period into groups. |
+| `all-closed` | boolean | &mdash; | `false` | &mdash; | Count every closed status, not only the default closed one. |
+| `status` | pattern | &mdash; | `any` | `statuses` | any, open, closed, or transition patterns ANDed with +. |
+
+<!-- END GENERATED keys task-stats/search -->
 
 The **Sent as** column names the Conduit `*.search` constraint a key's value is
 sent as. A key with no constraint is applied by the reader over the records that
@@ -982,6 +1051,35 @@ searches:
       status: open
       updated-after: 30d
       limit: 25
+```
+
+### Counting tasks
+
+```yaml
+spec: phorge/v1alpha1
+kind: search
+metadata:
+  name: development-throughput
+  description: How the Development backlog moved this quarter.
+
+searches:
+  - type: task-stats
+    title: Created and resolved per week
+    search:
+      tag: Development
+      since: 2026-07-01
+      until: 2026-10-01
+      period: week
+
+  - type: task-stats
+    title: Closed per owner, every closed status
+    search:
+      tag: Development
+      since: 2026-07-01
+      until: 2026-10-01
+      period: month
+      by: owner
+      all-closed: true
 ```
 
 ### Searching projects

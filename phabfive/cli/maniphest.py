@@ -1033,6 +1033,237 @@ def search(
             _echo_no_match_hint(plan.text_query)
 
 
+#: What `--period` and `--by` take, restated for typer's completion and help;
+#: `phabfive.maniphest.stats` is the source of truth and a test holds them
+#: equal.
+_STATS_PERIODS = ("week", "month", "quarter")
+_STATS_GROUPINGS = ("owner", "project", "subtype", "closer")
+
+
+@maniphest_app.command()
+def stats(
+    ctx: typer.Context,
+    text_query: Optional[str] = typer.Argument(
+        None, help="Free-text search in task title/description"
+    ),
+    since: str = typer.Option(
+        ...,
+        "--since",
+        help="Start of the range, inclusive: a date such as 2026-07-01, or a "
+        "TIME such as 12w",
+    ),
+    until: Optional[str] = typer.Option(
+        None,
+        "--until",
+        help="End of the range, exclusive, as --since  [default: now]",
+    ),
+    period: str = typer.Option(
+        "week",
+        "--period",
+        help="week (ISO weeks), month or quarter, in local time",
+        autocompletion=lambda: list(_STATS_PERIODS),
+    ),
+    by: Optional[str] = typer.Option(
+        None,
+        "--by",
+        help="Split each period by owner, project, subtype or closer",
+        autocompletion=lambda: list(_STATS_GROUPINGS),
+    ),
+    all_closed: bool = typer.Option(
+        False,
+        "--all-closed",
+        help="Count every closed status as closed, not only the instance's "
+        "default closed status (Resolved)",
+    ),
+    tag: Optional[str] = typer.Option(
+        None,
+        "--tag",
+        help="Filter by project/workboard name, hashtag, ID, or PHID (supports wildcards)",
+        autocompletion=complete_tag,
+    ),
+    exclude: Optional[str] = typer.Option(
+        None,
+        "--exclude",
+        help="Leave task(s) out of the counts (e.g., T123 or T123,T456)",
+    ),
+    assigned: Optional[str] = typer.Option(
+        None,
+        "--assigned",
+        help="Filter by assignee: username, @me for yourself, @none for "
+        "unassigned, or user PHID",
+        autocompletion=complete_assignee_filter,
+    ),
+    author: Optional[str] = typer.Option(
+        None,
+        "--author",
+        help="Filter by task author: username, @me for yourself, or user PHID",
+        autocompletion=complete_user_list_filter,
+    ),
+    space: Optional[str] = typer.Option(
+        None,
+        "--space",
+        help="Filter by Space (supports wildcards)",
+        autocompletion=complete_space_filter,
+    ),
+    visible_to: Optional[str] = typer.Option(
+        None,
+        "--visible-to",
+        help=f"Only tasks whose view policy is exactly this ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    editable_by: Optional[str] = typer.Option(
+        None,
+        "--editable-by",
+        help=f"Only tasks whose edit policy is exactly this ({POLICY_GRAMMAR})",
+        autocompletion=complete_policy,
+    ),
+    updated_after: Optional[str] = typer.Option(
+        None,
+        "--updated-after",
+        help="Tasks updated within TIME or since a date (e.g., 7d, 2w, 2026-07-01)",
+    ),
+    updated_before: Optional[str] = typer.Option(
+        None,
+        "--updated-before",
+        help="Tasks updated more than TIME ago, or before a date",
+    ),
+    closed_by: Optional[str] = typer.Option(
+        None,
+        "--closed-by",
+        help="Filter by who closed the task: username, @me for yourself, or user PHID",
+        autocompletion=complete_user_list_filter,
+    ),
+    ids: Optional[str] = typer.Option(
+        None,
+        "--ids",
+        help="Only these tasks, with the other filters still applied "
+        "(e.g., T123 or T123,T456)",
+    ),
+    phids: Optional[str] = typer.Option(
+        None,
+        "--phids",
+        help="Only these task PHIDs, with the other filters still applied",
+    ),
+    subscriber: Optional[str] = typer.Option(
+        None,
+        "--subscriber",
+        help="Filter by subscriber: username, @me for yourself, or user PHID",
+        autocompletion=complete_user_list_filter,
+    ),
+    subtype: Optional[str] = typer.Option(
+        None,
+        "--subtype",
+        help="Filter by task subtype key, e.g. default",
+    ),
+    parent: Optional[str] = typer.Option(
+        None,
+        "--parent",
+        help="Only the subtasks of these tasks (e.g., T123 or T123,T456); "
+        "@some for tasks with a parent, @none for tasks without",
+        autocompletion=complete_relation,
+    ),
+    subtask: Optional[str] = typer.Option(
+        None,
+        "--subtask",
+        help="Only the parents of these tasks (e.g., T123 or T123,T456); "
+        "@some for tasks with subtasks, @none for tasks without",
+        autocompletion=complete_relation,
+    ),
+    commit: Optional[str] = typer.Option(
+        None,
+        "--commit",
+        help="@some for tasks with a commit attached, @none for tasks without",
+        autocompletion=complete_relation,
+    ),
+    column: Optional[str] = typer.Option(
+        None,
+        "--column",
+        help="Filter tasks by column transitions",
+        autocompletion=complete_column_filter,
+    ),
+    priority: Optional[str] = typer.Option(
+        None,
+        "--priority",
+        help="Filter tasks by priority transitions",
+        autocompletion=complete_priority_filter,
+    ),
+    status: Optional[str] = typer.Option(
+        None,
+        "--status",
+        help="Filter by status: any (default), open, closed, or transition "
+        "patterns; AND them with + (e.g. any+in:Resolved)",
+        autocompletion=complete_status_filter,
+    ),
+) -> None:
+    """Count tasks created and closed per week, month or quarter.
+
+    Two searches over the whole range - one by creation date, one by close
+    date - with the same filters `maniphest search` takes, bucketed into
+    calendar periods in local time. Per period: tasks created and closed, the
+    net change, points added and completed when the instance has points, and
+    the median and 85th percentile of the days from creation to close.
+    Closed counts the default closed status only, unless --all-closed.
+    """
+    from phabfive.search import plan_item, run_item
+    from phabfive.spec.search import SearchPlanError
+
+    _setup_output_options(ctx)
+    maniphest = _get_maniphest_app()
+
+    # Planned and run exactly as a `type: task-stats` item in a search spec
+    # is, so the command and `phabfive search -f` cannot read a filter
+    # differently.
+    overrides = {
+        "text_query": text_query,
+        "since": since,
+        "until": until,
+        "period": period,
+        "by": by,
+        "all-closed": all_closed if all_closed else None,
+        "tag": tag,
+        "exclude": exclude,
+        "assigned": assigned,
+        "author": author,
+        "space": space,
+        "visible-to": visible_to,
+        "editable-by": editable_by,
+        "updated-after": updated_after,
+        "updated-before": updated_before,
+        "closed-by": closed_by,
+        "ids": ids,
+        "phids": phids,
+        "subscriber": subscriber,
+        "subtype": subtype,
+        "parent": parent,
+        "subtask": subtask,
+        "commit": commit,
+        "column": column,
+        "priority": priority,
+        "status": status,
+    }
+
+    try:
+        plan = plan_item(
+            maniphest, {"type": "task-stats", "search": {}}, overrides=overrides
+        )
+        result = run_item(maniphest, plan)
+    except SearchPlanError as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+    except (PhabfiveConfigException, PhabfiveDataException) as e:
+        typer.echo(f"ERROR: {e}", err=True)
+        raise typer.Exit(1)
+
+    from phabfive.display import display_task_stats
+
+    display_task_stats(result.payload, _get_output_format(ctx), maniphest)
+
+    if not result.payload:
+        typer.echo("No tasks found", err=True)
+        if text_query:
+            _echo_no_match_hint(text_query)
+
+
 def _get_edit_app():
     """Get Edit app instance with config error handling."""
     from phabfive.cli.apps import get_app

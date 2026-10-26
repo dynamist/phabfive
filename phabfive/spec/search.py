@@ -79,6 +79,7 @@ __all__ = [
     "run_search",
     "task_ids",
     "task_relation",
+    "transition_filter",
     "wants_banner",
 ]
 
@@ -499,8 +500,11 @@ def _value(
     return params.get(key, default)
 
 
-def _patterns(raw: Any, label: str, parse) -> Any:
+def transition_filter(raw: Any, label: str, parse) -> Any:
     """One transition filter, parsed, or None when there is none.
+
+    Public because `phabfive.search.dispatch` plans a `task-stats` item with
+    the same three filters, and has to word a bad one the same way.
 
     `parse` is caught broadly on purpose: the grammar's own errors are
     `PhabfiveInputException`, but a pattern naming a status only the instance
@@ -709,13 +713,13 @@ def plan_search(
     # always reported them in.
     from phabfive.transitions import parse_column_patterns, parse_priority_patterns
 
-    column_patterns = _patterns(
+    column_patterns = transition_filter(
         _value(params, overrides, "column"), "column", parse_column_patterns
     )
-    priority_patterns = _patterns(
+    priority_patterns = transition_filter(
         _value(params, overrides, "priority"), "priority", parse_priority_patterns
     )
-    status_patterns = _patterns(
+    status_patterns = transition_filter(
         _value(params, overrides, "status"),
         "status",
         app.parse_status_patterns_with_api,

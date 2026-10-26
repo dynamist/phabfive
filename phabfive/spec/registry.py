@@ -67,7 +67,7 @@ class FieldKind(enum.Enum):
 # The object types a field may apply to. Declared rather than derived from
 # FIELDS, because an object type with no fields declared yet is still a real
 # one - Phase 1 declares task search fields and nothing else.
-OBJECT_TYPES = frozenset({"task", "project", "paste", "passphrase"})
+OBJECT_TYPES = frozenset({"task", "project", "paste", "passphrase", "task-stats"})
 
 # What a spec does with an object. One registry serves both, so a create-only
 # key and a search-only key can share a name without sharing a declaration.
@@ -194,6 +194,14 @@ _CREATE = frozenset({"create"})
 _TASK_PASTE = frozenset({"task", "paste"})
 _TASK_PROJECT = frozenset({"task", "project"})
 
+# `task-stats` is tasks counted rather than listed: `maniphest stats`. It is
+# searched with the task filters that make sense for a count - not
+# `include:`, `limit:`, `order:` or the `show-*` display keys, and not the
+# `created-*`/`closed-*` times, which `since:`/`until:` replace - plus the
+# keys of its own block below. Each shared filter is the task's own Field
+# with `_STATS` added to its objects, so the two cannot drift.
+_STATS = frozenset({"task-stats"})
+
 # Every object type a create spec creates. `passphrase` is deliberately
 # absent: Phorge exposes no `passphrase.edit`, so a `passphrases:` section is
 # refused by name - see `phabfive.spec.references.UNCREATABLE_OBJECT_KEYS`.
@@ -260,7 +268,7 @@ FIELDS: tuple[Field, ...] = (
         # Every searchable object type takes free text, spelled the same way
         # and meaning the same thing, so it is one declaration rather than
         # four. Only where it *goes* differs, which `constraints` says.
-        objects=_SEARCHED,
+        objects=_SEARCHED | _STATS,
         verbs=_SEARCH,
         # The CLI takes this as a positional argument, so there is no flag.
         cli=None,
@@ -274,7 +282,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="tag",
         kind=FieldKind.PROJECT,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--tag",
         constraint="projects",
@@ -298,7 +306,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="exclude",
         kind=FieldKind.MONOGRAM,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--exclude",
         # Task ids only: `phabfive.cli.maniphest.parse_task_id_list` exits
@@ -313,7 +321,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="assigned",
         kind=FieldKind.USER,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--assigned",
         constraint="assigned",
@@ -322,7 +330,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="author",
         kind=FieldKind.USER,
-        objects=frozenset({"task", "paste"}),
+        objects=frozenset({"task", "paste"}) | _STATS,
         verbs=_SEARCH,
         cli="--author",
         constraint="authorPHIDs",
@@ -336,7 +344,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="space",
         kind=FieldKind.SPACE,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--space",
         constraint="spaces",
@@ -363,7 +371,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="updated-after",
         kind=FieldKind.TIME,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--updated-after",
         constraint="modifiedStart",
@@ -372,7 +380,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="updated-before",
         kind=FieldKind.TIME,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--updated-before",
         constraint="modifiedEnd",
@@ -381,7 +389,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="visible-to",
         kind=FieldKind.POLICY,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--visible-to",
         # maniphest.search has no policy constraint: the policy is resolved to
@@ -392,7 +400,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="editable-by",
         kind=FieldKind.POLICY,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--editable-by",
         constraint=None,
@@ -418,7 +426,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="column",
         kind=FieldKind.PATTERN,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--column",
         # A transition filter is read out of each task's history, in Python -
@@ -432,7 +440,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="priority",
         kind=FieldKind.PATTERN,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--priority",
         # As `column`: `in:High` is current state and becomes the `priorities`
@@ -544,7 +552,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="ids",
         kind=FieldKind.MONOGRAM,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--ids",
         monograms=("T",),
@@ -558,7 +566,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="phids",
         kind=FieldKind.TEXT,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--phids",
         constraint="phids",
@@ -568,7 +576,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="subscriber",
         kind=FieldKind.USER,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--subscriber",
         constraint="subscribers",
@@ -578,7 +586,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="subtype",
         kind=FieldKind.TEXT,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--subtype",
         constraint="subtypes",
@@ -591,7 +599,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="parent",
         kind=FieldKind.MONOGRAM,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--parent",
         monograms=("T",),
@@ -604,7 +612,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="subtask",
         kind=FieldKind.MONOGRAM,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--subtask",
         monograms=("T",),
@@ -617,7 +625,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="commit",
         kind=FieldKind.ENUM,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--commit",
         choices=_RELATION_KEYWORDS,
@@ -629,7 +637,7 @@ FIELDS: tuple[Field, ...] = (
     Field(
         name="closed-by",
         kind=FieldKind.USER,
-        objects=_TASK,
+        objects=_TASK | _STATS,
         verbs=_SEARCH,
         cli="--closed-by",
         constraint="closerPHIDs",
@@ -1045,6 +1053,72 @@ FIELDS: tuple[Field, ...] = (
         cli="--language",
         help="Language for syntax highlighting, e.g. python.",
     ),
+    # --- task-stats, search ----------------------------------------------
+    #
+    # `maniphest stats`: the shared task filters above carry `_STATS`, and
+    # these are the keys only a count has. `status` is declared again rather
+    # than shared, because its default differs: a task created in the range
+    # counts whether or not it is still open.
+    Field(
+        name="since",
+        kind=FieldKind.TIME,
+        objects=_STATS,
+        verbs=_SEARCH,
+        cli="--since",
+        constraint=None,
+        help="Start of the range, inclusive: a date such as 2026-07-01, or 12w.",
+    ),
+    Field(
+        name="until",
+        kind=FieldKind.TIME,
+        objects=_STATS,
+        verbs=_SEARCH,
+        cli="--until",
+        constraint=None,
+        help="End of the range, exclusive, as since. Defaults to now.",
+    ),
+    Field(
+        name="period",
+        kind=FieldKind.ENUM,
+        objects=_STATS,
+        verbs=_SEARCH,
+        cli="--period",
+        choices=("week", "month", "quarter"),
+        default="week",
+        constraint=None,
+        help="ISO weeks, calendar months or quarters, in local time.",
+    ),
+    Field(
+        name="by",
+        kind=FieldKind.ENUM,
+        objects=_STATS,
+        verbs=_SEARCH,
+        cli="--by",
+        choices=("owner", "project", "subtype", "closer"),
+        constraint=None,
+        help="Split each period into groups.",
+    ),
+    Field(
+        name="all-closed",
+        kind=FieldKind.BOOL,
+        objects=_STATS,
+        verbs=_SEARCH,
+        cli="--all-closed",
+        default=False,
+        constraint=None,
+        help="Count every closed status, not only the default closed one.",
+    ),
+    Field(
+        name="status",
+        kind=FieldKind.PATTERN,
+        objects=_STATS,
+        verbs=_SEARCH,
+        cli="--status",
+        constraint="statuses",
+        lifts=("in",),
+        default="any",
+        help="any, open, closed, or transition patterns ANDed with +.",
+    ),
 )
 
 
@@ -1077,6 +1151,7 @@ DECLARED_COMPLETE: frozenset[tuple[str, str]] = frozenset(
         ("project", "search"),
         ("paste", "search"),
         ("passphrase", "search"),
+        ("task-stats", "search"),
         ("task", "create"),
         ("project", "create"),
         ("paste", "create"),

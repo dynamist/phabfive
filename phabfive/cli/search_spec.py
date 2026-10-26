@@ -56,6 +56,7 @@ _NOTHING_FOUND = {
     "project": "No projects found",
     "paste": "No pastes found",
     "passphrase": "No credentials found matching the criteria",
+    "task-stats": "No tasks found",
 }
 
 #: What a search with no filters at all is answered with. `project search`
@@ -68,6 +69,7 @@ _NO_CRITERIA = {
     "task": "a task search needs at least one filter",
     "paste": "a paste search needs a text query or an author",
     "passphrase": "a passphrase search needs a text query or a type",
+    "task-stats": "a task-stats search needs since:, the start of its range",
 }
 
 #: For an object type that has criteria and no sentence of its own yet.
@@ -210,6 +212,10 @@ def _display(result, output_format: str, app: Any) -> None:
         from phabfive.project.display import display_projects
 
         display_projects(payload, output_format, app, tabular=True)
+    elif object_type == "task-stats":
+        from phabfive.display import display_task_stats
+
+        display_task_stats(payload, output_format, app)
     elif object_type == "paste":
         from phabfive.paste.display import display_pastes
 

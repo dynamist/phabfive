@@ -50,6 +50,7 @@ asking one is pointless. See `UNCREATABLE_OBJECT_KEYS` in
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import difflib
 from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional
@@ -793,8 +794,14 @@ def _check_time(
     number is days" branch hands to `float()`. Reporting `bad-time` for a
     value the search would have run is a false positive; refusing to publish
     `nan` as a legal time is not.
+
+    A `datetime.date` is a time too: YAML and TOML both read an unquoted
+    `2026-07-01` as one, so refusing it would refuse the spelling a person
+    is most likely to write.
     """
-    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+    if isinstance(value, bool) or not isinstance(
+        value, (str, int, float, datetime.date)
+    ):
         return [
             problem(
                 object_path,
@@ -802,8 +809,7 @@ def _check_time(
                 value=value,
                 reason=(
                     f"{field.name} takes a time such as 1h, 7d, 2w or "
-                    f"2026-07-01, not a "
-                    f"{_type_name(value)}"
+                    f"2026-07-01, not a {_type_name(value)}"
                 ),
                 code="wrong-type",
             )
