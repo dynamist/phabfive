@@ -4,7 +4,7 @@
  * The admin's SSH public key, so git over SSH works against the seeded
  * repositories.
  *
- * `make deploy` generates the keypair in k8s/base/ssh/ (gitignored), and the
+ * A known dev keypair, committed in k8s/base/ssh/phabfive-insecure, and the
  * public half reaches the pod as the Secret phorge-ssh-key. There is no
  * Conduit method for SSH keys, so like credentials this goes through Phorge's
  * editor, with the transactions PhabricatorAuthSSHKeyEditController applies.
@@ -15,7 +15,7 @@
 final class PhabfiveSSHKeysSeedModule extends PhabfiveSeedModule {
 
   const KEY_PATH = '/etc/phorge-seed/ssh/admin.pub';
-  const KEY_NAME = 'phabfive-dev';
+  const KEY_NAME = 'phabfive-insecure';
 
   public function getKey() {
     return 'sshkeys';
