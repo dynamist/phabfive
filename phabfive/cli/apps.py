@@ -27,10 +27,11 @@ def prompt_host(hosts):
 
     from InquirerPy import inquirer
 
-    selected = inquirer.select(
-        message="Multiple hosts found in ~/.arcrc. Select server:",
-        choices=list(hosts),
-    ).execute()
+    from phabfive.profiler import profiler
+
+    message = "Multiple hosts found in ~/.arcrc. Select server:"
+    with profiler.user_input(message):
+        selected = inquirer.select(message=message, choices=list(hosts)).execute()
     print(
         f"Tip: to skip this prompt, set PHAB_URL or add "
         f'"config":{{"default":"{selected}"}} to ~/.arcrc',
@@ -47,7 +48,10 @@ def new_app(cls):
     Several ~/.arcrc hosts and nothing to choose between them is answered
     with a prompt at a terminal.
     """
-    app = cls(verify=True, select_host=prompt_host)
+    from phabfive.profiler import profiler
+
+    with profiler.phase("Configuring and connecting"):
+        app = cls(verify=True, select_host=prompt_host)
     # PHAB_FALLBACK is configuration, but the format it names is the
     # command's concern, so it is the command that applies it.
     app.set_fallback_format(app.conf.get("PHAB_FALLBACK", "yaml"))

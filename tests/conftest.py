@@ -38,6 +38,25 @@ def isolated_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("PHAB_CACHE", "0")
 
 
+@pytest.fixture(autouse=True)
+def isolated_profiles(monkeypatch, tmp_path):
+    """Keep a developer's PHAB_PROFILE from recording the suite's commands.
+
+    Profiles land in tmp_path should a test ask for one, and the recorder is
+    switched off again afterwards, so one test's recording never leaks into
+    the next.
+    """
+    from phabfive.profiler import profiler
+
+    monkeypatch.setenv("PHAB_PROFILE", "0")
+    monkeypatch.setenv("PHAB_PROFILE_DIR", str(tmp_path / "profiles"))
+    monkeypatch.delenv("PHAB_PROFILE_KEEP", raising=False)
+    monkeypatch.delenv("PHAB_PROFILER_ORIGIN", raising=False)
+    yield
+    profiler.stop()
+    profiler.markers = []
+
+
 @pytest.fixture
 def enabled_cache(monkeypatch):
     """Switch the cache on, with configuration that needs no real files."""

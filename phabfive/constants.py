@@ -378,6 +378,10 @@ CONFIGURABLES = [
     "PHAB_RETRY",
     "PHAB_BACKOFF_MAX",
     "PHAB_PACE",
+    "PHAB_PROFILE",
+    "PHAB_PROFILE_KEEP",
+    "PHAB_PROFILE_DIR",
+    "PHAB_PROFILER_ORIGIN",
 ]
 DEFAULTS = {
     "PHAB_TOKEN": "",
@@ -394,6 +398,10 @@ DEFAULTS = {
     "PHAB_RETRY": 3,  # How often a failed Conduit call is tried again
     "PHAB_BACKOFF_MAX": 5,  # The longest wait before a retry, in seconds
     "PHAB_PACE": 0,  # Seconds to keep between the writes of a batch edit
+    "PHAB_PROFILE": False,  # Record every command as a Firefox Profiler profile
+    "PHAB_PROFILE_KEEP": 20,  # How many profiles to keep, 0 for all of them
+    "PHAB_PROFILE_DIR": "",  # Empty means appdirs.user_data_dir("phabfive")/profiles
+    "PHAB_PROFILER_ORIGIN": "https://profiler.dynamist.cloud",  # Where `phabfive profile` opens one
 }
 
 # Bumping this orphans every entry written by an older phabfive

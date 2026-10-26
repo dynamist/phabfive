@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Typer-based CLI for phabfive."""
 
+# First, so a recorded run's clock starts before typer and the commands load
+from phabfive.cli import clock  # noqa: F401
+
 import os
 import re
 import sys
@@ -22,6 +25,8 @@ from phabfive.cli.edit import edit_command
 from phabfive.cli.maniphest import maniphest_app
 from phabfive.cli.passphrase import passphrase_app
 from phabfive.cli.paste import paste_app
+from phabfive.cli.profile import begin as begin_profile
+from phabfive.cli.profile import profile_command
 from phabfive.cli.project import project_app
 from phabfive.cli.repl import repl_app
 from phabfive.cli.shell_completion import MonogramGroup, install_bash_escaping
@@ -56,6 +61,7 @@ _VALUELESS_GLOBAL_FLAGS = {
     "--install-completion",
     "--show-completion",
     "--skill",
+    "--profile",
 }
 
 # -v and -q are counted rather than valued, so -v, -vv, -q, -qq take no value
@@ -300,8 +306,18 @@ def main(
         is_eager=True,
         help="Print the agent skill file and exit",
     ),
+    profile: bool = typer.Option(
+        False,
+        "--profile",
+        help=(
+            "Record this command as a Firefox Profiler profile, "
+            "to open with 'phabfive profile'."
+        ),
+    ),
 ) -> None:
     """CLI for Phabricator and Phorge - built for humans and AI agents."""
+    # --profile is declared for --help and parsing only: cli_entrypoint reads
+    # it from argv before click runs, so the recording covers the whole run.
     # Configure logging before anything can log
     effective_log_level = resolve_log_level(verbose, quiet)
     init_logging(effective_log_level)
@@ -336,6 +352,7 @@ app.add_typer(spec_app, name="spec")
 # required positional would have spent that slot on a filename.
 app.command(name="apply")(apply_command)
 app.command(name="search")(search_command)
+app.command(name="profile")(profile_command)
 # Show repl command only if ptpython is installed (phabfive[repl])
 try:
     import ptpython  # noqa: F401
@@ -368,6 +385,18 @@ def cli_entrypoint() -> None:
     sys.argv = preprocess_format_alias(sys.argv)
     sys.argv = preprocess_monograms(sys.argv)
 
+    # --profile or PHAB_PROFILE: the session records the run and saves the
+    # profile on the way out, whatever the exit status
+    session = begin_profile(sys.argv, _command_words(sys.argv), _command_name)
+    if session is None:
+        _run()
+        return
+    with session:
+        _run()
+
+
+def _run() -> None:
+    """Run the command, ending with the exit status it asks for."""
     try:
         app()
     except KeyboardInterrupt:
@@ -381,3 +410,33 @@ def cli_entrypoint() -> None:
         else:
             typer.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
+
+def _command_words(argv: list[str]) -> list[str]:
+    """The positional words of argv: the command's path, then its arguments."""
+    words = []
+    skip_next = False
+    for arg in argv[1:]:
+        if arg == "--":
+            break
+        if skip_next:
+            skip_next = False
+            continue
+        if arg.startswith("-") and arg != "-":
+            skip_next = _consumes_next_arg(arg)
+            continue
+        words.append(arg)
+    return words
+
+
+def _command_name(words: list[str]) -> str:
+    """The command words name, such as "maniphest search", as click resolves it."""
+    command = typer.main.get_command(app)
+    path = []
+    for word in words:
+        commands = getattr(command, "commands", None)
+        if not commands or word not in commands:
+            break
+        command = commands[word]
+        path.append(word)
+    return " ".join(path)
