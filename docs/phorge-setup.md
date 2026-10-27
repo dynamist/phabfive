@@ -109,6 +109,16 @@ Offboarding Team. They have no workboards, and each one owns a space, below.
 A handful of tasks, one of them in the SOC space where the admin cannot see it.
 For a fuller set, see [Create Test Tasks](#create-test-tasks).
 
+### Tasks at Known Dates
+
+A **Metrics** project holding seven tasks the `stats` seed module backdates to the
+turn of 2025, created and closed - as Resolved or Wontfix, or closed and reopened - at
+fixed dates, for `maniphest stats` to count. Conduit cannot backdate anything, so the
+module creates each task through `maniphest.edit` and then writes its `dateCreated` and
+`closedEpoch` to the row. Every date is noon UTC on a Wednesday, which is the same day
+and ISO week in any time zone from UTC-11 to UTC+11. `phorge/seed/data/stats.json`
+holds them, and `tests/k8s/test_seed.py` checks the dates the search answers with.
+
 ### Default Spaces
 
 Ten spaces, S1 to S10. Most are restricted to a team, a project whose members are

@@ -518,8 +518,8 @@ wire:
 | `--commit @some` | Tasks with a commit attached |
 | `--commit @none` | Tasks with no commit attached |
 | `--closed-by @me` | Tasks closed by any of these users |
-| `--closed-after 7d` | Tasks closed within TIME |
-| `--closed-before 30d` | Tasks closed more than TIME ago |
+| `--closed-after 7d` | Tasks closed within TIME, or since a date such as `2026-07-01` |
+| `--closed-before 30d` | Tasks closed more than TIME ago, or before a date |
 
 `--ids` is not `--include`: an id given to `--ids` is still subject to every
 other filter, and the result is the intersection. `--include` is the opposite -
@@ -891,7 +891,9 @@ If a pattern doesn't return expected results:
 
 ### Date Filtering
 
-Filter tasks by creation or modification date using both "after" (within the last TIME) and "before" (more than TIME ago) filters. Time values support multiple units for convenience.
+Filter tasks by creation or modification date using both "after" and "before" filters. A
+time is either **relative** - within the last TIME, or more than TIME ago - or an
+**absolute date** in local time.
 
 **Supported Time Units:**
 - `h` - hours (e.g., `12h` = 12 hours)
@@ -928,12 +930,128 @@ phabfive maniphest search --tag "My Project" --updated-before=2w --priority="in:
 ```
 
 **Date Filter Options:**
-- `--created-after=TIME`: Tasks created within the last TIME (e.g., `1h`, `7d`, `2w`, `1m`, `1y`)
-- `--created-before=TIME`: Tasks created more than TIME ago (e.g., `1h`, `7d`, `2w`, `1m`, `1y`)
-- `--updated-after=TIME`: Tasks updated within the last TIME (e.g., `1h`, `7d`, `2w`, `1m`, `1y`)
-- `--updated-before=TIME`: Tasks updated more than TIME ago (e.g., `1h`, `7d`, `2w`, `1m`, `1y`)
+- `--created-after=TIME`: Tasks created within the last TIME (e.g., `1h`, `7d`, `2w`, `1m`, `1y`), or on or after a date
+- `--created-before=TIME`: Tasks created more than TIME ago (e.g., `1h`, `7d`, `2w`, `1m`, `1y`), or before a date
+- `--updated-after=TIME`: Tasks updated within the last TIME (e.g., `1h`, `7d`, `2w`, `1m`, `1y`), or on or after a date
+- `--updated-before=TIME`: Tasks updated more than TIME ago (e.g., `1h`, `7d`, `2w`, `1m`, `1y`), or before a date
 
 **Note:** Plain numbers (e.g., `7`) are interpreted as days for backward compatibility.
+
+**Absolute dates** are written `YYYY-MM-DD`, optionally with a time as
+`YYYY-MM-DDTHH:MM` or `YYYY-MM-DD HH:MM:SS`, and are read in **local time**. A bare date
+is its midnight, so a calendar month is an `--created-after` of its first day and a
+`--created-before` of the next month's first day:
+
+```bash
+# Tasks created in July 2026
+phabfive maniphest search --tag "My Project" --status=any --created-after=2026-07-01 --created-before=2026-08-01
+
+# Tasks closed since 09:30 on the first of July
+phabfive maniphest search --tag "My Project" --closed-after="2026-07-01 09:30"
+```
+
+There is no time zone suffix: the date is the one your calendar shows. Every time filter
+takes either form - the `--closed-*` ones, `paste search` and `user search` too - and so
+does every time key in a spec. Unquoted, YAML and TOML read `2026-07-01` as a date rather
+than a string, and that is accepted as well.
+
+## Statistics
+
+`maniphest stats` answers "how is this project trending" rather than "which tasks
+match": how many tasks were created and closed each week, month or quarter, and how
+long the closed ones took.
+
+```bash
+# Created and resolved per ISO week since the first of July
+phabfive maniphest stats --tag Development --since 2026-07-01
+
+# Per month, split by owner, counting every closed status
+phabfive maniphest stats --tag Development --since 2026-01-01 --period month --by owner --all-closed
+
+# One record per period, for a script or a chart
+phabfive --format=jsonl maniphest stats --tag Development --since 12w --period week
+```
+
+Against the local Phorge of [docs/phorge-setup.md](phorge-setup.md), whose seeded
+Metrics project has tasks created and closed in early 2025:
+
+```console
+$ phabfive maniphest stats --tag Metrics --since 2025-01-01 --until 2025-04-01 --period month
+Period   Start       End         Created  Closed  Net  MedianDaysToClose  P85DaysToClose
+2025-01  2025-01-01  2025-01-31  4        2       2    24.5               36.75
+2025-02  2025-02-01  2025-02-28  2        1       1    28.0               28.0
+2025-03  2025-03-01  2025-03-31  0        1       -1   21.0               21.0
+```
+
+January closed three tasks, and counts two: the third was closed as Wontfix. No point
+figures, because points are turned off on that instance.
+
+It takes the filters `maniphest search` takes - `--tag`, `--assigned`, `--author`,
+`--space`, `--subtype`, `--closed-by`, the transition patterns and the rest - and these:
+
+| Option | Meaning |
+|---|---|
+| `--since TIME` | Start of the range, inclusive. Required |
+| `--until TIME` | End of the range, exclusive. Defaults to now |
+| `--period week\|month\|quarter` | ISO weeks (the default), calendar months or quarters |
+| `--by owner\|project\|subtype\|closer` | Split each period into one record per group |
+| `--all-closed` | Count every closed status as closed |
+
+Not `--include`, `--limit`, `--order` or the `--show-*` options, which say nothing about a
+count, and not `--created-*` or `--closed-after`/`--closed-before`, which `--since` and
+`--until` replace. `--status` defaults to `any` here, since a task created in the range
+counts whether or not it is still open.
+
+Each record holds `Period`, the group with `--by` (`Owner`, `Project`, `Subtype` or
+`Closer`), the `Start` and `End` days the period covers, then:
+
+| Field | Meaning |
+|---|---|
+| `Created` | Tasks created in the period |
+| `Closed` | Tasks closed in the period, by the rule below |
+| `Net` | `Created` minus `Closed` |
+| `PointsAdded`, `PointsCompleted` | Points of the tasks created, and of the ones closed |
+| `MedianDaysToClose`, `P85DaysToClose` | The median and 85th percentile of the days from creation to close, of the tasks closed in the period |
+
+The terminal gets a table; `yaml`, `json` and `jsonl` publish one record per period
+(`jsonl` one per line). There are no charts: pipe `jsonl` into whatever draws them.
+
+How it counts:
+
+- **Two searches, not one per period.** One by creation date over the whole range
+  (`createdStart`/`createdEnd`), one by close date (`closedStart`/`closedEnd`), each with
+  every filter. The tasks are bucketed by their `dateCreated` and `dateClosed`.
+- **Periods** are calendar periods in local time: ISO weeks start on Monday and are
+  labelled like `2026-W27`, months `2026-07`, quarters `2026-Q3`. The first and last
+  period are clipped to the range, and every period in the range has a record, an empty
+  one included. Give `--since` as a date for whole periods: a relative `12w` starts the
+  first one part-way through.
+- **A task counts once**, however many of the projects `--tag` matched it is tagged
+  with. With `--by project` it counts once in each of its projects' groups. Every group
+  seen anywhere in the range has a record in every period. `--by owner` and `--by
+  closer` group by the task's owner and closer now, not at the time; a task with none is
+  in `(none)`. Phorge assigns an unowned task to whoever closes it.
+- **Closed means resolved.** By default only the instance's default closed status - the
+  one its status map marks as the closed status, *Resolved* unless configured otherwise -
+  counts, so Invalid, Duplicate and Wontfix do not inflate the throughput. `--all-closed`
+  counts every closed status. `Net` follows the same rule, so without `--all-closed` it
+  is not how much the backlog shrank: a task closed as Wontfix leaves the backlog without
+  being counted.
+- **Reopened tasks.** A task's `dateClosed` is its most recent close. A task closed,
+  reopened and closed again counts once, in the period of its last close; a task
+  reopened and still open has no `dateClosed` and is not counted as closed at all.
+- **Time to close** is the median and the 85th percentile, interpolated between closest
+  ranks, rather than the mean, which a few very old tasks skew. A period that closed
+  nothing has neither.
+- **Points** are left out of every record, rather than reported as 0, when no task found
+  carries any points - which is what an instance with points turned off answers with.
+  Once any task does, a task without points counts as 0.
+
+Not reported: the backlog size over time, the open tasks at the end of each period. That
+needs every task created before the end of the range, not the two searches above.
+
+The same count runs from a search spec as a `type: task-stats` item - see
+[Searching with Specs](search-specs.md#counting-instead-of-listing).
 
 ## Filtering Tasks
 

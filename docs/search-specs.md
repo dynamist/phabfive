@@ -155,6 +155,35 @@ ERROR: --show-secret cannot be combined with --with; a search spec never fetches
 
 Read one secret with `phabfive passphrase show K1 --show-secret`.
 
+## Counting instead of listing
+
+A `type: task-stats` item counts tasks rather than listing them: one record per week,
+month or quarter, holding the tasks created and closed in it, exactly what
+[`maniphest stats`](maniphest-cli.md#statistics) prints. Its `search:` takes the task
+filters, plus `since:` (required), `until:`, `period:`, `by:` and `all-closed:`.
+`specs/search/weekly-throughput.yaml` is the shipped one:
+
+```yaml
+searches:
+  - type: task-stats
+    title: "📈 Created and resolved per week"
+    search:
+      tag: "{{ project }}"
+      since: "{{ weeks }}w"
+      period: week
+```
+
+```bash
+phabfive search -f specs/search/weekly-throughput.yaml --set project=QA --set weeks=26
+phabfive --format=jsonl search -f specs/search/weekly-throughput.yaml
+```
+
+It is two searches over the whole range, one by creation date and one by close date,
+whatever the period - so a year of weeks costs what a year of one search costs. An item
+with no `since:` is refused like a task search with no filter at all: there would be no
+range to count over. A date is the way to get whole periods: `since: 2026-07-01`, which
+YAML may leave unquoted.
+
 ## Transition patterns are not free either
 
 `column:`, `priority:` and `status:` accept a transition grammar, spelled out on the
@@ -309,6 +338,7 @@ project cannot be deleted through Conduit and a hashtag is taken once.
 | `specs/search/my-pastes.yaml` | `type: paste`, `author: "@me"` |
 | `specs/search/deploy-credentials.yaml` | `type: passphrase`, with the walk cost in its `metadata.description` |
 | `specs/search/release-readiness.yaml` | task, project and paste in one document |
+| `specs/search/weekly-throughput.yaml` | `type: task-stats`: created and resolved per week, and closed per owner |
 | `specs/formats/audit.{yaml,json,jsonl,toml}` | one search spec, four serializations |
 | `specs/broken/*.yaml` | one file per failure, each named after the code it produces |
 
