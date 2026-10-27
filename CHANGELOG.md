@@ -32,6 +32,26 @@
 
 ## New Features
 
+* **`maniphest stats` counts tasks created and closed per period (#598).**
+  `phabfive maniphest stats --tag Development --since 2026-07-01` prints one row per ISO
+  week - `--period month` or `quarter` for calendar months or quarters, in local time -
+  with the tasks `Created` and `Closed`, the `Net` change, `PointsAdded` and
+  `PointsCompleted` where the instance has points, and the median and 85th percentile of
+  the days to close. `--by owner|project|subtype|closer` splits each period into groups.
+  It takes the filters `maniphest search` takes, and makes two searches over the whole
+  range, one by creation date and one by close date, rather than one per period. A task
+  in several matched projects counts once. `Closed` counts only the instance's default
+  closed status, so Invalid, Duplicate and Wontfix do not inflate the throughput;
+  `--all-closed` counts them all. `yaml`, `json` and `jsonl` publish one record per
+  period. A search spec runs the same count as a `type: task-stats` item, and
+  `specs/search/weekly-throughput.yaml` is one
+
+* **Every time filter takes an absolute date.** `--created-after 2026-07-01`,
+  `--closed-before "2026-07-01 09:30"` and `created-after: 2026-07-01` in a spec name that
+  moment in local time, beside the relative `7d` and `2w`, which are unchanged. On
+  `maniphest search`, `paste search` and `user search`, and in the offline validator and
+  the published JSON Schema alike. An unquoted date in YAML or TOML is accepted too
+
 * **`project show` lists a project's workboard columns.** In board order, each with the
   `Name` that `--column` takes, its `Sequence`, whether it is `Hidden`, whether it is the
   `Default` column new tasks land in, and the milestone or subproject it stands for as

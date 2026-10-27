@@ -318,9 +318,11 @@ phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
   means "set to All Users". Applied on the client, before `--limit`.
 - `--include T123` pins a task into the results whatever the filters say; `--exclude T123`
   removes one. Include bypasses the limit, exclude is applied before it.
-- Dates are **relative only**: `h`, `d`, `w`, `m` (30 days), `y` (365 days); a bare number
-  means days. There is no absolute-date syntax. `--created-after`, `--created-before`,
-  `--updated-after`, `--updated-before`.
+- Times are relative - `h`, `d`, `w`, `m` (30 days), `y` (365 days), a bare number
+  meaning days - or an absolute date in **local time**: `2026-07-01`, `2026-07-01T09:30`.
+  A bare date is its midnight, so July is `--created-after=2026-07-01
+  --created-before=2026-08-01`. No time zone suffix. `--created-after`, `--created-before`,
+  `--updated-after`, `--updated-before`, `--closed-after`, `--closed-before`.
 - `--limit` defaults to 100 and is applied on the client *after* ordering, so it keeps the
   top N of the requested order.
 - `--order` is `<field>[:asc|:desc]` over `priority`, `updated`, `created`, `closed`,
@@ -359,6 +361,26 @@ These filters fetch each candidate task's full transaction history — one API c
 task. On a broad search that is slow; narrow with `--tag` and `--limit` first.
 
 `docs/maniphest-cli.md` in the repository has the full grammar with worked examples.
+
+## Count tasks per period
+
+To ask how a project is trending rather than which tasks match, count instead of
+paging through `search` output:
+
+```bash
+phabfive --format=json maniphest stats --tag Backend --since 2026-07-01
+phabfive --format=jsonl maniphest stats --tag Backend --since 2026-01-01 --period month --by owner
+```
+
+One record per period - `--period week` (ISO weeks, the default), `month` or `quarter`,
+in local time - with `Created`, `Closed`, `Net`, `MedianDaysToClose` and
+`P85DaysToClose`, plus `PointsAdded`/`PointsCompleted` only where the instance has points.
+`--by owner|project|subtype|closer` adds that key and one record per group. It takes the
+`search` filters; `--since` is required and `--until` defaults to now. `Closed` counts the
+default closed status (Resolved) only; `--all-closed` counts Invalid, Duplicate and
+Wontfix too. A task is counted once per group however many matched projects it is in. A
+reopened task counts only at its last close, and not at all while it is open. There is
+no backlog size over time. In a search spec the same count is a `type: task-stats` item.
 
 ## Write safely
 
