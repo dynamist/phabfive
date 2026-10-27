@@ -30,7 +30,7 @@ phabfive --format=table diffusion uri list R10 --disabled
 
 ```
 URI                                        Origin    Role      I/O           Display       Credential  Disabled
-git@example.com:dynamist/throwaway375.git  external  disabled  mirror (set)  always (set)  K3          true
+git@example.com:dynamist/legacy-tools.git  external  disabled  mirror (set)  always (set)  K3          true
 ```
 
 The `I/O` cell still reads `mirror`. That is the stored setting, and it is what
@@ -46,7 +46,7 @@ phabfive diffusion uri list R11
 ```
 
 ```
-- URI: http://phorge.localhost/diffusion/11/e2e-047acb25.git
+- URI: http://phorge.localhost/diffusion/11/build-images.git
   Origin: built-in
   Role: clone + push
   I/O:
@@ -74,8 +74,8 @@ phabfive --format=table diffusion uri list R11
 
 ```
 URI                                                    Origin    Role          I/O                  Display           Credential  Disabled
-http://phorge.localhost/diffusion/11/e2e-047acb25.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
-http://phorge.localhost/source/e2e-047acb25.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
+http://phorge.localhost/diffusion/11/build-images.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
+http://phorge.localhost/source/build-images.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
 ```
 
 `--format=json`, `--format=jsonl` and `--format=yaml` keep all three levels:
@@ -168,25 +168,25 @@ repository, before and after it was turned into an observer:
 
 ```bash
 # Hosted: Phorge serves the repository, so its built-in URIs default to readwrite
-phabfive --format=table diffusion uri list uridoc377
+phabfive --format=table diffusion uri list docs-site
 ```
 
 ```
 URI                                                 Origin    Role          I/O                  Display           Credential  Disabled
-http://phorge.localhost/diffusion/16/uridoc377.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
-http://phorge.localhost/source/uridoc377.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
+http://phorge.localhost/diffusion/16/docs-site.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
+http://phorge.localhost/source/docs-site.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
 ```
 
 ```bash
 # After adding an observe URI: the repository follows a remote, so the same
 # built-in URIs now default to read
-phabfive --format=table diffusion uri list uridoc377 --builtin
+phabfive --format=table diffusion uri list docs-site --builtin
 ```
 
 ```
 URI                                                 Origin    Role               I/O         Display      Credential  Disabled
-http://phorge.localhost/diffusion/16/uridoc377.git  built-in  clone (read-only)  read (set)  never (set)  (none)      false
-http://phorge.localhost/source/uridoc377.git        built-in  clone (read-only)  read (set)  never (set)  (none)      false
+http://phorge.localhost/diffusion/16/docs-site.git  built-in  clone (read-only)  read (set)  never (set)  (none)      false
+http://phorge.localhost/source/docs-site.git        built-in  clone (read-only)  read (set)  never (set)  (none)      false
 ```
 
 Two different things happened between those two listings, and the three-level
@@ -199,13 +199,13 @@ have changed anyway.
 The same distinction shows up on `Display`, and there the two levels disagree:
 
 ```bash
-phabfive --format=json diffusion uri list uridoc377 --builtin \
+phabfive --format=json diffusion uri list docs-site --builtin \
   | jq '.[] | {URI, Display}'
 ```
 
 ```json
 {
-  "URI": "http://phorge.localhost/diffusion/16/uridoc377.git",
+  "URI": "http://phorge.localhost/diffusion/16/docs-site.git",
   "Display": {
     "Raw": "never",
     "Default": "never",
@@ -213,7 +213,7 @@ phabfive --format=json diffusion uri list uridoc377 --builtin \
   }
 }
 {
-  "URI": "http://phorge.localhost/source/uridoc377.git",
+  "URI": "http://phorge.localhost/source/docs-site.git",
   "Display": {
     "Raw": "never",
     "Default": "always",
@@ -239,24 +239,24 @@ stored, so there is nothing to change. `uri edit --uri` against a built-in URI i
 accepted and reports the change, but the URI is unaffected:
 
 ```bash
-phabfive diffusion uri edit uridoc377 \
-  http://phorge.localhost/source/uridoc377.git \
+phabfive diffusion uri edit docs-site \
+  http://phorge.localhost/source/docs-site.git \
   --uri http://example.com/other.git --yes
 ```
 
 ```
-http://phorge.localhost/R16 (uridoc377):
-  URI: http://phorge.localhost/source/uridoc377.git → http://example.com/other.git
+http://phorge.localhost/R16 (docs-site):
+  URI: http://phorge.localhost/source/docs-site.git → http://example.com/other.git
 ```
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377 --builtin
+phabfive --format=table diffusion uri list docs-site --builtin
 ```
 
 ```
 URI                                                 Origin    Role               I/O         Display      Credential  Disabled
-http://phorge.localhost/diffusion/16/uridoc377.git  built-in  clone (read-only)  read (set)  never (set)  (none)      false
-http://phorge.localhost/source/uridoc377.git        built-in  clone (read-only)  read (set)  never (set)  (none)      false
+http://phorge.localhost/diffusion/16/docs-site.git  built-in  clone (read-only)  read (set)  never (set)  (none)      false
+http://phorge.localhost/source/docs-site.git        built-in  clone (read-only)  read (set)  never (set)  (none)      false
 ```
 
 The address is what it always was. phabfive does not currently warn about this.
@@ -268,14 +268,14 @@ it does not. Changing that name changes every built-in URI at once, and
 get:
 
 ```bash
-phabfive diffusion repo edit uridoc377 --short-name uridoc377-renamed --dry-run
+phabfive diffusion repo edit docs-site --short-name docs-site-renamed --dry-run
 ```
 
 ```
-[DRY RUN] Would apply to http://phorge.localhost/R16 (uridoc377):
-  Short name: uridoc377 → uridoc377-renamed
-  Built-in URI: http://phorge.localhost/diffusion/16/uridoc377.git → http://phorge.localhost/diffusion/16/uridoc377-renamed.git
-  Built-in URI: http://phorge.localhost/source/uridoc377.git → http://phorge.localhost/source/uridoc377-renamed.git
+[DRY RUN] Would apply to http://phorge.localhost/R16 (docs-site):
+  Short name: docs-site → docs-site-renamed
+  Built-in URI: http://phorge.localhost/diffusion/16/docs-site.git → http://phorge.localhost/diffusion/16/docs-site-renamed.git
+  Built-in URI: http://phorge.localhost/source/docs-site.git → http://phorge.localhost/source/docs-site-renamed.git
 ```
 
 A repository with a callsign carries a third one, `/diffusion/<callsign>/<name>.git`,
@@ -286,13 +286,13 @@ Because the clone name falls back to the name, `--name` moves the URIs of a
 repository that never got a short name, and `repo edit` says so there as well:
 
 ```bash
-phabfive diffusion repo edit uridoc405 --name uridoc405-renamed --dry-run
+phabfive diffusion repo edit ci-config --name ci-config-renamed --dry-run
 ```
 
 ```
-[DRY RUN] Would apply to http://phorge.localhost/R24 (uridoc405):
-  Name: uridoc405 → uridoc405-renamed
-  Built-in URI: http://phorge.localhost/diffusion/24/uridoc405.git → http://phorge.localhost/diffusion/24/uridoc405-renamed.git
+[DRY RUN] Would apply to http://phorge.localhost/R24 (ci-config):
+  Name: ci-config → ci-config-renamed
+  Built-in URI: http://phorge.localhost/diffusion/24/ci-config.git → http://phorge.localhost/diffusion/24/ci-config-renamed.git
 ```
 
 It carries only the one: a `/source/` address is built from the short name, so a
@@ -316,7 +316,7 @@ and `readwrite`; an external URI carries a remote, so it accepts `default`,
 server:
 
 ```bash
-phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git --io=read --yes
+phabfive diffusion uri edit docs-site git@github.com:dynamist/phabfive.git --io=read --yes
 ```
 
 ```
@@ -350,7 +350,7 @@ Nothing in the arguments hints at this, so preview it. `--dry-run` names each
 URI it would demote:
 
 ```bash
-phabfive diffusion uri create K3 uridoc377 git@github.com:dynamist/phabfive.git \
+phabfive diffusion uri create K3 docs-site git@github.com:dynamist/phabfive.git \
   --observe --dry-run
 ```
 
@@ -360,12 +360,12 @@ phabfive diffusion uri create K3 uridoc377 git@github.com:dynamist/phabfive.git 
   I/O: (none) → observe
   Display: (none) → always
   Credential: (none) → K3
-  Demotes http://phorge.localhost/diffusion/16/uridoc377.git: io=readwrite, display=never → io=read, display=never
-  Demotes http://phorge.localhost/source/uridoc377.git: io=readwrite, display=always → io=read, display=never
+  Demotes http://phorge.localhost/diffusion/16/docs-site.git: io=readwrite, display=never → io=read, display=never
+  Demotes http://phorge.localhost/source/docs-site.git: io=readwrite, display=always → io=read, display=never
 ```
 
 The last demotion in that plan is the one that costs something:
-`/source/uridoc377.git` was the repository's published clone URL — it is the only
+`/source/docs-site.git` was the repository's published clone URL — it is the only
 URI on the repository with `display=always` — and adding an observe URI
 un-publishes it.
 
@@ -385,26 +385,26 @@ GitHub instead of being served by Phorge.
 hosted, and its built-in URIs default to `readwrite`:
 
 ```bash
-phabfive diffusion repo create uridoc377 --yes
+phabfive diffusion repo create docs-site --yes
 ```
 
 ```
-uridoc377:
-  Name: (none) → uridoc377
-  Short name: (none) → uridoc377
+docs-site:
+  Name: (none) → docs-site
+  Short name: (none) → docs-site
   VCS: (none) → git
   Status: (none) → active
-  Built-in URIs: (none) → /source/uridoc377.git
+  Built-in URIs: (none) → /source/docs-site.git
 ```
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377
+phabfive --format=table diffusion uri list docs-site
 ```
 
 ```
 URI                                                 Origin    Role          I/O                  Display           Credential  Disabled
-http://phorge.localhost/diffusion/16/uridoc377.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
-http://phorge.localhost/source/uridoc377.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
+http://phorge.localhost/diffusion/16/docs-site.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
+http://phorge.localhost/source/docs-site.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
 ```
 
 **2. Check which credential Phorge will pull with.** The URI needs an SSH private
@@ -435,7 +435,7 @@ monogram is.
 **3. Preview the change.** This is the step that shows the demotion:
 
 ```bash
-phabfive diffusion uri create K3 uridoc377 git@github.com:dynamist/phabfive.git \
+phabfive diffusion uri create K3 docs-site git@github.com:dynamist/phabfive.git \
   --observe --dry-run
 ```
 
@@ -445,14 +445,14 @@ phabfive diffusion uri create K3 uridoc377 git@github.com:dynamist/phabfive.git 
   I/O: (none) → observe
   Display: (none) → always
   Credential: (none) → K3
-  Demotes http://phorge.localhost/diffusion/16/uridoc377.git: io=readwrite, display=never → io=read, display=never
-  Demotes http://phorge.localhost/source/uridoc377.git: io=readwrite, display=always → io=read, display=never
+  Demotes http://phorge.localhost/diffusion/16/docs-site.git: io=readwrite, display=never → io=read, display=never
+  Demotes http://phorge.localhost/source/docs-site.git: io=readwrite, display=always → io=read, display=never
 ```
 
 **4. Apply it.** The command prints the URI it created:
 
 ```bash
-phabfive diffusion uri create K3 uridoc377 git@github.com:dynamist/phabfive.git \
+phabfive diffusion uri create K3 docs-site git@github.com:dynamist/phabfive.git \
   --observe --yes
 ```
 
@@ -464,21 +464,21 @@ git@github.com:dynamist/phabfive.git
 published clone URL; the built-in URIs are read-only and hidden:
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377
+phabfive --format=table diffusion uri list docs-site
 ```
 
 ```
 URI                                                 Origin    Role                    I/O            Display       Credential  Disabled
 git@github.com:dynamist/phabfive.git                external  Phorge pulls from here  observe (set)  always (set)  K3          false
-http://phorge.localhost/diffusion/16/uridoc377.git  built-in  clone (read-only)       read (set)     never (set)   (none)      false
-http://phorge.localhost/source/uridoc377.git        built-in  clone (read-only)       read (set)     never (set)   (none)      false
+http://phorge.localhost/diffusion/16/docs-site.git  built-in  clone (read-only)       read (set)     never (set)   (none)      false
+http://phorge.localhost/source/docs-site.git        built-in  clone (read-only)       read (set)     never (set)   (none)      false
 ```
 
 The repository now reports itself as not hosted, which is what moved the
 built-in URIs' inherited I/O from `readwrite` to `read`:
 
 ```bash
-phabfive --format=json diffusion repo show uridoc377 | jq '.[0].Repository.Hosted'
+phabfive --format=json diffusion repo show docs-site | jq '.[0].Repository.Hosted'
 ```
 
 ```json
@@ -491,11 +491,11 @@ often, so that can be a while. `repo nudge` does what Update Now on the
 repository's Manage → Status page does:
 
 ```bash
-phabfive diffusion repo nudge uridoc377
+phabfive diffusion repo nudge docs-site
 ```
 
 ```
-Asked Phorge to update R16 (uridoc377) soon
+Asked Phorge to update R16 (docs-site) soon
 ```
 
 The update is only scheduled, so the command returns before anything is
@@ -503,13 +503,13 @@ fetched. `--wait` waits for the import, and exits 1 if it has not finished
 within `--timeout` seconds (300 by default):
 
 ```bash
-phabfive diffusion repo nudge uridoc377 --wait
+phabfive diffusion repo nudge docs-site --wait
 ```
 
 ```
-Asked Phorge to update R16 (uridoc377) soon
-Waiting up to 300s for R16 (uridoc377) to finish importing
-Finished importing R16 (uridoc377)
+Asked Phorge to update R16 (docs-site) soon
+Waiting up to 300s for R16 (docs-site) to finish importing
+Finished importing R16 (docs-site)
 ```
 
 `--wait` is for the repository's initial import, which a new observe URI
@@ -519,13 +519,13 @@ the commits instead, and the command waits until Diffusion has imported every
 one of them:
 
 ```bash
-phabfive diffusion repo nudge uridoc377 --commit 7d7fc2c3e002,1b2eccf4a6c9 --timeout 600
+phabfive diffusion repo nudge docs-site --commit 7d7fc2c3e002,1b2eccf4a6c9 --timeout 600
 ```
 
 ```
-Asked Phorge to update R16 (uridoc377) soon
-Waiting up to 600s for 7d7fc2c3e002, 1b2eccf4a6c9 to be imported into R16 (uridoc377)
-7d7fc2c3e002, 1b2eccf4a6c9 are imported into R16 (uridoc377)
+Asked Phorge to update R16 (docs-site) soon
+Waiting up to 600s for 7d7fc2c3e002, 1b2eccf4a6c9 to be imported into R16 (docs-site)
+7d7fc2c3e002, 1b2eccf4a6c9 are imported into R16 (docs-site)
 ```
 
 Name each commit you need, not only the newest. Phorge discovers the commits
@@ -542,7 +542,7 @@ applied, so no arguments at all is every URI.
 Split the list by origin. The two cannot be combined with each other.
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377 --external
+phabfive --format=table diffusion uri list docs-site --external
 ```
 
 ```
@@ -551,13 +551,13 @@ git@github.com:dynamist/phabfive.git  external  Phorge pulls from here  observe 
 ```
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377 --builtin
+phabfive --format=table diffusion uri list docs-site --builtin
 ```
 
 ```
 URI                                                 Origin    Role               I/O         Display      Credential  Disabled
-http://phorge.localhost/diffusion/16/uridoc377.git  built-in  clone (read-only)  read (set)  never (set)  (none)      false
-http://phorge.localhost/source/uridoc377.git        built-in  clone (read-only)  read (set)  never (set)  (none)      false
+http://phorge.localhost/diffusion/16/docs-site.git  built-in  clone (read-only)  read (set)  never (set)  (none)      false
+http://phorge.localhost/source/docs-site.git        built-in  clone (read-only)  read (set)  never (set)  (none)      false
 ```
 
 ### `--io`
@@ -568,7 +568,7 @@ observe URI", and matching both is what makes `--io=default` useful at all —
 `default` is never an effective value.
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377 --io=observe
+phabfive --format=table diffusion uri list docs-site --io=observe
 ```
 
 ```
@@ -584,8 +584,8 @@ phabfive --format=table diffusion uri list R11 --io=default
 
 ```
 URI                                                    Origin    Role          I/O                  Display           Credential  Disabled
-http://phorge.localhost/diffusion/11/e2e-047acb25.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
-http://phorge.localhost/source/e2e-047acb25.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
+http://phorge.localhost/diffusion/11/build-images.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
+http://phorge.localhost/source/build-images.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
 ```
 
 `--io=readwrite` finds the URIs that do read-write however they came by it, so
@@ -597,8 +597,8 @@ phabfive --format=table diffusion uri list R11 --io=readwrite
 
 ```
 URI                                                    Origin    Role          I/O                  Display           Credential  Disabled
-http://phorge.localhost/diffusion/11/e2e-047acb25.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
-http://phorge.localhost/source/e2e-047acb25.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
+http://phorge.localhost/diffusion/11/build-images.git  built-in  clone + push  readwrite (default)  never (default)   (none)      false
+http://phorge.localhost/source/build-images.git        built-in  clone + push  readwrite (default)  always (default)  (none)      false
 ```
 
 Valid values are `default`, `observe`, `mirror`, `read`, `readwrite` and `none`.
@@ -624,7 +624,7 @@ phabfive --format=table diffusion uri list R11 --display=always
 
 ```
 URI                                              Origin    Role          I/O                  Display           Credential  Disabled
-http://phorge.localhost/source/e2e-047acb25.git  built-in  clone + push  readwrite (default)  always (default)  (none)      false
+http://phorge.localhost/source/build-images.git  built-in  clone + push  readwrite (default)  always (default)  (none)      false
 ```
 
 ### `--disabled` and `--enabled`
@@ -633,17 +633,17 @@ Split the list by whether the URI is in service. The two cannot be combined with
 each other. Taking the observe URI out of service:
 
 ```bash
-phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git --disable --yes
+phabfive diffusion uri edit docs-site git@github.com:dynamist/phabfive.git --disable --yes
 ```
 
 ```
-http://phorge.localhost/R16 (uridoc377):
+http://phorge.localhost/R16 (docs-site):
   URI: git@github.com:dynamist/phabfive.git
   Disabled: False → True
 ```
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377 --disabled
+phabfive --format=table diffusion uri list docs-site --disabled
 ```
 
 ```
@@ -652,13 +652,13 @@ git@github.com:dynamist/phabfive.git  external  disabled  observe (set)  always 
 ```
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377 --enabled
+phabfive --format=table diffusion uri list docs-site --enabled
 ```
 
 ```
 URI                                                 Origin    Role               I/O         Display      Credential  Disabled
-http://phorge.localhost/diffusion/16/uridoc377.git  built-in  clone (read-only)  read (set)  never (set)  (none)      false
-http://phorge.localhost/source/uridoc377.git        built-in  clone (read-only)  read (set)  never (set)  (none)      false
+http://phorge.localhost/diffusion/16/docs-site.git  built-in  clone (read-only)  read (set)  never (set)  (none)      false
+http://phorge.localhost/source/docs-site.git        built-in  clone (read-only)  read (set)  never (set)  (none)      false
 ```
 
 The remaining examples in this section assume it has been enabled again with
@@ -672,7 +672,7 @@ as its own flag; `--display=always` is the general form, and differs in also
 matching a URI whose *raw* display is `always`.
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377 --clone
+phabfive --format=table diffusion uri list docs-site --clone
 ```
 
 ```
@@ -685,7 +685,7 @@ git@github.com:dynamist/phabfive.git  external  Phorge pulls from here  observe 
 Filters AND together:
 
 ```bash
-phabfive --format=table diffusion uri list uridoc377 --external --io=observe --enabled
+phabfive --format=table diffusion uri list docs-site --external --io=observe --enabled
 ```
 
 ```
@@ -702,22 +702,22 @@ option`.
 
 ```bash
 # Stop using a URI without deleting it
-phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git --disable --yes
+phabfive diffusion uri edit docs-site git@github.com:dynamist/phabfive.git --disable --yes
 
 # Put it back
-phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git --enable --yes
+phabfive diffusion uri edit docs-site git@github.com:dynamist/phabfive.git --enable --yes
 
 # Change which credential Phorge pulls with
-phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git --cred K2 --dry-run
+phabfive diffusion uri edit docs-site git@github.com:dynamist/phabfive.git --cred K2 --dry-run
 
 # Publish or un-publish it as a clone URL
-phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git --display=never --dry-run
+phabfive diffusion uri edit docs-site git@github.com:dynamist/phabfive.git --display=never --dry-run
 ```
 
 Disabling reports the dimension it changed and nothing else:
 
 ```
-http://phorge.localhost/R16 (uridoc377):
+http://phorge.localhost/R16 (docs-site):
   URI: git@github.com:dynamist/phabfive.git
   Disabled: False → True
 ```
@@ -726,11 +726,11 @@ An edit that would leave the URI where it already is makes no request, whether
 or not `--dry-run` was given:
 
 ```bash
-phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git --io=observe --yes
+phabfive diffusion uri edit docs-site git@github.com:dynamist/phabfive.git --io=observe --yes
 ```
 
 ```
-http://phorge.localhost/R16 (uridoc377): No changes (already at target state)
+http://phorge.localhost/R16 (docs-site): No changes (already at target state)
 ```
 
 Unlike `uri create`, `uri edit` touches only the URI named. It does not demote
@@ -746,12 +746,12 @@ of case alone counts as another host. phabfive sends nothing to clear it, but
 says so, in the preview and in the result:
 
 ```bash
-phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git \
+phabfive diffusion uri edit docs-site git@github.com:dynamist/phabfive.git \
     --uri git@gitlab.example.com:dynamist/phabfive.git --dry-run
 ```
 
 ```
-[DRY RUN] Would apply to http://phorge.localhost/R16 (uridoc377):
+[DRY RUN] Would apply to http://phorge.localhost/R16 (docs-site):
   URI: git@github.com:dynamist/phabfive.git → git@gitlab.example.com:dynamist/phabfive.git
   Credential: K3 → (none)   [cleared: the host changed]
 ```

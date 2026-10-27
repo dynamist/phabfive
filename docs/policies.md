@@ -209,7 +209,7 @@ phabfive --format=table diffusion repo list --show-policy
 Name                Visible To                  Editable By      Can Push
 GUNNAR Firmware     All Users                   Administrators   All Users
 docs-policy-probe   Public (No Login Required)  #infrastructure  Administrators
-uridoc377           Public (No Login Required)  Administrators   Not a Hosted Repository
+docs-site           Public (No Login Required)  Administrators   Not a Hosted Repository
 ```
 
 ### Filtering tasks by policy
@@ -405,10 +405,10 @@ phabfive diffusion repo show R16 --show-policy --no-description
 ```
 
 ```
-- Link: http://phorge.localhost/source/uridoc377/
+- Link: http://phorge.localhost/source/docs-site/
   Repository:
-    Name: uridoc377
-    Short Name: uridoc377
+    Name: docs-site
+    Short Name: docs-site
     Callsign:
     Monogram: R16
     Status: active
@@ -439,8 +439,8 @@ phabfive diffusion repo edit R16 --can-push=admin --dry-run
 ```
 
 ```
-WARNING: http://phorge.localhost/R16 (uridoc377) is not a hosted repository, so a push policy has no effect on it. It is stored, and applies if the repository becomes hosted.
-[DRY RUN] Would apply to http://phorge.localhost/R16 (uridoc377):
+WARNING: http://phorge.localhost/R16 (docs-site) is not a hosted repository, so a push policy has no effect on it. It is stored, and applies if the repository becomes hosted.
+[DRY RUN] Would apply to http://phorge.localhost/R16 (docs-site):
   Can Push: All Users → Administrators
 ```
 
