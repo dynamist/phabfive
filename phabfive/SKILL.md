@@ -663,7 +663,11 @@ on it, so `--io=default` finds the URIs that inherit their I/O and
 `--display=always` on the effective value.
 
 A hosted repository can report no URIs at all, and a filter that matches
-nothing is an empty result - neither is a failure.
+nothing is an empty result - neither is a failure. stderr tells them apart:
+`No URIs found: R1 has none`, or `No URIs found: R3 has 2, none matching the
+filters given`. An empty `repo list` says `No repositories found` the same way,
+adding `: the instance has N, none of them active` when the status filter left
+every repository out.
 
 `diffusion repo edit` changes `--name`, `--short-name`, `--default-branch` and
 `--status`. Phorge derives the built-in clone URIs from the repository's short

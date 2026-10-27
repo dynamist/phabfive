@@ -13,6 +13,8 @@ tests hold the other commands to.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from typer.testing import CliRunner
 
 from phabfive.cli.diffusion import diffusion_app
@@ -132,12 +134,46 @@ class TestDiffusionUriListExitCode:
     def test_repository_without_uris_exits_zero(self, mock_get_app):
         """An empty result is not a failure."""
         mock_d = MagicMock()
-        mock_d.uri_list.return_value = {"uris": []}
+        mock_d.uri_list.return_value = {"uris": [], "total": 0}
         mock_get_app.return_value = mock_d
 
         result = runner.invoke(diffusion_app, ["uri", "list", "myrepo"])
 
         assert result.exit_code == 0
+
+    @pytest.mark.parametrize("output_format", ["json", "jsonl", "yaml", "rich"])
+    @patch("phabfive.cli.diffusion._get_diffusion_app")
+    def test_repository_without_uris_says_so_on_stderr(
+        self, mock_get_app, output_format
+    ):
+        """Not silence: an empty list says why, and stdout stays parseable (#395)."""
+        mock_d = MagicMock()
+        mock_d.uri_list.return_value = {"uris": [], "total": 0}
+        mock_get_app.return_value = mock_d
+
+        with patch(
+            "phabfive.cli.diffusion._get_output_format", return_value=output_format
+        ):
+            result = runner.invoke(diffusion_app, ["uri", "list", "R1"])
+
+        assert result.exit_code == 0
+        assert result.stderr == "No URIs found: R1 has none\n"
+        assert "No URIs" not in result.stdout
+
+    @patch("phabfive.cli.diffusion._get_diffusion_app")
+    def test_filtered_away_uris_say_so_on_stderr(self, mock_get_app):
+        mock_d = MagicMock()
+        mock_d.uri_list.return_value = {"uris": [], "total": 2}
+        mock_get_app.return_value = mock_d
+
+        with patch("phabfive.cli.diffusion._get_output_format", return_value="json"):
+            result = runner.invoke(diffusion_app, ["uri", "list", "R3", "--builtin"])
+
+        assert result.exit_code == 0
+        assert result.stderr == (
+            "No URIs found: R3 has 2, none matching the filters given\n"
+        )
+        assert result.stdout == "[]\n"
 
     @patch("phabfive.cli.diffusion._get_diffusion_app")
     def test_repository_with_uris_exits_zero(self, mock_get_app):
@@ -151,3 +187,35 @@ class TestDiffusionUriListExitCode:
 
         assert result.exit_code == 0
         assert "git@example.com:org/myrepo.git" in _output(result)
+
+
+class TestDiffusionRepoListEmpty:
+    """`repo list` that lists nothing says why on stderr and exits 0 (#395)."""
+
+    @patch("phabfive.cli.diffusion._get_diffusion_app")
+    def test_instance_without_repositories(self, mock_get_app):
+        mock_d = MagicMock()
+        mock_d.repo_list.return_value = {"repositories": [], "total": 0}
+        mock_get_app.return_value = mock_d
+
+        with patch("phabfive.cli.diffusion._get_output_format", return_value="json"):
+            result = runner.invoke(diffusion_app, ["repo", "list"])
+
+        assert result.exit_code == 0
+        assert result.stderr == "No repositories found\n"
+        assert result.stdout == "[]\n"
+
+    @patch("phabfive.cli.diffusion._get_diffusion_app")
+    def test_every_repository_left_out_by_status(self, mock_get_app):
+        mock_d = MagicMock()
+        mock_d.repo_list.return_value = {"repositories": [], "total": 3}
+        mock_get_app.return_value = mock_d
+
+        with patch("phabfive.cli.diffusion._get_output_format", return_value="jsonl"):
+            result = runner.invoke(diffusion_app, ["repo", "list"])
+
+        assert result.exit_code == 0
+        assert result.stderr == (
+            "No repositories found: the instance has 3, none of them active\n"
+        )
+        assert result.stdout == ""

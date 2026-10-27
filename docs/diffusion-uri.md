@@ -93,8 +93,24 @@ phabfive --format=json diffusion uri list R11 | jq '.[0]["I/O"]'
 ```
 
 A repository with no URIs to show, and one whose URIs the filters all rejected,
-both print nothing and exit `0`. That includes `--format=json`, which prints no
-output rather than an empty array.
+are both an empty result and exit `0`. stdout holds what the format says for no
+records - `[]` for `json` and `yaml`, nothing for `jsonl` and the terminal
+formats - and stderr says which of the two cases it is, so the next step is
+clear without a second command:
+
+```console
+$ phabfive --format=json diffusion uri list R1
+No URIs found: R1 has none
+[]
+$ phabfive --format=json diffusion uri list R3 --builtin
+No URIs found: R3 has 2, none matching the filters given
+[]
+```
+
+Because the message is on stderr, `--format=jsonl ... >> uris.jsonl` keeps the
+file valid. `repo list` does the same: `No repositories found`, or
+`No repositories found: the instance has 3, none of them active` when the
+status filter left every repository out.
 
 `repo show --show-uris` and `repo list --show-uris` nest the same record under
 each repository, so the three commands cannot disagree about the same URI. Two
@@ -732,7 +748,8 @@ anything.
 
 `uri list` could not resolve the repository. It accepts a monogram (`R16`), a
 callsign or a short name. A repository that exists but has no URIs to show is
-not this error — it is empty output and exit `0`.
+not this error — it is an empty result, `No URIs found: X has none` on stderr,
+and exit `0`.
 
 ### `Value "read" is not a valid IO setting for this URI`
 
