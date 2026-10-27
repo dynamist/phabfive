@@ -331,15 +331,14 @@ one to read.
 !!! note
 
     Built-in URIs are only reported for protocols the instance actually serves.
-    The local development instance in [Phorge Setup](phorge-setup.md) has no SSH
-    port and leaves `diffusion.allow-http-auth` unset, so it serves HTTP only to
-    publicly-visible repositories — and `uri list R1` on a seeded repository
-    prints nothing at all. That is instance configuration, not a missing URI.
-    Making a repository public is what brings its built-in URIs into view there:
-
-    ```bash
-    phabfive diffusion repo edit R10 --visible-to public --dry-run
-    ```
+    The local development instance in [Phorge Setup](phorge-setup.md) serves
+    SSH on port 2222 (see [Git over SSH](phorge-setup.md#git-over-ssh)), so
+    `uri list R1` on a seeded repository lists its `ssh://` built-in URIs. It
+    leaves `diffusion.allow-http-auth` unset, so it serves HTTP only to
+    publicly-visible repositories, and no `http://` built-in URIs appear for a
+    private one. On an instance that serves neither, a repository without
+    URIs of its own reports `No URIs found: R1 has none` - that is instance
+    configuration, not a missing URI.
 
     ```
     [DRY RUN] Would apply to http://phorge.localhost/R10 (urimatrix375):
