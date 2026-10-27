@@ -13,7 +13,13 @@ from phabfive.cli.output import (
     _setup_output_options,
     is_machine_format,
 )
-from phabfive.constants import REPO_STATUS_CHOICES
+from phabfive.constants import (
+    REPO_STATUS_ACTIVE,
+    REPO_STATUS_ALL,
+    REPO_STATUS_ANY,
+    REPO_STATUS_CHOICES,
+    REPO_STATUS_FILTER_CHOICES,
+)
 from phabfive.diffusion.formatters import repository_is_hosted
 from phabfive.diffusion.waiting import DEFAULT_TIMEOUT, validate_commit_hash
 from phabfive.exceptions import (
@@ -124,12 +130,86 @@ def _resolve_show_uris(show_uris: bool, url: bool) -> bool:
     return show_uris or url
 
 
+def _resolve_repo_status(status: Optional[str], positional: Optional[str]) -> List[str]:
+    """Combine --status with the deprecated positional STATUS argument.
+
+    The positional fell back to "active" for anything it did not know, so
+    `repo list any` and `repo list inactiv` listed the active repositories
+    without a word (#425). Both spellings are now checked against the same
+    choices, and an unknown value is refused.
+
+    Parameters
+    ----------
+    status : str or None
+        Value of --status
+    positional : str or None
+        Value of the hidden, deprecated STATUS argument
+
+    Returns
+    -------
+    list
+        The repository statuses to list, as `Diffusion.repo_list` takes them
+
+    Raises
+    ------
+    typer.Exit
+        With status 1 when a value is unknown, or the two disagree
+    """
+    choices = ", ".join(REPO_STATUS_FILTER_CHOICES)
+
+    def _check(value: Optional[str], name: str) -> Optional[str]:
+        if value is None:
+            return None
+        if value == REPO_STATUS_ALL:
+            return REPO_STATUS_ANY
+        if value not in REPO_STATUS_FILTER_CHOICES:
+            typer.echo(f"ERROR: {name} must be one of: {choices}", err=True)
+            raise typer.Exit(1)
+        return value
+
+    from_option = _check(status, "--status")
+    from_positional = _check(positional, "STATUS")
+
+    if status == REPO_STATUS_ALL:
+        sys.stderr.write(
+            "WARNING: --status=all is deprecated, use --status=any instead.\n"
+        )
+
+    if from_positional is not None:
+        sys.stderr.write(
+            f"WARNING: the STATUS argument is deprecated, use "
+            f"--status={from_positional} instead.\n"
+        )
+
+        if from_option is not None and from_option != from_positional:
+            typer.echo(
+                f"ERROR: the STATUS argument {positional} means "
+                f"--status={from_positional}, and cannot be combined with "
+                f"--status={status}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+    resolved = from_option or from_positional or REPO_STATUS_ACTIVE
+
+    if resolved == REPO_STATUS_ANY:
+        return list(REPO_STATUS_CHOICES)
+    return [resolved]
+
+
 @repo_app.command("list")
 def repo_list(
     ctx: typer.Context,
-    status: Optional[str] = typer.Argument(
+    positional_status: Optional[str] = typer.Argument(
         None,
-        help="Filter by status: active, inactive, or all",
+        metavar="[STATUS]",
+        hidden=True,
+        help="Deprecated, use --status",
+    ),
+    status: Optional[str] = typer.Option(
+        None,
+        "--status",
+        help="Filter by status: active, inactive or any  [default: active]",
         autocompletion=complete_repo_status,
     ),
     show_uris: bool = typer.Option(
@@ -148,6 +228,9 @@ def repo_list(
 ) -> None:
     """List repositories.
 
+    Lists the active repositories unless --status says otherwise:
+    --status=inactive lists the inactive ones and --status=any lists both.
+
     Answers with the records `repo show` answers with, minus the
     per-repository sections. A URI is reported as its display URI, the one
     the web UI shows, which is what `repo show --show-uris` and `uri list`
@@ -159,22 +242,17 @@ def repo_list(
     \b
     Examples:
         phabfive diffusion repo list
-        phabfive diffusion repo list all --show-uris
-        phabfive diffusion repo list --show-policy
-        phabfive --format=json diffusion repo list active
+        phabfive diffusion repo list --status=any --show-uris
+        phabfive diffusion repo list --status=inactive --show-policy
+        phabfive --format=json diffusion repo list
     """
     from phabfive.diffusion.display import display_repositories
+
+    status_filter = _resolve_repo_status(status, positional_status)
 
     _setup_output_options(ctx)
     show_uris = _resolve_show_uris(show_uris, url)
     diffusion = _get_diffusion_app()
-
-    if status == "all":
-        status_filter = REPO_STATUS_CHOICES
-    elif status == "inactive":
-        status_filter = ["inactive"]
-    else:
-        status_filter = ["active"]
 
     try:
         result = diffusion.repo_list(

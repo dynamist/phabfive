@@ -165,6 +165,20 @@ URI_ROLE_DISABLED = "disabled"
 
 REPO_STATUS_CHOICES = ["active", "inactive"]
 
+# The statuses `diffusion repo list --status` takes: a repository's own two,
+# plus "any" for both - the word `maniphest search` and `project search` use
+# for "every status". "all" is the deprecated spelling of it, from when the
+# status was a positional argument.
+REPO_STATUS_ACTIVE = "active"
+REPO_STATUS_INACTIVE = "inactive"
+REPO_STATUS_ANY = "any"
+REPO_STATUS_FILTER_CHOICES = [
+    REPO_STATUS_ACTIVE,
+    REPO_STATUS_INACTIVE,
+    REPO_STATUS_ANY,
+]
+REPO_STATUS_ALL = "all"
+
 # Phorge's policy keyword constants, labelled the way its web UI labels them.
 # A policy can also carry a PHID - a project, or a custom policy rule - and
 # those are passed through unresolved rather than guessed at.

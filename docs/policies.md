@@ -190,7 +190,7 @@ The flag is on six commands:
 Naming a policy that points at a project or a user costs an extra `phid.query`,
 and a read that never looks at the section should not pay for it. The lookup is
 batched, so it is one extra round trip per command however many objects are
-listed — `diffusion repo list active --show-policy` against the local test
+listed — `diffusion repo list --show-policy` against the local test
 instance issues exactly one more `phid.query` than the same command without it —
 but it is a round trip all the same, and most callers listing repositories or
 searching tasks do not want it.
@@ -202,7 +202,7 @@ at the right-hand end of the row. Here is that end of it, with the columns
 between `Name` and `Visible To` cut away:
 
 ```bash
-phabfive --format=table diffusion repo list active --show-policy
+phabfive --format=table diffusion repo list --show-policy
 ```
 
 ```

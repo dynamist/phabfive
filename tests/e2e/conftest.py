@@ -248,7 +248,7 @@ def settled_repositories(conduit):
     goes to some trouble to avoid creating more of.
 
     Excluding them loses nothing, and not because the commands under test
-    hide them: `repo list all` lists every status, and `Importing` is on
+    hide them: `repo list --status=any` lists every status, and `Importing` is on
     every record it prints. It is the same fact that makes the wait
     futile that makes the wait unnecessary - no daemon ever touches an
     inactive repository, so its `isImporting` is frozen, and a frozen

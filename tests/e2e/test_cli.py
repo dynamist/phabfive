@@ -431,7 +431,7 @@ def test_repo_list_formats_agree(phabfive, settled_repositories):
     from ruamel.yaml import YAML
 
     load = YAML(typ="safe").load
-    args = ("diffusion", "repo", "list", "all", "--show-uris")
+    args = ("diffusion", "repo", "list", "--status=any", "--show-uris")
 
     as_json = phabfive(*args, json_output=True)
     as_jsonl = [
