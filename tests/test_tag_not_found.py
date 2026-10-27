@@ -82,6 +82,18 @@ class TestTaskSearch:
 
         maniphest.phab.maniphest.search.assert_not_called()
 
+    @pytest.mark.parametrize("tag", ["known+", "+known", "known++known", "known,"])
+    def test_an_empty_name_raises_before_searching(self, _init, tag):
+        """`known+` used to search `known` alone, every task of it (#526)"""
+        maniphest = self._maniphest()
+        maniphest.phab.maniphest.search.side_effect = AssertionError("searched")
+
+        with pytest.raises(PhabfiveInputException, match="Empty project name"):
+            maniphest.task_search(tag=tag)
+
+        maniphest.phab.project.search.assert_not_called()
+        maniphest.phab.maniphest.search.assert_not_called()
+
     def test_a_malformed_pattern_is_bad_input(self, _init):
         with pytest.raises(PhabfiveInputException, match="Invalid tag pattern"):
             self._maniphest().task_search(tag=",")

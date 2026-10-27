@@ -3,7 +3,7 @@
 # 3rd party imports
 import pytest
 
-from phabfive.exceptions import PhabfiveException
+from phabfive.exceptions import PhabfiveException, PhabfiveInputException
 
 # phabfive imports
 from phabfive.project_filters import (
@@ -181,30 +181,25 @@ class TestParseProjectPatterns:
             parse_project_patterns("   ")
         assert "Empty project pattern" in str(exc.value)
 
-    def test_trailing_comma(self):
-        """Trailing comma creates empty group, which is skipped"""
-        patterns = parse_project_patterns("ProjectA,")
-        assert len(patterns) == 1
-        assert patterns[0].project_names == ["ProjectA"]
+    @pytest.mark.parametrize(
+        "patterns_str", ["ProjectA+", "+ProjectA", "ProjectA++ProjectB", "+", "C++"]
+    )
+    def test_an_empty_name_next_to_plus_is_refused(self, patterns_str):
+        """`team+` is a half-built AND search, not a search of `team` (#526)"""
+        with pytest.raises(PhabfiveInputException, match="next to '\\+'"):
+            parse_project_patterns(patterns_str)
 
-    def test_trailing_plus(self):
-        """Trailing plus creates empty part, which is skipped"""
-        patterns = parse_project_patterns("ProjectA+")
-        assert len(patterns) == 1
-        assert patterns[0].project_names == ["ProjectA"]
+    @pytest.mark.parametrize(
+        "patterns_str", ["ProjectA,", ",ProjectA", "ProjectA,,ProjectB", ",", " , "]
+    )
+    def test_an_empty_name_next_to_comma_is_refused(self, patterns_str):
+        """One rule for both operators: no name may be empty"""
+        with pytest.raises(PhabfiveInputException, match="next to ','"):
+            parse_project_patterns(patterns_str)
 
-    def test_leading_comma(self):
-        """Leading comma creates empty group, which is skipped"""
-        patterns = parse_project_patterns(",ProjectA")
-        assert len(patterns) == 1
-        assert patterns[0].project_names == ["ProjectA"]
-
-    def test_multiple_commas(self):
-        """Multiple commas create empty groups"""
-        patterns = parse_project_patterns("ProjectA,,ProjectB")
-        assert len(patterns) == 2
-        assert patterns[0].project_names == ["ProjectA"]
-        assert patterns[1].project_names == ["ProjectB"]
+    def test_a_name_with_a_plus_points_at_hashtag_or_id(self):
+        with pytest.raises(PhabfiveInputException, match="hashtag or ID"):
+            parse_project_patterns("C++")
 
     def test_whitespace_around_operators(self):
         """Whitespace around operators should be trimmed"""

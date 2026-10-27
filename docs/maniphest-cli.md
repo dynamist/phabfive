@@ -769,6 +769,24 @@ phabfive maniphest search --tag "Q1*+Urgent,Q2*"
 
 **How it works**: Comma-separated groups are evaluated independently (OR), and within each group, plus-separated projects must all match (AND).
 
+Every name has to be there. An empty name next to `+` or `,` is refused rather than
+skipped, since `--tag "team+"` read as `--tag team` would answer a narrow question with a
+wide one:
+
+```bash
+$ phabfive maniphest search --tag "Backend+"
+ERROR: Invalid tag pattern 'Backend+': Empty project name next to '+'. A project whose name contains '+' or ',' is named by its hashtag or ID
+```
+
+The same goes for a stray comma (`Backend,`, `,Backend`, `Backend,,QA`). A project whose
+name contains `+` or `,` cannot be written by name in `--tag`, because the name is split
+on them; name it by its hashtag or ID instead. Phorge drops the `+` from a hashtag, so a
+project called `C++` is usually `#c`:
+
+```bash
+phabfive maniphest search --tag "#c+Sprint 42"
+```
+
 #### Wildcards with AND/OR Logic
 
 Combine wildcard patterns with logical operators:
