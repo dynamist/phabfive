@@ -127,6 +127,16 @@
 
 ## Bug Fixes
 
+* **`--show-relations` no longer loses parent and subtask edges on large results.**
+  `edge.search` pages by when an edge was created, to the second, and skips the edges
+  of a tie that did not fit on the page - and one edit that sets many subtasks creates
+  all their edges in the same second. So a search with more than 100 edges could report
+  an edge from one end and not the other in the same response, a different one each
+  time. phabfive now asks for each page from just above the last edge of the one
+  before and drops the repeats, so `search --show-relations`, `show --show-relations`
+  and the `--parent`, `--subtask` and `--commit` filters see every edge. This works
+  around the server on every Phorge and Phabricator version. #547
+
 * **`passphrase show --show-secret` fails on a secret Phorge does not return.** A
   credential without Conduit access printed `[Access denied - enable Conduit access in
   web UI]` as its secret, and a note printed an empty one, both with exit status 0, so

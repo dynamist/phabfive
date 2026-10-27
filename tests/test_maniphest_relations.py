@@ -2,11 +2,12 @@
 
 """--show-relations: Parents, Subtasks and Commits for many tasks at once (#542)."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 from phabfive.exceptions import PhabfiveAPIException
 from phabfive.maniphest import Maniphest
-from phabfive.maniphest.fetchers import fetch_edges_for_tasks
+from phabfive.maniphest.fetchers import fetch_edges_for_tasks, search_edges
 
 URL = "https://phorge.example.com"
 
@@ -118,6 +119,134 @@ class TestFetchEdgesForTasks:
 
         assert fetch_edges_for_tasks(phab, [], ["parents"]) == {}
         phab.edge.search.assert_not_called()
+
+
+class _EdgeServer:
+    """edge.search as Phorge pages it (#547).
+
+    Rows are ordered newest first by ``(dateCreated, seq)``, a page is cut
+    after `limit` rows (at most 1000), its cursor is ``<dateCreated>_<seq>``
+    of the last row, and the next page holds the rows strictly below that
+    pair. `seq` restarts in every edit, so rows created in the same second
+    tie, and the server skips the tied rows that did not fit on a page.
+    """
+
+    def __init__(self, rows):
+        #: (source, edgeType, destination, dateCreated, seq)
+        self.rows = rows
+        self.calls = []
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        rows = sorted(
+            (
+                row
+                for row in self.rows
+                if row[0] in kwargs["sourcePHIDs"] and row[1] in kwargs["types"]
+            ),
+            key=lambda row: (row[3], row[4]),
+            reverse=True,
+        )
+        if kwargs.get("after"):
+            created, seq = (int(part) for part in kwargs["after"].split("_"))
+            rows = [row for row in rows if (row[3], row[4]) < (created, seq)]
+        limit = min(1000, kwargs.get("limit", 100))
+        page = rows[:limit]
+        more = len(rows) > limit
+        return {
+            "data": [
+                {"sourcePHID": src, "edgeType": edge_type, "destinationPHID": dst}
+                for src, edge_type, dst, _, _ in page
+            ],
+            "cursor": {"after": f"{page[-1][3]}_{page[-1][4]}" if more else None},
+        }
+
+
+def _children(count, created=1700000000):
+    """`count` subtasks set on one parent in one edit: each child's parent
+    edge is created in the same second with seq 0, so every one ties."""
+    children = [f"PHID-TASK-C{i}" for i in range(count)]
+    rows = [(child, "task.parent", "PHID-TASK-P", created, 0) for child in children]
+    rows += [
+        ("PHID-TASK-P", "task.subtask", child, created, seq)
+        for seq, child in enumerate(children)
+    ]
+    return children, rows
+
+
+class TestEdgeSearchTies:
+    """edge.search's cursor skips edges created in the same second (#547)."""
+
+    def test_tied_edges_past_the_first_page_are_all_read(self):
+        children, rows = _children(150)
+        phab = MagicMock()
+        phab.edge.search.side_effect = _EdgeServer(rows)
+
+        edges = fetch_edges_for_tasks(
+            phab, children + ["PHID-TASK-P"], ["parents", "subtasks"]
+        )
+
+        assert all(edges[child]["parents"] == ["PHID-TASK-P"] for child in children)
+        assert sorted(edges["PHID-TASK-P"]["subtasks"]) == sorted(children)
+
+    def test_a_tie_across_a_page_boundary_is_read_again_not_skipped(self):
+        """90 newer edges, then 30 tied older ones that straddle the first page."""
+        rows = [
+            (f"PHID-TASK-{i}", "task.parent", "PHID-TASK-NEW", 1700000000 + i, 0)
+            for i in range(90)
+        ]
+        rows += [
+            (f"PHID-TASK-T{i}", "task.parent", "PHID-TASK-OLD", 1600000000, 0)
+            for i in range(30)
+        ]
+        server = _EdgeServer(rows)
+
+        records = search_edges(
+            server,
+            sourcePHIDs=[row[0] for row in rows],
+            types=["task.parent"],
+        )
+
+        assert len(records) == 120
+        assert len({record["sourcePHID"] for record in records}) == 120
+        assert [call.get("after") for call in server.calls] == [
+            None,
+            "1600000000_1",
+        ]
+
+    def test_a_page_of_one_tie_is_asked_for_again_at_the_largest_size(self):
+        children, rows = _children(250)
+        server = _EdgeServer(rows)
+
+        records = search_edges(server, sourcePHIDs=children, types=["task.parent"])
+
+        assert len(records) == 250
+        assert [call["limit"] for call in server.calls] == [100, 100, 1000]
+
+    def test_a_tie_larger_than_any_page_is_paged_past_with_a_warning(self, caplog):
+        children, rows = _children(1200)
+        rows.append(("PHID-TASK-C0", "task.parent", "PHID-TASK-OLD", 1600000000, 0))
+        server = _EdgeServer(rows)
+
+        with caplog.at_level(logging.WARNING, logger="phabfive.maniphest.fetchers"):
+            records = search_edges(server, sourcePHIDs=children, types=["task.parent"])
+
+        assert len(records) == 1001
+        assert "may be missing" in caplog.text
+
+    def test_a_cursor_of_another_form_is_followed_as_it_is(self):
+        pages = {
+            None: {"data": [{"sourcePHID": "A"}], "cursor": {"after": "abc"}},
+            "abc": {"data": [{"sourcePHID": "B"}], "cursor": {"after": None}},
+        }
+        calls = []
+
+        def search(**kwargs):
+            calls.append(kwargs.get("after"))
+            return pages[kwargs.get("after")]
+
+        assert [r["sourcePHID"] for r in search_edges(search)] == ["A", "B"]
+        assert calls == [None, "abc"]
 
 
 class TestSearchShowRelations:

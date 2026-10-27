@@ -4,7 +4,7 @@
 
 import logging
 
-from phabfive.pagination import search_all_pages
+from phabfive.pagination import MAX_PAGE_SIZE, page_records
 
 log = logging.getLogger(__name__)
 
@@ -772,6 +772,99 @@ _RELATIONSHIP_EDGE_TYPES = {
 }
 
 
+#: The largest page edge.search serves. It caps `limit` at 1000 rather than
+#: refusing it, unlike the `*.search` methods' 100 (MAX_PAGE_SIZE).
+EDGE_MAX_PAGE_SIZE = 1000
+
+
+def _inclusive_cursor(cursor):
+    """
+    The cursor that asks edge.search again for the rows tied with `cursor`.
+
+    edge.search pages newest first by ``(dateCreated, seq)`` and names a
+    cursor ``<dateCreated>_<seq>`` after the last row of a page, answering
+    the next page with the rows strictly older. But the pair is not unique:
+    `seq` restarts at 0 in every edit, so every edge created in the same
+    second ties with the others, and the rows of a tie that did not fit on
+    the page are never served (#547). One more than `seq` is a cursor just
+    above the tie, so the next page starts with the whole of it again.
+
+    Returns None for a cursor in any other form, which is paged as it is.
+    """
+    created, sep, seq = str(cursor).partition("_")
+    if not sep or not created.isdigit() or not seq.isdigit():
+        return None
+
+    return f"{created}_{int(seq) + 1}"
+
+
+def search_edges(search, **kwargs):
+    """
+    Run edge.search and return every edge, including the rows its cursor skips.
+
+    Each page after the first is asked for from just above the last row of
+    the one before (see `_inclusive_cursor`), so the rows that tie with it
+    are served again and the duplicates are dropped here. A page that holds
+    nothing but one tie is asked for again at edge.search's largest page
+    size; a tie larger than that is paged past with a warning, since it
+    cannot be read whole.
+
+    Parameters
+    ----------
+    search : callable
+        Calls edge.search with its keyword arguments and returns the response
+    **kwargs
+        Passed to edge.search unchanged, e.g. sourcePHIDs and types
+
+    Returns
+    -------
+    list
+        Each edge once, in the order the server answered with.
+    """
+    records = []
+    seen = set()
+    limit = MAX_PAGE_SIZE
+    after = None
+    previous = None
+
+    while True:
+        page_kwargs = dict(kwargs, limit=limit)
+        if after is not None:
+            page_kwargs["after"] = after
+
+        response = search(**page_kwargs)
+
+        for edge in page_records(response.get("data")):
+            key = (
+                edge.get("sourcePHID"),
+                edge.get("edgeType"),
+                edge.get("destinationPHID"),
+            )
+            if key not in seen:
+                seen.add(key)
+                records.append(edge)
+
+        cursor = (response.get("cursor") or {}).get("after")
+        if not cursor:
+            return records
+
+        if cursor == previous:
+            # The page held nothing but rows tied with the last one
+            if limit < EDGE_MAX_PAGE_SIZE:
+                limit = EDGE_MAX_PAGE_SIZE
+                continue
+
+            log.warning(
+                f"edge.search has more than {limit} edges created at {cursor}; "
+                "some of them may be missing"
+            )
+            after = cursor
+        else:
+            after = _inclusive_cursor(cursor) or cursor
+
+        previous = cursor
+
+
 def fetch_task_edges(phab, task_phid, relationship_type):
     """
     Fetch the parents, subtasks or commits of a task, raising on failure.
@@ -875,7 +968,7 @@ def fetch_edges_for_tasks(phab, task_phids, relationship_types):
         result = phab.edge.search(**kwargs)
         return getattr(result, "response", result) or {}
 
-    records = search_all_pages(
+    records = search_edges(
         search,
         sourcePHIDs=list(task_phids),
         types=list(by_edge_type),

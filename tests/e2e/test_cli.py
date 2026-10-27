@@ -1025,6 +1025,51 @@ def test_search_publishes_relations_when_asked(phabfive, create_task, conduit):
     assert "Parents" not in search()[child]
 
 
+def test_search_relations_survive_edges_created_in_one_second(phabfive, conduit):
+    """#547: edge.search pages by (dateCreated, seq), which ties for edges
+    created in the same second, and skips the tied ones past a page. One
+    edit that sets 120 subtasks creates 120 child-to-parent edges at once."""
+    unique = uuid.uuid4().hex[:8]
+    children = [
+        conduit(
+            "maniphest.edit",
+            **{
+                "transactions[0][type]": "title",
+                "transactions[0][value]": f"e2e-ties-{unique} {i}",
+            },
+        )["object"]
+        for i in range(120)
+    ]
+    params = {
+        "transactions[0][type]": "title",
+        "transactions[0][value]": f"e2e-ties-{unique} parent",
+        "transactions[1][type]": "subtasks.set",
+    }
+    for i, child in enumerate(children):
+        params[f"transactions[1][value][{i}]"] = child["phid"]
+    parent = conduit("maniphest.edit", **params)["object"]
+
+    ids = ",".join(f"T{task['id']}" for task in [parent, *children])
+    tasks = phabfive(
+        "maniphest",
+        "search",
+        f"--ids={ids}",
+        "--status=any",
+        "--show-relations",
+        "-l",
+        "0",
+        json_output=True,
+    )
+
+    by_id = {int(task["Link"].rsplit("/T", 1)[-1]): task for task in tasks}
+    assert len(by_id) == 121
+    assert len(by_id[parent["id"]]["Subtasks"]) == 120
+    orphans = [
+        child["id"] for child in children if len(by_id[child["id"]]["Parents"]) != 1
+    ]
+    assert orphans == []
+
+
 @missing_before(
     "2024.35", "task titles are not limited to 255 characters, so none is refused"
 )
