@@ -137,6 +137,15 @@
   and the `--parent`, `--subtask` and `--commit` filters see every edge. This works
   around the server on every Phorge and Phabricator version. #547
 
+* **`maniphest search --tag` refuses an empty project name next to `+` or `,`.** It
+  skipped one, so `--tag "team+"` - say `--tag "$TEAM+$SPRINT"` with `$SPRINT` unset -
+  searched every task of `team` rather than the tasks in `team` and something else, with
+  exit status 0 and an answer that looked right. Now `team+`, `+team`, `a++b` and the
+  stray commas in `a,`, `,a` and `a,,b` all fail with one line and exit status 1, one
+  rule for both operators. A project whose name contains `+`, such as `C++`, was
+  silently read as `C`; it is refused too, and has to be named by its hashtag or ID.
+  In a search spec, `tag:` follows the same rule. #526
+
 * **`passphrase show --show-secret` fails on a secret Phorge does not return.** A
   credential without Conduit access printed `[Access denied - enable Conduit access in
   web UI]` as its secret, and a note printed an empty one, both with exit status 0, so

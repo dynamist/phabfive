@@ -149,8 +149,9 @@ def parse_project_patterns(patterns_str):
 
     Raises
     ------
-    PhabfiveException
-        If pattern syntax is invalid
+    PhabfiveInputException
+        If the string is empty, or a name on either side of a ``,`` or
+        ``+`` is empty (``"a+"``, ``"a,,b"``)
 
     Examples
     --------
@@ -168,31 +169,23 @@ def parse_project_patterns(patterns_str):
 
     patterns = []
 
-    # Split by comma for OR groups
-    or_groups = patterns_str.split(",")
-
-    for or_group in or_groups:
-        or_group = or_group.strip()
-        if not or_group:
-            continue
+    # Every name has to be there: skipping an empty one would turn a
+    # half-built `team+` into `team`, an AND search into a wider one that
+    # still looks like an answer (#526). An empty OR group is refused too,
+    # for one rule rather than two
+    for or_group in patterns_str.split(","):
+        if not or_group.strip():
+            raise PhabfiveInputException("Empty project name next to ','")
 
         project_names = []
+        for and_part in or_group.split("+"):
+            if not and_part.strip():
+                raise PhabfiveInputException(
+                    "Empty project name next to '+'. A project whose name "
+                    "contains '+' or ',' is named by its hashtag or ID"
+                )
+            project_names.append(_parse_single_project(and_part))
 
-        # Split by plus for AND conditions
-        and_parts = or_group.split("+")
-
-        for and_part in and_parts:
-            and_part = and_part.strip()
-            if not and_part:
-                continue
-
-            project_name = _parse_single_project(and_part)
-            project_names.append(project_name)
-
-        if project_names:
-            patterns.append(ProjectPattern(project_names))
-
-    if not patterns:
-        raise PhabfiveInputException("No valid project patterns found")
+        patterns.append(ProjectPattern(project_names))
 
     return patterns

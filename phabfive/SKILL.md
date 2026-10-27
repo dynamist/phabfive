@@ -309,7 +309,9 @@ phabfive --format=json maniphest search --tag Backend --order=updated --limit 20
   concluding that nothing matches. `user search` is the exception: its text matches any
   part of a username or real name.
 - `--tag` filters by project or workboard, and supports wildcards and `,` for OR and `+`
-  for AND (`--tag "Backend*+Sprint 42"`).
+  for AND (`--tag "Backend*+Sprint 42"`). An empty name next to either is refused
+  (`team+`, `a,,b`), and a project whose name contains `+` or `,` is named by its hashtag
+  or ID.
 - `--assigned` and `--author` accept a username or `@me`.
 - `--status=open|closed|any` sets which statuses a search reaches; it is `open` by default,
   so closed tasks are excluded unless asked for. `--all` is a deprecated `--status=any`.
