@@ -4634,18 +4634,83 @@ class TestRepoListCli:
     }
 
     @pytest.mark.parametrize(
-        "status, expected",
+        "args, expected",
         [
-            (None, ["active"]),
-            ("active", ["active"]),
-            ("inactive", ["inactive"]),
-            ("all", ["active", "inactive"]),
+            ([], ["active"]),
+            (["--status=active"], ["active"]),
+            (["--status=inactive"], ["inactive"]),
+            (["--status=any"], ["active", "inactive"]),
         ],
     )
-    def test_the_status_argument_reaches_the_lookup(self, status, expected):
-        _, diffusion = self._invoke([status] if status else [])
+    def test_the_status_option_reaches_the_lookup(self, args, expected):
+        result, diffusion = self._invoke(args)
 
+        assert result.exit_code == 0
         assert diffusion.repo_list.call_args[1]["status"] == expected
+        assert "WARNING" not in result.output
+
+    @pytest.mark.parametrize("args", [["--status=inactiv"], ["inactiv"], ["any2"]])
+    def test_an_unknown_status_is_refused_not_read_as_active(self, args):
+        """The positional fell through to `active` for any value it did not
+        know, so a typo listed the active repositories and said nothing (#425).
+        """
+        result, diffusion = self._invoke(args)
+
+        assert result.exit_code == 1
+        assert "must be one of: active, inactive, any" in result.output
+        diffusion.repo_list.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "status, expected, replacement",
+        [
+            ("active", ["active"], "active"),
+            ("inactive", ["inactive"], "inactive"),
+            # `any` was the most likely thing to type, and meant `active`
+            ("any", ["active", "inactive"], "any"),
+            ("all", ["active", "inactive"], "any"),
+        ],
+    )
+    def test_the_status_argument_still_works_and_says_it_is_deprecated(
+        self, status, expected, replacement
+    ):
+        result, diffusion = self._invoke([status])
+
+        assert result.exit_code == 0
+        assert diffusion.repo_list.call_args[1]["status"] == expected
+        assert (
+            "WARNING: the STATUS argument is deprecated, use "
+            f"--status={replacement} instead." in result.output
+        )
+
+    def test_status_all_is_a_deprecated_spelling_of_any(self):
+        result, diffusion = self._invoke(["--status=all"])
+
+        assert result.exit_code == 0
+        assert diffusion.repo_list.call_args[1]["status"] == ["active", "inactive"]
+        assert (
+            "WARNING: --status=all is deprecated, use --status=any instead."
+            in result.output
+        )
+
+    def test_the_argument_and_the_option_may_agree(self):
+        result, diffusion = self._invoke(["all", "--status=any"])
+
+        assert result.exit_code == 0
+        assert diffusion.repo_list.call_args[1]["status"] == ["active", "inactive"]
+
+    def test_the_argument_and_the_option_must_not_disagree(self):
+        result, diffusion = self._invoke(["inactive", "--status=active"])
+
+        assert result.exit_code == 1
+        assert "cannot be combined with --status=active" in result.output
+        diffusion.repo_list.assert_not_called()
+
+    def test_the_status_argument_is_left_out_of_the_help(self):
+        result, _ = self._invoke(["--help"])
+
+        assert "--status" in result.output
+        assert "Deprecated, use --status" not in result.output
+        assert "repo list all" not in result.output
 
     def test_show_uris_reaches_the_lookup(self):
         _, diffusion = self._invoke(["--show-uris"])

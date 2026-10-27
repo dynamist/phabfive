@@ -15,7 +15,7 @@ from phabfive.constants import (
     PROJECT_ICONS,
     PROJECT_STATUS_CHOICES,
     RELATION_KEYWORDS,
-    REPO_STATUS_CHOICES,
+    REPO_STATUS_FILTER_CHOICES,
     USER_ROLE_ANY,
     USER_ROLES,
 )
@@ -1228,7 +1228,10 @@ def complete_policy(incomplete: str) -> list[str | tuple[str, str]]:
 
 
 def complete_repo_status(incomplete: str) -> List[str]:
-    """Complete the repository status filter for diffusion repo list.
+    """Complete `diffusion repo list --status`.
+
+    The deprecated `all` is not offered: completion should teach the
+    spelling that stays.
 
     Parameters
     ----------
@@ -1240,7 +1243,7 @@ def complete_repo_status(incomplete: str) -> List[str]:
     list
         Matching status completions
     """
-    return _complete_fixed(incomplete, REPO_STATUS_CHOICES + ["all"])
+    return _complete_fixed(incomplete, REPO_STATUS_FILTER_CHOICES)
 
 
 # The icons in use on the instance, cached for as long as the priorities and

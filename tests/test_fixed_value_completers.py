@@ -21,14 +21,16 @@ def _complete(args, incomplete):
 
 class TestRepoStatusCompletion:
     def test_offers_all_statuses(self):
-        assert _complete(["diffusion", "repo", "list"], "") == [
+        assert _complete(["diffusion", "repo", "list", "--status"], "") == [
             "active",
             "inactive",
-            "all",
+            "any",
         ]
 
     def test_matches_prefix(self):
-        assert _complete(["diffusion", "repo", "list"], "in") == ["inactive"]
+        assert _complete(["diffusion", "repo", "list", "--status"], "in") == [
+            "inactive"
+        ]
 
 
 class TestPolicyCompletion:

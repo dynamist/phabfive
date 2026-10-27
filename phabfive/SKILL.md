@@ -596,9 +596,9 @@ phabfive --format=json passphrase search "deploy" --type=password
 phabfive --format=json passphrase show K12                 # no Secret key
 phabfive --format=value passphrase show K12 --show-secret  # the bare secret
 
-phabfive --format=json diffusion repo list active
-phabfive --format=table diffusion repo list active   # a grid, for a human
-phabfive --format=json diffusion repo list all --show-uris
+phabfive --format=json diffusion repo list            # active ones only
+phabfive --format=table diffusion repo list           # a grid, for a human
+phabfive --format=json diffusion repo list --status=any --show-uris
 phabfive --format=json diffusion repo show R5
 phabfive diffusion repo show R5 R6 --show-uris --show-branches
 phabfive --format=json diffusion repo show R5 --show-policy

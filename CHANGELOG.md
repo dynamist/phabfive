@@ -30,6 +30,14 @@
   `ERR-INVALID-AUTH`, or an HTTP status such as `HTTP 503` - instead of one string, so a
   program no longer has to split `Bad response status: 503` itself
 
+* **`diffusion repo list` takes `--status=active|inactive|any`, and the positional
+  `STATUS` argument is deprecated (#425).** It is the option, and the `any` spelling,
+  that `maniphest search` and `project search` use. The positional still works, hidden,
+  and warns `the STATUS argument is deprecated, use --status=<value> instead.`; `all`
+  is a deprecated spelling of `any`, as `--status=all` too. A value the command does not
+  know is now refused with exit status 1 instead of listing the active repositories, and
+  the positional and `--status` cannot disagree
+
 ## New Features
 
 * **`maniphest stats` counts tasks created and closed per period (#598).**
@@ -126,6 +134,12 @@
   goes after the text: `phabfive T123 "text" --dry-run`. #577
 
 ## Bug Fixes
+
+* **`diffusion repo list any` no longer lists only the active repositories (#425).**
+  The positional status fell back to `active` for any value but `inactive` and `all`, so
+  `any` - the word every other command uses for every status - and a typo such as
+  `inactiv` both listed the active repositories without a word. `any` now means both,
+  and an unknown value is refused
 
 * **`--show-relations` no longer loses parent and subtask edges on large results.**
   `edge.search` pages by when an edge was created, to the second, and skips the edges
