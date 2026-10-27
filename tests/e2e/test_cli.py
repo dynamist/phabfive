@@ -1383,3 +1383,115 @@ def test_search_runs_every_object_type_one_spec_holds(phabfive_raw, tmp_path):
     # Both types ran, each record says which it is, and tasks came first.
     assert set(sections) == {"Task", "Project"}
     assert sections == sorted(sections, key=["Task", "Project"].index)
+
+
+# `maniphest stats` (#598) against the seed's Metrics project, whose tasks the
+# `stats` seed module backdates to 2025 (phorge/seed/data/stats.json). Every
+# date there is noon UTC on a Wednesday, so these months come out the same in
+# any timezone the tests run in.
+STATS_RANGE = ("--tag", "Metrics", "--since", "2025-01-01", "--until", "2025-04-01")
+
+
+def test_stats_counts_resolved_tasks_per_month(phabfive):
+    records = phabfive(
+        "maniphest", "stats", *STATS_RANGE, "--period", "month", json_output=True
+    )
+
+    assert [(r["Period"], r["Created"], r["Closed"], r["Net"]) for r in records] == [
+        ("2025-01", 4, 2, 2),
+        ("2025-02", 2, 1, 1),
+        ("2025-03", 0, 1, -1),
+    ]
+    # Closed in 7 and 42 days; the Wontfix one is not counted
+    assert records[0]["MedianDaysToClose"] == 24.5
+    assert records[0]["P85DaysToClose"] == 36.75
+    # Points are off on this instance, so there are no point figures at all
+    assert "PointsAdded" not in records[0]
+
+
+def test_stats_all_closed_counts_wontfix_too(phabfive):
+    records = phabfive(
+        "maniphest",
+        "stats",
+        *STATS_RANGE,
+        "--period",
+        "quarter",
+        "--all-closed",
+        json_output=True,
+    )
+
+    assert [(r["Period"], r["Created"], r["Closed"]) for r in records] == [
+        ("2025-Q1", 6, 5)
+    ]
+
+
+def test_stats_by_owner_splits_each_week(phabfive):
+    records = phabfive(
+        "maniphest",
+        "stats",
+        "--tag",
+        "Metrics",
+        "--since",
+        "2025-01-13",
+        "--until",
+        "2025-01-20",
+        "--by",
+        "owner",
+        json_output=True,
+    )
+
+    closed = {r["Owner"]: r["Closed"] for r in records if r["Period"] == "2025-W03"}
+    assert closed["mikael.wallin"] == 1
+    assert sum(closed.values()) == 1
+
+
+def test_stats_jsonl_is_one_period_per_line(phabfive):
+    out = phabfive(
+        "--format", "jsonl", "maniphest", "stats", *STATS_RANGE, "--period", "month"
+    )
+
+    assert [json.loads(line)["Period"] for line in out.splitlines()] == [
+        "2025-01",
+        "2025-02",
+        "2025-03",
+    ]
+
+
+def test_stats_runs_from_a_search_spec(phabfive, tmp_path):
+    spec = tmp_path / "throughput.yaml"
+    spec.write_text(
+        "kind: search\n"
+        "searches:\n"
+        "  - type: task-stats\n"
+        "    search:\n"
+        "      tag: Metrics\n"
+        "      since: 2025-01-01\n"
+        "      until: 2025-04-01\n"
+        "      period: month\n"
+    )
+
+    records = phabfive("search", "-f", str(spec), json_output=True)
+
+    assert [(r["Period"], r["Closed"]) for r in records] == [
+        ("2025-01", 2),
+        ("2025-02", 1),
+        ("2025-03", 1),
+    ]
+
+
+def test_search_takes_an_absolute_date(phabfive):
+    tasks = phabfive(
+        "maniphest",
+        "search",
+        "--tag",
+        "Metrics",
+        "--status",
+        "any",
+        "--created-after",
+        "2025-01-01",
+        "--created-before",
+        "2025-02-01",
+        json_output=True,
+    )
+
+    assert len(tasks) == 4
