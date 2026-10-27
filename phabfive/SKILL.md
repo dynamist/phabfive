@@ -500,6 +500,9 @@ cannot be undone: a repository cannot be removed once created, and
 `diffusion uri create` **demotes every URI already on the repository** to
 `io=read, display=never` before adding the new one, so it can un-publish a clone
 URL that nothing asked it to touch. Its `--dry-run` names each URI it would demote.
+`diffusion uri edit --uri` to another host or protocol **clears the URI's credential** -
+Phorge does it, and the preview adds a `Credential` line ending `[cleared: the host
+changed]`. Pass `--cred` in the same edit to keep or replace the key.
 
 ### Things that will hang you
 

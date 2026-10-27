@@ -1175,6 +1175,56 @@ def test_passphrase_show_prints_description_and_username(phabfive):
         assert "Secret" not in credential
 
 
+def test_uri_edit_says_a_host_change_clears_the_credential(
+    phabfive, phabfive_raw, create_repository
+):
+    """#409: Phorge drops the credential of a URI moved to another host.
+
+    `uri create` insists on --observe or --mirror, so the URI is made a mirror
+    and set to no I/O at once, and it names `.invalid` hosts, which never
+    resolve, for the moment in between.
+    """
+    key = _seeded_credentials(phabfive)["Observe key"]["id"]
+    name = create_repository()
+    old = f"git@example.invalid:group/{name}.git"
+    new = f"git@other-host.example.invalid:group/{name}.git"
+
+    phabfive("diffusion", "uri", "create", key, name, old, "--mirror", "--yes")
+    phabfive("diffusion", "uri", "edit", name, old, "--io", "none", "--yes")
+
+    def credential_of(uri):
+        [found] = [
+            row
+            for row in phabfive("diffusion", "uri", "list", name, json_output=True)
+            if row["URI"] == uri
+        ]
+        return found["Credential"]
+
+    assert credential_of(old) == key
+
+    preview = phabfive_raw(
+        "diffusion", "uri", "edit", name, old, "--uri", new, "--dry-run"
+    )
+    assert preview.returncode == 0, preview.stderr
+    # Not a terminal, so the format is machine-readable and the prose that
+    # describes the change goes to stderr.
+    assert f"Credential: {key} → (none)   [cleared: the host changed]" in preview.stderr
+
+    # Naming the credential the URI already has keeps it across the move,
+    # which one request cannot do: Phorge drops it as having no effect.
+    phabfive(
+        "diffusion", "uri", "edit", name, old, "--uri", new, "--cred", key, "--yes"
+    )
+    assert credential_of(new) == key
+
+    moved_back = phabfive_raw(
+        "diffusion", "uri", "edit", name, new, "--uri", old, "--yes"
+    )
+    assert moved_back.returncode == 0, moved_back.stderr
+    assert "[cleared: the host changed]" in moved_back.stderr
+    assert credential_of(old) == "(none)"
+
+
 def test_passphrase_show_reads_the_secrets_phorge_returns(phabfive):
     creds = _seeded_credentials(phabfive)
 

@@ -113,7 +113,8 @@ def render_changes(monogram, changes, header=None, file=None):
 
     Args:
         monogram (str): Object monogram (e.g., "T123")
-        changes (list): Dicts with 'field', 'old' and 'new' keys
+        changes (list): Dicts with 'field', 'old' and 'new' keys, and an
+            optional 'note' saying why a change happens, shown after it
         header (str): Line to print first; defaults to "<monogram>:"
         file: Stream to write to; defaults to stdout. Under a
             machine-readable format the caller passes stderr, because this
@@ -127,6 +128,9 @@ def render_changes(monogram, changes, header=None, file=None):
         field = change["field"]
         old = change["old"]
         new = change["new"]
+
+        if change.get("note") and field != "Title":
+            new = f"{new}   [{change['note']}]"
 
         if field == "Title":
             # A title is free text, so a diff reads better than "old → new"
