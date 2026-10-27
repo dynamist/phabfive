@@ -758,7 +758,8 @@ credential the URI already has keeps it:
 An edit that sets both `--uri` and `--cred` is sent as two requests, the
 credential second: in one request, Phorge discards a credential the URI already
 had as no change before the new URI clears it. If the second request fails, the
-error says the URI was changed and now has no credential.
+error says which credential the URI was left with: none, if the new URI is one
+Phorge clears it for, or the one it had otherwise.
 
 ## Error messages
 

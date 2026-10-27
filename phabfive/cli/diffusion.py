@@ -1131,7 +1131,7 @@ def edit(
             raise typer.Exit(return_code or 0)
 
     try:
-        diffusion.apply_uri_edit(object_id, transactions)
+        diffusion.apply_uri_edit(object_id, transactions, uri_record=uri_record)
     except PhabfiveDataException as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
