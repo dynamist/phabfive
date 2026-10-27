@@ -340,11 +340,6 @@ one to read.
     URIs of its own reports `No URIs found: R1 has none` - that is instance
     configuration, not a missing URI.
 
-    ```
-    [DRY RUN] Would apply to http://phorge.localhost/R10 (urimatrix375):
-      Visible To: All Users → Public (No Login Required)
-    ```
-
 ## `uri create` demotes every other URI
 
 Phorge publishes one clone URI per repository. `uri create` respects that by
