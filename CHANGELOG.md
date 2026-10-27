@@ -141,6 +141,16 @@
   `inactiv` both listed the active repositories without a word. `any` now means both,
   and an unknown value is refused
 
+* **`diffusion uri edit --uri` says when Phorge clears the URI's credential.** Moving a
+  URI to another host or protocol makes Phorge drop its credential, and the preview and
+  the result reported only the URI changing - so a repository that authenticated a
+  moment ago stopped fetching with no line saying why. Both now add
+  `Credential: K3 → (none)   [cleared: the host changed]`. A path change keeps the
+  credential and says nothing. And `--uri` with `--cred` naming the credential the URI
+  already had used to lose it, because Phorge drops a credential that is no change
+  before the new URI clears it: phabfive now sends the credential in a second request
+  after the URI, whenever an edit sets both. #409
+
 * **`--show-relations` no longer loses parent and subtask edges on large results.**
   `edge.search` pages by when an edge was created, to the second, and skips the edges
   of a tie that did not fit on the page - and one edit that sets many subtasks creates

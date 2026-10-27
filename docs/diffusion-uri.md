@@ -726,6 +726,40 @@ http://phorge.localhost/R16 (uridoc377): No changes (already at target state)
 Unlike `uri create`, `uri edit` touches only the URI named. It does not demote
 anything.
 
+### Moving a URI to another host clears its credential
+
+Phorge drops a URI's credential when `--uri` changes its host or its protocol, so
+a key for one server never silently follows the URI to another. A change of path
+or port keeps it, and so does `git@host:path` rewritten as `ssh://git@host/path`,
+which is the same protocol and host. Hosts are compared as written, so a change
+of case alone counts as another host. phabfive sends nothing to clear it, but
+says so, in the preview and in the result:
+
+```bash
+phabfive diffusion uri edit uridoc377 git@github.com:dynamist/phabfive.git \
+    --uri git@gitlab.example.com:dynamist/phabfive.git --dry-run
+```
+
+```
+[DRY RUN] Would apply to http://phorge.localhost/R16 (uridoc377):
+  URI: git@github.com:dynamist/phabfive.git → git@gitlab.example.com:dynamist/phabfive.git
+  Credential: K3 → (none)   [cleared: the host changed]
+```
+
+The repository does not fail at the edit, it fails the next time a daemon
+fetches, so give the new key in the same edit with `--cred`. Naming the
+credential the URI already has keeps it:
+
+```
+  URI: git@github.com:dynamist/phabfive.git → git@gitlab.example.com:dynamist/phabfive.git
+  Credential: K3 → K3   [set again: Phorge clears it when the host changed]
+```
+
+An edit that sets both `--uri` and `--cred` is sent as two requests, the
+credential second: in one request, Phorge discards a credential the URI already
+had as no change before the new URI clears it. If the second request fails, the
+error says the URI was changed and now has no credential.
+
 ## Error messages
 
 ### `ERROR: Repository 'X' not found`

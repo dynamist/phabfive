@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # 3rd party imports
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -588,6 +588,180 @@ class TestUriEditCredentialSecrecy:
         assert changes == [
             {"field": "Credential", "old": "PHID-CDTL-oldcred", "new": "K2"}
         ]
+
+
+class TestUriEditClearsCredential:
+    """Phorge drops a URI's credential when its host or protocol changes (#409).
+
+    The rule is DiffusionURIEditor's, measured against a local Phorge: a host
+    or protocol change clears the credential, a path change keeps it, and in
+    one request a credential transaction naming the credential the URI had
+    before is discarded as having no effect.
+    """
+
+    OLD = "git@example.com:group/thing.git"
+    K3 = "PHID-CDTL-k3"
+
+    def _diffusion(self, diffusion):
+        diffusion.phab.phid.query.side_effect = lambda phids: {
+            phid: {"name": {self.K3: "K3", "PHID-CDTL-k4": "K4"}[phid]}
+            for phid in phids
+        }
+        diffusion.passphrase.get_credential_record = MagicMock(
+            side_effect=lambda monogram: {
+                "id": int(monogram[1:]),
+                "phid": f"PHID-CDTL-{monogram.lower()}",
+                "monogram": monogram,
+                "type": "ssh-generated-key",
+            }
+        )
+        return diffusion
+
+    def _build(self, diffusion, new_uri, credential=None, credential_phid=K3):
+        return self._diffusion(diffusion).build_uri_edit(
+            _uri(uri=self.OLD, credential_phid=credential_phid),
+            uri=new_uri,
+            credential=credential,
+        )
+
+    def test_a_host_change_says_the_credential_is_cleared(self, diffusion):
+        transactions, changes = self._build(
+            diffusion, "git@other-host.example.net:group/thing.git"
+        )
+
+        # Phorge does the clearing; there is nothing for phabfive to send.
+        assert transactions == [
+            {"type": "uri", "value": "git@other-host.example.net:group/thing.git"}
+        ]
+        assert changes[1] == {
+            "field": "Credential",
+            "old": "K3",
+            "new": "(none)",
+            "note": "cleared: the host changed",
+        }
+
+    def test_a_path_change_keeps_the_credential(self, diffusion):
+        _, changes = self._build(diffusion, "git@example.com:group/thing-moved.git")
+
+        assert [c["field"] for c in changes] == ["URI"]
+
+    def test_the_same_host_in_ssh_form_keeps_the_credential(self, diffusion):
+        _, changes = self._build(diffusion, "ssh://git@example.com/group/thing.git")
+
+        assert [c["field"] for c in changes] == ["URI"]
+
+    def test_a_protocol_change_says_the_credential_is_cleared(self, diffusion):
+        _, changes = self._build(diffusion, "https://example.com/group/thing.git")
+
+        assert changes[1]["note"] == "cleared: the protocol changed"
+
+    def test_a_host_differing_only_in_case_is_another_host(self, diffusion):
+        # Phorge compares the hosts as strings, and measured so.
+        _, changes = self._build(diffusion, "git@EXAMPLE.com:group/thing.git")
+
+        assert changes[1]["note"] == "cleared: the host changed"
+
+    def test_no_credential_means_nothing_to_clear(self, diffusion):
+        _, changes = self._build(
+            diffusion,
+            "git@other-host.example.net:group/thing.git",
+            credential_phid=None,
+        )
+
+        assert [c["field"] for c in changes] == ["URI"]
+
+    def test_the_same_credential_is_set_again(self, diffusion):
+        transactions, changes = self._build(
+            diffusion, "git@other-host.example.net:group/thing.git", credential="K3"
+        )
+
+        # Already the URI's credential, but the host change clears it, so it
+        # must be sent rather than skipped as no change.
+        assert {"type": "credential", "value": self.K3} in transactions
+        assert changes[1] == {
+            "field": "Credential",
+            "old": "K3",
+            "new": "K3",
+            "note": "set again: Phorge clears it when the host changed",
+        }
+
+    def test_another_credential_is_an_ordinary_change(self, diffusion):
+        transactions, changes = self._build(
+            diffusion, "git@other-host.example.net:group/thing.git", credential="K4"
+        )
+
+        assert {"type": "credential", "value": "PHID-CDTL-k4"} in transactions
+        assert changes[1] == {"field": "Credential", "old": "K3", "new": "K4"}
+
+    def test_the_credential_goes_in_a_second_request(self, diffusion):
+        transactions = [
+            {"type": "uri", "value": "git@other-host.example.net:group/thing.git"},
+            {"type": "io", "value": "observe"},
+            {"type": "credential", "value": self.K3},
+        ]
+
+        diffusion.apply_uri_edit(10, transactions)
+
+        assert diffusion.phab.diffusion.uri.edit.call_args_list == [
+            call(transactions=transactions[:2], objectIdentifier=10),
+            call(transactions=transactions[2:], objectIdentifier=10),
+        ]
+
+    def test_a_credential_alone_is_one_request(self, diffusion):
+        transactions = [{"type": "credential", "value": self.K3}]
+
+        diffusion.apply_uri_edit(10, transactions)
+
+        diffusion.phab.diffusion.uri.edit.assert_called_once_with(
+            transactions=transactions, objectIdentifier=10
+        )
+
+    def test_a_failed_second_request_says_the_credential_is_gone(self, diffusion):
+        from phabfive.exceptions import PhabfiveAPIException
+
+        diffusion.phab.diffusion.uri.edit.side_effect = [
+            None,
+            PhabfiveAPIException("ERR", "nope"),
+        ]
+
+        with pytest.raises(PhabfiveDataException, match="now has none"):
+            diffusion.apply_uri_edit(
+                10,
+                [
+                    {"type": "uri", "value": "git@other.example.net:x.git"},
+                    {"type": "credential", "value": self.K3},
+                ],
+            )
+
+    def test_the_dry_run_shows_the_cleared_credential(self, diffusion):
+        from typer.testing import CliRunner
+
+        from phabfive.cli.diffusion import diffusion_app
+
+        diffusion = self._diffusion(diffusion)
+        diffusion.url = "https://phorge.example.com"
+        record = _uri(uri=self.OLD, credential_phid=self.K3)
+        diffusion.get_uri_and_repo = MagicMock(
+            return_value=(_repo("thing", short_name="thing"), record)
+        )
+
+        with patch("phabfive.cli.diffusion._get_diffusion_app", return_value=diffusion):
+            result = CliRunner().invoke(
+                diffusion_app,
+                [
+                    "uri",
+                    "edit",
+                    "thing",
+                    self.OLD,
+                    "--uri",
+                    "git@other-host.example.net:group/thing.git",
+                    "--dry-run",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "Credential: K3 → (none)   [cleared: the host changed]" in result.output
+        diffusion.phab.diffusion.uri.edit.assert_not_called()
 
 
 class TestEditUriComposition:

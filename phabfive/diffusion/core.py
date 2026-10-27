@@ -4,6 +4,7 @@
 
 import functools
 import logging
+import re
 
 
 from phabfive import passphrase
@@ -93,6 +94,85 @@ def fold_short_name(name):
         return ""
 
     return name.translate(_SHORT_NAME_PUNCTUATION).casefold()
+
+
+def _uri_protocol_and_host(uri):
+    """Read a URI's protocol and host the way Phorge's PhutilURI does.
+
+    A Git/SCP-style ``user@host:path`` has an implicit "ssh" protocol, so
+    ``git@host:path`` and ``ssh://git@host/path`` agree. Neither part is
+    folded to lower case, because Phorge compares them as plain strings.
+
+    Parameters
+    ----------
+    uri : str
+        A URI as a repository URI carries it
+
+    Returns
+    -------
+    tuple
+        (protocol, host), each "" where the URI has none
+    """
+    uri = uri or ""
+
+    # PhutilURI::isGitURIPattern, in arcanist/src/parser/PhutilURI.php
+    git = re.match(r"^(?P<head>[^/]+):(?P<last>(?!//).*)\Z", uri, re.S)
+    if (
+        git
+        and not re.search(r"\s", git["head"] + git["last"])
+        and not re.match(r"^\d+\Z", git["last"])
+        and re.search(r"[.@]", git["head"])
+    ):
+        parts = re.match(r"^(?:[^/@]+@)?(?P<host>[^/:]+):", uri)
+        return ("ssh", parts["host"] if parts else "")
+
+    scheme = re.match(r"^(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*)://(?P<rest>.*)\Z", uri)
+    if not scheme:
+        return ("", "")
+
+    authority = re.split(r"[/?#]", scheme["rest"], maxsplit=1)[0]
+    host = authority.rpartition("@")[2]
+    if host.startswith("["):
+        host = host.partition("]")[0] + "]"
+    else:
+        host = host.partition(":")[0]
+
+    return (scheme["scheme"], host)
+
+
+def _credential_clearing_reason(old_uri, new_uri):
+    """Say why moving a URI from one value to another drops its credential.
+
+    Phorge's DiffusionURIEditor clears the credential of a URI whose protocol
+    or host changes, and leaves it for a change of port or path - a key for
+    one host should not silently follow the URI to another.
+
+    Parameters
+    ----------
+    old_uri : str
+        The URI as it stands
+    new_uri : str
+        The URI it is being set to
+
+    Returns
+    -------
+    str or None
+        "the host changed", "the protocol changed", or None if the
+        credential survives the change
+    """
+    if not old_uri or old_uri == new_uri:
+        return None
+
+    old_protocol, old_host = _uri_protocol_and_host(old_uri)
+    new_protocol, new_host = _uri_protocol_and_host(new_uri)
+
+    if old_host != new_host:
+        return "the host changed"
+
+    if old_protocol != new_protocol:
+        return "the protocol changed"
+
+    return None
 
 
 def describe_repository(repo):
@@ -1273,18 +1353,35 @@ class Diffusion(Phabfive):
             record = self.passphrase.get_credential_record(credential)
             credential_phid = self._validate_credential_type(credential=record)
 
+        uri_fields = fields.get("uri", {})
+        current_uri = uri_fields.get("display")
+        stored_credential = fields.get("credentialPHID")
+
+        # Phorge clears the credential of a URI whose host or protocol
+        # changes, as a side effect of the URI transaction. Measured against
+        # what Phorge compares - the raw URI - and only worth saying when
+        # there is a credential to lose.
+        cleared_because = None
+        if uri is not None and uri != current_uri and stored_credential:
+            cleared_because = _credential_clearing_reason(
+                uri_fields.get("raw") or current_uri, uri
+            )
+
         candidates = [
-            ("uri", uri, "URI", fields.get("uri", {}).get("display"), None),
+            ("uri", uri, "URI", current_uri, None),
             ("io", io, "I/O", fields.get("io", {}).get("raw"), None),
             ("display", display, "Display", fields.get("display", {}).get("raw"), None),
             ("disable", disable, "Disabled", fields.get("disabled"), None),
             # The credential travels as a PHID but is shown by monogram, so its
             # secret never reaches the description of the change.
+            # Compared with what the URI will carry once the URI transaction
+            # has run, so naming the credential it already has still re-sets
+            # it after a host change clears it.
             (
                 "credential",
                 credential_phid,
                 "Credential",
-                fields.get("credentialPHID"),
+                None if cleared_because else stored_credential,
                 credential,
             ),
         ]
@@ -1300,15 +1397,30 @@ class Diffusion(Phabfive):
             transactions.append({"type": kind, "value": value})
 
             if kind == "credential":
-                old_shown = self._describe_credential(current)
+                old_shown = self._describe_credential(stored_credential)
             else:
                 old_shown = "(none)" if current is None else str(current)
 
+            change = {
+                "field": label,
+                "old": old_shown,
+                "new": str(shown_new if shown_new is not None else value),
+            }
+
+            if kind == "credential" and cleared_because and value == stored_credential:
+                change["note"] = f"set again: Phorge clears it when {cleared_because}"
+
+            changes.append(change)
+
+        if cleared_because and credential_phid is None:
+            # No transaction of ours, but the server's side effect is a change
+            # all the same, and the one a repository stops fetching over.
             changes.append(
                 {
-                    "field": label,
-                    "old": old_shown,
-                    "new": str(shown_new if shown_new is not None else value),
+                    "field": "Credential",
+                    "old": self._describe_credential(stored_credential),
+                    "new": "(none)",
+                    "note": f"cleared: {cleared_because}",
                 }
             )
 
@@ -1328,13 +1440,38 @@ class Diffusion(Phabfive):
         ------
         PhabfiveDataException
             If the API rejects the edit
+
+        Notes
+        -----
+        An edit that sets both the URI and the credential is sent as two
+        requests, the credential second. Phorge's URI transaction clears the
+        credential when the host or protocol changes, and it drops a
+        credential transaction naming the credential the URI had before the
+        edit as having no effect - so in one request, moving a URI to another
+        host while keeping its key would silently lose the key.
         """
-        try:
-            self.phab.diffusion.uri.edit(
-                transactions=transactions, objectIdentifier=object_identifier
-            )
-        except PhabfiveAPIException as e:
-            raise PhabfiveDataException(str(e))
+        kinds = {transaction["type"] for transaction in transactions}
+
+        if {"uri", "credential"} <= kinds:
+            batches = [
+                [t for t in transactions if t["type"] != "credential"],
+                [t for t in transactions if t["type"] == "credential"],
+            ]
+        else:
+            batches = [transactions]
+
+        for number, batch in enumerate(batches):
+            try:
+                self.phab.diffusion.uri.edit(
+                    transactions=batch, objectIdentifier=object_identifier
+                )
+            except PhabfiveAPIException as e:
+                if number:
+                    raise PhabfiveDataException(
+                        f"The URI was changed, but setting its credential "
+                        f"failed, so it now has none: {e}"
+                    )
+                raise PhabfiveDataException(str(e))
 
     def edit_uri(
         self,

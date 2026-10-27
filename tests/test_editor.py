@@ -169,6 +169,22 @@ class TestRenderChanges:
         assert "-before" in out
         assert "+after" in out
 
+    def test_a_note_follows_the_change(self, capsys):
+        render_changes(
+            "R1",
+            [
+                {
+                    "field": "Credential",
+                    "old": "K3",
+                    "new": "(none)",
+                    "note": "cleared: the host changed",
+                }
+            ],
+        )
+
+        out = capsys.readouterr().out
+        assert "Credential: K3 → (none)   [cleared: the host changed]" in out
+
     def test_none_old_means_added(self, capsys):
         render_changes("T42", [{"field": "Comment", "old": None, "new": "hello"}])
 
