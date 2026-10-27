@@ -262,7 +262,50 @@ def repo_list(
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
 
+    if not result.get("repositories"):
+        typer.echo(_no_repositories_found(result.get("total"), status_filter), err=True)
+
     display_repositories(result, _get_output_format(ctx), diffusion, tabular=True)
+
+
+def _no_repositories_found(total, status_filter):
+    """Say why `repo list` found nothing, on stderr like every other list.
+
+    Which of the two empty cases it is decides the next step: an instance
+    with no repositories, or one whose repositories the status filter all
+    left out, which --status=any would list (#395).
+
+    Parameters
+    ----------
+    total : int or None
+        How many repositories the instance has before the status filter
+    status_filter : list[str]
+        The statuses that were kept
+    """
+    if not total:
+        return "No repositories found"
+    return (
+        f"No repositories found: the instance has {total}, "
+        f"none of them {' or '.join(status_filter)}"
+    )
+
+
+def _no_uris_found(repo, total):
+    """Say why `uri list` found nothing, on stderr like every other list.
+
+    A repository with no URIs and one whose URIs the filters all rejected
+    call for different next steps, so the message says which (#395).
+
+    Parameters
+    ----------
+    repo : str
+        The repository as the caller named it
+    total : int or None
+        How many URIs the repository has before the filters
+    """
+    if not total:
+        return f"No URIs found: {repo} has none"
+    return f"No URIs found: {repo} has {total}, none matching the filters given"
 
 
 @repo_app.command("show")
@@ -929,6 +972,10 @@ def uri_list(
     except PhabfiveDataException as e:
         typer.echo(f"ERROR: {e}", err=True)
         raise typer.Exit(1)
+
+    # On stderr, so json and jsonl on stdout stay parseable, and exit 0
+    if not result.get("uris"):
+        typer.echo(_no_uris_found(repo, result.get("total")), err=True)
 
     display_uris(result, _get_output_format(ctx), diffusion, tabular=True)
 

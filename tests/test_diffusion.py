@@ -138,7 +138,27 @@ class TestEmptyInstance:
 
     def test_uri_list_is_empty_for_repository_without_uris(self):
         """An existing repository with no URIs is an empty result, not an error."""
-        assert _listing([_repo("myrepo")]).uri_list("myrepo") == {"uris": []}
+        assert _listing([_repo("myrepo")]).uri_list("myrepo") == {
+            "uris": [],
+            "total": 0,
+        }
+
+    def test_uri_list_counts_the_uris_the_filters_rejected(self):
+        """`total` lets the CLI say "none matching" rather than "none" (#395)."""
+        repo = _repo("myrepo")
+        repo["attachments"]["uris"]["uris"] = [_show_uri("ssh://example.com/x")]
+
+        assert _listing([repo]).uri_list("myrepo", builtin=True) == {
+            "uris": [],
+            "total": 1,
+        }
+
+    def test_repo_list_counts_the_repositories_the_status_filter_left_out(self):
+        result = _listing([_repo("old", status="inactive")]).repo_list(
+            status=["active"]
+        )
+
+        assert result == {"repositories": [], "total": 1}
 
     def test_uri_list_reports_unknown_repository_among_others(self):
         with pytest.raises(PhabfiveDataException, match="not found"):
@@ -4364,7 +4384,8 @@ class TestUriListRecord:
                     "Credential": "(none)",
                     "Disabled": False,
                 }
-            ]
+            ],
+            "total": 1,
         }
 
     def test_the_display_uri_is_what_is_reported(self):
@@ -4777,7 +4798,9 @@ class TestUriListFilterCli:
         result, _ = self._invoke(["uri", "list", "R5", "--io=read"])
 
         assert result.exit_code == 0
-        assert result.output == "[]\n"
+        assert result.stdout == "[]\n"
+        # The why goes to stderr, so stdout stays a parseable document (#395)
+        assert result.stderr.startswith("No URIs found: R5")
 
 
 class TestListFormats:

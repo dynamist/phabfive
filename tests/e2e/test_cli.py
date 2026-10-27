@@ -565,7 +565,8 @@ def test_uri_list_shows_the_built_in_ssh_uris(phabfive_raw):
 def test_uri_list_on_a_repository_without_uris(phabfive_raw):
     """An empty result, not a failure: no URIs were added to the seeded repositories.
 
-    An empty list, so stdout is still a JSON document (#522).
+    An empty list, so stdout is still a JSON document (#522), and stderr
+    says the built-in URIs are there but filtered away (#395).
     """
     result = phabfive_raw(
         "--format", "json", "diffusion", "uri", "list", "GUNNAR", "--external"
@@ -573,6 +574,8 @@ def test_uri_list_on_a_repository_without_uris(phabfive_raw):
 
     assert result.returncode == 0
     assert json.loads(result.stdout) == []
+    assert "No URIs found: GUNNAR has " in result.stderr
+    assert "none matching the filters given" in result.stderr
 
 
 def test_uri_list_refuses_an_io_value_that_is_not_one(phabfive_raw):

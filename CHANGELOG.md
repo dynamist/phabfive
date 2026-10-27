@@ -135,6 +135,15 @@
 
 ## Bug Fixes
 
+* **An empty `diffusion repo list` or `diffusion uri list` says so on stderr (#395).**
+  They printed nothing there, so "the repository has no URIs", "every URI was filtered
+  away" and "the command did nothing" looked the same. Like `maniphest search`,
+  `paste search` and `project search`, they now say `No URIs found` or `No repositories
+  found` on stderr, and which case it is: `R1 has none`, or `R3 has 2, none matching
+  the filters given`. stdout and the exit status `0` are unchanged. For the library,
+  `Diffusion.uri_list()` and `Diffusion.repo_list()` also answer with `total`, the
+  count before filtering
+
 * **`diffusion repo list any` no longer lists only the active repositories (#425).**
   The positional status fell back to `active` for any value but `inactive` and `all`, so
   `any` - the word every other command uses for every status - and a typo such as

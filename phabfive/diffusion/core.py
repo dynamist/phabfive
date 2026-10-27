@@ -721,13 +721,18 @@ class Diffusion(Phabfive):
         Returns
         -------
         dict
-            {"repositories": [...]}, sorted by name
+            {"repositories": [...], "total": int}, the repositories sorted
+            by name and ``total`` the number the instance has before the
+            status filter. ``total`` is what lets an empty listing say
+            whether the instance has no repositories or the filter kept
+            none of them (#395).
         """
         status = status or REPO_STATUS_CHOICES
 
         repos = fetch_repositories(
             self.phab, attachments={"uris": True} if show_uris else None
         )
+        total = len(repos)
 
         repos = [repo for repo in repos if repo["fields"].get("status") in status]
         repos = sorted(repos, key=lambda repo: repo["fields"].get("name") or "")
@@ -743,7 +748,7 @@ class Diffusion(Phabfive):
             show_policy=show_policy,
         )
 
-        return {"repositories": repositories}
+        return {"repositories": repositories, "total": total}
 
     def uri_list(
         self,
@@ -778,9 +783,11 @@ class Diffusion(Phabfive):
         Returns
         -------
         dict
-            {"uris": [...]}. A repository with no URIs to list, and one
-            whose URIs the filters all rejected, are both an empty result
-            rather than a failure.
+            {"uris": [...], "total": int}, ``total`` being how many URIs
+            the repository has before the filters. A repository with no
+            URIs to list, and one whose URIs the filters all rejected, are
+            both an empty result rather than a failure; ``total`` tells the
+            two apart (#395).
 
         Raises
         ------
@@ -794,8 +801,10 @@ class Diffusion(Phabfive):
         if match is None:
             raise PhabfiveDataException(f"Repository '{repo}' not found")
 
+        all_uris = match["attachments"]["uris"]["uris"]
+
         uris = select_uris(
-            match["attachments"]["uris"]["uris"],
+            all_uris,
             clone_only=clone_only,
             io=io,
             display=display,
@@ -805,7 +814,10 @@ class Diffusion(Phabfive):
 
         credential_names = self._credential_names(uris)
 
-        return {"uris": [format_uri(uri, credential_names) for uri in uris]}
+        return {
+            "uris": [format_uri(uri, credential_names) for uri in uris],
+            "total": len(all_uris),
+        }
 
     def _credential_names(self, uris):
         """Name the credentials a set of URIs is bound to, by monogram.
