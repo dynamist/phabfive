@@ -239,6 +239,14 @@
   an idle hour left `api-supersecr3tapikeyfordevelop1` rejected. The seed now makes it
   permanent, as the bash scripts before it did, and makes an existing one permanent on
   the next start; `make down && make up` repairs an instance that already lost it
+
+* The test suite no longer passes or fails depending on the terminal it runs in.
+  `tests/conftest.py` sets `TYPER_USE_RICH=0` before any test module imports typer, and
+  drops `FORCE_COLOR`, `TTY_COMPATIBLE`, `TTY_INTERACTIVE`, `COLUMNS`, `LINES` and a
+  `TERM` of `dumb`, so five tests that assert on rendered help and records stop failing
+  locally under a shell that sets one of them, and a single-file run agrees with a full
+  one. CI never saw it, its environment set none of them. #414
+
 * The skill `phabfive --skill` prints says to build comment and description text with a
   quoted heredoc (`<<'EOF'`). Remarkup writes inline code in backticks, and an agent that
   used `<<EOF` had the shell run them: one comment got a test run's output pasted into

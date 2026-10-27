@@ -16,6 +16,25 @@ from unittest.mock import patch
 import pytest
 
 
+# The suite asserts on text that rich and typer render, so the developer's
+# terminal must not decide what that text is. This runs before any test module
+# is imported, which matters for TYPER_USE_RICH: typer reads it once, when it is
+# first imported, and several test modules import typer before phabfive.cli
+# gets to set it - so without this, single-file and full runs disagreed (#414).
+# "0" is what phabfive.cli sets for the real command.
+os.environ["TYPER_USE_RICH"] = "0"
+# Each of these makes rich colour, or size, output that is not a terminal - which
+# CliRunner's never is - so a shell that sets one (FORCE_COLOR is common) put
+# escape codes in the middle of the asserted strings. The tests of these
+# variables set them themselves with monkeypatch.
+for _var in ("FORCE_COLOR", "TTY_COMPATIBLE", "TTY_INTERACTIVE", "COLUMNS", "LINES"):
+    os.environ.pop(_var, None)
+# TERM=dumb makes rich ignore COLUMNS and fall back to 80 columns, which elides
+# help rows that tests asking for a wide terminal expect to see
+if os.environ.get("TERM") in ("dumb", "unknown"):
+    del os.environ["TERM"]
+
+
 # Tests against a live Phorge in the k3d cluster only run when asked for, see
 # `make test-k8s` and `make test-e2e`
 if not os.environ.get("PHABFIVE_LIVE_TESTS"):
