@@ -47,6 +47,7 @@ from phabfive.diffusion.validators import (
 from phabfive.diffusion.waiting import DEFAULT_TIMEOUT, poll
 from phabfive.exceptions import (
     PhabfiveAPIException,
+    PhabfiveConnectionException,
     PhabfiveDataException,
     PhabfiveNameCollisionException,
     PhabfiveNotFoundException,
@@ -173,6 +174,42 @@ def _credential_clearing_reason(old_uri, new_uri):
         return "the protocol changed"
 
     return None
+
+
+def _credential_left(uri_record, transactions):
+    """Say which credential a URI has after its credential request failed.
+
+    The URI request before it went through, so the URI keeps the credential
+    it had, unless the new URI is one Phorge clears it for.
+
+    Parameters
+    ----------
+    uri_record : dict or None
+        The URI as it stood before the edit, None when the caller did not
+        pass it
+    transactions : list
+        The transactions of the whole edit
+
+    Returns
+    -------
+    str
+        A clause to follow "setting its credential failed,"
+    """
+    if uri_record is None:
+        return "so check which credential it has now"
+
+    fields = uri_record.get("fields", {})
+    if not fields.get("credentialPHID"):
+        return "so it still has none"
+
+    uri_fields = fields.get("uri", {})
+    old_uri = uri_fields.get("raw") or uri_fields.get("display")
+    new_uri = next(t["value"] for t in transactions if t["type"] == "uri")
+    reason = _credential_clearing_reason(old_uri, new_uri)
+
+    if reason:
+        return f"and Phorge cleared the one it had because {reason}, so it now has none"
+    return "so it keeps the credential it had"
 
 
 def describe_repository(repo):
@@ -1426,7 +1463,7 @@ class Diffusion(Phabfive):
 
         return transactions, changes
 
-    def apply_uri_edit(self, object_identifier, transactions):
+    def apply_uri_edit(self, object_identifier, transactions, uri_record=None):
         """Send prepared transactions to Diffusion.
 
         Parameters
@@ -1435,11 +1472,15 @@ class Diffusion(Phabfive):
             URI object identifier
         transactions : list
             Transactions from build_uri_edit
+        uri_record : dict, optional
+            The URI as it stood before the edit, so that a failure between
+            the two requests can say which credential the URI was left with
 
         Raises
         ------
         PhabfiveDataException
-            If the API rejects the edit
+            If the API rejects the edit, or the server cannot be reached for
+            the credential after the URI was changed
 
         Notes
         -----
@@ -1465,12 +1506,16 @@ class Diffusion(Phabfive):
                 self.phab.diffusion.uri.edit(
                     transactions=batch, objectIdentifier=object_identifier
                 )
-            except PhabfiveAPIException as e:
+            except (PhabfiveAPIException, PhabfiveConnectionException) as e:
                 if number:
+                    # The URI is already changed, so whatever went wrong -
+                    # a refusal or a lost connection - the edit is half done
                     raise PhabfiveDataException(
                         f"The URI was changed, but setting its credential "
-                        f"failed, so it now has none: {e}"
-                    )
+                        f"failed, {_credential_left(uri_record, transactions)}: {e}"
+                    ) from e
+                if isinstance(e, PhabfiveConnectionException):
+                    raise
                 raise PhabfiveDataException(str(e))
 
     def edit_uri(
@@ -1534,7 +1579,7 @@ class Diffusion(Phabfive):
         if dry_run:
             return {"changes": changes, "dry_run": True}
 
-        self.apply_uri_edit(object_identifier, transactions)
+        self.apply_uri_edit(object_identifier, transactions, uri_record=uri_record)
 
         return {"changes": changes, "dry_run": False}
 

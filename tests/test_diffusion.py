@@ -716,15 +716,97 @@ class TestUriEditClearsCredential:
             transactions=transactions, objectIdentifier=10
         )
 
-    def test_a_failed_second_request_says_the_credential_is_gone(self, diffusion):
+    def _fail_second_request(self, diffusion, error, new_uri, **record):
+        diffusion.phab.diffusion.uri.edit.side_effect = [None, error]
+
+        with pytest.raises(PhabfiveDataException) as raised:
+            diffusion.apply_uri_edit(
+                10,
+                [
+                    {"type": "uri", "value": new_uri},
+                    {"type": "credential", "value": "PHID-CDTL-k4"},
+                ],
+                **record,
+            )
+        return str(raised.value)
+
+    def test_a_failed_second_request_after_a_host_change_says_it_is_gone(
+        self, diffusion
+    ):
         from phabfive.exceptions import PhabfiveAPIException
 
-        diffusion.phab.diffusion.uri.edit.side_effect = [
-            None,
+        message = self._fail_second_request(
+            diffusion,
             PhabfiveAPIException("ERR", "nope"),
-        ]
+            "git@other.example.net:group/thing.git",
+            uri_record=_uri(uri=self.OLD, credential_phid=self.K3),
+        )
 
-        with pytest.raises(PhabfiveDataException, match="now has none"):
+        assert "cleared the one it had because the host changed" in message
+        assert "now has none" in message
+
+    def test_a_failed_second_request_after_a_path_change_keeps_the_old_one(
+        self, diffusion
+    ):
+        from phabfive.exceptions import PhabfiveAPIException
+
+        message = self._fail_second_request(
+            diffusion,
+            PhabfiveAPIException("ERR", "nope"),
+            "git@example.com:group/moved.git",
+            uri_record=_uri(uri=self.OLD, credential_phid=self.K3),
+        )
+
+        assert "keeps the credential it had" in message
+        assert "now has none" not in message
+
+    def test_a_failed_second_request_on_a_uri_without_one_says_so(self, diffusion):
+        from phabfive.exceptions import PhabfiveAPIException
+
+        message = self._fail_second_request(
+            diffusion,
+            PhabfiveAPIException("ERR", "nope"),
+            "git@other.example.net:group/thing.git",
+            uri_record=_uri(uri=self.OLD, credential_phid=None),
+        )
+
+        assert "still has none" in message
+
+    def test_a_failed_second_request_without_the_record_does_not_guess(self, diffusion):
+        from phabfive.exceptions import PhabfiveAPIException
+
+        message = self._fail_second_request(
+            diffusion,
+            PhabfiveAPIException("ERR", "nope"),
+            "git@other.example.net:group/thing.git",
+        )
+
+        assert "check which credential it has now" in message
+
+    def test_a_lost_connection_on_the_second_request_says_the_edit_is_half_done(
+        self, diffusion
+    ):
+        from phabfive.exceptions import PhabfiveConnectionException
+
+        message = self._fail_second_request(
+            diffusion,
+            PhabfiveConnectionException("Connection refused", host="phorge"),
+            "git@other.example.net:group/thing.git",
+            uri_record=_uri(uri=self.OLD, credential_phid=self.K3),
+        )
+
+        assert message.startswith("The URI was changed")
+        assert "now has none" in message
+        assert "Connection refused" in message
+
+    def test_a_lost_connection_on_the_first_request_is_left_alone(self, diffusion):
+        from phabfive.exceptions import PhabfiveConnectionException
+
+        diffusion.phab.diffusion.uri.edit.side_effect = PhabfiveConnectionException(
+            "Connection refused", host="phorge"
+        )
+
+        with pytest.raises(PhabfiveConnectionException):
             diffusion.apply_uri_edit(
                 10,
                 [
@@ -2709,8 +2791,10 @@ class TestUriEditIoCli:
         result, diffusion = self._invoke(["myrepo", self.URI, "--io=never"])
 
         assert result.exit_code == 0
-        diffusion.apply_uri_edit.assert_called_once_with(
-            10, [{"type": "io", "value": "none"}]
+        diffusion.apply_uri_edit.assert_called_once()
+        assert diffusion.apply_uri_edit.call_args.args == (
+            10,
+            [{"type": "io", "value": "none"}],
         )
 
     def test_a_deprecated_display_spelling_still_applies(self):
