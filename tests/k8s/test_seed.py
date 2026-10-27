@@ -304,3 +304,84 @@ def test_api_token_never_expires(kubectl):
         token_sql(
             kubectl, "UPDATE conduit_token SET expires = NULL WHERE token = :token"
         )
+
+
+def _epoch(text):
+    """An ISO 8601 date with a Z, as phorge/seed/data/stats.json writes it."""
+    import datetime
+
+    return int(datetime.datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp())
+
+
+def _metrics_tasks(conduit, seed, **constraints):
+    [project] = conduit(
+        "project.search", constraints={"name": seed["stats"]["project"]["name"]}
+    )["data"]
+    found = conduit(
+        "maniphest.search",
+        constraints={"projects": [project["phid"]], **constraints},
+        limit=100,
+    )["data"]
+    return {task["fields"]["name"]: task["fields"] for task in found}
+
+
+def test_stats_tasks_are_at_known_dates(conduit, seed):
+    """The `stats` module backdated its tasks, for `maniphest stats` (#598).
+
+    Conduit cannot backdate, so the module writes dateCreated and closedEpoch
+    to the row after creating each task. A reopened task has no close date.
+    """
+    found = _metrics_tasks(conduit, seed)
+
+    for record in seed["stats"]["tasks"]:
+        fields = found[record["title"]]
+        assert fields["dateCreated"] == _epoch(record["created"]), record["title"]
+
+        if "closed" in record:
+            assert fields["dateClosed"] == _epoch(record["closed"]), record["title"]
+            assert fields["status"]["value"] == record["status"]
+        else:
+            assert fields["dateClosed"] is None, record["title"]
+            assert fields["status"]["value"] == "open"
+
+
+def test_stats_tasks_are_found_by_the_date_constraints(conduit, seed):
+    """createdStart/End and closedStart/End compare against those columns."""
+    january = {
+        "Start": _epoch("2025-01-01T00:00:00Z"),
+        "End": _epoch("2025-02-01T00:00:00Z"),
+    }
+
+    created = _metrics_tasks(
+        conduit,
+        seed,
+        createdStart=january["Start"],
+        createdEnd=january["End"],
+    )
+    closed = _metrics_tasks(
+        conduit,
+        seed,
+        closedStart=january["Start"],
+        closedEnd=january["End"],
+    )
+
+    def expected(key):
+        return {
+            record["title"]
+            for record in seed["stats"]["tasks"]
+            if key in record
+            and january["Start"] <= _epoch(record[key]) < january["End"]
+        }
+
+    assert set(created) == expected("created")
+    assert set(closed) == expected("closed")
+
+
+def test_the_stats_seed_runs_twice(kubectl, conduit, seed):
+    """Idempotent: a second run creates nothing and leaves the dates alone."""
+    before = _metrics_tasks(conduit, seed)
+
+    result = kubectl("exec", "deploy/phorge", "--", "php", SEED_SCRIPT, "stats")
+
+    assert "Created 0 task(s)" in result.stdout
+    assert _metrics_tasks(conduit, seed) == before
