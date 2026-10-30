@@ -41,31 +41,10 @@ final class PhabfiveAuthSeedModule extends PhabfiveSeedModule {
       PhabfiveSeedPasswords::ensure($admin, $password);
     }
 
-    $secret = $this->env(
-      'PHORGE_ADMIN_TOKEN',
-      'api-supersecr3tapikeyfordevelop1');
-    $token = id(new PhabricatorConduitToken())
-      ->loadOneWhere('token = %s', $secret);
-    if (!$token) {
-      $token = PhabricatorConduitToken::initializeNewToken(
-        $admin->getPHID(),
-        PhabricatorConduitToken::TYPE_COMMANDLINE)
-        ->setToken($secret);
-      // Tokens have names since July 2026, releases before that have none
-      if (property_exists($token, 'tokenName')) {
-        $token->setTokenName('phabfive-dev');
-      }
-      // A "cli" token expires an hour after it is made unless it is used,
-      // and the daemons then delete it, so an instance nobody calls in its
-      // first hour loses its token. Make it permanent, as using it would
-      $token->setExpires(null);
-      $token->save();
-      $this->log(pht('Created API token.'));
-    } else if ($token->getExpires()) {
-      $token->setExpires(null);
-      $token->save();
-      $this->log(pht('Made the API token permanent.'));
-    }
+    $this->ensureConduitToken(
+      $admin,
+      $this->env('PHORGE_ADMIN_TOKEN', 'api-supersecr3tapikeyfordevelop1'),
+      'phabfive-dev');
   }
 
   private function seedPasswordProvider() {

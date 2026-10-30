@@ -252,6 +252,12 @@
 
 ## Other Notes
 
+* The local Phorge seeds a bot account, `dynatron`, with its own permanent API token,
+  `PHORGE_DYNATRON_TOKEN` in `k8s/base/secret.env`, so Dynatron's standup page no longer
+  has to call Conduit with the admin's token. The account is a bot and nothing more, not
+  an admin, which is enough for `user.whoami` and `maniphest.search`. `make creds`
+  prints its token beside the admin's
+
 * The local Phorge's admin SSH key is a known key, committed as
   `k8s/base/ssh/phabfive-insecure` the way the API token is, instead of one `make deploy`
   generated into whichever worktree deployed. Every worktree can now use git over SSH,

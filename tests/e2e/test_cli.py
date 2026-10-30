@@ -3,7 +3,10 @@
 
 # python std lib
 import json
+import os
 import re
+import subprocess
+import sys
 import time
 import uuid
 from urllib.parse import urlparse
@@ -23,6 +26,35 @@ def test_whoami(phabfive, live_env):
     [host] = phabfive("user", "whoami", json_output=True)
     assert host["User"]["UserName"] == "admin"
     assert host["Host"] == urlparse(live_env["PHAB_URL"]).hostname
+
+
+def test_whoami_as_dynatron(live_env):
+    """The bot's token, k8s/base/secret.env's PHORGE_DYNATRON_TOKEN, is not the
+    admin's, and reads what Dynatron's standup page reads."""
+    token = os.environ.get("PHORGE_DYNATRON_TOKEN", "api-dynatr0nb0tapikeyfordevelop1")
+    env = dict(live_env, PHAB_TOKEN=token)
+
+    def run(*args):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from phabfive.cli import cli_entrypoint; cli_entrypoint()",
+                "--format",
+                "json",
+                *args,
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, result.stderr
+        return json.loads(result.stdout)
+
+    [host] = run("user", "whoami")
+    assert host["User"]["UserName"] == "dynatron"
+    assert run("maniphest", "search", "--tag=Development")
 
 
 def test_create_on_a_workboard(phabfive, create_task):

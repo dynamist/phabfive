@@ -11,6 +11,7 @@ export PHORGE_ADMIN_USER="${PHORGE_ADMIN_USER:-admin}"
 export PHORGE_ADMIN_PASS="${PHORGE_ADMIN_PASS:-supersecr3tpassw0rdfordevelop1}"
 export PHORGE_ADMIN_EMAIL="${PHORGE_ADMIN_EMAIL:-admin@domain.tld}"
 export PHORGE_ADMIN_TOKEN="${PHORGE_ADMIN_TOKEN:-api-supersecr3tapikeyfordevelop1}"
+export PHORGE_DYNATRON_TOKEN="${PHORGE_DYNATRON_TOKEN:-api-dynatr0nb0tapikeyfordevelop1}"
 
 # Read rows from the database, tab separated. A failure is a non-zero status
 # rather than a row, so a caller can tell an empty result from an unreachable
@@ -131,6 +132,18 @@ print_spaces() {
   done <<< "$rows"
 }
 
+# Dynatron's token, only when the instance has it: PHORGE_SEED may have left
+# the dynatron module out
+print_dynatron() {
+  local rows
+  rows=$(mysql_rows phabricator_conduit "
+        SELECT 1 FROM conduit_token WHERE token = '${PHORGE_DYNATRON_TOKEN}'") || return 0
+  [ -n "$rows" ] || return 0
+  echo ""
+  echo "🦾 Dynatron's API Token: $PHORGE_DYNATRON_TOKEN"
+  echo "   bot user dynatron, not an admin - for Dynatron, instead of the admin token"
+}
+
 print_checkout() {
   local commit
   commit=$(git -C "/app/$1" rev-parse HEAD 2>/dev/null) || return 0
@@ -163,6 +176,7 @@ print_banner() {
     echo "⚡ Use this one-time link to set your password:"
     echo "   $RECOVERY_LINK"
   fi
+  print_dynatron
   echo ""
   print_users
   echo ""
