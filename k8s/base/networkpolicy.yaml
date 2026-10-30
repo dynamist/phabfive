@@ -37,17 +37,23 @@ spec:
 # at the caller, and they use PHAB_URL=http://web.phorge.svc.cluster.local/api/
 # - PHORGE_ALLOWED_URIS is what makes Phorge answer to that name.
 #
-# Namespace-scoped rather than pod-scoped on purpose: it grants the dev
-# app, not a particular Deployment, so a second consumer there needs no
-# change. And it selects on the dev-app label rather than the namespace
-# name, because Dynatron runs one instance per git worktree - `dynatron`
-# for the main checkout, `dynatron-<slug>` for each worktree - and every
-# one of them carries `dynamist.se/dev-app: dynatron`, so a new worktree is
-# admitted without a change here. The cost: the API server sets
-# `kubernetes.io/metadata.name`, but anyone who can create a namespace can
-# set this label - in a local dev cluster the same people who could edit
-# this policy, so it widens nothing real. Port 80 only, which is all
-# Conduit uses.
+# Both the namespace and the pod must match, in one `from` entry. The
+# namespace by `app.kubernetes.io/part-of: dynatron` rather than by name,
+# because Dynatron runs one instance per git worktree - `dynatron` for the
+# main checkout, `dynatron-<slug>` for each worktree - so a new worktree is
+# admitted without a change here. The pod by name, because only the hub
+# (`dynatron`) and the `worker` call Conduit, and the rest of an instance -
+# its database, cache and object store - has no business on this port.
+#
+# Neither label proves anything. The API server sets
+# `kubernetes.io/metadata.name`, but anyone who may edit namespaces can
+# label one `part-of: dynatron`, and anyone who may create pods in an
+# admitted namespace can name a pod `worker`. The pod selector narrows the
+# grant; it does not authenticate the caller. In this local dev cluster
+# those are the people who could edit this policy anyway, so it widens
+# nothing real, but a production cluster would have to restrict who
+# labels namespaces before trusting a policy like this one. Port 80 only,
+# which is all Conduit uses.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -61,7 +67,12 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              dynamist.se/dev-app: dynatron
+              app.kubernetes.io/part-of: dynatron
+          podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [dynatron, worker]
       ports:
         - port: 80
 ---
