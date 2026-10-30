@@ -54,7 +54,9 @@ def test_whoami_as_dynatron(live_env):
 
     [host] = run("user", "whoami")
     assert host["User"]["UserName"] == "dynatron"
-    assert run("maniphest", "search", "--tag=Development")
+    # QA is the seeded project with a task in the default Space, which any
+    # logged-in user sees, so a fresh instance has something to find
+    assert run("maniphest", "search", "--tag=QA")
 
 
 def test_create_on_a_workboard(phabfive, create_task):
