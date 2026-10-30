@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """The seed modules created what docs/phorge-setup.md promises."""
 
+# 3rd party imports
+import pytest
+
 from tests.phorge_versions import phorge_older_than
 
 
@@ -26,6 +29,29 @@ def test_bot_and_disabled_users(conduit, seed):
     for user in flagged:
         assert ("bot" in roles[user["username"]]) == bool(user.get("bot"))
         assert ("disabled" in roles[user["username"]]) == bool(user.get("disabled"))
+
+
+def test_dynatron_is_a_bot_and_not_an_admin(conduit):
+    """Dynatron's standup page calls Conduit as dynatron, not as the admin."""
+    [found] = conduit("user.search", constraints={"usernames": ["dynatron"]})["data"]
+    roles = found["fields"]["roles"]
+
+    assert "bot" in roles
+    assert "admin" not in roles
+    assert "disabled" not in roles
+
+
+def test_dynatron_token_reads_as_dynatron(conduit, dynatron_token):
+    """What a bot gets by default is enough for what the standup page asks."""
+    me = conduit("user.whoami", token=dynatron_token)
+    assert me["userName"] == "dynatron"
+    assert "admin" not in me["roles"]
+
+    # Any logged-in user sees the seeded tasks, so the bot does too
+    as_admin = conduit("maniphest.search", limit=5)["data"]
+    as_dynatron = conduit("maniphest.search", token=dynatron_token, limit=5)["data"]
+    assert as_dynatron
+    assert [task["phid"] for task in as_dynatron] == [task["phid"] for task in as_admin]
 
 
 def test_projects_and_milestones(conduit, seed):
@@ -259,13 +285,17 @@ TOKEN_EXPIRES = (
 )
 
 
-def token_sql(kubectl, statement):
+# The seed module that makes each well-known token, and the variable it reads
+TOKENS = {"auth": "PHORGE_ADMIN_TOKEN", "dynatron": "PHORGE_DYNATRON_TOKEN"}
+
+
+def token_sql(kubectl, statement, variable="PHORGE_ADMIN_TOKEN"):
     """Run SQL on phabricator_conduit from the Phorge pod.
 
-    `:token` in `statement` is the admin token, quoted. The shell fills it in
-    from the pod's environment, so the test cannot disagree with the seed.
+    `:token` in `statement` is the token in `variable`, quoted. The shell fills
+    it in from the pod's environment, so the test cannot disagree with the seed.
     """
-    statement = statement.replace(":token", "'$PHORGE_ADMIN_TOKEN'")
+    statement = statement.replace(":token", f"'${variable}'")
     script = (
         'mysql -h"$MYSQL_HOST" -u"$MYSQL_USER" -p"$MYSQL_PASS" -N '
         f'-D phabricator_conduit -e "{statement}"'
@@ -273,11 +303,12 @@ def token_sql(kubectl, statement):
     return kubectl("exec", "deploy/phorge", "--", "sh", "-c", script).stdout.strip()
 
 
-def seed_auth(kubectl):
-    kubectl("exec", "deploy/phorge", "--", "php", SEED_SCRIPT, "auth")
+def run_seed(kubectl, module):
+    return kubectl("exec", "deploy/phorge", "--", "php", SEED_SCRIPT, module).stdout
 
 
-def test_api_token_never_expires(kubectl):
+@pytest.mark.parametrize("module", sorted(TOKENS))
+def test_api_token_never_expires(kubectl, module):
     """The seed's token is permanent, whether it creates it or finds it.
 
     A "cli" token expires an hour after it is made unless it is used, and the
@@ -286,24 +317,61 @@ def test_api_token_never_expires(kubectl):
     about the seed: this deletes the token and runs the seed again, then gives
     it an expiry and runs the seed again.
     """
+    variable = TOKENS[module]
     try:
-        token_sql(kubectl, "DELETE FROM conduit_token WHERE token = :token")
-        seed_auth(kubectl)
-        assert token_sql(kubectl, TOKEN_EXPIRES) == "never", "created with an expiry"
+        token_sql(kubectl, "DELETE FROM conduit_token WHERE token = :token", variable)
+        run_seed(kubectl, module)
+        assert token_sql(kubectl, TOKEN_EXPIRES, variable) == "never", (
+            "created with an expiry"
+        )
 
         token_sql(
             kubectl,
             "UPDATE conduit_token SET expires = UNIX_TIMESTAMP() + 3600 "
             "WHERE token = :token",
+            variable,
         )
-        seed_auth(kubectl)
-        assert token_sql(kubectl, TOKEN_EXPIRES) == "never", "expiry left in place"
+        run_seed(kubectl, module)
+        assert token_sql(kubectl, TOKEN_EXPIRES, variable) == "never", (
+            "expiry left in place"
+        )
     finally:
         # The seed creates the token again if a step above lost it
-        seed_auth(kubectl)
+        run_seed(kubectl, module)
         token_sql(
-            kubectl, "UPDATE conduit_token SET expires = NULL WHERE token = :token"
+            kubectl,
+            "UPDATE conduit_token SET expires = NULL WHERE token = :token",
+            variable,
         )
+
+
+def test_the_dynatron_seed_runs_twice(kubectl, conduit, dynatron_token):
+    """Idempotent: a second run creates nothing and changes nothing."""
+    run_seed(kubectl, "dynatron")
+    before = conduit("user.search", constraints={"usernames": ["dynatron"]})["data"]
+    tokens = token_sql(
+        kubectl,
+        "SELECT COUNT(*) FROM conduit_token WHERE token = :token",
+        "PHORGE_DYNATRON_TOKEN",
+    )
+
+    output = run_seed(kubectl, "dynatron")
+
+    assert "Created" not in output and "Made" not in output, output
+    assert (
+        conduit("user.search", constraints={"usernames": ["dynatron"]})["data"]
+        == before
+    )
+    assert tokens == "1"
+    assert (
+        token_sql(
+            kubectl,
+            "SELECT COUNT(*) FROM conduit_token WHERE token = :token",
+            "PHORGE_DYNATRON_TOKEN",
+        )
+        == "1"
+    )
+    assert conduit("user.whoami", token=dynatron_token)["userName"] == "dynatron"
 
 
 def _epoch(text):

@@ -95,3 +95,9 @@ def seed():
 @pytest.fixture(scope="session")
 def admin_username():
     return os.environ.get("PHORGE_ADMIN_USER", "admin")
+
+
+@pytest.fixture(scope="session")
+def dynatron_token():
+    """The bot's token, k8s/base/secret.env's PHORGE_DYNATRON_TOKEN."""
+    return os.environ.get("PHORGE_DYNATRON_TOKEN", "api-dynatr0nb0tapikeyfordevelop1")

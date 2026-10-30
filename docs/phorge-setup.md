@@ -43,6 +43,15 @@ On every start the container seeds sample data from [`phorge/seed/`](#sample-dat
 
 If `PHORGE_ADMIN_PASS` is not set, a one-time password recovery link is displayed in the logs instead.
 
+### Dynatron's Bot Account
+
+- **Username:** `dynatron` - Dynatron, a bot account (role `bot`), not an admin and with no password
+- **API Token:** `api-dynatr0nb0tapikeyfordevelop1` (`PHORGE_DYNATRON_TOKEN`)
+
+The account Dynatron's standup page calls Conduit as, so it does not need the admin's token. It
+holds what any bot gets by default, which is enough for `user.whoami` and `maniphest.search`.
+`make creds` prints its token beside the admin's.
+
 ### Test Users
 
 Eight RMI GUNNAR team members for testing (all share the same password as admin if `PHORGE_ADMIN_PASS` is set):
@@ -286,6 +295,7 @@ make up
 | `PHORGE_ADMIN_NAME` | `Administrator` | Admin display name |
 | `PHORGE_ADMIN_PASS` | `supersecr3tpassw0rdfordevelop1` | Admin password, enables immediate login (secret) |
 | `PHORGE_ADMIN_TOKEN` | `api-supersecr3tapikeyfordevelop1` | Pre-configured API token (secret) |
+| `PHORGE_DYNATRON_TOKEN` | `api-dynatr0nb0tapikeyfordevelop1` | API token of the `dynatron` bot, for Dynatron rather than the admin token (secret) |
 | `PHORGE_SEED` | `all` | Seed modules to run, space-separated, or `all` / `none` |
 | `PHORGE_SSH_USER` | `git` | User git over SSH logs in as (`diffusion.ssh-user`). Only `git`, the image's one VCS user, or empty to turn SSH off |
 | `PHORGE_SSH_HOST` | `phorge.localhost` | Host in the SSH clone URIs Phorge advertises (`diffusion.ssh-host`) |
@@ -410,6 +420,7 @@ phorge/seed/
 |--------|-------|---------|
 | `auth` | | password login, admin account, API token (from `PHORGE_ADMIN_*`) |
 | `users` | auth | test users |
+| `dynatron` | auth | the `dynatron` bot account and its API token (from `PHORGE_DYNATRON_TOKEN`) |
 | `teams` | users | team projects |
 | `spaces` | auth, teams | spaces, in data file order |
 | `projects` | users, spaces | projects, milestones, workboards |
@@ -473,6 +484,8 @@ Phorge runs in a local [k3d](https://k3d.io) cluster, which is k3s in Docker. Th
     ```
 
     Setting `PHAB_URL` to the Service name instead makes every link phabfive returns a `*.svc.cluster.local` address, which resolves nowhere outside the cluster.
+
+    Dynatron authenticates with the `dynatron` bot's token, `PHORGE_DYNATRON_TOKEN` in `k8s/base/secret.env`, not the admin's `PHORGE_ADMIN_TOKEN`: its standup page only reads, and a bot can do that without being an admin. See [Dynatron's Bot Account](#dynatrons-bot-account).
 - **Images:** `make phorge-image` builds `dynamist/phorge`, tags it by content and imports it with `k3d image import`, no registry is involved.
 
 Every `make` target passes `--context k3d-dynamist`, so it never acts on another cluster.

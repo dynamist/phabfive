@@ -71,6 +71,52 @@ abstract class PhabfiveSeedModule extends Phobject {
   }
 
   /**
+   * A permanent command line Conduit token for $user, with the well-known
+   * value $secret, so a client can be configured before the instance exists.
+   */
+  final protected function ensureConduitToken(
+    PhabricatorUser $user,
+    $secret,
+    $name) {
+
+    $token = id(new PhabricatorConduitToken())
+      ->loadOneWhere('token = %s', $secret);
+    if ($token && $token->getObjectPHID() !== $user->getPHID()) {
+      // Two variables with the same value would hand one account's token to
+      // whoever was configured with the other
+      throw new Exception(pht(
+        'Seed module "%s" wants API token "%s" for %s, but it belongs to '.
+        'someone else.',
+        $this->getKey(),
+        $name,
+        $user->getUsername()));
+    }
+
+    if (!$token) {
+      $token = PhabricatorConduitToken::initializeNewToken(
+        $user->getPHID(),
+        PhabricatorConduitToken::TYPE_COMMANDLINE)
+        ->setToken($secret);
+      // Tokens have names since July 2026, releases before that have none
+      if (property_exists($token, 'tokenName')) {
+        $token->setTokenName($name);
+      }
+      // A "cli" token expires an hour after it is made unless it is used,
+      // and the daemons then delete it, so an instance nobody calls in its
+      // first hour loses its token. Make it permanent, as using it would
+      $token->setExpires(null);
+      $token->save();
+      $this->log(pht('Created API token for %s.', $user->getUsername()));
+    } else if ($token->getExpires()) {
+      $token->setExpires(null);
+      $token->save();
+      $this->log(pht(
+        'Made the API token for %s permanent.',
+        $user->getUsername()));
+    }
+  }
+
+  /**
    * Apply transactions as the admin, or as $actor. Acting as someone else is
    * how an object ends up with a policy the admin is not part of: the editor
    * refuses to let its actor lock themselves out.
