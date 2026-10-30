@@ -49,15 +49,25 @@ def probe_from(kubectl, namespace, host, port):
 
 
 def other_namespaces(kubectl):
-    """default plus the namespaces of other dev apps in the shared cluster."""
+    """default plus the namespaces of other dev apps in the shared cluster.
+
+    Each comes with its `dynamist.se/dev-app` label, None for default.
+    """
     selector = f"dynamist.se/dev-app,dynamist.se/dev-app!={NAMESPACE}"
     others = json.loads(
         kubectl("get", "namespaces", "-l", selector, "-o", "json").stdout
     )["items"]
-    return ["default", *(ns["metadata"]["name"] for ns in others)]
+    return [
+        ("default", None),
+        *(
+            (ns["metadata"]["name"], ns["metadata"]["labels"]["dynamist.se/dev-app"])
+            for ns in others
+        ),
+    ]
 
 
-# The namespaces k8s/base/networkpolicy.yaml admits to Phorge's Conduit port
+# The dev apps k8s/base/networkpolicy.yaml admits to Phorge's Conduit port, by
+# their `dynamist.se/dev-app` label: every namespace of each, main or worktree
 CONDUIT_CLIENTS = {"dynatron"}
 
 
@@ -72,9 +82,9 @@ CONDUIT_CLIENTS = {"dynatron"}
     ],
 )
 def test_other_namespaces_cannot_reach_phorge(kubectl, host, port, admitted):
-    for namespace in other_namespaces(kubectl):
+    for namespace, app in other_namespaces(kubectl):
         reachable = probe_from(kubectl, namespace, host, port)
-        if namespace in admitted:
+        if app in admitted:
             assert reachable, f"{host}:{port} is not reachable from {namespace}"
         else:
             assert not reachable, f"{host}:{port} is reachable from {namespace}"
