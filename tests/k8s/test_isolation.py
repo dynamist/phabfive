@@ -13,11 +13,12 @@ import yaml
 from tests.k8s.conftest import KUBE_CONTEXT, NAMESPACE, ROOT
 
 
-def probe_from(kubectl, namespace, host, port):
+def probe_from(kubectl, namespace, host, port, labels=None):
     """Try a TCP connection from a throwaway pod, return True when it connects.
 
     The pod runs to completion before its log is read: `kubectl run -i` loses
-    the output when the container exits before kubectl attaches.
+    the output when the container exits before kubectl attaches. `labels` are
+    set on the pod, for policies that select pods as well as namespaces.
     """
     name = f"probe-{uuid.uuid4().hex[:8]}"
     command = f"nc -z -w 5 {host} {port} && echo OPEN || echo CLOSED"
@@ -26,6 +27,7 @@ def probe_from(kubectl, namespace, host, port):
         name,
         "--restart=Never",
         "--image=busybox:1.37",
+        *(f"--labels={k}={v}" for k, v in (labels or {}).items()),
         "--",
         "sh",
         "-c",
@@ -49,45 +51,73 @@ def probe_from(kubectl, namespace, host, port):
 
 
 def other_namespaces(kubectl):
-    """default plus the namespaces of other dev apps in the shared cluster.
-
-    Each comes with its `dynamist.se/dev-app` label, None for default.
-    """
+    """default plus the namespaces of other dev apps in the shared cluster."""
     selector = f"dynamist.se/dev-app,dynamist.se/dev-app!={NAMESPACE}"
     others = json.loads(
         kubectl("get", "namespaces", "-l", selector, "-o", "json").stdout
     )["items"]
-    return [
-        ("default", None),
-        *(
-            (ns["metadata"]["name"], ns["metadata"]["labels"]["dynamist.se/dev-app"])
-            for ns in others
-        ),
-    ]
-
-
-# The dev apps k8s/base/networkpolicy.yaml admits to Phorge's Conduit port, by
-# their `dynamist.se/dev-app` label: every namespace of each, main or worktree
-CONDUIT_CLIENTS = {"dynatron"}
+    return ["default", *(ns["metadata"]["name"] for ns in others)]
 
 
 @pytest.mark.parametrize(
-    "host,port,admitted",
+    "host,port",
     [
-        ("web.phorge.svc.cluster.local", 80, CONDUIT_CLIENTS),
+        # Conduit admits only named pods, see test_conduit_clients_* below
+        ("web.phorge.svc.cluster.local", 80),
         # git over SSH is reached through port-forward only, which enters the
         # pod's own network namespace and needs no NetworkPolicy
-        ("ssh.phorge.svc.cluster.local", 22, set()),
-        ("mariadb.phorge.svc.cluster.local", 3306, set()),
+        ("ssh.phorge.svc.cluster.local", 22),
+        ("mariadb.phorge.svc.cluster.local", 3306),
     ],
 )
-def test_other_namespaces_cannot_reach_phorge(kubectl, host, port, admitted):
-    for namespace, app in other_namespaces(kubectl):
+def test_other_namespaces_cannot_reach_phorge(kubectl, host, port):
+    for namespace in other_namespaces(kubectl):
         reachable = probe_from(kubectl, namespace, host, port)
-        if app in admitted:
-            assert reachable, f"{host}:{port} is not reachable from {namespace}"
-        else:
-            assert not reachable, f"{host}:{port} is reachable from {namespace}"
+        assert not reachable, f"{host}:{port} is reachable from {namespace}"
+
+
+# The pods k8s/base/networkpolicy.yaml admits to Phorge's Conduit port, by
+# `app.kubernetes.io/name`, in any namespace of the app named here
+CONDUIT_APP = "dynatron"
+CONDUIT_CLIENTS = ["dynatron", "worker"]
+
+
+@pytest.fixture(scope="module")
+def client_namespace(kubectl):
+    """A scratch namespace labelled as one of the Conduit app's instances.
+
+    The policy's own test, so it needs no Dynatron deployed beside Phorge, and
+    it is not labelled `dynamist.se/dev-app`, so nothing takes it for a dev app.
+    """
+    name = f"phorge-probe-{uuid.uuid4().hex[:8]}"
+    kubectl("create", "namespace", name)
+    try:
+        kubectl("label", "namespace", name, f"app.kubernetes.io/part-of={CONDUIT_APP}")
+        yield name
+    finally:
+        kubectl("delete", "namespace", name, "--wait=false", check=False)
+
+
+@pytest.mark.parametrize("client", CONDUIT_CLIENTS)
+def test_conduit_clients_reach_phorge(kubectl, client_namespace, client):
+    assert probe_from(
+        kubectl,
+        client_namespace,
+        "web.phorge.svc.cluster.local",
+        80,
+        labels={"app.kubernetes.io/name": client},
+    )
+
+
+def test_conduit_clients_namespace_admits_no_other_pod(kubectl, client_namespace):
+    """Control for the test above: the namespace label alone admits nothing."""
+    assert not probe_from(
+        kubectl,
+        client_namespace,
+        "web.phorge.svc.cluster.local",
+        80,
+        labels={"app.kubernetes.io/name": "postgres"},
+    )
 
 
 def test_probe_detects_open_ports(kubectl):
