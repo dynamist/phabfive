@@ -272,6 +272,12 @@
   creates the column of each milestone on its parent's board, which Phorge otherwise
   creates only when the board is first opened in a browser. #588
 
+* Every Dynatron instance in the shared cluster reaches the local Phorge's Conduit port,
+  not only the `dynatron` namespace. Dynatron runs one instance per git worktree, in
+  `dynatron-<slug>`, so the NetworkPolicy `phorge-from-dev-apps` now admits namespaces
+  labelled `dynamist.se/dev-app: dynatron` instead of naming one. A running instance
+  needs only that policy reapplied, or the next `make deploy`
+
 * The local Phorge's API token no longer disappears when nobody uses it in the first
   hour. The seeder made it a `cli` token, which Phorge expires an hour after it is
   created unless it is used, and the daemons then deleted it, so `make up` followed by

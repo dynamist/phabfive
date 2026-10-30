@@ -38,8 +38,16 @@ spec:
 # - PHORGE_ALLOWED_URIS is what makes Phorge answer to that name.
 #
 # Namespace-scoped rather than pod-scoped on purpose: it grants the dev
-# namespace, not a particular Deployment, so a second consumer there needs
-# no change. Port 80 only, which is all Conduit uses.
+# app, not a particular Deployment, so a second consumer there needs no
+# change. And it selects on the dev-app label rather than the namespace
+# name, because Dynatron runs one instance per git worktree - `dynatron`
+# for the main checkout, `dynatron-<slug>` for each worktree - and every
+# one of them carries `dynamist.se/dev-app: dynatron`, so a new worktree is
+# admitted without a change here. The cost: the API server sets
+# `kubernetes.io/metadata.name`, but anyone who can create a namespace can
+# set this label - in a local dev cluster the same people who could edit
+# this policy, so it widens nothing real. Port 80 only, which is all
+# Conduit uses.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -53,7 +61,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: dynatron
+              dynamist.se/dev-app: dynatron
       ports:
         - port: 80
 ---
