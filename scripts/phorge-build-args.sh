@@ -6,6 +6,9 @@
 #   phabricator-stable  Phabricator, which Phorge was forked from, at a branch
 #                       (phabricator-master for master). Phacility still hosts
 #                       it, and it has not changed since 2022
+#   local            the Phorge checkout at PHORGE_CHECKOUT (../phorge) and the
+#                    Arcanist at ARCANIST_CHECKOUT (the arcanist next to it, as
+#                    Phorge expects), as they are on disk, committed or not
 #
 # Any branch or tag works, as long as Phorge and Arcanist both have it, which
 # upstream keeps true for its branches and release tags. The commits are
@@ -78,6 +81,40 @@ commit() {
   fi
   echo "$sha"
 }
+
+# The absolute path of a local checkout, which has to be a clone: the .git of a
+# worktree points outside the build (see phorge/checkout-local.sh)
+checkout() {
+  local dir
+  dir=$(cd "$1" 2>/dev/null && pwd) || {
+    log "Error: no checkout at $1"
+    exit 1
+  }
+  if [ ! -d "$dir/.git" ]; then
+    log "Error: $dir is not a git clone, VERSION=local can not build a worktree"
+    exit 1
+  fi
+  echo "$dir"
+}
+
+# A local checkout, the commit it is at and what it has not committed
+describe() {
+  local changed
+  changed=$(git -C "$1" status --porcelain --untracked-files=all | wc -l)
+  echo "$1 at $(git -C "$1" rev-parse --short HEAD), ${changed} files not committed"
+}
+
+if [ "$version" = local ]; then
+  phorge_dir=$(checkout "${PHORGE_CHECKOUT:-../phorge}")
+  arcanist_dir=$(checkout "${ARCANIST_CHECKOUT:-${phorge_dir}/../arcanist}")
+  php=${php:-$(php_for "$version")}
+  log "local Phorge $(describe "$phorge_dir"), Arcanist $(describe "$arcanist_dir"), on PHP ${php}"
+  echo "--build-arg SOURCE=local --build-arg PHORGE_VERSION=local" \
+    "--build-context phorge-checkout=${phorge_dir} --build-arg PHORGE_REPO=${phorge_dir}" \
+    "--build-context arcanist-checkout=${arcanist_dir} --build-arg ARCANIST_REPO=${arcanist_dir}" \
+    "--build-arg PHP=${php}"
+  exit 0
+fi
 
 phorge=$(commit "$phorge_repo")
 arcanist=$(commit "$arcanist_repo")

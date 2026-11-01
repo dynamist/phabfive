@@ -29,6 +29,7 @@ uv run mypy                          # [tool.mypy] in pyproject.toml, checks pha
 # Local Phorge instance for testing, in the shared k3d cluster (see docs/phorge-setup.md)
 make up                              # create/reuse the cluster, build and deploy Phorge
 make reset && make up VERSION=master # stable (default), master or a tag like 2025.51 (remembered in .k8s/version)
+make reset && make up VERSION=local  # the Phorge and Arcanist checkouts next to this repository, uncommitted changes too
 make down                            # stop, keep data
 make reset                           # delete the phorge namespace and its data
 make creds                           # print the credentials of the running Phorge

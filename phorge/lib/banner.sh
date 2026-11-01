@@ -145,12 +145,23 @@ print_dynatron() {
 }
 
 print_checkout() {
-  local commit
+  local commit uncommitted
   commit=$(git -C "/app/$1" rev-parse HEAD 2>/dev/null) || return 0
-  echo "  - $1 $2/commit/${commit}"
+  case $2 in
+    http*)
+      echo "  - $1 $2/commit/${commit}"
+      ;;
+    *)
+      # A local checkout, and what it had not committed when the image was
+      # built (see checkout-local.sh)
+      uncommitted=$(wc -l <"/app/$1/.git/phabfive-uncommitted" 2>/dev/null) || uncommitted=0
+      echo "  - $1 ${commit} of the checkout in $2, ${uncommitted} files not committed"
+      ;;
+  esac
 }
 
-# The branch or tag the image was built from, and the commits it resolved to
+# The branch or tag the image was built from, and the commits it resolved to,
+# or with VERSION=local the checkouts it was built from
 print_version() {
   echo "🏷️ Phorge ${PHORGE_VERSION:-(unknown version)} on PHP ${PHP_VERSION:-?}:"
   print_checkout phorge "${PHORGE_REPO:-}"

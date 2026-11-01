@@ -252,6 +252,13 @@
 
 ## Other Notes
 
+* `make up VERSION=local` runs the local Phorge from the Phorge and Arcanist checkouts on
+  disk, `../phorge` and the `arcanist` next to it unless `PHORGE_CHECKOUT` or
+  `ARCANIST_CHECKOUT` say otherwise, with their uncommitted changes and new files but
+  without what their `.gitignore` excludes, so a change to Phorge can be tried on the
+  shared instance before it goes upstream. `make creds` names the checkouts, their commits
+  and how many files they had not committed
+
 * The local Phorge seeds a bot account, `dynatron`, with its own permanent API token,
   `PHORGE_DYNATRON_TOKEN` in `k8s/base/secret.env`, so Dynatron's standup page no longer
   has to call Conduit with the admin's token. The account is a bot and nothing more, not

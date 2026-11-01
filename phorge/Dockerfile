@@ -3,12 +3,15 @@
 # a class into an error, so an older release only starts on a PHP from before
 # its code was deprecated. Renovate keeps each stage on its series.
 ARG PHP=8.5
+# Where Phorge and Arcanist come from, one of the source-* stages below: remote,
+# upstream at the commits make resolves, or local, the checkouts on disk
+ARG SOURCE=remote
 FROM php:8.5-apache AS php-8.5
 FROM php:8.4-apache AS php-8.4
 FROM php:8.3-apache AS php-8.3
 FROM php:8.0-apache AS php-8.0
 
-FROM php-${PHP}
+FROM php-${PHP} AS base
 
 WORKDIR /app
 
@@ -37,7 +40,7 @@ RUN a2enmod rewrite
 # Phorge (or Phabricator) and Arcanist at the commits of a branch or tag that
 # `make phorge-image VERSION=...` resolves (see scripts/phorge-build-args.sh).
 # A git checkout rather than an archive, Phorge reads its version from it.
-ARG PHORGE_VERSION
+FROM base AS source-remote
 ARG PHORGE_REPO
 ARG PHORGE_COMMIT
 ARG ARCANIST_REPO
@@ -49,8 +52,23 @@ RUN test -n "$PHORGE_COMMIT" -a -n "$ARCANIST_COMMIT" || \
       git init -q "/app/$1" && \
       git -C "/app/$1" fetch -q --depth 1 "$2.git" "$3" && \
       git -C "/app/$1" checkout -q FETCH_HEAD || exit 1; \
-    done && \
-    git config --system --add safe.directory /app/phorge && \
+    done
+
+# Or, with `make phorge-image VERSION=local`, the Phorge and Arcanist checkouts
+# on disk, which make passes as the phorge-checkout and arcanist-checkout build
+# contexts (see checkout-local.sh)
+FROM base AS source-local
+RUN --mount=type=bind,from=phorge-checkout,target=/src/phorge \
+    --mount=type=bind,from=arcanist-checkout,target=/src/arcanist \
+    --mount=type=bind,source=checkout-local.sh,target=/checkout-local.sh \
+    /checkout-local.sh phorge arcanist
+
+FROM source-${SOURCE}
+
+ARG PHORGE_VERSION
+ARG PHORGE_REPO
+ARG ARCANIST_REPO
+RUN git config --system --add safe.directory /app/phorge && \
     git config --system --add safe.directory /app/arcanist
 ENV PHORGE_VERSION=${PHORGE_VERSION} PHORGE_REPO=${PHORGE_REPO} ARCANIST_REPO=${ARCANIST_REPO}
 
