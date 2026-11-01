@@ -24,9 +24,10 @@ OVERLAY ?= local
 PHORGE_IMAGE := dynamist/phorge
 BUILD_DIR := .k8s
 
-# Phorge to build: a branch (stable, master) or a release tag (2025.51), see
-# scripts/phorge-build-args.sh. Defaults to the last one built, switching needs
-# `make reset`.
+# Phorge to build: a branch (stable, master), a release tag (2025.51) or local,
+# the checkouts at PHORGE_CHECKOUT (../phorge) and ARCANIST_CHECKOUT (arcanist
+# next to it) as they are on disk, see scripts/phorge-build-args.sh. Defaults to
+# the last one built, switching needs `make reset`.
 VERSION ?= $(shell cat $(BUILD_DIR)/version 2>/dev/null || echo stable)
 # PHP series to build on (8.0, 8.3, 8.4, 8.5), empty for the newest VERSION runs on
 PHP ?=
@@ -168,7 +169,7 @@ destroy: check-tools ## DELETE the shared cluster with every app and all data (F
 
 ##@ Phorge
 
-phorge-image: check-tools ## build the phorge image of VERSION (stable, master, 2025.51, ...) and import it into the cluster
+phorge-image: check-tools ## build the phorge image of VERSION (stable, master, 2025.51, local, ...) and import it into the cluster
 	@mkdir -p $(BUILD_DIR)
 	@args=$$(scripts/phorge-build-args.sh $(VERSION) $(PHP)) && \
 	docker build $$args -t $(PHORGE_IMAGE):dev phorge

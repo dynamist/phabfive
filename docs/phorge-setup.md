@@ -304,7 +304,7 @@ make up
 
 ### Phorge Versions
 
-`VERSION` picks the Phorge to build: a branch or a release tag that both Phorge and Arcanist have, which upstream keeps true for its branches and release tags.
+`VERSION` picks the Phorge to build: a branch or a release tag that both Phorge and Arcanist have, which upstream keeps true for its branches and release tags, or `local` for checkouts on disk.
 
 | `VERSION` | Source |
 |-----------|--------|
@@ -312,6 +312,7 @@ make up
 | `master` | the `master` branch, what the next release will be |
 | `2026.27`, `2025.51`, ... | a release tag, see [the tags](https://github.com/phorgeit/phorge/tags) |
 | `phabricator-stable`, `phabricator-master` | Phabricator, which Phorge was forked from: a branch of [phacility/phabricator](https://github.com/phacility/phabricator), unchanged since 2022 |
+| `local` | the Phorge and Arcanist checkouts on disk, see [Local Checkouts](#local-checkouts) |
 
 ```bash
 make reset && make up VERSION=2025.51
@@ -322,6 +323,26 @@ make reset && make up VERSION=2025.51
 The version is remembered in `.k8s/version`, so a plain `make up` builds the last one again. The pod remembers the version its data was set up with too, and refuses to start on another one, because a database cannot go back to an older Phorge and the schema of `master` is not the schema of `stable`. `make reset` deletes the data, then `make up VERSION=...` starts over. `make up` and `make ci-deploy` stop as soon as the pod cannot start, and print the end of its log, rather than waiting for the rollout to time out. `stable` moving on to a newer commit is not a change of version, it upgrades the database as usual.
 
 `make ps` and `make creds` show the version, the commits and the PHP that are running.
+
+#### Local Checkouts
+
+`VERSION=local` is for trying a change to Phorge itself. It builds the Phorge checkout next to this repository, `../phorge`, and the Arcanist next to that one, which is where Phorge looks for it, as they are on disk. `PHORGE_CHECKOUT=` and `ARCANIST_CHECKOUT=` point elsewhere:
+
+```bash
+make reset && make up VERSION=local
+make up VERSION=local PHORGE_CHECKOUT=~/src/phorge ARCANIST_CHECKOUT=~/src/arcanist
+```
+
+`phorge/checkout-local.sh` puts each checkout in the image as a shallow clone of its HEAD that holds the files of its working tree: uncommitted changes and new files are in, what its `.gitignore` excludes, like `conf/local/local.json`, is not. `make creds` names the checkouts, their commits and how many files they had not committed, `make ps` the commit of Phorge. A checkout has to be a clone, the `.git` of a git worktree points outside the build. Keep Arcanist on the branch Phorge is on, `master` with `master`: Phorge's `master` uses functions that Arcanist's `stable` does not have yet.
+
+After a change, `make up` builds the checkouts again and rolls out the new image. The pod only knows that its data was set up by `local`, not by which branch, so `make reset` when the checkout moves to an older version of Phorge, or a branch whose schema differs.
+
+Phorge's unit tests run in the pod, against its MariaDB, with the Arcanist that came with Phorge. `arc unit` runs the tests that go with the files it is given, a test case or the files you changed, and a directory runs nothing:
+
+```bash
+make shell
+cd /app/phorge && ../arcanist/bin/arc unit -- src/applications/project/__tests__/PhabricatorProjectCoreTestCase.php
+```
 
 #### PHP
 
