@@ -12,7 +12,7 @@ passes whatever the code does.
 So each one runs a fresh interpreter with `subprocess.run`, with the
 environment scrubbed down to what an interpreter needs to start:
 
-1. **No configuration, no credentials.** `PHAB_URL` and `PHAB_TOKEN` are
+1. **No configuration, no credentials.** `PHORGE_HOST` and `PHORGE_TOKEN` are
    unset and `HOME` points nowhere, so `~/.arcrc` and
    `~/.config/phabfive.yaml` do not exist. A spec still loads and still
    validates.
@@ -62,7 +62,7 @@ FORBIDDEN = (
 def scrubbed_environment():
     """As little environment as an interpreter needs to start.
 
-    No `PHAB_URL`, no `PHAB_TOKEN`, and a `HOME` that does not exist, so
+    No `PHORGE_HOST`, no `PHORGE_TOKEN`, and a `HOME` that does not exist, so
     nothing can read `~/.arcrc`, `~/.config/phabfive.yaml` or a cache
     directory. `SYSTEMROOT` is what Windows needs to start Python at all, and
     `PATH` is kept because `uv run` put the interpreter on it.
@@ -88,8 +88,8 @@ def scrubbed_environment():
     environment["PYTHONPATH"] = str(REPOSITORY)
     environment["TERM"] = "dumb"
 
-    assert "PHAB_URL" not in environment
-    assert "PHAB_TOKEN" not in environment
+    assert "PHORGE_HOST" not in environment
+    assert "PHORGE_TOKEN" not in environment
     assert "TYPER_USE_RICH" not in environment
 
     return environment
@@ -125,8 +125,8 @@ class TestNoConfigurationAndNoCredentials:
     def test_a_shipped_template_validates(self, path, kind):
         script = f"""
 import json, os, sys
-assert "PHAB_URL" not in os.environ, "PHAB_URL leaked into the subprocess"
-assert "PHAB_TOKEN" not in os.environ, "PHAB_TOKEN leaked into the subprocess"
+assert "PHORGE_HOST" not in os.environ, "PHORGE_HOST leaked into the subprocess"
+assert "PHORGE_TOKEN" not in os.environ, "PHORGE_TOKEN leaked into the subprocess"
 assert not os.path.exists(os.path.expanduser("~")), "HOME exists after all"
 
 from phabfive.spec import load_spec, validate_offline

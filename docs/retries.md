@@ -50,7 +50,7 @@ Each retry waits a random time between nothing and a ceiling that doubles:
 0.25 seconds before the first retry, 0.5 before the second, 1 before the
 third. The randomness keeps many clients that failed together from coming back
 together. A server that answers with `Retry-After` is waited for as long as it
-asks - but never longer than `PHAB_BACKOFF_MAX`, which caps every single wait.
+asks - but never longer than `PHORGE_BACKOFF_MAX`, which caps every single wait.
 
 Every retry is announced on stderr, with the server, what went wrong and the wait:
 
@@ -64,9 +64,9 @@ WARNING - maniphest.search on phorge.example.com: HTTP 503 Service Unavailable, 
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `PHAB_RETRY` | `3` | How often a failed call is tried again. `0` turns retrying off |
-| `PHAB_BACKOFF_MAX` | `5` | The longest single wait, in seconds, `Retry-After` included |
-| `PHAB_PACE` | `0` | Seconds to keep between the writes of a batch edit |
+| `PHORGE_RETRY` | `3` | How often a failed call is tried again. `0` turns retrying off |
+| `PHORGE_BACKOFF_MAX` | `5` | The longest single wait, in seconds, `Retry-After` included |
+| `PHORGE_PACE` | `0` | Seconds to keep between the writes of a batch edit |
 
 Like every setting they can go in the environment or in `~/.config/phabfive.yaml`.
 Each must be a finite number of at least 0, and all three are checked as soon as
@@ -76,17 +76,17 @@ The defaults suit a person waiting at a terminal. A bulk job that should ride ou
 a server restart can afford more patience:
 
 ```bash
-PHAB_RETRY=8 PHAB_BACKOFF_MAX=60 phabfive maniphest search --status=any -l 0
+PHORGE_RETRY=8 PHORGE_BACKOFF_MAX=60 phabfive maniphest search --status=any -l 0
 ```
 
 ## Pacing batch edits
 
 A batch edit sends one `maniphest.edit` per task, back to back. Against a server
-that is already struggling, `PHAB_PACE` spaces them out:
+that is already struggling, `PHORGE_PACE` spaces them out:
 
 ```bash
 phabfive --format=yaml maniphest search --tag=migration |
-  PHAB_PACE=1 phabfive edit --editable-by=admin --yes
+  PHORGE_PACE=1 phabfive edit --editable-by=admin --yes
 ```
 
 The pause is kept between one write and the next, never before the first, and
@@ -103,11 +103,11 @@ from phabfive import Maniphest
 maniphest = Maniphest(
     url="https://phorge.example.com",
     token="api-...",
-    config={"PHAB_RETRY": 8, "PHAB_BACKOFF_MAX": 60, "PHAB_PACE": 1},
+    config={"PHORGE_RETRY": 8, "PHORGE_BACKOFF_MAX": 60, "PHORGE_PACE": 1},
 )
 ```
 
-`Edit.apply_all()` keeps `PHAB_PACE` between its writes. A program making its own
+`Edit.apply_all()` keeps `PHORGE_PACE` between its writes. A program making its own
 writes through `self.phab` can declare one idempotent with
 `phabfive.retry.idempotent_writes()`, and should only do so for an edit that sets
 fields of an object that already exists:

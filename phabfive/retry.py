@@ -11,7 +11,7 @@ it makes, which is what makes it the one policy phabfive has:
 
 * connection errors, timeouts, 429 and 5xx are retried, with exponential
   backoff and full jitter, and a `Retry-After` is honoured
-* no wait is ever longer than PHAB_BACKOFF_MAX, `Retry-After` included
+* no wait is ever longer than PHORGE_BACKOFF_MAX, `Retry-After` included
 * a read - `*.search`, `*.query`, `phid.lookup`, `user.whoami` - is retried
   on any of those
 * a write is retried only on a connection that was never made, which cannot
@@ -24,7 +24,7 @@ slower. Only a failing one waits, and the defaults keep that under two
 seconds in total.
 
 `Pacer` is the other half of being kind to a struggling server: an optional
-pause between the writes of a batch, PHAB_PACE seconds.
+pause between the writes of a batch, PHORGE_PACE seconds.
 """
 
 import contextlib
@@ -44,11 +44,11 @@ log = logging.getLogger(__name__)
 
 #: How often a failed call is tried again, and the longest single wait in
 #: seconds. Small, because a person is usually waiting: a bulk job that
-#: should ride out a restart raises both, e.g. PHAB_RETRY=8
-#: PHAB_BACKOFF_MAX=60.
+#: should ride out a restart raises both, e.g. PHORGE_RETRY=8
+#: PHORGE_BACKOFF_MAX=60.
 # DEFAULTS mixes value types, so mypy sees each entry as `object`.
-DEFAULT_RETRIES = cast(int, DEFAULTS["PHAB_RETRY"])
-DEFAULT_BACKOFF_MAX = float(cast(int, DEFAULTS["PHAB_BACKOFF_MAX"]))
+DEFAULT_RETRIES = cast(int, DEFAULTS["PHORGE_RETRY"])
+DEFAULT_BACKOFF_MAX = float(cast(int, DEFAULTS["PHORGE_BACKOFF_MAX"]))
 
 #: The first wait before jitter; each retry doubles it.
 BACKOFF_BASE = 0.25
@@ -204,7 +204,7 @@ class RetryPolicy:
 
     @classmethod
     def from_conf(cls, conf):
-        """The policy PHAB_RETRY and PHAB_BACKOFF_MAX describe.
+        """The policy PHORGE_RETRY and PHORGE_BACKOFF_MAX describe.
 
         Raises
         ------
@@ -212,8 +212,8 @@ class RetryPolicy:
             For a value that is not a non-negative number.
         """
         return cls(
-            retries=_number(conf, "PHAB_RETRY", DEFAULT_RETRIES, int),
-            backoff_max=_number(conf, "PHAB_BACKOFF_MAX", DEFAULT_BACKOFF_MAX, float),
+            retries=_number(conf, "PHORGE_RETRY", DEFAULT_RETRIES, int),
+            backoff_max=_number(conf, "PHORGE_BACKOFF_MAX", DEFAULT_BACKOFF_MAX, float),
         )
 
     def backoff(self, attempt):
@@ -343,14 +343,14 @@ class Pacer:
 
     @classmethod
     def from_conf(cls, conf):
-        """The pace PHAB_PACE describes, 0 (no pause) by default."""
-        return cls(_number(conf, "PHAB_PACE", 0.0, float))
+        """The pace PHORGE_PACE describes, 0 (no pause) by default."""
+        return cls(_number(conf, "PHORGE_PACE", 0.0, float))
 
     def wait(self):
         if self.seconds and self._last is not None:
             remaining = self.seconds - (time.monotonic() - self._last)
             if remaining > 0:
-                with profiler.sleep("PHAB_PACE"):
+                with profiler.sleep("PHORGE_PACE"):
                     _sleep(remaining)
         self._last = time.monotonic()
 

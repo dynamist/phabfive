@@ -135,7 +135,10 @@ def _maniphest(tasks=(), *, honour=(), pages=None):
     maniphest = Maniphest()
     maniphest.phab = MagicMock()
     maniphest.url = "https://phabricator.example.com"
-    maniphest.conf = {"PHAB_SPACE": "S1", "PHAB_URL": "https://phab.example.com/api/"}
+    maniphest.conf = {
+        "PHORGE_SPACE": "S1",
+        "PHORGE_HOST": "https://phab.example.com/api/",
+    }
 
     maniphest.phab.phid.lookup.return_value = {
         "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global"}

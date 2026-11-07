@@ -878,7 +878,7 @@ def resolve_space_phids(phab, space: str, all_spaces: dict | None = None) -> lis
 
     try:
         # A monogram names one Space outright, so it can be looked up directly.
-        # That is the common path - every search resolves PHAB_SPACE, normally
+        # That is the common path - every search resolves PHORGE_SPACE, normally
         # "S1" - and unlike enumerating, it has no ceiling to run into.
         if all_spaces is None and is_exact_monogram(space):
             monogram = space.upper()

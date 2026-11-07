@@ -207,7 +207,7 @@ Name      Status  Icon       Color  Parent       Milestone  Space
 Sprint 1  active  milestone  blue   Development  1          S1 Default
 ```
 
-With no filters it lists every active project in `PHAB_SPACE`, sorted by name.
+With no filters it lists every active project in `PHORGE_SPACE`, sorted by name.
 Subprojects and milestones are included.
 
 | Option | Keeps projects |
@@ -219,7 +219,7 @@ Subprojects and milestones are included.
 | `--milestones` / `--no-milestones` | That are, or are not, milestones |
 | `--status` | `active` (the default), `archived`, or `any` |
 | `--icon`, `--color` | With any of these icons or colors |
-| `--space` | In these Spaces; `'*'` for all of them. Defaults to `PHAB_SPACE` |
+| `--space` | In these Spaces; `'*'` for all of them. Defaults to `PHORGE_SPACE` |
 | `--ids` | Only these project ids, with every other filter still applied |
 | `--phids` | The same, by PHID |
 | `--slug` | With any of these hashtags. A hashtag is exact; `QUERY` is not |
@@ -328,9 +328,9 @@ No projects found
 The search still runs, because a configured icon that no project uses yet looks
 exactly the same. The icons in use are cached for a week, with the ones tab
 completion offers. Finding them means fetching every project, so with caching
-off (`PHAB_CACHE=0`) the icon is not checked and nothing is warned about.
+off (`PHORGE_CACHE=0`) the icon is not checked and nothing is warned about.
 
-`project search` looks in `PHAB_SPACE` unless `--space` says otherwise, the same
+`project search` looks in `PHORGE_SPACE` unless `--space` says otherwise, the same
 as `maniphest search`. A project that has no Space of its own belongs to the
 default Space, so it is still found.
 

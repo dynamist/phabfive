@@ -328,13 +328,13 @@ class TestNothingIsRetriedThatCouldDoubleCreate:
 
 
 class TestThePace:
-    """PHAB_PACE spaces out a spec apply, as it does every other batch."""
+    """PHORGE_PACE spaces out a spec apply, as it does every other batch."""
 
     def test_it_waits_between_writes(self):
         waits = []
 
         with patch("phabfive.retry._sleep", side_effect=waits.append):
-            _run(refuse=None, conf={"PHAB_PACE": 0.5})
+            _run(refuse=None, conf={"PHORGE_PACE": 0.5})
 
         # Five objects, and the first never waits
         assert len(waits) == 4

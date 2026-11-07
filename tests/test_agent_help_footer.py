@@ -90,5 +90,5 @@ def test_leaf_help_has_no_footer(args):
 
 
 def test_footer_names_the_configuration_sources():
-    for source in ("PHAB_URL", "PHAB_TOKEN", ".arcrc", ".arcconfig"):
+    for source in ("PHORGE_HOST", "PHORGE_TOKEN", ".arcrc", ".arcconfig"):
         assert source in AGENT_HELP_FOOTER

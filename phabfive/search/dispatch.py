@@ -213,7 +213,7 @@ def _project_params(app: Any, values: Mapping[str, Any]) -> dict[str, Any]:
         "status": values.get("status") or PROJECT_STATUS_ACTIVE,
         "icons": _as_list(values.get("icons")),
         "colors": _as_list(values.get("colors")),
-        # None means PHAB_SPACE, which is not the same as "no Space filter"
+        # None means PHORGE_SPACE, which is not the same as "no Space filter"
         "spaces": _as_list(values.get("spaces")) or None,
         "show_policy": bool(values.get("show-policy")),
         "show_members": bool(values.get("show-members")),
@@ -370,7 +370,7 @@ _SEARCH_RUNNERS = {
         build=_project_params,
         records_key="projects",
         # Deliberately empty: `project search` with no filter lists every
-        # active project in PHAB_SPACE, which is a request, not a mistake.
+        # active project in PHORGE_SPACE, which is a request, not a mistake.
         criteria=(),
         text_key=("query",),
     ),

@@ -144,7 +144,7 @@ class User(Phabfive):
     def whoami_configured_host(self):
         """Run whoami against the host phabfive is configured to use.
 
-        Uses the PHAB_URL/PHAB_TOKEN that came out of the normal
+        Uses the PHORGE_HOST/PHORGE_TOKEN that came out of the normal
         configuration chain, so it reports the host every other phabfive
         command talks to.
 
@@ -154,8 +154,10 @@ class User(Phabfive):
             Same shape as one entry of :meth:`whoami_all_hosts`.
         """
         return self._whoami_for_host(
-            self._normalize_url(self.conf["PHAB_URL"]),
-            self.conf.get("PHAB_TOKEN"),
+            self._normalize_url(
+                self.conf.get("PHORGE_API_HOST") or self.conf["PHORGE_HOST"]
+            ),
+            self.conf.get("PHORGE_TOKEN"),
             phab=self.phab,
         )
 
@@ -229,7 +231,7 @@ class User(Phabfive):
         list[dict]
             List of user info dicts, one per host. Each contains:
             - Host: FQDN only (e.g., "phabricator.example.com")
-            - URL: Full API URL for PHAB_URL (e.g., "https://phabricator.example.com/api/")
+            - URL: The host's Conduit endpoint (e.g., "https://phabricator.example.com/api/")
             - User: dict with UserName, RealName, PrimaryEmail, Link
             - _link: Rich hyperlink to user profile (for rich format)
             - Error: if whoami failed for this host, a dict with Message and,

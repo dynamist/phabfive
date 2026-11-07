@@ -91,8 +91,8 @@ class StubApp:
 
         real = Phabfive.__new__(Phabfive)
         real.conf = {
-            "PHAB_URL": "https://phorge.example.com/api/",
-            "PHAB_TOKEN": "api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "PHORGE_HOST": "https://phorge.example.com/api/",
+            "PHORGE_TOKEN": "api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         }
         real.url = "https://phorge.example.com"
         real.phab = MagicMock()
@@ -389,7 +389,7 @@ class TestRunningOne:
         )
 
     def test_a_project_search_with_no_filter_is_a_request(self):
-        """It lists every active project in PHAB_SPACE, which is a thing to ask."""
+        """It lists every active project in PHORGE_SPACE, which is a thing to ask."""
         app = stub_app()
 
         assert has_criteria(plan_item(app, item("project"))) is True
@@ -472,7 +472,7 @@ class TestTheAppEachTypeIsSearchedWith:
         from phabfive.project import Project
 
         parent = Project.__new__(Project)
-        parent.conf = {"PHAB_URL": "https://phorge.example.com/api/"}
+        parent.conf = {"PHORGE_HOST": "https://phorge.example.com/api/"}
         parent.url = "https://phorge.example.com"
         parent.phab = MagicMock()
         parent.lookup_store = None

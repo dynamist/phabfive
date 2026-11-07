@@ -15,19 +15,19 @@ import phabfive
 
 @pytest.fixture
 def credentials(live_env):
-    return {"url": live_env["PHAB_URL"], "token": live_env["PHAB_TOKEN"]}
+    return {"url": live_env["PHORGE_HOST"], "token": live_env["PHORGE_TOKEN"]}
 
 
 @pytest.fixture
 def isolated(monkeypatch, tmp_path):
-    """No configuration to discover: an empty HOME and no PHAB_* variables.
+    """No configuration to discover: an empty HOME and no PHORGE_* or PHAB_* variables.
 
     Explicit arguments must be enough on their own, so nothing else may be
     able to supply what they leave out.
     """
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    for name in ("PHAB_URL", "PHAB_TOKEN", "PHAB_SPACE"):
+    for name in ("PHORGE_HOST", "PHORGE_TOKEN", "PHORGE_SPACE"):
         monkeypatch.delenv(name, raising=False)
 
 

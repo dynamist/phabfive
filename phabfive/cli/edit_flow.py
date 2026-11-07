@@ -728,7 +728,7 @@ def edit_tasks_batch(
     # object, not an absence of one - while a dry run, a skip and a failure
     # are not.
     settled_ids = []
-    # PHAB_PACE seconds between writes, so a batch does not keep hammering a
+    # PHORGE_PACE seconds between writes, so a batch does not keep hammering a
     # server that is already struggling. Off unless configured.
     pacer = Pacer.from_conf(maniphest.conf)
 

@@ -12,7 +12,7 @@ was live on `project|paste|passphrase search --with` until this issue, so it
 is pinned here from both entry points.
 
 **`--with` still works, and says once what replaces it.** A `log.warning`,
-the way `phabfive/core.py` deprecates the yaml-config spelling of `PHAB_URL`
+the way `phabfive/core.py` deprecates the yaml-config spelling of `PHORGE_HOST`
 - not a break. It is documented, shipped and in people's scripts.
 
 **The two entry points differ in exactly one way**, deliberately: a failure
@@ -133,7 +133,7 @@ def invoke(*args):
 def an_instance():
     """An app the runner can be handed, which asks nothing."""
     instance = MagicMock()
-    instance.conf = {"PHAB_URL": "https://phorge.example.com/api/"}
+    instance.conf = {"PHORGE_HOST": "https://phorge.example.com/api/"}
     return instance
 
 

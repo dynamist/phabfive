@@ -23,7 +23,8 @@ from phabfive.exceptions import PhabfiveConfigException
 from phabfive.maniphest import Maniphest
 from phabfive.passphrase import Passphrase
 
-URL = "https://phorge.example.com/api/"
+HOST = "https://phorge.example.com"
+URL = f"{HOST}/api/"
 TOKEN = "api-" + "a" * 28
 
 
@@ -36,65 +37,77 @@ def phabricator():
 
 class TestExplicitConfiguration:
     def test_url_and_token_configure_the_instance(self, phabricator):
-        app = Phabfive(url=URL, token=TOKEN)
+        app = Phabfive(url=HOST, token=TOKEN)
 
-        assert app.conf["PHAB_URL"] == URL
-        assert app.conf["PHAB_TOKEN"] == TOKEN
-        assert app.url == "https://phorge.example.com"
+        assert app.conf["PHORGE_HOST"] == HOST
+        assert app.conf["PHORGE_API_HOST"] == URL
+        assert app.conf["PHORGE_TOKEN"] == TOKEN
+        assert app.url == HOST
 
     def test_nothing_is_discovered(self, phabricator, monkeypatch):
         """Neither the environment nor any file can change an explicit setup."""
-        monkeypatch.setenv("PHAB_URL", "https://elsewhere.example.com/api/")
-        monkeypatch.setenv("PHAB_SPACE", "S9")
+        monkeypatch.setenv("PHORGE_HOST", "https://elsewhere.example.com/api/")
+        monkeypatch.setenv("PHORGE_SPACE", "S9")
 
         with mock.patch.object(Phabfive, "read_config") as read_config:
             app = Phabfive(url=URL, token=TOKEN)
 
         read_config.assert_not_called()
-        assert app.conf["PHAB_URL"] == URL
-        assert app.conf["PHAB_SPACE"] == "S1"
+        assert app.conf["PHORGE_HOST"] == HOST
+        assert app.conf["PHORGE_SPACE"] == "S1"
 
-    def test_the_instance_address_is_enough(self, phabricator):
-        """The /api/ suffix is added, since it is the usual thing to forget."""
-        app = Phabfive(url="https://phorge.example.com", token=TOKEN)
+    def test_the_endpoint_is_forgiven(self, phabricator):
+        """A pasted /api/ endpoint names the instance as well as its root."""
+        app = Phabfive(url=URL, token=TOKEN)
 
-        assert app.conf["PHAB_URL"] == URL
+        assert app.conf["PHORGE_HOST"] == HOST
+        assert app.conf["PHORGE_API_HOST"] == URL
+
+    def test_a_bare_host_is_reached_over_https(self, phabricator):
+        """As glab takes GITLAB_HOST: no scheme means https."""
+        app = Phabfive(url="phorge.example.com", token=TOKEN)
+
+        assert app.conf["PHORGE_HOST"] == HOST
+        assert app.conf["PHORGE_API_HOST"] == URL
 
     def test_config_sets_other_values(self, phabricator):
-        app = Phabfive(url=URL, token=TOKEN, config={"PHAB_SPACE": "S2"})
+        app = Phabfive(url=URL, token=TOKEN, config={"PHORGE_SPACE": "S2"})
 
-        assert app.conf["PHAB_SPACE"] == "S2"
+        assert app.conf["PHORGE_SPACE"] == "S2"
 
     def test_config_alone_is_explicit(self, phabricator):
-        app = Phabfive(config={"PHAB_URL": URL, "PHAB_TOKEN": TOKEN})
+        app = Phabfive(config={"PHORGE_HOST": HOST, "PHORGE_TOKEN": TOKEN})
 
-        assert app.conf["PHAB_URL"] == URL
+        assert app.conf["PHORGE_HOST"] == HOST
 
     def test_arguments_override_config(self, phabricator):
-        other = "https://other.example.com/api/"
-        app = Phabfive(url=other, config={"PHAB_URL": URL, "PHAB_TOKEN": TOKEN})
+        other = "https://other.example.com"
+        app = Phabfive(url=other, config={"PHORGE_HOST": HOST, "PHORGE_TOKEN": TOKEN})
 
-        assert app.conf["PHAB_URL"] == other
+        assert app.conf["PHORGE_HOST"] == other
 
     def test_an_unknown_key_is_refused(self, phabricator):
-        with pytest.raises(PhabfiveConfigException, match="PHAB_SPCAE"):
-            Phabfive(url=URL, token=TOKEN, config={"PHAB_SPCAE": "S2"})
+        with pytest.raises(PhabfiveConfigException, match="PHORGE_SPCAE"):
+            Phabfive(url=URL, token=TOKEN, config={"PHORGE_SPCAE": "S2"})
 
     def test_a_missing_token_is_refused(self, phabricator):
-        with pytest.raises(PhabfiveConfigException, match="PHAB_TOKEN"):
+        with pytest.raises(PhabfiveConfigException, match="PHORGE_TOKEN"):
             Phabfive(url=URL)
 
     def test_a_malformed_token_is_refused(self, phabricator):
-        with pytest.raises(PhabfiveConfigException, match="PHAB_TOKEN is malformed"):
+        with pytest.raises(PhabfiveConfigException, match="PHORGE_TOKEN is malformed"):
             Phabfive(url=URL, token="too-short")
 
     def test_counts_as_an_explicit_host(self, phabricator):
+        assert Phabfive(url=URL, token=TOKEN).has_explicit_host()
+
+    def test_the_old_name_of_the_explicit_host_check_still_answers(self, phabricator):
         assert Phabfive(url=URL, token=TOKEN).has_explicit_phab_url()
 
     def test_app_classes_take_the_same_arguments(self, phabricator):
-        app = Maniphest(url=URL, token=TOKEN)
+        app = Maniphest(url=HOST, token=TOKEN)
 
-        assert app.conf["PHAB_URL"] == URL
+        assert app.conf["PHORGE_HOST"] == HOST
 
 
 class TestNoRequestUntilUsed:
@@ -191,8 +204,8 @@ class TestSelectHost:
             "https://phorge-b.example.com/api/",
         ]
         assert result == {
-            "PHAB_URL": "https://phorge-b.example.com/api/",
-            "PHAB_TOKEN": "b" * 32,
+            "PHORGE_HOST": "https://phorge-b.example.com/api/",
+            "PHORGE_TOKEN": "b" * 32,
         }
 
     def test_without_a_callback_a_terminal_is_not_prompted(self, arcrc):
@@ -206,7 +219,7 @@ class TestSelectHost:
         select.assert_not_called()
 
     def test_a_declining_callback_explains_how_to_choose(self, arcrc):
-        with pytest.raises(PhabfiveConfigException, match="set PHAB_URL"):
+        with pytest.raises(PhabfiveConfigException, match="set PHORGE_HOST"):
             Phabfive._load_arcrc({}, select_host=lambda hosts: None)
 
 

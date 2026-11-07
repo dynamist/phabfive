@@ -491,29 +491,29 @@ class TestConfiguration:
         assert profile_keep({}) == 20
 
     def test_keep_comes_from_the_configuration(self):
-        assert profile_keep({"PHAB_PROFILE_KEEP": "3"}) == 3
-        assert profile_keep({"PHAB_PROFILE_KEEP": 0}) == 0
+        assert profile_keep({"PHORGE_PROFILE_KEEP": "3"}) == 3
+        assert profile_keep({"PHORGE_PROFILE_KEEP": 0}) == 0
 
     def test_the_environment_wins(self, monkeypatch):
-        monkeypatch.setenv("PHAB_PROFILE_KEEP", "7")
-        assert profile_keep({"PHAB_PROFILE_KEEP": 3}) == 7
+        monkeypatch.setenv("PHORGE_PROFILE_KEEP", "7")
+        assert profile_keep({"PHORGE_PROFILE_KEEP": 3}) == 7
 
     @pytest.mark.parametrize("value", ["-1", "many", "1.5"])
     def test_a_bad_keep_is_refused(self, value):
-        with pytest.raises(PhabfiveInputException, match="PHAB_PROFILE_KEEP"):
-            profile_keep({"PHAB_PROFILE_KEEP": value})
+        with pytest.raises(PhabfiveInputException, match="PHORGE_PROFILE_KEEP"):
+            profile_keep({"PHORGE_PROFILE_KEEP": value})
 
     def test_the_directory_follows_the_configuration(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("PHAB_PROFILE_DIR")
-        assert profile_dir({"PHAB_PROFILE_DIR": str(tmp_path)}) == tmp_path
+        monkeypatch.delenv("PHORGE_PROFILE_DIR")
+        assert profile_dir({"PHORGE_PROFILE_DIR": str(tmp_path)}) == tmp_path
         assert profile_dir({}).name == "profiles"
 
     def test_the_origin_loses_its_trailing_slash(self, monkeypatch):
         assert profiler_origin({}) == "https://profiler.dynamist.cloud"
-        assert profiler_origin({"PHAB_PROFILER_ORIGIN": "http://localhost:4242/"}) == (
-            "http://localhost:4242"
-        )
-        monkeypatch.setenv("PHAB_PROFILER_ORIGIN", "https://profiler.firefox.com")
+        assert profiler_origin(
+            {"PHORGE_PROFILER_ORIGIN": "http://localhost:4242/"}
+        ) == ("http://localhost:4242")
+        monkeypatch.setenv("PHORGE_PROFILER_ORIGIN", "https://profiler.firefox.com")
         assert profiler_origin({}) == "https://profiler.firefox.com"
 
 
@@ -600,7 +600,7 @@ class TestHooks:
         pacer.wait()
 
         assert len(sleeps) == 1
-        assert [m.data["reason"] for m in recording.markers] == ["PHAB_PACE"]
+        assert [m.data["reason"] for m in recording.markers] == ["PHORGE_PACE"]
 
     def test_a_saved_profile_holds_no_token_or_written_text(
         self, recording, wire, sleeps

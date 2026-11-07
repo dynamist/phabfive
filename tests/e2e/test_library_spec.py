@@ -25,19 +25,19 @@ from phabfive.spec import validate_online
 
 @pytest.fixture
 def credentials(live_env):
-    return {"url": live_env["PHAB_URL"], "token": live_env["PHAB_TOKEN"]}
+    return {"url": live_env["PHORGE_HOST"], "token": live_env["PHORGE_TOKEN"]}
 
 
 @pytest.fixture
 def isolated(monkeypatch, tmp_path):
-    """No configuration to discover: an empty HOME and no PHAB_* variables.
+    """No configuration to discover: an empty HOME and no PHORGE_* or PHAB_* variables.
 
     Explicit arguments must be enough on their own, so nothing else may be
     able to supply what they leave out.
     """
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    for name in ("PHAB_URL", "PHAB_TOKEN", "PHAB_SPACE"):
+    for name in ("PHORGE_HOST", "PHORGE_TOKEN", "PHORGE_SPACE"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -213,11 +213,13 @@ def test_the_whole_flow_loads_nothing_of_the_command(live_env, tmp_path):
         "'loaded': [n for n in ('typer', 'click', 'InquirerPy', 'phabfive.cli') "
         "if n in sys.modules]}))"
     )
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PHAB_")}
+    env = {
+        k: v for k, v in os.environ.items() if not k.startswith(("PHAB_", "PHORGE_"))
+    }
     env.pop("TYPER_USE_RICH", None)
     env["HOME"] = str(tmp_path)
-    env["URL"] = live_env["PHAB_URL"]
-    env["TOKEN"] = live_env["PHAB_TOKEN"]
+    env["URL"] = live_env["PHORGE_HOST"]
+    env["TOKEN"] = live_env["PHORGE_TOKEN"]
 
     result = subprocess.run(
         [sys.executable, "-c", code],
@@ -372,11 +374,13 @@ def test_a_search_spec_runs_with_nothing_of_the_command_loaded(live_env, tmp_pat
         "'loaded': [n for n in ('typer', 'click', 'InquirerPy', 'phabfive.cli') "
         "if n in sys.modules]}))"
     )
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PHAB_")}
+    env = {
+        k: v for k, v in os.environ.items() if not k.startswith(("PHAB_", "PHORGE_"))
+    }
     env.pop("TYPER_USE_RICH", None)
     env["HOME"] = str(tmp_path)
-    env["URL"] = live_env["PHAB_URL"]
-    env["TOKEN"] = live_env["PHAB_TOKEN"]
+    env["URL"] = live_env["PHORGE_HOST"]
+    env["TOKEN"] = live_env["PHORGE_TOKEN"]
 
     result = subprocess.run(
         [sys.executable, "-c", code],

@@ -323,7 +323,7 @@ class TestOfflineWithNoTokenAtAll:
         """As little environment as an interpreter needs to start.
 
         Copied from `tests/test_spec_isolation.py`, which owns the
-        explanation: `PHAB_URL` and `PHAB_TOKEN` are unset and every place a
+        explanation: `PHORGE_HOST` and `PHORGE_TOKEN` are unset and every place a
         configuration could come from points at a directory that does not
         exist - but is still *defined*, because `phabricator/__init__.py`
         reads `ProgramData` and `AppData` as it imports and an absent one is
@@ -343,8 +343,8 @@ class TestOfflineWithNoTokenAtAll:
         environment["PYTHONPATH"] = str(REPOSITORY)
         environment["TERM"] = "dumb"
 
-        assert "PHAB_URL" not in environment
-        assert "PHAB_TOKEN" not in environment
+        assert "PHORGE_HOST" not in environment
+        assert "PHORGE_TOKEN" not in environment
 
         return environment
 

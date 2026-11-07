@@ -39,7 +39,7 @@ class TestClear:
 
     def test_all_works_without_credentials(self, monkeypatch):
         """What somebody reaches for when things are broken."""
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ):
@@ -52,8 +52,8 @@ class TestClear:
         assert "Removed 1 cached lookup from every instance" in result.stdout
 
     def test_says_so_when_no_instance_is_configured(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
-        conf = dict(CONF, PHAB_URL="")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
+        conf = dict(CONF, PHORGE_HOST="")
         with patch("phabfive.core.Phabfive.read_config", return_value=(conf, False)):
             result = runner.invoke(app, ["--format=rich", "cache", "clear"])
 
@@ -76,7 +76,7 @@ class TestInfo:
         assert "Nothing cached yet" in result.stdout
 
     def test_explains_why_the_cache_is_off(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ):
@@ -150,7 +150,7 @@ class TestInfo:
 
     def test_mentions_accounts_cached_under_another_token(self, enabled_cache):
         """ "Nothing cached yet" is misleading when the host has entries."""
-        other = dict(CONF, PHAB_TOKEN="api-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        other = dict(CONF, PHORGE_TOKEN="api-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
         with patch("phabfive.core.Phabfive.read_config", return_value=(other, True)):
             cache.set("projects", "key", {"records": [1], "truncated": False})
 
@@ -177,7 +177,7 @@ class TestInfo:
 
     def test_does_not_need_a_working_connection(self, monkeypatch):
         """Inspecting the cache must work when the instance is unreachable."""
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch("phabfive.core.Phabfive.read_config", side_effect=OSError("boom")):
             result = runner.invoke(app, ["cache", "info"])
 

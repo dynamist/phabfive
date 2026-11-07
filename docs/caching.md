@@ -190,24 +190,24 @@ phabfive cache clear --url <TAB>
 ## Turning it off
 
 ```bash
-export PHAB_CACHE=0          # takes effect immediately, including mid-completion
+export PHORGE_CACHE=0          # takes effect immediately, including mid-completion
 ```
 
 or in `~/.config/phabfive.yaml`:
 
 ```yaml
-PHAB_CACHE: false
+PHORGE_CACHE: false
 ```
 
 There is no `--no-cache` flag, because a flag cannot be typed inside a
-completion — which is where most of the cache is used. `PHAB_CACHE=0` makes the
+completion — which is where most of the cache is used. `PHORGE_CACHE=0` makes the
 commands ask for the status map every time too.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `PHAB_CACHE` | `true` | Turn caching off with `0` or `false` |
-| `PHAB_CACHE_TTL` | `0` | Seconds; overrides every entry in the table above |
-| `PHAB_CACHE_DIR` | unset | Somewhere other than `~/.cache/phabfive` |
+| `PHORGE_CACHE` | `true` | Turn caching off with `0` or `false` |
+| `PHORGE_CACHE_TTL` | `0` | Seconds; overrides every entry in the table above |
+| `PHORGE_CACHE_DIR` | unset | Somewhere other than `~/.cache/phabfive` |
 
 Each works as an environment variable or as a key in `~/.config/phabfive.yaml`.
 

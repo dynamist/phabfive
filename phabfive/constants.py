@@ -380,42 +380,70 @@ USER_ROLE_CONSTRAINTS = {
 }
 
 CONFIGURABLES = [
-    "PHAB_TOKEN",
-    "PHAB_URL",
-    "PHAB_API_URL",
-    "PHAB_WEB_URL",
-    "PHAB_SPACE",
-    "PHAB_FALLBACK",
-    "PHAB_CACHE",
-    "PHAB_CACHE_TTL",
-    "PHAB_CACHE_DIR",
-    "PHAB_RETRY",
-    "PHAB_BACKOFF_MAX",
-    "PHAB_PACE",
-    "PHAB_PROFILE",
-    "PHAB_PROFILE_KEEP",
-    "PHAB_PROFILE_DIR",
-    "PHAB_PROFILER_ORIGIN",
+    "PHORGE_TOKEN",
+    "PHORGE_HOST",
+    "PHORGE_API_HOST",
+    "PHORGE_SPACE",
+    "PHORGE_FALLBACK",
+    "PHORGE_CACHE",
+    "PHORGE_CACHE_TTL",
+    "PHORGE_CACHE_DIR",
+    "PHORGE_RETRY",
+    "PHORGE_BACKOFF_MAX",
+    "PHORGE_PACE",
+    "PHORGE_PROFILE",
+    "PHORGE_PROFILE_KEEP",
+    "PHORGE_PROFILE_DIR",
+    "PHORGE_PROFILER_ORIGIN",
 ]
+
+# The names the settings had before PHORGE_HOST and PHORGE_TOKEN, named the
+# way glab names GITLAB_HOST and GITLAB_TOKEN, replaced them. Every one is
+# still read, from the environment, a yaml file or a `config` dict, and
+# renamed to its successor with a deprecation warning; see phabfive.settings.
+# PHAB_URL and PHAB_WEB_URL both become PHORGE_HOST: PHAB_URL was the Conduit
+# endpoint, which PHORGE_HOST forgives, and when both are given PHAB_WEB_URL
+# wins, as the pair used to win over PHAB_URL.
+LEGACY_CONFIGURABLES = {
+    "PHAB_URL": "PHORGE_HOST",
+    "PHAB_WEB_URL": "PHORGE_HOST",
+    "PHAB_API_URL": "PHORGE_API_HOST",
+    "PHAB_TOKEN": "PHORGE_TOKEN",
+    "PHAB_SPACE": "PHORGE_SPACE",
+    "PHAB_FALLBACK": "PHORGE_FALLBACK",
+    "PHAB_CACHE": "PHORGE_CACHE",
+    "PHAB_CACHE_TTL": "PHORGE_CACHE_TTL",
+    "PHAB_CACHE_DIR": "PHORGE_CACHE_DIR",
+    "PHAB_RETRY": "PHORGE_RETRY",
+    "PHAB_BACKOFF_MAX": "PHORGE_BACKOFF_MAX",
+    "PHAB_PACE": "PHORGE_PACE",
+    "PHAB_PROFILE": "PHORGE_PROFILE",
+    "PHAB_PROFILE_KEEP": "PHORGE_PROFILE_KEEP",
+    "PHAB_PROFILE_DIR": "PHORGE_PROFILE_DIR",
+    "PHAB_PROFILER_ORIGIN": "PHORGE_PROFILER_ORIGIN",
+}
+
 DEFAULTS = {
-    "PHAB_TOKEN": "",
-    "PHAB_URL": "",
-    # The split pair, for an instance whose Conduit endpoint is not the address
-    # a reader can open. Both or neither, see Phabfive._resolve_url_pair.
-    "PHAB_API_URL": "",
-    "PHAB_WEB_URL": "",
-    "PHAB_SPACE": "S1",
-    "PHAB_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml, json or jsonl)
-    "PHAB_CACHE": True,  # Cache API lookups that shell completion repeats
-    "PHAB_CACHE_TTL": 0,  # 0 means use the per-namespace CACHE_TTLS below
-    "PHAB_CACHE_DIR": "",  # Empty means appdirs.user_cache_dir("phabfive")
-    "PHAB_RETRY": 3,  # How often a failed Conduit call is tried again
-    "PHAB_BACKOFF_MAX": 5,  # The longest wait before a retry, in seconds
-    "PHAB_PACE": 0,  # Seconds to keep between the writes of a batch edit
-    "PHAB_PROFILE": False,  # Record every command as a Firefox Profiler profile
-    "PHAB_PROFILE_KEEP": 20,  # How many profiles to keep, 0 for all of them
-    "PHAB_PROFILE_DIR": "",  # Empty means appdirs.user_data_dir("phabfive")/profiles
-    "PHAB_PROFILER_ORIGIN": "https://profiler.dynamist.cloud",  # Where `phabfive profile` opens one
+    "PHORGE_TOKEN": "",
+    # The instance, as glab takes GITLAB_HOST: phorge.example.com or
+    # https://phorge.example.com, the root of every link phabfive hands back.
+    # The Conduit endpoint is PHORGE_HOST/api/ unless PHORGE_API_HOST says the
+    # process reaches the instance at another address than a reader does;
+    # see Phabfive._resolve_hosts.
+    "PHORGE_HOST": "",
+    "PHORGE_API_HOST": "",
+    "PHORGE_SPACE": "S1",
+    "PHORGE_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml, json or jsonl)
+    "PHORGE_CACHE": True,  # Cache API lookups that shell completion repeats
+    "PHORGE_CACHE_TTL": 0,  # 0 means use the per-namespace CACHE_TTLS below
+    "PHORGE_CACHE_DIR": "",  # Empty means appdirs.user_cache_dir("phabfive")
+    "PHORGE_RETRY": 3,  # How often a failed Conduit call is tried again
+    "PHORGE_BACKOFF_MAX": 5,  # The longest wait before a retry, in seconds
+    "PHORGE_PACE": 0,  # Seconds to keep between the writes of a batch edit
+    "PHORGE_PROFILE": False,  # Record every command as a Firefox Profiler profile
+    "PHORGE_PROFILE_KEEP": 20,  # How many profiles to keep, 0 for all of them
+    "PHORGE_PROFILE_DIR": "",  # Empty means appdirs.user_data_dir("phabfive")/profiles
+    "PHORGE_PROFILER_ORIGIN": "https://profiler.dynamist.cloud",  # Where `phabfive profile` opens one
 }
 
 # Bumping this orphans every entry written by an older phabfive
@@ -440,26 +468,24 @@ CACHE_TTL_DEFAULT = 300
 # display statuses with - unlike "statuses", which is the list of keys that
 # completion offers
 STATUS_MAP_CACHE_NAMESPACE = "status-map"
-REQUIRED = ["PHAB_TOKEN", "PHAB_URL"]
+REQUIRED = ["PHORGE_TOKEN", "PHORGE_HOST"]
+# Judged after Phabfive._resolve_hosts has normalized the addresses: the host
+# is an origin with no path, which is what turns a pasted sub-path into a named
+# error rather than links nobody can open, and the endpoint ends in /api/.
+# Empty is how PHORGE_API_HOST says "unset", since most instances need none.
 VALIDATORS = {
-    "PHAB_URL": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
-    "PHAB_TOKEN": "^[a-zA-Z0-9-]{32}$",
-    "PHAB_FALLBACK": "^(yaml|json|jsonl|ndjson)$",
-    # Empty is how these two say "unset", since most instances need neither.
-    # The endpoint takes the same shape as PHAB_URL; the web half is an origin
-    # with no path at all, which is what turns a pasted /api/ endpoint into a
-    # named error rather than links nobody can open.
-    "PHAB_API_URL": r"^$|^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
-    "PHAB_WEB_URL": r"^$|^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/?$",
+    "PHORGE_HOST": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?$",
+    "PHORGE_API_HOST": r"^$|^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
+    "PHORGE_TOKEN": "^[a-zA-Z0-9-]{32}$",
+    "PHORGE_FALLBACK": "^(yaml|json|jsonl|ndjson)$",
 }
 VALIDATION_HINTS = {
-    "PHAB_URL": "example: https://we.phorge.it/api/",
-    "PHAB_API_URL": "example: http://web.phorge.svc.cluster.local/api/",
-    "PHAB_WEB_URL": "the address a reader opens, no /api/ suffix, example: https://we.phorge.it",
+    "PHORGE_HOST": "example: https://we.phorge.it",
+    "PHORGE_API_HOST": "the address this process calls, example: http://web.phorge.svc.cluster.local",
 }
 MISSING_CONFIG_HINTS = {
-    "PHAB_TOKEN": "add token to ~/.arcrc or run: phabfive user setup",
-    "PHAB_URL": 'create .arcconfig with: {"phabricator.uri": "https://we.phorge.it/"} or run: phabfive user setup',
+    "PHORGE_TOKEN": "add token to ~/.arcrc or run: phabfive user setup",
+    "PHORGE_HOST": 'set PHORGE_HOST, create .arcconfig with: {"phabricator.uri": "https://we.phorge.it/"} or run: phabfive user setup',
 }
 
 PRIORITY_DEFAULT = "normal"

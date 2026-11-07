@@ -35,7 +35,7 @@ OTHER_HOST = "https://elsewhere.example.com/api/"
 
 def _write_entry(url, token, namespace="projects"):
     """Cache one entry as the given account would."""
-    conf = dict(CONF, PHAB_URL=url, PHAB_TOKEN=token)
+    conf = dict(CONF, PHORGE_HOST=url, PHORGE_TOKEN=token)
     with patch("phabfive.core.Phabfive.read_config", return_value=(conf, True)):
         cache.set(namespace, "key", {"records": [1], "truncated": False})
 
@@ -47,20 +47,20 @@ def _dirs():
 
 class TestClearHost:
     def test_clears_every_token_for_that_host(self, enabled_cache):
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
-        _write_entry(CONF["PHAB_URL"], OTHER_TOKEN)
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], OTHER_TOKEN)
         assert len(_dirs()) == 2
 
-        removed = cache.clear_host(CONF["PHAB_URL"])
+        removed = cache.clear_host(CONF["PHORGE_HOST"])
 
         assert removed == 2
         assert _dirs() == []
 
     def test_leaves_other_hosts_alone(self, enabled_cache):
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
-        _write_entry(OTHER_HOST, CONF["PHAB_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
+        _write_entry(OTHER_HOST, CONF["PHORGE_TOKEN"])
 
-        cache.clear_host(CONF["PHAB_URL"])
+        cache.clear_host(CONF["PHORGE_HOST"])
 
         assert len(_dirs()) == 1
         assert _dirs()[0].startswith("elsewhere.example.com-")
@@ -75,12 +75,12 @@ class TestClearHost:
     )
     def test_accepts_a_bare_host_or_a_url(self, enabled_cache, form):
         """Completion can only offer bare hosts, so those must work."""
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
 
         assert cache.clear_host(form) == 1
 
     def test_nothing_cached_is_not_an_error(self, enabled_cache):
-        assert cache.clear_host(CONF["PHAB_URL"]) == 0
+        assert cache.clear_host(CONF["PHORGE_HOST"]) == 0
 
     @pytest.mark.parametrize("value", ["", None])
     def test_a_value_naming_no_host_is_rejected(self, enabled_cache, value):
@@ -89,9 +89,9 @@ class TestClearHost:
 
 class TestCachedHosts:
     def test_lists_each_host_once(self, enabled_cache):
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
-        _write_entry(CONF["PHAB_URL"], OTHER_TOKEN)
-        _write_entry(OTHER_HOST, CONF["PHAB_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], OTHER_TOKEN)
+        _write_entry(OTHER_HOST, CONF["PHORGE_TOKEN"])
 
         assert cache.cached_hosts() == [
             "elsewhere.example.com",
@@ -104,8 +104,8 @@ class TestCachedHosts:
 
 class TestCompleteCachedHost:
     def test_offers_cached_hosts(self, enabled_cache):
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
-        _write_entry(OTHER_HOST, CONF["PHAB_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
+        _write_entry(OTHER_HOST, CONF["PHORGE_TOKEN"])
 
         assert complete_cached_host("") == [
             "elsewhere.example.com",
@@ -113,8 +113,8 @@ class TestCompleteCachedHost:
         ]
 
     def test_narrows_by_what_was_typed(self, enabled_cache):
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
-        _write_entry(OTHER_HOST, CONF["PHAB_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
+        _write_entry(OTHER_HOST, CONF["PHORGE_TOKEN"])
 
         assert complete_cached_host("pho") == ["phorge.example.com"]
         assert complete_cached_host("zz") == []
@@ -124,7 +124,7 @@ class TestCompleteCachedHost:
     )
     def test_every_completion_starts_with_what_was_typed(self, enabled_cache, typed):
         """typer drops completions that do not, so a bare host would vanish."""
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
 
         offered = complete_cached_host(typed)
 
@@ -132,7 +132,7 @@ class TestCompleteCachedHost:
         assert all(value.startswith(typed) for value in offered)
 
     def test_keeps_the_scheme_that_was_typed(self, enabled_cache):
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
 
         assert complete_cached_host("https://pho") == ["https://phorge.example.com"]
 
@@ -142,8 +142,8 @@ class TestCompleteCachedHost:
 
 class TestClearUrlCommand:
     def test_clears_the_host(self, enabled_cache):
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
-        _write_entry(CONF["PHAB_URL"], OTHER_TOKEN)
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], OTHER_TOKEN)
 
         result = runner.invoke(
             app, ["--format=rich", "cache", "clear", "--url", "phorge.example.com"]
@@ -171,7 +171,7 @@ class TestClearUrlCommand:
 class TestTokenMismatchIsVisible:
     def test_says_so_when_another_token_cached_this_host(self, enabled_cache):
         """Removing nothing must not read as "there was nothing to clear"."""
-        _write_entry(CONF["PHAB_URL"], OTHER_TOKEN)
+        _write_entry(CONF["PHORGE_HOST"], OTHER_TOKEN)
 
         result = runner.invoke(app, ["--format=rich", "cache", "clear"])
 
@@ -181,7 +181,7 @@ class TestTokenMismatchIsVisible:
         assert "--url" in result.stderr
 
     def test_quiet_when_the_configured_token_matched(self, enabled_cache):
-        _write_entry(CONF["PHAB_URL"], CONF["PHAB_TOKEN"])
+        _write_entry(CONF["PHORGE_HOST"], CONF["PHORGE_TOKEN"])
 
         result = runner.invoke(app, ["--format=rich", "cache", "clear"])
 
@@ -201,8 +201,8 @@ class TestClearNamespaces:
     def _seed(self, url=None, token=None):
         conf = dict(
             CONF,
-            PHAB_URL=url or CONF["PHAB_URL"],
-            PHAB_TOKEN=token or CONF["PHAB_TOKEN"],
+            PHORGE_HOST=url or CONF["PHORGE_HOST"],
+            PHORGE_TOKEN=token or CONF["PHORGE_TOKEN"],
         )
         with patch("phabfive.core.Phabfive.read_config", return_value=(conf, True)):
             for namespace in ("projects", "users", "priorities"):
@@ -240,11 +240,11 @@ class TestClearNamespaces:
         self._seed()
         self._seed(token=OTHER_TOKEN)
 
-        assert cache.clear_host(CONF["PHAB_URL"], namespaces=["users"]) == 2
+        assert cache.clear_host(CONF["PHORGE_HOST"], namespaces=["users"]) == 2
 
         remaining = sorted(
             name
-            for directory in cache._dirs_for_host(dict(CONF), CONF["PHAB_URL"])
+            for directory in cache._dirs_for_host(dict(CONF), CONF["PHORGE_HOST"])
             for name in os.listdir(directory)
         )
         assert remaining == ["priorities", "priorities", "projects", "projects"]

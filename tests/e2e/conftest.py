@@ -22,10 +22,21 @@ import requests
 
 @pytest.fixture(scope="session")
 def live_env():
-    if not os.environ.get("PHAB_URL") or not os.environ.get("PHAB_TOKEN"):
-        pytest.skip("PHAB_URL and PHAB_TOKEN must point to a disposable Phorge")
-    env = dict(os.environ, PHAB_CACHE="0", NO_COLOR="1")
+    if not os.environ.get("PHORGE_HOST") or not os.environ.get("PHORGE_TOKEN"):
+        pytest.skip("PHORGE_HOST and PHORGE_TOKEN must point to a disposable Phorge")
+    env = dict(os.environ, PHORGE_CACHE="0", NO_COLOR="1")
     return env
+
+
+def conduit_url(host):
+    """The Conduit endpoint of PHORGE_HOST, as phabfive derives it."""
+    host = host.strip()
+    if "://" not in host:
+        host = f"https://{host}"
+    host = host.rstrip("/")
+    if host.endswith("/api"):
+        host = host[: -len("/api")]
+    return f"{host}/api/"
 
 
 @pytest.fixture(scope="session")
@@ -180,8 +191,8 @@ def conduit(live_env):
 
     def call(method, **params):
         response = requests.post(
-            live_env["PHAB_URL"].rstrip("/") + "/" + method,
-            data={"api.token": live_env["PHAB_TOKEN"], **params},
+            conduit_url(live_env["PHORGE_HOST"]) + method,
+            data={"api.token": live_env["PHORGE_TOKEN"], **params},
             timeout=30,
         )
         response.raise_for_status()

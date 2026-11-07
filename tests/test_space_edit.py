@@ -73,7 +73,7 @@ class TestMovingATask:
         maniphest = Maniphest()
         maniphest.phab = phab
         maniphest.url = "https://phorge.example.com/"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
         maniphest._get_task_data = MagicMock(return_value=task or _task())
         return maniphest
 
@@ -157,8 +157,8 @@ class TestMovingATask:
 @pytest.fixture
 def mock_config(monkeypatch):
     """Configuration and a client that need no network."""
-    monkeypatch.setenv("PHAB_TOKEN", "cli-testtoken1234567890123456789")
-    monkeypatch.setenv("PHAB_URL", "https://phabricator.example.com/api/")
+    monkeypatch.setenv("PHORGE_TOKEN", "cli-testtoken1234567890123456789")
+    monkeypatch.setenv("PHORGE_HOST", "https://phabricator.example.com/api/")
     monkeypatch.setattr("phabfive.core.Phabricator", lambda **kwargs: MagicMock())
 
 

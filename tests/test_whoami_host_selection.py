@@ -3,7 +3,7 @@
 """Tests for `user whoami` honouring the configured host.
 
 `whoami` used to always enumerate ~/.arcrc, so an explicitly configured
-PHAB_URL/PHAB_TOKEN was ignored and the command reported an unrelated
+PHORGE_HOST/PHORGE_TOKEN was ignored and the command reported an unrelated
 host, or failed outright when no ~/.arcrc existed.
 """
 
@@ -57,25 +57,25 @@ def _load_config(tmp_path, environ, arcrc=None, user_yaml=None, arcconfig=None):
 
 
 class TestExplicitPhabUrlDetection:
-    """PHAB_URL counts as explicit unless it only came from ~/.arcrc."""
+    """PHORGE_HOST counts as explicit unless it only came from ~/.arcrc."""
 
     def test_env_var_is_explicit(self, tmp_path):
         phabfive = _load_config(
-            tmp_path, {"PHAB_URL": "https://phorge.example.com/api/"}
+            tmp_path, {"PHORGE_HOST": "https://phorge.example.com/api/"}
         )
-        assert phabfive.has_explicit_phab_url() is True
+        assert phabfive.has_explicit_host() is True
 
     def test_user_yaml_is_explicit(self, tmp_path):
         phabfive = _load_config(
-            tmp_path, {}, user_yaml="PHAB_URL: https://phorge.example.com/api/\n"
+            tmp_path, {}, user_yaml="PHORGE_HOST: https://phorge.example.com/api/\n"
         )
-        assert phabfive.has_explicit_phab_url() is True
+        assert phabfive.has_explicit_host() is True
 
     def test_arcconfig_is_explicit(self, tmp_path):
         phabfive = _load_config(
-            tmp_path, {}, arcconfig={"PHAB_URL": "https://phorge.example.com/api/"}
+            tmp_path, {}, arcconfig={"PHORGE_HOST": "https://phorge.example.com/api/"}
         )
-        assert phabfive.has_explicit_phab_url() is True
+        assert phabfive.has_explicit_host() is True
 
     def test_arcrc_only_is_not_explicit(self, tmp_path):
         """A host discovered by reading ~/.arcrc is not an explicit choice."""
@@ -84,12 +84,12 @@ class TestExplicitPhabUrlDetection:
         )
         phabfive = _load_config(tmp_path, {}, arcrc=arcrc)
 
-        assert phabfive.conf["PHAB_URL"] == "https://phorge.example.com/api/"
-        assert phabfive.has_explicit_phab_url() is False
+        assert phabfive.conf["PHORGE_HOST"] == "https://phorge.example.com"
+        assert phabfive.has_explicit_host() is False
 
     def test_no_url_anywhere_is_not_explicit(self, tmp_path):
         phabfive = _load_config(tmp_path, {})
-        assert phabfive.has_explicit_phab_url() is False
+        assert phabfive.has_explicit_host() is False
 
 
 class TestWhoamiForHost:
@@ -170,8 +170,8 @@ class TestWhoamiForHost:
         """whoami_configured_host reports the host from self.conf."""
         user = self._user()
         user.conf = {
-            "PHAB_URL": "https://phorge.example.com/api/",
-            "PHAB_TOKEN": TOKEN,
+            "PHORGE_HOST": "https://phorge.example.com/api/",
+            "PHORGE_TOKEN": TOKEN,
         }
         user._normalize_url = Phabfive._normalize_url.__get__(user)
         user.phab = MagicMock()
@@ -188,7 +188,7 @@ class TestWhoamiHostSelection:
 
     def _mock_user(self, explicit):
         mock_user = MagicMock()
-        mock_user.has_explicit_phab_url.return_value = explicit
+        mock_user.has_explicit_host.return_value = explicit
         mock_user.whoami_configured_host.return_value = {
             "Host": "phorge.example.com",
             "URL": "https://phorge.example.com/api/",

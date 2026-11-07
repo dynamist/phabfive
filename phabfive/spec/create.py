@@ -1932,7 +1932,7 @@ def apply_plan(
         An already-constructed app.
     plan : CreatePlan
     pace : Pacer, optional
-        The pause between writes; `PHAB_PACE`'s by default, which is what
+        The pause between writes; `PHORGE_PACE`'s by default, which is what
         `edit_tasks_batch` and `Edit.apply_all` already use.
     """
     from phabfive.retry import Pacer

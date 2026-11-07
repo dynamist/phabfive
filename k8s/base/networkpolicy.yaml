@@ -34,7 +34,7 @@ spec:
 # and reaching Traefik's ClusterIP directly would mean pinning an address
 # that changes when the cluster is recreated. So the clients are named
 # here, where a destination's ingress belongs, rather than worked around
-# at the caller, and they use PHAB_URL=http://web.phorge.svc.cluster.local/api/
+# at the caller, and they use PHORGE_HOST=http://web.phorge.svc.cluster.local
 # - PHORGE_ALLOWED_URIS is what makes Phorge answer to that name.
 #
 # Both the namespace and the pod must match, in one `from` entry. The

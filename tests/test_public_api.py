@@ -277,7 +277,11 @@ class TestLaziness:
             "'loaded': [n for n in ('typer', 'click', 'InquirerPy', 'rich', "
             "'phabfive.cli') if n in sys.modules]}))"
         )
-        env = {k: v for k, v in os.environ.items() if not k.startswith("PHAB_")}
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(("PHAB_", "PHORGE_"))
+        }
         env["HOME"] = str(tmp_path)
         result = subprocess.run(
             [sys.executable, "-c", code],
@@ -373,7 +377,7 @@ class TestSpecSurface:
     def test_validating_offline_needs_no_configuration(self, tmp_path):
         """The library half of the web-frontend flow, in a bare interpreter.
 
-        An empty HOME and no PHAB_* variables leave nothing to discover, so
+        An empty HOME and no PHORGE_* or PHAB_* variables leave nothing to discover, so
         this fails if anything on the path reads `~/.arcrc`, `.arcconfig` or
         `~/.config/phabfive.yaml` -- and the environment is compared before
         and after, because a library must not rewrite it.
@@ -395,7 +399,11 @@ class TestSpecSurface:
             "'loaded': [n for n in ('phabricator', 'requests', 'phabfive.core', "
             "'phabfive.conduit', 'phabfive.cli') if n in sys.modules]}))"
         )
-        env = {k: v for k, v in os.environ.items() if not k.startswith("PHAB_")}
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(("PHAB_", "PHORGE_"))
+        }
         env["HOME"] = str(tmp_path)
         result = subprocess.run(
             [sys.executable, "-c", code],

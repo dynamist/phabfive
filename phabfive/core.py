@@ -9,7 +9,7 @@ import os
 import re
 import stat
 import sys
-from urllib.parse import urlparse
+import warnings
 
 # phabfive imports
 from phabfive.conduit import Conduit
@@ -28,6 +28,7 @@ from phabfive.exceptions import (
     PhabfiveDataException,
     PhabfiveInputException,
 )
+from phabfive.settings import deprecation_message, modernize, warn_legacy
 
 # 3rd party imports
 import anyconfig
@@ -71,7 +72,7 @@ class Phabfive:
 
     @classmethod
     def set_fallback_format(cls, fallback):
-        """Set the format used when stdout is not a terminal (PHAB_FALLBACK).
+        """Set the format used when stdout is not a terminal (PHORGE_FALLBACK).
 
         Aliases are resolved here, so the rest of the program only ever sees
         a real OutputFormat value, exactly as --format=ndjson is resolved.
@@ -157,7 +158,7 @@ class Phabfive:
         """Determine default output format based on whether stdout is a TTY.
 
         Returns:
-            str: "rich" if stdout is a terminal, PHAB_FALLBACK if piped/redirected
+            str: "rich" if stdout is a terminal, PHORGE_FALLBACK if piped/redirected
         """
         import sys
 
@@ -274,12 +275,15 @@ class Phabfive:
         Parameters
         ----------
         url : str, optional
-            The instance, e.g. ``https://phorge.example.com``. The ``/api/``
-            suffix is added when missing.
+            The instance, as ``PHORGE_HOST`` names it: ``phorge.example.com``
+            or ``https://phorge.example.com``. A pasted ``/api/`` endpoint is
+            forgiven.
         token : str, optional
             A Conduit API token.
         config : dict, optional
-            Any of the CONFIGURABLES keys, e.g. ``{"PHAB_SPACE": "S2"}``.
+            Any of the CONFIGURABLES keys, e.g. ``{"PHORGE_SPACE": "S2"}``. A
+            deprecated ``PHAB_*`` key is renamed to its successor, with a
+            DeprecationWarning.
         verify : bool
             Check the connection now with a ``user.whoami`` call. Off by
             default, so constructing makes no request at all: the client is
@@ -298,7 +302,7 @@ class Phabfive:
             self.conf = self.load_config(select_host=select_host)
         else:
             self.conf = self._explicit_config(url, token, config)
-            self._explicit_phab_url = bool(self.conf.get("PHAB_URL"))
+            self._explicit_host = bool(self.conf.get("PHORGE_HOST"))
 
         maxlen = 8 + len(max(dict(self.conf).keys(), key=len))
 
@@ -333,21 +337,15 @@ class Phabfive:
 
                 raise PhabfiveConfigException(error)
 
-        # PHAB_PACE is only read by a batch of writes, but checked here with
+        # PHORGE_PACE is only read by a batch of writes, but checked here with
         # the retry settings, so that a bad value fails before any work
         # rather than after a batch edit has been planned and confirmed.
         Pacer.from_conf(self.conf)
         self.phab = Conduit(self._client_factory(), RetryPolicy.from_conf(self.conf))
 
-        # Every link phabfive hands back is rooted here. That is the endpoint's
-        # own origin unless PHAB_WEB_URL says a reader reaches the instance at
-        # a different address than this process does.
-        web = self.conf.get("PHAB_WEB_URL")
-        if web:
-            self.url = web.rstrip("/")
-        else:
-            url = urlparse(self.conf["PHAB_URL"])
-            self.url = f"{url.scheme}://{url.netloc}"
+        # Every link phabfive hands back is rooted at the host, whether or not
+        # PHORGE_API_HOST says this process reaches the instance elsewhere.
+        self.url = self.conf["PHORGE_HOST"]
 
         if verify:
             self.verify_connection()
@@ -355,7 +353,15 @@ class Phabfive:
     @classmethod
     def _explicit_config(cls, url, token, config):
         """Build a configuration from arguments alone, discovering nothing."""
-        config = dict(config or {})
+        config, legacy = modernize(dict(config or {}))
+        if legacy:
+            # A program's deprecation, so the Python one: it reaches the
+            # program's own warning filters, and names the line to change
+            warnings.warn(
+                deprecation_message(legacy, "config"),
+                DeprecationWarning,
+                stacklevel=3,
+            )
 
         unknown = sorted(set(config) - set(CONFIGURABLES))
         if unknown:
@@ -367,16 +373,11 @@ class Phabfive:
         conf = copy.deepcopy(DEFAULTS)
         conf.update(config)
         if url is not None:
-            conf["PHAB_URL"] = url
+            conf["PHORGE_HOST"] = url
         if token is not None:
-            conf["PHAB_TOKEN"] = token
+            conf["PHORGE_TOKEN"] = token
 
-        # Forgive the one thing everybody gets wrong: the instance's address
-        # rather than its API endpoint.
-        if conf["PHAB_URL"]:
-            conf["PHAB_URL"] = cls._normalize_url(conf["PHAB_URL"])
-
-        return cls._resolve_url_pair(conf, supersedes_explicit=url is not None)
+        return cls._resolve_hosts(conf)
 
     @classmethod
     def _from_parent(cls, parent):
@@ -388,7 +389,7 @@ class Phabfive:
         build and connect a second client to the same host.
         """
         child = cls.__new__(cls)
-        for name in ("conf", "url", "phab", "_explicit_phab_url", "lookup_store"):
+        for name in ("conf", "url", "phab", "_explicit_host", "lookup_store"):
             if hasattr(parent, name):
                 setattr(child, name, getattr(parent, name))
         return child
@@ -417,8 +418,10 @@ class Phabfive:
         not when the recipe is made, so a test that patches
         `phabfive.core.Phabricator` still reaches every instance.
         """
-        host = self._normalize_url(self.conf.get("PHAB_URL"))
-        token = self.conf.get("PHAB_TOKEN")
+        host = self.conf.get("PHORGE_API_HOST") or self._normalize_url(
+            self.conf.get("PHORGE_HOST")
+        )
+        token = self.conf.get("PHORGE_TOKEN")
 
         def build():
             return Phabricator(host=host, token=token)
@@ -492,17 +495,21 @@ class Phabfive:
         Parameters
         ----------
         current_conf : dict
-            The current configuration (used to match PHAB_URL if set)
+            The current configuration. A token authenticates against the
+            endpoint, so ~/.arcrc keys it by the endpoint: the host looked up
+            is PHORGE_API_HOST when it is set, else PHORGE_HOST, when either
+            is.
 
         Returns
         -------
         dict
-            Configuration dict with PHAB_URL and/or PHAB_TOKEN if found
+            Configuration dict with PHORGE_HOST and/or PHORGE_TOKEN if found
 
         Raises
         ------
         PhabfiveConfigException
-            If .arcrc has insecure permissions or multiple hosts without PHAB_URL
+            If .arcrc has insecure permissions or multiple hosts without
+            PHORGE_HOST
         """
         arcrc_path = os.path.expanduser("~/.arcrc")
 
@@ -532,10 +539,12 @@ class Phabfive:
             return {}
 
         result = {}
-        current_url = current_conf.get("PHAB_URL", "")
+        current_url = current_conf.get("PHORGE_API_HOST") or current_conf.get(
+            "PHORGE_HOST", ""
+        )
 
         if current_url:
-            # PHAB_URL is already set, try to find matching token in .arcrc
+            # A host is already set, try to find matching token in .arcrc
             normalized_current = cls._normalize_url(current_url)
 
             for host_uri, host_data in hosts.items():
@@ -544,19 +553,19 @@ class Phabfive:
                     token = host_data.get("token")
                     if token:
                         log.debug(f"Found matching token in .arcrc for {host_uri}")
-                        result["PHAB_TOKEN"] = token
+                        result["PHORGE_TOKEN"] = token
                     break
         else:
-            # PHAB_URL not set, use .arcrc hosts
+            # No host set, use .arcrc hosts
             if len(hosts) == 1:
                 # Single host - use both URL and token
                 host_uri, host_data = next(iter(hosts.items()))
                 token = host_data.get("token")
 
                 log.debug(f"Using single host from .arcrc: {host_uri}")
-                result["PHAB_URL"] = host_uri
+                result["PHORGE_HOST"] = host_uri
                 if token:
-                    result["PHAB_TOKEN"] = token
+                    result["PHORGE_TOKEN"] = token
             else:
                 # Multiple hosts - check for default in config section
                 default_host = arcrc_data.get("config", {}).get("default", "")
@@ -570,9 +579,9 @@ class Phabfive:
                         if normalized_default == normalized_host:
                             token = host_data.get("token")
                             log.debug(f"Using default host from .arcrc: {host_uri}")
-                            result["PHAB_URL"] = host_uri
+                            result["PHORGE_HOST"] = host_uri
                             if token:
-                                result["PHAB_TOKEN"] = token
+                                result["PHORGE_TOKEN"] = token
                             break
                     else:
                         # Default didn't match any host
@@ -588,30 +597,30 @@ class Phabfive:
                     if selected is None:
                         host_list = "\n  - ".join(hosts.keys())
                         raise PhabfiveConfigException(
-                            f"Multiple hosts found in ~/.arcrc but PHAB_URL is not configured. "
-                            f"Please set PHAB_URL to specify which host to use:\n  - {host_list}\n\n"
-                            f"Example: export PHAB_URL=https://phorge.example.com/api/"
+                            f"Multiple hosts found in ~/.arcrc but PHORGE_HOST is not configured. "
+                            f"Please set PHORGE_HOST to specify which host to use:\n  - {host_list}\n\n"
+                            f"Example: export PHORGE_HOST=phorge.example.com"
                         )
-                    result["PHAB_URL"] = selected
+                    result["PHORGE_HOST"] = selected
                     token = hosts[selected].get("token")
                     if token:
-                        result["PHAB_TOKEN"] = token
+                        result["PHORGE_TOKEN"] = token
 
         return result
 
     @classmethod
     def _load_arcconfig(cls):
         """
-        Load PHAB_URL from .arcconfig in the git repository root.
+        Load PHORGE_HOST from .arcconfig in the git repository root.
 
         Walks up from the current working directory looking for a .git directory,
         then reads .arcconfig in that directory. Extracts `phabricator.uri` and
-        normalizes it to an API URL.
+        normalizes it to the instance's root address.
 
         Returns
         -------
         dict
-            Configuration dict with PHAB_URL if found, empty dict otherwise
+            Configuration dict with PHORGE_HOST if found, empty dict otherwise
         """
         # Walk up from cwd looking for .git directory
         current = os.getcwd()
@@ -654,9 +663,9 @@ class Phabfive:
             log.debug("No phabricator.uri found in .arcconfig")
             return {}
 
-        normalized = cls._normalize_url(uri)
-        log.debug(f"Using PHAB_URL from .arcconfig: {normalized}")
-        return {"PHAB_URL": normalized}
+        normalized = cls._host_root(uri)
+        log.debug(f"Using PHORGE_HOST from .arcconfig: {normalized}")
+        return {"PHORGE_HOST": normalized}
 
     @staticmethod
     def _site_config_base():
@@ -675,13 +684,26 @@ class Phabfive:
 
     def load_config(self, select_host=None):
         """
-        Load configuration and remember whether PHAB_URL was chosen explicitly.
+        Load configuration and remember whether the host was chosen explicitly.
 
         See read_config for the search order.
         """
-        conf, explicit_phab_url = type(self).read_config(select_host=select_host)
-        self._explicit_phab_url = explicit_phab_url
+        conf, explicit_host = type(self).read_config(select_host=select_host)
+        self._explicit_host = explicit_host
         return conf
+
+    @classmethod
+    def _settings_from(cls, mapping, where):
+        """The settings in `mapping`, a loaded yaml file or the environment.
+
+        Keys that are not settings are dropped, and a deprecated ``PHAB_*``
+        key is renamed to its ``PHORGE_*`` successor with a warning naming
+        `where` it was found.
+        """
+        renamed, legacy = modernize(dict(mapping))
+        if legacy:
+            warn_legacy(legacy, where)
+        return {key: value for key, value in renamed.items() if key in CONFIGURABLES}
 
     @classmethod
     def read_config(cls, select_host=None):
@@ -699,7 +721,7 @@ class Phabfive:
           7. `~/.arcrc` (Arcanist configuration)
           8. environment variables
 
-        A classmethod because the cache needs PHAB_URL to key its entries
+        A classmethod because the cache needs the endpoint to key its entries
         before it knows whether it will ask the server anything, and a
         Phabfive() validates a whole configuration it does not need.
 
@@ -707,16 +729,16 @@ class Phabfive:
         ----------
         select_host : callable, optional
             Called with the list of hosts when ~/.arcrc holds several, no
-            PHAB_URL is configured and ~/.arcrc names no default. Returns the
-            chosen host.
+            PHORGE_HOST is configured and ~/.arcrc names no default. Returns
+            the chosen host.
 
         Returns
         -------
         tuple
-            (conf, explicit_phab_url), where explicit_phab_url is whether the
-            host came from anything other than ~/.arcrc
+            (conf, explicit_host), where explicit_host is whether the host
+            came from anything other than ~/.arcrc
         """
-        environ = os.environ.copy()
+        environ = cls._settings_from(os.environ, "the environment")
 
         log.debug("Loading configuration defaults")
         conf = copy.deepcopy(DEFAULTS)
@@ -725,48 +747,32 @@ class Phabfive:
         log.debug(f"Loading configuration file: {site_conf_file}")
         anyconfig.merge(
             conf,
-            {
-                key: value
-                for key, value in dict(
-                    anyconfig.load(
-                        site_conf_file,
-                        ac_ignore_missing=True,
-                    )
-                ).items()
-                if key in CONFIGURABLES
-            },
+            cls._settings_from(
+                anyconfig.load(site_conf_file, ac_ignore_missing=True),
+                site_conf_file,
+            ),
         )
 
         site_conf_dir = os.path.join(f"{cls._site_config_base()}.d", "*.yaml")
         log.debug(f"Loading configuration files: {site_conf_dir}")
         anyconfig.merge(
             conf,
-            {
-                key: value
-                for key, value in dict(anyconfig.multi_load(site_conf_dir)).items()
-                if key in CONFIGURABLES
-            },
+            cls._settings_from(anyconfig.multi_load(site_conf_dir), site_conf_dir),
         )
 
         # Track config state before user yaml files to detect deprecated keys
-        pre_user_url = conf.get("PHAB_URL", "")
-        pre_user_token = conf.get("PHAB_TOKEN", "")
+        pre_user_host = conf.get("PHORGE_HOST", "")
+        pre_user_token = conf.get("PHORGE_TOKEN", "")
 
         user_conf_file = os.path.join(f"{appdirs.user_config_dir('phabfive')}.yaml")
         log.debug(f"Loading configuration file: {user_conf_file}")
         cls._check_secure_permissions(user_conf_file)
         anyconfig.merge(
             conf,
-            {
-                key: value
-                for key, value in dict(
-                    anyconfig.load(
-                        user_conf_file,
-                        ac_ignore_missing=True,
-                    )
-                ).items()
-                if key in CONFIGURABLES
-            },
+            cls._settings_from(
+                anyconfig.load(user_conf_file, ac_ignore_missing=True),
+                user_conf_file,
+            ),
         )
 
         user_conf_dir = os.path.join(
@@ -778,19 +784,17 @@ class Phabfive:
             cls._check_secure_permissions(conf_file)
         anyconfig.merge(
             conf,
-            {
-                key: value
-                for key, value in dict(anyconfig.multi_load(user_conf_dir)).items()
-                if key in CONFIGURABLES
-            },
+            cls._settings_from(anyconfig.multi_load(user_conf_dir), user_conf_dir),
         )
 
-        # Warn if PHAB_URL or PHAB_TOKEN were set from user yaml config files
+        # Warn if the host or token were set from user yaml config files
         deprecated_keys = []
-        if conf.get("PHAB_URL", "") != pre_user_url and conf.get("PHAB_URL", ""):
-            deprecated_keys.append("PHAB_URL")
-        if conf.get("PHAB_TOKEN", "") != pre_user_token and conf.get("PHAB_TOKEN", ""):
-            deprecated_keys.append("PHAB_TOKEN")
+        if conf.get("PHORGE_HOST", "") != pre_user_host and conf.get("PHORGE_HOST", ""):
+            deprecated_keys.append("PHORGE_HOST")
+        if conf.get("PHORGE_TOKEN", "") != pre_user_token and conf.get(
+            "PHORGE_TOKEN", ""
+        ):
+            deprecated_keys.append("PHORGE_TOKEN")
         if deprecated_keys:
             keys_str = "/".join(deprecated_keys)
             log.warning(
@@ -807,46 +811,34 @@ class Phabfive:
         # Remember whether a host was chosen by anything other than ~/.arcrc.
         # Everything merged so far (site and user yaml, .arcconfig) plus the
         # environment means the user pointed phabfive at a specific host; a
-        # PHAB_URL that only comes out of ~/.arcrc does not.
-        explicit_phab_url = bool(conf.get("PHAB_URL")) or bool(environ.get("PHAB_URL"))
+        # host that only comes out of ~/.arcrc does not.
+        explicit_host = any(
+            bool(conf.get(key)) or bool(environ.get(key))
+            for key in ("PHORGE_HOST", "PHORGE_API_HOST")
+        )
 
-        # Load from Arcanist .arcrc file (supports single or multiple hosts)
-        # Include PHAB_URL from environment so .arcrc can match the right host
-        # even though env vars are formally merged later
+        # Load from Arcanist .arcrc file (supports single or multiple hosts).
+        # Include the host from the environment so .arcrc can match the right
+        # one even though env vars are formally merged later
         arcrc_lookup_conf = dict(conf)
-        if "PHAB_URL" in environ and environ["PHAB_URL"]:
-            arcrc_lookup_conf["PHAB_URL"] = environ["PHAB_URL"]
-        # A token authenticates against the endpoint, so ~/.arcrc keys it by
-        # the endpoint: a split configuration has to match on PHAB_API_URL or
-        # it looks up a host that was never written. The environment is
-        # formally merged further down, so read it here as well.
-        api_for_lookup = environ.get("PHAB_API_URL") or conf.get("PHAB_API_URL")
-        if api_for_lookup:
-            arcrc_lookup_conf["PHAB_URL"] = cls._normalize_url(api_for_lookup)
+        for key in ("PHORGE_HOST", "PHORGE_API_HOST"):
+            if environ.get(key):
+                arcrc_lookup_conf[key] = environ[key]
         arcrc_conf = cls._load_arcrc(arcrc_lookup_conf, select_host=select_host)
         if arcrc_conf:
             log.debug("Merging configuration from ~/.arcrc")
             anyconfig.merge(conf, arcrc_conf)
 
         log.debug("Loading configuration from environment variables")
-        anyconfig.merge(
-            conf,
-            {key: value for key, value in environ.items() if key in CONFIGURABLES},
-        )
+        anyconfig.merge(conf, environ)
 
-        # Last, so that the two shapes are judged on the merged configuration.
-        # Half a pair in one layer and half in another is a valid split, and a
-        # per-layer check would reject it.
-        conf = cls._resolve_url_pair(conf, supersedes_explicit=explicit_phab_url)
+        # Last, so that the addresses are settled on the merged configuration:
+        # a host in one layer and an endpoint in another is an ordinary split
+        return cls._resolve_hosts(conf), explicit_host
 
-        if conf.get("PHAB_API_URL"):
-            explicit_phab_url = True
-
-        return conf, explicit_phab_url
-
-    def has_explicit_phab_url(self):
+    def has_explicit_host(self):
         """
-        Whether PHAB_URL was configured outside of ~/.arcrc.
+        Whether PHORGE_HOST was configured outside of ~/.arcrc.
 
         True when the host came from an environment variable, `.arcconfig`,
         or a phabfive yaml config, i.e. the user pointed phabfive at one
@@ -857,7 +849,11 @@ class Phabfive:
         -------
         bool
         """
-        return getattr(self, "_explicit_phab_url", False)
+        return getattr(self, "_explicit_host", False)
+
+    def has_explicit_phab_url(self):
+        """Deprecated spelling of :meth:`has_explicit_host`."""
+        return self.has_explicit_host()
 
     def to_transactions(self, data):
         """
@@ -877,97 +873,78 @@ class Phabfive:
         return result
 
     @classmethod
+    def _host_root(cls, host):
+        """
+        Normalize an instance's address to its root, with no trailing slash.
+
+        PHORGE_HOST is taken the way glab takes GITLAB_HOST: a bare host is
+        reached over https, and a pasted endpoint is forgiven.
+
+        - phorge.example.com -> https://phorge.example.com
+        - https://phorge.example.com/ -> https://phorge.example.com
+        - https://phorge.example.com/api/ -> https://phorge.example.com
+        - http://phorge.localhost:8080 -> http://phorge.localhost:8080
+        """
+        host = host.strip()
+        if host and "://" not in host:
+            host = f"https://{host}"
+        host = host.rstrip("/")
+        if host.endswith("/api"):
+            host = host[: -len("/api")]
+        return host.rstrip("/")
+
+    @classmethod
     def _normalize_url(cls, url):
         """
-        Normalizes a URL by removing trailing slashes and ensuring it ends with '/api/'
+        Normalize an instance's address to its Conduit endpoint.
 
         Handles various input formats:
+        - phorge.example.com -> https://phorge.example.com/api/
         - https://phorge.example.com -> https://phorge.example.com/api/
         - https://phorge.example.com/ -> https://phorge.example.com/api/
         - https://phorge.example.com/api -> https://phorge.example.com/api/
         - https://phorge.example.com/api/ -> https://phorge.example.com/api/
         """
-        url = url.rstrip("/")
-
-        if not url.endswith("/api"):
-            url += "/api"
-
-        url += "/"
-
-        return url
+        return f"{cls._host_root(url)}/api/"
 
     @classmethod
-    def _resolve_url_pair(cls, conf, supersedes_explicit=False):
+    def _resolve_hosts(cls, conf):
         """
-        Settle PHAB_API_URL and PHAB_WEB_URL into a configuration.
+        Settle PHORGE_HOST and PHORGE_API_HOST into a configuration.
 
-        PHAB_URL is one string doing two jobs: the Conduit endpoint phabfive
-        calls, and the root of every link it hands back. Those are the same
-        address almost everywhere, which is why one setting has held up; they
-        come apart behind an ingress or split-horizon DNS, where a caller
-        reaching a Service name still has to emit links a reader can open.
+        PHORGE_HOST is the instance: the root of every link phabfive hands
+        back and, as a rule, where it calls Conduit, at PHORGE_HOST/api/.
+        Those come apart behind an ingress or split-horizon DNS, where a
+        caller reaching a Service name still has to emit links a reader can
+        open; PHORGE_API_HOST is then where this process calls, the way
+        glab's GITLAB_API_HOST is.
 
-        So a configuration has exactly two valid shapes: PHAB_URL on its own,
-        or PHAB_API_URL and PHAB_WEB_URL together. Half a pair is an error
-        rather than a guess, because the missing half is precisely what cannot
-        be derived -- stripping /api/ off an endpoint is the assumption that
-        fails in the only case this exists for.
-
-        The pair resolves *into* PHAB_URL, so PHAB_URL always holds the
-        endpoint downstream. Everything keyed by instance -- the token in
-        ~/.arcrc, the cache directory -- therefore keeps keying on the address
-        it authenticates against, which is what those keys mean by an instance.
+        Both are normalized here: PHORGE_HOST to a root with no trailing
+        slash, PHORGE_API_HOST to the endpoint - and PHORGE_API_HOST holds the
+        endpoint downstream whether or not it was configured, so that
+        everything keyed by instance -- the token in ~/.arcrc, the cache
+        directory -- keys on the address it authenticates against, which is
+        what those keys mean by an instance. An endpoint with no host is left
+        for the REQUIRED check to name: the address a reader opens cannot be
+        derived from the one a process calls.
 
         Parameters
         ----------
         conf : dict
             A merged configuration.
-        supersedes_explicit : bool
-            Whether a PHAB_URL in `conf` was chosen deliberately rather than
-            read out of ~/.arcrc. Only then is being superseded worth a word:
-            ~/.arcrc carries a PHAB_URL for every stored token, so warning
-            about that one would fire on every ordinary run.
 
         Returns
         -------
         dict
-            `conf`, with the pair normalized and PHAB_URL holding the endpoint.
-
-        Raises
-        ------
-        PhabfiveConfigException
-            When one half of the pair is configured without the other.
+            `conf`, with both addresses normalized.
         """
-        api = (conf.get("PHAB_API_URL") or "").strip()
-        web = (conf.get("PHAB_WEB_URL") or "").strip()
+        host = (conf.get("PHORGE_HOST") or "").strip()
+        api = (conf.get("PHORGE_API_HOST") or "").strip()
 
-        if not api and not web:
-            return conf
-
-        if not api or not web:
-            given, missing = (
-                ("PHAB_WEB_URL", "PHAB_API_URL")
-                if web
-                else ("PHAB_API_URL", "PHAB_WEB_URL")
-            )
-            raise PhabfiveConfigException(
-                f"{given} is configured without {missing}. Neither address can "
-                f"be derived from the other: configure both, or configure "
-                f"PHAB_URL alone when the endpoint and the address a reader "
-                f"opens are the same"
-            )
-
-        conf["PHAB_API_URL"] = cls._normalize_url(api)
-        conf["PHAB_WEB_URL"] = web.rstrip("/")
-
-        previous = conf.get("PHAB_URL") or ""
-        if supersedes_explicit and previous and previous != conf["PHAB_API_URL"]:
-            log.warning(
-                f"PHAB_URL ({previous}) is ignored because PHAB_API_URL and "
-                f"PHAB_WEB_URL are configured; the endpoint is "
-                f"{conf['PHAB_API_URL']}"
-            )
-        conf["PHAB_URL"] = conf["PHAB_API_URL"]
+        if host:
+            conf["PHORGE_HOST"] = cls._host_root(host)
+        if api or host:
+            conf["PHORGE_API_HOST"] = cls._normalize_url(api or host)
 
         return conf
 

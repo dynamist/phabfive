@@ -135,19 +135,25 @@ def smoke_env(home: str, url: str = DEAD_URL) -> dict:
         {
             "HOME": home,
             "USERPROFILE": home,
-            "PHAB_URL": url,
-            "PHAB_TOKEN": SMOKE_TOKEN,
-            "PHAB_CACHE": "0",
+            "PHORGE_HOST": url,
+            "PHORGE_TOKEN": SMOKE_TOKEN,
+            "PHORGE_CACHE": "0",
             "NO_COLOR": "1",
         }
     )
     # Inherited from the caller these would re-enable the completion cache or
-    # point it back at a real directory.
-    env.pop("PHAB_CACHE_DIR", None)
-    env.pop("PHAB_SPACE", None)
-    # Or record every check's run, somewhere outside HOME
-    for key in ("PHAB_PROFILE", "PHAB_PROFILE_DIR", "PHAB_PROFILE_KEEP"):
-        env.pop(key, None)
+    # point it back at a real directory, or record every check's run somewhere
+    # outside HOME - under their current names or the deprecated PHAB_ ones,
+    # which phabfive still honours.
+    for key in list(env):
+        if key.startswith("PHAB_") or key in (
+            "PHORGE_CACHE_DIR",
+            "PHORGE_SPACE",
+            "PHORGE_PROFILE",
+            "PHORGE_PROFILE_DIR",
+            "PHORGE_PROFILE_KEEP",
+        ):
+            env.pop(key)
     return env
 
 
@@ -493,7 +499,7 @@ def check_profile(executable, home, timeout):
     so a run that fails to connect still passes through most of it, and
     building and writing the profile is the rest.
     """
-    env = {"PHAB_PROFILE_DIR": os.path.join(home, "profiles")}
+    env = {"PHORGE_PROFILE_DIR": os.path.join(home, "profiles")}
     code, output = run(
         executable,
         ["--profile", "--format=json", "user", "whoami"],

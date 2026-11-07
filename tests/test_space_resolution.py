@@ -266,7 +266,7 @@ class TestOneProbePerCommand:
         maniphest = Maniphest()
         maniphest.phab = phab
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = conf if conf is not None else {"PHAB_SPACE": "S1"}
+        maniphest.conf = conf if conf is not None else {"PHORGE_SPACE": "S1"}
 
         response = MagicMock()
         response.response = {"data": []}

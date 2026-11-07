@@ -296,8 +296,8 @@ class TestTagsWithColumn:
 @pytest.fixture
 def mock_config(monkeypatch):
     """Configuration and a client that need no network."""
-    monkeypatch.setenv("PHAB_TOKEN", "cli-testtoken1234567890123456789")
-    monkeypatch.setenv("PHAB_URL", "https://phabricator.example.com/api/")
+    monkeypatch.setenv("PHORGE_TOKEN", "cli-testtoken1234567890123456789")
+    monkeypatch.setenv("PHORGE_HOST", "https://phabricator.example.com/api/")
     monkeypatch.setattr("phabfive.core.Phabricator", lambda **kwargs: MagicMock())
 
 
@@ -613,8 +613,8 @@ class TestEndToEnd:
 
     @pytest.fixture
     def phab(self, monkeypatch):
-        monkeypatch.setenv("PHAB_TOKEN", "cli-testtoken1234567890123456789")
-        monkeypatch.setenv("PHAB_URL", "https://phabricator.example.com/api/")
+        monkeypatch.setenv("PHORGE_TOKEN", "cli-testtoken1234567890123456789")
+        monkeypatch.setenv("PHORGE_HOST", "https://phabricator.example.com/api/")
         phab = _phab()
         phab.maniphest.search.return_value = _Result(data=[_task(["PHID-PROJ-qa"])])
         phab.maniphest.edit.return_value = {"object": {"id": 42}}

@@ -13,7 +13,7 @@ This is the gate that would have caught it, and it is the same gate
 the production loader and the offline validation pass, and a file that fails
 fails *by name* rather than as one opaque walk. `test_the_command_validates_
 the_whole_corpus` runs the real command in a subprocess with no token, no
-`PHAB_URL` and a `HOME` that does not exist, which is the promise the offline
+`PHORGE_HOST` and a `HOME` that does not exist, which is the promise the offline
 layer is built on: a CI job or a pre-commit hook can lint a repository of
 specs on a machine that was never configured.
 
@@ -179,7 +179,7 @@ def _check_task_list(tasks, where):
 def scrubbed_environment():
     """As little environment as an interpreter needs to start.
 
-    No `PHAB_URL`, no `PHAB_TOKEN`, and a `HOME` that does not exist, so
+    No `PHORGE_HOST`, no `PHORGE_TOKEN`, and a `HOME` that does not exist, so
     nothing can read `~/.arcrc`, `~/.config/phabfive.yaml` or a cache
     directory. `SYSTEMROOT` is what Windows needs to start Python at all, and
     `PATH` is kept because `uv run` put the interpreter on it.
@@ -207,8 +207,8 @@ def scrubbed_environment():
     environment["PYTHONPATH"] = str(REPO_ROOT)
     environment["TERM"] = "dumb"
 
-    assert "PHAB_URL" not in environment
-    assert "PHAB_TOKEN" not in environment
+    assert "PHORGE_HOST" not in environment
+    assert "PHORGE_TOKEN" not in environment
 
     return environment
 
@@ -368,7 +368,7 @@ def test_the_command_validates_the_whole_corpus():
 
     The in-process cases above import the validation pass directly. This one
     runs the command a user or a CI job runs, in a child interpreter with no
-    `PHAB_TOKEN`, no `PHAB_URL` and a `HOME` that does not exist, so a file
+    `PHORGE_TOKEN`, no `PHORGE_HOST` and a `HOME` that does not exist, so a file
     that only validates because the developer's machine is configured fails
     here.
     """

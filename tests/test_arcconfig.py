@@ -28,7 +28,7 @@ class TestLoadArcconfig:
         with mock.patch("os.getcwd", return_value=str(tmp_path)):
             result = self.phabfive._load_arcconfig()
 
-        assert result == {"PHAB_URL": "https://phorge.example.com/api/"}
+        assert result == {"PHORGE_HOST": "https://phorge.example.com"}
 
     def test_arcconfig_missing(self, tmp_path):
         """Test .arcconfig missing returns empty dict."""
@@ -91,7 +91,7 @@ class TestLoadArcconfig:
         with mock.patch("os.getcwd", return_value=str(subdir)):
             result = self.phabfive._load_arcconfig()
 
-        assert result == {"PHAB_URL": "https://phorge.example.com/api/"}
+        assert result == {"PHORGE_HOST": "https://phorge.example.com"}
 
 
 class TestArconfigUrlNormalization:
@@ -101,7 +101,7 @@ class TestArconfigUrlNormalization:
         self.phabfive = object.__new__(Phabfive)
 
     def test_url_without_api_suffix(self, tmp_path):
-        """Test URL without /api/ gets normalized."""
+        """Test URL without a trailing slash is kept as the root."""
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
         arcconfig = tmp_path / ".arcconfig"
@@ -112,7 +112,7 @@ class TestArconfigUrlNormalization:
         with mock.patch("os.getcwd", return_value=str(tmp_path)):
             result = self.phabfive._load_arcconfig()
 
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
+        assert result["PHORGE_HOST"] == "https://phorge.example.com"
 
     def test_url_with_trailing_slash(self, tmp_path):
         """Test URL with trailing slash gets normalized."""
@@ -126,10 +126,10 @@ class TestArconfigUrlNormalization:
         with mock.patch("os.getcwd", return_value=str(tmp_path)):
             result = self.phabfive._load_arcconfig()
 
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
+        assert result["PHORGE_HOST"] == "https://phorge.example.com"
 
     def test_url_with_api_already(self, tmp_path):
-        """Test URL already ending with /api/ is preserved."""
+        """Test the /api/ suffix of a pasted endpoint is dropped."""
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
         arcconfig = tmp_path / ".arcconfig"
@@ -140,7 +140,7 @@ class TestArconfigUrlNormalization:
         with mock.patch("os.getcwd", return_value=str(tmp_path)):
             result = self.phabfive._load_arcconfig()
 
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
+        assert result["PHORGE_HOST"] == "https://phorge.example.com"
 
     def test_url_with_port(self, tmp_path):
         """Test URL with port gets normalized."""
@@ -154,7 +154,7 @@ class TestArconfigUrlNormalization:
         with mock.patch("os.getcwd", return_value=str(tmp_path)):
             result = self.phabfive._load_arcconfig()
 
-        assert result["PHAB_URL"] == "https://phorge.example.com:8443/api/"
+        assert result["PHORGE_HOST"] == "https://phorge.example.com:8443"
 
     def test_url_with_api_no_trailing_slash(self, tmp_path):
         """Test URL ending with /api (no trailing slash) gets normalized."""
@@ -168,4 +168,4 @@ class TestArconfigUrlNormalization:
         with mock.patch("os.getcwd", return_value=str(tmp_path)):
             result = self.phabfive._load_arcconfig()
 
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
+        assert result["PHORGE_HOST"] == "https://phorge.example.com"

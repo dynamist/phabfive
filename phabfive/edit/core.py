@@ -128,7 +128,7 @@ class Edit(Phabfive):
 
         A task in `plan.failures` was never planned and is not attempted.
         To carry on past a refusal, call `apply` for each edit instead.
-        PHAB_PACE, when set, is kept between one write and the next.
+        PHORGE_PACE, when set, is kept between one write and the next.
         """
         pacer = Pacer.from_conf(self.conf)
         results = []

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Record a phabfive run as a Firefox Profiler profile.
 
-A run is mostly waiting: on Conduit, on a retry's backoff, on PHAB_PACE, on
+A run is mostly waiting: on Conduit, on a retry's backoff, on PHORGE_PACE, on
 the person at the terminal. The recorder keeps a marker for each of those, and
 for log records and cache lookups, and turns them into a processed profile the
 Firefox Profiler opens as it is. Nothing is sampled. The samples in the profile
@@ -41,6 +41,7 @@ from typing import Any
 from urllib.parse import quote
 
 from phabfive.exceptions import PhabfiveInputException
+from phabfive.settings import env_setting
 
 #: The processed profile format version written. The Firefox Profiler
 #: upgrades older versions as it loads them, so a front-end newer than this
@@ -51,10 +52,10 @@ PROCESSED_PROFILE_VERSION = 76
 #: here comes from Gecko, but the field is required.
 GECKO_PROFILE_VERSION = 37
 
-#: Where `phabfive profile` opens a profile when PHAB_PROFILER_ORIGIN is unset
+#: Where `phabfive profile` opens a profile when PHORGE_PROFILER_ORIGIN is unset
 DEFAULT_ORIGIN = "https://profiler.dynamist.cloud"
 
-#: How many profiles are kept when PHAB_PROFILE_KEEP is unset
+#: How many profiles are kept when PHORGE_PROFILE_KEEP is unset
 DEFAULT_KEEP = 20
 
 #: A profile's file name; sorting the names sorts them oldest first
@@ -81,7 +82,7 @@ _PRIVATE_KEYS = re.compile(
 # Conduit and Arcanist tokens, wherever they turn up in a log message
 _TOKEN = re.compile(r"\b(api|cli)-[a-z0-9]{20,}\b", re.IGNORECASE)
 
-# Values that mean "off" for PHAB_PROFILE, from the environment or a yaml file
+# Values that mean "off" for PHORGE_PROFILE, from the environment or a yaml file
 _FALSEY = {"0", "false", "no", "off", "", "none"}
 
 
@@ -424,7 +425,7 @@ class Profiler:
         return self.marker(name, Category.PHASE, MarkerType.PHASE)
 
     def sleep(self, reason):
-        """phabfive waiting on purpose: a retry's backoff, PHAB_PACE."""
+        """phabfive waiting on purpose: a retry's backoff, PHORGE_PACE."""
         return self.marker("Sleep", Category.SLEEP, MarkerType.SLEEP, reason=reason)
 
     def user_input(self, question):
@@ -1045,9 +1046,9 @@ def prune_profiles(directory, keep):
 
 
 def profile_dir(conf=None):
-    """Where profiles are kept: PHAB_PROFILE_DIR, or phabfive's data directory."""
-    configured = os.environ.get("PHAB_PROFILE_DIR") or (conf or {}).get(
-        "PHAB_PROFILE_DIR"
+    """Where profiles are kept: PHORGE_PROFILE_DIR, or phabfive's data directory."""
+    configured = env_setting("PHORGE_PROFILE_DIR") or (conf or {}).get(
+        "PHORGE_PROFILE_DIR"
     )
     if configured:
         return Path(configured).expanduser()
@@ -1057,16 +1058,16 @@ def profile_dir(conf=None):
 
 
 def profile_keep(conf=None):
-    """How many profiles PHAB_PROFILE_KEEP keeps; 0 keeps every one.
+    """How many profiles PHORGE_PROFILE_KEEP keeps; 0 keeps every one.
 
     Raises
     ------
     PhabfiveInputException
         When the value is not a whole number of at least 0
     """
-    value = os.environ.get("PHAB_PROFILE_KEEP")
+    value = env_setting("PHORGE_PROFILE_KEEP")
     if value is None:
-        value = (conf or {}).get("PHAB_PROFILE_KEEP")
+        value = (conf or {}).get("PHORGE_PROFILE_KEEP")
     if value is None or str(value).strip() == "":
         return DEFAULT_KEEP
     try:
@@ -1075,15 +1076,15 @@ def profile_keep(conf=None):
         keep = -1
     if keep < 0:
         raise PhabfiveInputException(
-            f"PHAB_PROFILE_KEEP must be a whole number of at least 0, not {value!r}"
+            f"PHORGE_PROFILE_KEEP must be a whole number of at least 0, not {value!r}"
         )
     return keep
 
 
 def profiler_origin(conf=None):
     """The Firefox Profiler a profile is opened in, without a trailing slash."""
-    origin = os.environ.get("PHAB_PROFILER_ORIGIN") or (conf or {}).get(
-        "PHAB_PROFILER_ORIGIN"
+    origin = env_setting("PHORGE_PROFILER_ORIGIN") or (conf or {}).get(
+        "PHORGE_PROFILER_ORIGIN"
     )
     return (origin or DEFAULT_ORIGIN).rstrip("/")
 

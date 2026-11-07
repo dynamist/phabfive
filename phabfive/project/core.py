@@ -549,7 +549,7 @@ class Project(Phabfive):
         """
         Search projects, as the records `show` answers with.
 
-        Narrowed to PHAB_SPACE unless spaces names others, the way a task
+        Narrowed to PHORGE_SPACE unless spaces names others, the way a task
         search is, so the two searches agree on where they look. "*" means
         every Space, and is sent as no Space constraint at all rather than as
         a list of every Space - which is what an audit of the whole instance
@@ -579,7 +579,7 @@ class Project(Phabfive):
             search - see _search_milestones_by_look.
         spaces : list, optional
             Space names, monograms or patterns, any of which matches. None
-            means PHAB_SPACE, and "*" among them means every Space.
+            means PHORGE_SPACE, and "*" among them means every Space.
         show_policy, show_members : bool, optional
             Include that section
         limit : int, optional
@@ -831,7 +831,7 @@ class Project(Phabfive):
         Parameters
         ----------
         spaces : list or None
-            What --space named. None falls back to PHAB_SPACE, which takes
+            What --space named. None falls back to PHORGE_SPACE, which takes
             the same comma-separated patterns.
 
         Returns
@@ -844,7 +844,7 @@ class Project(Phabfive):
         from_config = spaces is None
 
         if from_config:
-            default_space = self.conf.get("PHAB_SPACE", "S1") or ""
+            default_space = self.conf.get("PHORGE_SPACE", "S1") or ""
             spaces = [part.strip() for part in default_space.split(",") if part.strip()]
 
         if not spaces or "*" in spaces:
@@ -865,7 +865,7 @@ class Project(Phabfive):
 
         if from_config:
             log.info(
-                f"Filtering to space(s): {', '.join(spaces)} (from PHAB_SPACE). "
+                f"Filtering to space(s): {', '.join(spaces)} (from PHORGE_SPACE). "
                 "Projects in other spaces are excluded; "
                 "use --space='*' to include all spaces."
             )

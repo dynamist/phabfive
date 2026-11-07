@@ -42,7 +42,7 @@ class TestCheckSecurePermissions:
     def test_secure_permissions_600(self, tmp_path):
         """Test that 0600 permissions pass."""
         config_file = tmp_path / "config.yaml"
-        config_file.write_text("PHAB_TOKEN: test")
+        config_file.write_text("PHORGE_TOKEN: test")
         os.chmod(config_file, 0o600)
         # Should not raise
         self.phabfive._check_secure_permissions(str(config_file))
@@ -51,7 +51,7 @@ class TestCheckSecurePermissions:
     def test_secure_permissions_400(self, tmp_path):
         """Test that 0400 permissions pass."""
         config_file = tmp_path / "config.yaml"
-        config_file.write_text("PHAB_TOKEN: test")
+        config_file.write_text("PHORGE_TOKEN: test")
         os.chmod(config_file, 0o400)
         # Should not raise
         self.phabfive._check_secure_permissions(str(config_file))
@@ -60,7 +60,7 @@ class TestCheckSecurePermissions:
     def test_insecure_permissions_group_read(self, tmp_path):
         """Test that group readable (0640) raises error."""
         config_file = tmp_path / "config.yaml"
-        config_file.write_text("PHAB_TOKEN: test")
+        config_file.write_text("PHORGE_TOKEN: test")
         os.chmod(config_file, 0o640)
 
         with pytest.raises(PhabfiveConfigException) as exc_info:
@@ -74,7 +74,7 @@ class TestCheckSecurePermissions:
     def test_insecure_permissions_world_read(self, tmp_path):
         """Test that world readable (0644) raises error."""
         config_file = tmp_path / "config.yaml"
-        config_file.write_text("PHAB_TOKEN: test")
+        config_file.write_text("PHORGE_TOKEN: test")
         os.chmod(config_file, 0o644)
 
         with pytest.raises(PhabfiveConfigException) as exc_info:
@@ -87,7 +87,7 @@ class TestCheckSecurePermissions:
     def test_insecure_permissions_group_write(self, tmp_path):
         """Test that group writable (0620) raises error."""
         config_file = tmp_path / "config.yaml"
-        config_file.write_text("PHAB_TOKEN: test")
+        config_file.write_text("PHORGE_TOKEN: test")
         os.chmod(config_file, 0o620)
 
         with pytest.raises(PhabfiveConfigException) as exc_info:
@@ -99,7 +99,7 @@ class TestCheckSecurePermissions:
     def test_insecure_permissions_world_execute(self, tmp_path):
         """Test that world executable (0701) raises error."""
         config_file = tmp_path / "config.yaml"
-        config_file.write_text("PHAB_TOKEN: test")
+        config_file.write_text("PHORGE_TOKEN: test")
         os.chmod(config_file, 0o701)
 
         with pytest.raises(PhabfiveConfigException) as exc_info:
@@ -167,8 +167,8 @@ class TestLoadArcrc:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
-        assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
+        assert result["PHORGE_HOST"] == "https://phorge.example.com/api/"
+        assert result["PHORGE_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
     def test_arcrc_owner_only_read(self, tmp_path):
         """Test that .arcrc with 0400 permissions is accepted."""
@@ -186,7 +186,7 @@ class TestLoadArcrc:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert "PHAB_URL" in result
+        assert "PHORGE_HOST" in result
 
     def test_arcrc_invalid_json(self, tmp_path):
         """Test that invalid JSON in .arcrc returns empty dict."""
@@ -246,8 +246,8 @@ class TestArcrcSingleHost:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
-        assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
+        assert result["PHORGE_HOST"] == "https://phorge.example.com/api/"
+        assert result["PHORGE_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
     def test_single_host_without_token(self, tmp_path):
         """Test that single host without token only provides URL."""
@@ -259,8 +259,8 @@ class TestArcrcSingleHost:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
-        assert "PHAB_TOKEN" not in result
+        assert result["PHORGE_HOST"] == "https://phorge.example.com/api/"
+        assert "PHORGE_TOKEN" not in result
 
 
 class TestArcrcMultipleHosts:
@@ -270,7 +270,7 @@ class TestArcrcMultipleHosts:
         self.phabfive = object.__new__(Phabfive)
 
     def test_multiple_hosts_without_phab_url_raises_error(self, tmp_path):
-        """Test that multiple hosts without PHAB_URL set raises error (non-TTY)."""
+        """Test that multiple hosts without PHORGE_HOST set raises error (non-TTY)."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
@@ -297,7 +297,7 @@ class TestArcrcMultipleHosts:
         assert "Multiple hosts found" in error_msg
         # The hosts are offered as a bullet list for the user to choose from.
         # Match the list itself rather than looking for the names anywhere in
-        # the message, which the trailing "Example: export PHAB_URL=..." line
+        # the message, which the trailing "Example: export PHORGE_HOST=..." line
         # can satisfy on its own.
         assert re.findall(r"^  - (\S+)$", error_msg, re.MULTILINE) == [
             "https://phorge-a.example.com/api/",
@@ -333,8 +333,8 @@ class TestArcrcMultipleHosts:
             mock_stdin.isatty.return_value = True
             result = self.phabfive._load_arcrc({}, select_host=prompt_host)
 
-        assert result["PHAB_URL"] == "https://phorge-b.example.com/api/"
-        assert result["PHAB_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        assert result["PHORGE_HOST"] == "https://phorge-b.example.com/api/"
+        assert result["PHORGE_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         mock_select.assert_called_once()
 
     def test_multiple_hosts_interactive_prints_tip(self, tmp_path, capsys):
@@ -366,10 +366,10 @@ class TestArcrcMultipleHosts:
 
         captured = capsys.readouterr()
         assert "Tip:" in captured.err
-        assert "PHAB_URL" in captured.err
+        assert "PHORGE_HOST" in captured.err
 
     def test_multiple_hosts_with_matching_phab_url(self, tmp_path):
-        """Test that multiple hosts with matching PHAB_URL returns token."""
+        """Test that multiple hosts with matching PHORGE_HOST returns token."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
@@ -384,17 +384,17 @@ class TestArcrcMultipleHosts:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        current_conf = {"PHAB_URL": "https://phorge-b.example.com/api/"}
+        current_conf = {"PHORGE_HOST": "https://phorge-b.example.com/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
 
         # Should only return token, not URL (URL already set)
-        assert "PHAB_URL" not in result
-        assert result["PHAB_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        assert "PHORGE_HOST" not in result
+        assert result["PHORGE_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
     def test_multiple_hosts_with_non_matching_phab_url(self, tmp_path):
-        """Test that multiple hosts with non-matching PHAB_URL returns empty."""
+        """Test that multiple hosts with non-matching PHORGE_HOST returns empty."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
@@ -409,7 +409,7 @@ class TestArcrcMultipleHosts:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        current_conf = {"PHAB_URL": "https://other-server.example.com/api/"}
+        current_conf = {"PHORGE_HOST": "https://other-server.example.com/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
@@ -436,11 +436,11 @@ class TestArcrcMultipleHosts:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phorge-b.example.com/api/"
-        assert result["PHAB_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        assert result["PHORGE_HOST"] == "https://phorge-b.example.com/api/"
+        assert result["PHORGE_TOKEN"] == "cli-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
     def test_multiple_hosts_with_default_and_phab_url_uses_phab_url(self, tmp_path):
-        """Test that PHAB_URL takes precedence over config.default."""
+        """Test that PHORGE_HOST takes precedence over config.default."""
         arcrc_path = tmp_path / ".arcrc"
         arcrc_data = {
             "hosts": {
@@ -456,15 +456,15 @@ class TestArcrcMultipleHosts:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        # PHAB_URL set to host A, but default is host B
-        current_conf = {"PHAB_URL": "https://phorge-a.example.com/api/"}
+        # PHORGE_HOST set to host A, but default is host B
+        current_conf = {"PHORGE_HOST": "https://phorge-a.example.com/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
 
-        # Should use host A's token (PHAB_URL takes precedence)
-        assert "PHAB_URL" not in result  # URL already set, not overwritten
-        assert result["PHAB_TOKEN"] == "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        # Should use host A's token (PHORGE_HOST takes precedence)
+        assert "PHORGE_HOST" not in result  # URL already set, not overwritten
+        assert result["PHORGE_TOKEN"] == "cli-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
     def test_multiple_hosts_with_invalid_default_raises_error(self, tmp_path):
         """Test that invalid default (not matching any host) raises error (non-TTY)."""
@@ -515,12 +515,12 @@ class TestArcrcMultipleHosts:
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc({})
 
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
-        assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
+        assert result["PHORGE_HOST"] == "https://phorge.example.com/api/"
+        assert result["PHORGE_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
 
 class TestArcrcUrlMatching:
-    """Tests for URL matching between PHAB_URL and .arcrc hosts."""
+    """Tests for URL matching between PHORGE_HOST and .arcrc hosts."""
 
     def setup_method(self):
         self.phabfive = object.__new__(Phabfive)
@@ -538,13 +538,13 @@ class TestArcrcUrlMatching:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        # PHAB_URL without trailing slash should still match
-        current_conf = {"PHAB_URL": "https://phorge.example.com/api"}
+        # PHORGE_HOST without trailing slash should still match
+        current_conf = {"PHORGE_HOST": "https://phorge.example.com/api"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
 
-        assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
+        assert result["PHORGE_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
     def test_url_matching_arcrc_without_trailing_slash(self, tmp_path):
         """Test URL matching when .arcrc has no trailing slash."""
@@ -559,12 +559,12 @@ class TestArcrcUrlMatching:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        current_conf = {"PHAB_URL": "https://phorge.example.com/api/"}
+        current_conf = {"PHORGE_HOST": "https://phorge.example.com/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
 
-        assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
+        assert result["PHORGE_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
     def test_url_matching_with_port(self, tmp_path):
         """Test URL matching works with port numbers."""
@@ -579,12 +579,12 @@ class TestArcrcUrlMatching:
         arcrc_path.write_text(json.dumps(arcrc_data))
         os.chmod(arcrc_path, 0o600)
 
-        current_conf = {"PHAB_URL": "https://phorge.example.com:8443/api/"}
+        current_conf = {"PHORGE_HOST": "https://phorge.example.com:8443/api/"}
 
         with mock.patch.object(os.path, "expanduser", return_value=str(arcrc_path)):
             result = self.phabfive._load_arcrc(current_conf)
 
-        assert result["PHAB_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
+        assert result["PHORGE_TOKEN"] == "cli-abcdefghijklmnopqrstuvwxyz12"
 
 
 class TestArcrcLegacyFormat:
@@ -611,20 +611,20 @@ class TestArcrcLegacyFormat:
             result = self.phabfive._load_arcrc({})
 
         # Should provide URL but not token (cert-based auth not supported)
-        assert result["PHAB_URL"] == "https://phorge.example.com/api/"
-        assert "PHAB_TOKEN" not in result
+        assert result["PHORGE_HOST"] == "https://phorge.example.com/api/"
+        assert "PHORGE_TOKEN" not in result
 
 
 class TestDeprecationWarning:
-    """Tests for deprecation warning when PHAB_URL/PHAB_TOKEN in phabfive.yaml."""
+    """Tests for deprecation warning when PHORGE_HOST/PHORGE_TOKEN in phabfive.yaml."""
 
     def setup_method(self):
         self.phabfive = object.__new__(Phabfive)
 
     def test_deprecation_warning_phab_url_in_yaml(self, tmp_path, caplog):
-        """Test that PHAB_URL in user yaml config prints warning to stderr."""
+        """Test that PHORGE_HOST in user yaml config prints warning to stderr."""
         user_conf = tmp_path / "phabfive.yaml"
-        user_conf.write_text("PHAB_URL: https://phorge.example.com/api/\n")
+        user_conf.write_text("PHORGE_HOST: https://phorge.example.com/api/\n")
         os.chmod(user_conf, 0o600)
 
         with (
@@ -644,14 +644,14 @@ class TestDeprecationWarning:
             with caplog.at_level(logging.WARNING, logger="phabfive.core"):
                 self.phabfive.load_config()
 
-        assert "PHAB_URL" in caplog.text
+        assert "PHORGE_HOST" in caplog.text
         assert "deprecated" in caplog.text
         assert "phabfive user setup" in caplog.text
 
     def test_deprecation_warning_phab_token_in_yaml(self, tmp_path, caplog):
-        """Test that PHAB_TOKEN in user yaml config prints warning to stderr."""
+        """Test that PHORGE_TOKEN in user yaml config prints warning to stderr."""
         user_conf = tmp_path / "phabfive.yaml"
-        user_conf.write_text("PHAB_TOKEN: cli-abcdefghijklmnopqrstuvwxyz12\n")
+        user_conf.write_text("PHORGE_TOKEN: cli-abcdefghijklmnopqrstuvwxyz12\n")
         os.chmod(user_conf, 0o600)
 
         with (
@@ -671,13 +671,13 @@ class TestDeprecationWarning:
             with caplog.at_level(logging.WARNING, logger="phabfive.core"):
                 self.phabfive.load_config()
 
-        assert "PHAB_TOKEN" in caplog.text
+        assert "PHORGE_TOKEN" in caplog.text
         assert "deprecated" in caplog.text
 
     def test_no_deprecation_warning_without_credentials(self, tmp_path, caplog):
         """Test no warning when yaml has only non-credential keys."""
         user_conf = tmp_path / "phabfive.yaml"
-        user_conf.write_text("PHAB_SPACE: S42\n")
+        user_conf.write_text("PHORGE_SPACE: S42\n")
         os.chmod(user_conf, 0o600)
 
         with (

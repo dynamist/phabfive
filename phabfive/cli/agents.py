@@ -9,7 +9,7 @@ from typer.core import TyperGroup
 
 AGENT_HELP_FOOTER = (
     "Config: ~/.config/phabfive.yaml, ~/.arcrc, .arcconfig\n"
-    "Env:    PHAB_URL, PHAB_TOKEN (run: phabfive user setup)\n"
+    "Env:    PHORGE_HOST, PHORGE_TOKEN (run: phabfive user setup)\n"
     "Docs:   https://phabfive.readthedocs.io\n"
     "Home:   https://github.com/dynamist/phabfive\n"
     "\n"

@@ -42,24 +42,37 @@ if not os.environ.get("PHABFIVE_LIVE_TESTS"):
 
 
 CONF = {
-    "PHAB_URL": "https://phorge.example.com/api/",
-    "PHAB_TOKEN": "api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "PHAB_CACHE": True,
-    "PHAB_CACHE_TTL": 0,
-    "PHAB_CACHE_DIR": "",
+    "PHORGE_HOST": "https://phorge.example.com",
+    "PHORGE_TOKEN": "api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "PHORGE_CACHE": True,
+    "PHORGE_CACHE_TTL": 0,
+    "PHORGE_CACHE_DIR": "",
 }
+
+
+@pytest.fixture(autouse=True)
+def forgotten_deprecations():
+    """Let every test see the deprecation warning a legacy setting earns.
+
+    They are logged once per process, and the suite is one process.
+    """
+    from phabfive.settings import forget_warnings
+
+    forget_warnings()
+    yield
+    forget_warnings()
 
 
 @pytest.fixture(autouse=True)
 def isolated_cache(monkeypatch, tmp_path):
     """Keep every test away from the real cache directory."""
-    monkeypatch.setenv("PHAB_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setenv("PHAB_CACHE", "0")
+    monkeypatch.setenv("PHORGE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("PHORGE_CACHE", "0")
 
 
 @pytest.fixture(autouse=True)
 def isolated_profiles(monkeypatch, tmp_path):
-    """Keep a developer's PHAB_PROFILE from recording the suite's commands.
+    """Keep a developer's PHORGE_PROFILE from recording the suite's commands.
 
     Profiles land in tmp_path should a test ask for one, and the recorder is
     switched off again afterwards, so one test's recording never leaks into
@@ -67,10 +80,10 @@ def isolated_profiles(monkeypatch, tmp_path):
     """
     from phabfive.profiler import profiler
 
-    monkeypatch.setenv("PHAB_PROFILE", "0")
-    monkeypatch.setenv("PHAB_PROFILE_DIR", str(tmp_path / "profiles"))
-    monkeypatch.delenv("PHAB_PROFILE_KEEP", raising=False)
-    monkeypatch.delenv("PHAB_PROFILER_ORIGIN", raising=False)
+    monkeypatch.setenv("PHORGE_PROFILE", "0")
+    monkeypatch.setenv("PHORGE_PROFILE_DIR", str(tmp_path / "profiles"))
+    monkeypatch.delenv("PHORGE_PROFILE_KEEP", raising=False)
+    monkeypatch.delenv("PHORGE_PROFILER_ORIGIN", raising=False)
     yield
     profiler.stop()
     profiler.markers = []
@@ -79,6 +92,6 @@ def isolated_profiles(monkeypatch, tmp_path):
 @pytest.fixture
 def enabled_cache(monkeypatch):
     """Switch the cache on, with configuration that needs no real files."""
-    monkeypatch.setenv("PHAB_CACHE", "1")
+    monkeypatch.setenv("PHORGE_CACHE", "1")
     with patch("phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)):
         yield

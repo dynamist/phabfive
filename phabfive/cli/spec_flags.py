@@ -212,7 +212,7 @@ def warn_with_deprecated(replacement: str) -> None:
 
     A ``log.warning`` rather than a break, which is how this repository has
     deprecated before: ``phabfive/core.py`` says the same kind of thing about
-    ``PHAB_URL`` in ``~/.config/phabfive.yaml``. ``--with`` is documented,
+    ``PHORGE_HOST`` in ``~/.config/phabfive.yaml``. ``--with`` is documented,
     shipped and in people's scripts, and carrying a two-line shim until the
     format promotes from ``v1alpha1`` to ``v1`` costs nothing.
 

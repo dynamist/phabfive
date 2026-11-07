@@ -106,10 +106,10 @@ class TestExpiry:
             assert cache.get("users", "key", ttl=60) is cache.MISS
 
     def test_ttl_override_applies_to_every_namespace(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config",
-            return_value=(_conf(PHAB_CACHE_TTL=7), True),
+            return_value=(_conf(PHORGE_CACHE_TTL=7), True),
         ):
             assert cache.ttl_for("users") == 7
             assert cache.ttl_for("projects") == 7
@@ -187,10 +187,10 @@ class TestCorruptionTolerance:
         assert cache.get("users", "second") == "value"
 
     def test_unwritable_root_does_not_raise(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         blocker = tmp_path / "a-file-not-a-dir"
         blocker.write_text("")
-        monkeypatch.setenv("PHAB_CACHE_DIR", str(blocker))
+        monkeypatch.setenv("PHORGE_CACHE_DIR", str(blocker))
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ):
@@ -198,7 +198,7 @@ class TestCorruptionTolerance:
             assert cache.get("users", "key") is cache.MISS
 
     def test_unreadable_config_disables_the_cache(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch("phabfive.core.Phabfive.read_config", side_effect=OSError("boom")):
             assert cache.instance_dir() is None
             cache.set("users", "key", "value")
@@ -239,25 +239,25 @@ class TestInstanceIsolation:
             return cache.get("users", key)
 
     def test_different_urls_do_not_share_entries(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
-        one = _conf(PHAB_URL="https://one.example.com/api/")
-        two = _conf(PHAB_URL="https://two.example.com/api/")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
+        one = _conf(PHORGE_HOST="https://one.example.com/api/")
+        two = _conf(PHORGE_HOST="https://two.example.com/api/")
         self._set_for(one, "key", "from-one")
         assert self._get_for(two, "key") is cache.MISS
         assert self._get_for(one, "key") == "from-one"
 
     def test_different_tokens_do_not_share_entries(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
-        one = _conf(PHAB_TOKEN="api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        two = _conf(PHAB_TOKEN="api-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
+        one = _conf(PHORGE_TOKEN="api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        two = _conf(PHORGE_TOKEN="api-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
         self._set_for(one, "key", "from-one")
         assert self._get_for(two, "key") is cache.MISS
 
     def test_no_phab_url_means_no_caching(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config",
-            return_value=(_conf(PHAB_URL=""), False),
+            return_value=(_conf(PHORGE_HOST=""), False),
         ):
             assert cache.instance_dir() is None
 
@@ -269,14 +269,14 @@ class TestInstanceIsolation:
         for dirpath, _, files in os.walk(cache.root()):
             for name in files:
                 with open(os.path.join(dirpath, name), "rb") as stream:
-                    assert CONF["PHAB_TOKEN"].encode() not in stream.read()
-        assert CONF["PHAB_TOKEN"] not in cache.instance_dir()
+                    assert CONF["PHORGE_TOKEN"].encode() not in stream.read()
+        assert CONF["PHORGE_TOKEN"] not in cache.instance_dir()
 
 
 class TestDisabling:
     def test_env_var_disables_without_reading_config(self, monkeypatch):
         """The env gate must short-circuit before anything loads config."""
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         with patch("phabfive.core.Phabfive.read_config") as read_config:
             assert cache.get("users", "key") is cache.MISS
             cache.set("users", "key", "value")
@@ -285,23 +285,23 @@ class TestDisabling:
 
     @pytest.mark.parametrize("value", ["0", "false", "FALSE", "no", "off", "", "None"])
     def test_falsey_env_values_disable(self, monkeypatch, value):
-        monkeypatch.setenv("PHAB_CACHE", value)
+        monkeypatch.setenv("PHORGE_CACHE", value)
         assert cache.enabled() is False
 
     @pytest.mark.parametrize("value", ["1", "true", "yes", "on", "anything"])
     def test_truthy_env_values_enable(self, monkeypatch, value):
-        monkeypatch.setenv("PHAB_CACHE", value)
+        monkeypatch.setenv("PHORGE_CACHE", value)
         assert cache.enabled() is True
 
     def test_unset_env_var_leaves_the_cache_on(self, monkeypatch):
-        monkeypatch.delenv("PHAB_CACHE", raising=False)
+        monkeypatch.delenv("PHORGE_CACHE", raising=False)
         assert cache.enabled() is True
 
     def test_config_can_disable_it_too(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config",
-            return_value=(_conf(PHAB_CACHE=False), True),
+            return_value=(_conf(PHORGE_CACHE=False), True),
         ):
             assert cache.instance_dir() is None
             cache.set("users", "key", "value")
@@ -310,7 +310,7 @@ class TestDisabling:
 
 class TestContext:
     def test_resolves_location_and_ttl_in_one_read(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ) as read_config:
@@ -321,15 +321,15 @@ class TestContext:
         assert ttl == cache.CACHE_TTLS["users"]
 
     def test_honours_the_ttl_override(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config",
-            return_value=(_conf(PHAB_CACHE_TTL=9), True),
+            return_value=(_conf(PHORGE_CACHE_TTL=9), True),
         ):
             assert cache.context("users")[1] == 9
 
     def test_reports_nothing_to_cache_when_disabled(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         assert cache.context("users") == (None, 0)
 
     def test_matches_instance_dir_and_ttl_for(self, enabled_cache):
@@ -375,20 +375,20 @@ class TestClear:
         assert cache.clear() == 0
 
     def test_clears_entries_left_over_after_disabling_the_cache(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ):
             cache.set("users", "key", "value")
 
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ):
             assert cache.clear() == 1
 
     def test_all_instances_works_without_credentials(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ):
@@ -400,10 +400,10 @@ class TestClear:
             assert cache.clear(all_instances=True) == 1
 
     def test_single_instance_clear_reports_no_configured_instance(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config",
-            return_value=(_conf(PHAB_URL=""), False),
+            return_value=(_conf(PHORGE_HOST=""), False),
         ):
             assert cache.clear() is None
 
@@ -489,7 +489,7 @@ class TestDescribe:
     def test_reports_accounts_cached_under_another_token(self, enabled_cache):
         """Only the configured token's entries are described, so say when
         the host has more that none of those numbers account for."""
-        other = dict(CONF, PHAB_TOKEN="api-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        other = dict(CONF, PHORGE_TOKEN="api-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
         with patch("phabfive.core.Phabfive.read_config", return_value=(other, True)):
             cache.set("projects", "key", {"records": [1], "truncated": False})
 
@@ -517,15 +517,15 @@ class TestDescribe:
         assert namespaces["users"]["Records"] == 1
 
     def test_explains_why_the_cache_is_off(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         described = cache.describe()
         assert described["Enabled"] is False
         assert "environment" in described["Reason"]
 
     def test_explains_a_missing_url(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config",
-            return_value=(_conf(PHAB_URL=""), False),
+            return_value=(_conf(PHORGE_HOST=""), False),
         ):
-            assert cache.describe()["Reason"] == "no PHAB_URL is configured"
+            assert cache.describe()["Reason"] == "no PHORGE_HOST is configured"
