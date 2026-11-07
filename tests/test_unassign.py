@@ -76,8 +76,8 @@ class TestBuildTaskEdit:
 @pytest.fixture
 def mock_config(monkeypatch):
     """Configuration and a client that need no network."""
-    monkeypatch.setenv("PHAB_TOKEN", "cli-testtoken1234567890123456789")
-    monkeypatch.setenv("PHAB_URL", "https://phabricator.example.com/api/")
+    monkeypatch.setenv("PHORGE_TOKEN", "cli-testtoken1234567890123456789")
+    monkeypatch.setenv("PHORGE_HOST", "https://phabricator.example.com/api/")
     monkeypatch.setattr("phabfive.core.Phabricator", lambda **kwargs: MagicMock())
 
 

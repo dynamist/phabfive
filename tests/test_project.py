@@ -230,7 +230,7 @@ def _app(phab):
 
     project.phab = phab
     project.url = URL
-    project.conf = {"PHAB_SPACE": "S1"}
+    project.conf = {"PHORGE_SPACE": "S1"}
     project.format_link = lambda url, text: url
 
     return project
@@ -1112,7 +1112,7 @@ class TestUnknownIconWarning:
     def test_off_without_cache(self, phab, monkeypatch):
         """With caching off the sweep of every project would be paid on
         every run, so the icon is not looked up at all."""
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
 
         result = self._invoke(phab, ["project", "search", "--icon=grop"])
 

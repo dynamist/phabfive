@@ -164,7 +164,7 @@ share the admin password) and create an API token under **Settings → Conduit A
 Tokens**. With tommy.svensson's token, S6 SOC is listed and its tasks are found.
 
 Filter by them with `maniphest search --space`, and note that phabfive defaults to
-`PHAB_SPACE=S1`, so tasks in S3 and S10 are excluded until you ask for them:
+`PHORGE_SPACE=S1`, so tasks in S3 and S10 are excluded until you ask for them:
 
 ```bash
 phabfive maniphest search --space '*' --tag '*'
@@ -364,20 +364,20 @@ Use the pre-configured API token:
 **Environment variables:**
 
 ```bash
-export PHAB_TOKEN=api-supersecr3tapikeyfordevelop1
-export PHAB_URL=http://phorge.localhost/api/
+export PHORGE_HOST=http://phorge.localhost
+export PHORGE_TOKEN=api-supersecr3tapikeyfordevelop1
 ```
 
 **Or configuration file:**
 
 ```bash
 # Linux
-echo "PHAB_TOKEN: api-supersecr3tapikeyfordevelop1" > ~/.config/phabfive.yaml
-echo "PHAB_URL: http://phorge.localhost/api/" >> ~/.config/phabfive.yaml
+echo "PHORGE_HOST: http://phorge.localhost" > ~/.config/phabfive.yaml
+echo "PHORGE_TOKEN: api-supersecr3tapikeyfordevelop1" >> ~/.config/phabfive.yaml
 
 # macOS
-echo "PHAB_TOKEN: api-supersecr3tapikeyfordevelop1" > ~/Library/Application\ Support/phabfive.yaml
-echo "PHAB_URL: http://phorge.localhost/api/" >> ~/Library/Application\ Support/phabfive.yaml
+echo "PHORGE_HOST: http://phorge.localhost" > ~/Library/Application\ Support/phabfive.yaml
+echo "PHORGE_TOKEN: api-supersecr3tapikeyfordevelop1" >> ~/Library/Application\ Support/phabfive.yaml
 ```
 
 Test it:
@@ -388,7 +388,7 @@ uv run phabfive diffusion repo list
 uv run phabfive maniphest search --tag '*'
 ```
 
-`user whoami` reports the host `PHAB_URL` points at. Without `PHAB_URL` it reports every host in `~/.arcrc` instead; `--all` forces that.
+`user whoami` reports the host `PHORGE_HOST` points at. Without `PHORGE_HOST` it reports every host in `~/.arcrc` instead; `--all` forces that.
 
 ## Create Test Tasks
 
@@ -497,14 +497,14 @@ Phorge runs in a local [k3d](https://k3d.io) cluster, which is k3s in Docker. Th
 - **Cluster:** `k8s/cluster/k3d.yaml`, identical in every repo that uses it. It pins the k3s version and publishes the bundled Traefik ingress on `127.0.0.1:80` and `:443`. Whichever app starts first creates the cluster, the others reuse it.
 - **Routing:** each app has a standard `Ingress` with its own hostnames, here `phorge.localhost` and `cdn.localhost` to the `web` Service.
 - **Phorge:** `k8s/base` holds the `phorge` namespace, MariaDB (StatefulSet `mariadb`), Phorge (Deployment `phorge`, `Recreate` so two pods never upgrade the same database), the Ingress, a ResourceQuota with default limits and NetworkPolicies. The Phorge pod has two containers, `web` (the default for `kubectl exec` and `logs`) and `sshd`, see [Git over SSH](#git-over-ssh). Only Traefik and Dynatron's Conduit clients reach Phorge - the `dynatron` and `worker` pods (`app.kubernetes.io/name`) of every Dynatron instance, main checkout or worktree (namespaces labelled `app.kubernetes.io/part-of: dynatron`), nothing reaches its sshd except `make ssh-forward`, and only Phorge reaches MariaDB, whose port is not published on the host. Overlays: `local` (with `config.local.env`) and `ci`.
-- **In-cluster clients:** a pod cannot use `phorge.localhost`, which resolves to the pod itself. Phorge also answers to its Service name (`PHORGE_ALLOWED_URIS`), so a client the NetworkPolicy `phorge-from-dev-apps` admits reaches it at `http://web.phorge.svc.cluster.local/api/` and needs no `hostAlias`. Configure that as `PHAB_API_URL`, with `PHAB_WEB_URL=http://phorge.localhost` beside it, so the links in whatever the pod renders still open on the host:
+- **In-cluster clients:** a pod cannot use `phorge.localhost`, which resolves to the pod itself. Phorge also answers to its Service name (`PHORGE_ALLOWED_URIS`), so a client the NetworkPolicy `phorge-from-dev-apps` admits reaches it at `http://web.phorge.svc.cluster.local/api/` and needs no `hostAlias`. Configure the Service name as `PHORGE_API_HOST`, with `PHORGE_HOST=http://phorge.localhost` beside it, so the links in whatever the pod renders still open on the host:
 
     ```bash
-    PHAB_API_URL=http://web.phorge.svc.cluster.local/api/
-    PHAB_WEB_URL=http://phorge.localhost
+    PHORGE_HOST=http://phorge.localhost
+    PHORGE_API_HOST=http://web.phorge.svc.cluster.local
     ```
 
-    Setting `PHAB_URL` to the Service name instead makes every link phabfive returns a `*.svc.cluster.local` address, which resolves nowhere outside the cluster.
+    Setting `PHORGE_HOST` to the Service name instead makes every link phabfive returns a `*.svc.cluster.local` address, which resolves nowhere outside the cluster.
 
     The policy admits a pod by two labels, its namespace's `app.kubernetes.io/part-of` and its own `app.kubernetes.io/name`, and a new client needs both. Neither is proof of who the caller is: a namespace label is only as trustworthy as whoever may edit namespaces, and the pod selector narrows the grant, but anyone who can create pods in an admitted namespace can still give one an admitted name. That is fine in a local dev cluster, where the same people could edit the policy, and not something to copy into production unchanged.
 

@@ -191,7 +191,7 @@ After installation, restart your shell or source your profile.
 
 Completions that come from the server, such as usernames, are cached on disk so
 only the first TAB waits for a round trip. Run `phabfive cache clear` after
-somebody joins, leaves or is renamed, or set `PHAB_CACHE=0` to switch caching
+somebody joins, leaves or is renamed, or set `PHORGE_CACHE=0` to switch caching
 off. See [Caching](docs/caching.md) for what is cached and for how long;
 secrets never are.
 
@@ -210,30 +210,40 @@ secrets never are.
 }
 ```
 
-**Or environment variables:**
+**Or environment variables**, named the way [glab](https://gitlab.com/gitlab-org/cli)
+names `GITLAB_HOST` and `GITLAB_TOKEN`:
 
 ```bash
-export PHAB_TOKEN=cli-ABC123
-export PHAB_URL=https://yourserver.com/api/
+export PHORGE_HOST=yourserver.com        # or https://yourserver.com; a pasted /api/ is forgiven
+export PHORGE_TOKEN=cli-ABC123
 ```
+
+A bare host is reached over https. The same keys work in `~/.config/phabfive.yaml`,
+though a token belongs in `~/.arcrc` rather than there.
 
 **When the endpoint is not the address people open:**
 
-`PHAB_URL` is both the Conduit endpoint phabfive calls and the root of every
-link it returns. Those are the same address almost everywhere, and come apart
-behind an ingress or split-horizon DNS -- a process inside a Kubernetes cluster
-reaches Phorge at a Service name, while the report it renders is read by people
-whose browsers cannot resolve one. Configure the two halves instead:
+`PHORGE_HOST` is the root of every link phabfive returns and, as a rule, where it
+calls Conduit, at `PHORGE_HOST/api/`. Those are the same address almost everywhere,
+and come apart behind an ingress or split-horizon DNS -- a process inside a
+Kubernetes cluster reaches Phorge at a Service name, while the report it renders is
+read by people whose browsers cannot resolve one. `PHORGE_API_HOST` is then where
+phabfive calls, as glab's `GITLAB_API_HOST` is:
 
 ```bash
-export PHAB_API_URL=http://web.phorge.svc.cluster.local/api/  # what phabfive calls
-export PHAB_WEB_URL=https://phorge.example.com                   # what links point at
+export PHORGE_HOST=https://phorge.example.com                   # what links point at
+export PHORGE_API_HOST=http://web.phorge.svc.cluster.local      # what phabfive calls
 ```
 
-Either `PHAB_URL` alone, or both of these -- half the pair is refused, because
-the missing address cannot be derived from the one you gave. The token in
-`~/.arcrc` and the completion cache stay keyed by the endpoint, so adopting the
-pair does not orphan either.
+`PHORGE_API_HOST` on its own is refused, because the address people open cannot
+be derived from the one you gave. The token in `~/.arcrc` and the completion cache
+stay keyed by the endpoint, so adopting the split does not orphan either.
+
+**The old names still work.** `PHAB_URL`, `PHAB_TOKEN`, `PHAB_API_URL`,
+`PHAB_WEB_URL` and every other `PHAB_*` setting are read as before -- from the
+environment, a yaml file or a program's `config` -- and renamed to their
+`PHORGE_*` successor with a deprecation warning that names it. `PHAB_URL` and
+`PHAB_WEB_URL` both become `PHORGE_HOST`, `PHAB_API_URL` becomes `PHORGE_API_HOST`.
 
 **Windows SSL certificates:** If you encounter certificate errors, install [pip-system-certs](https://pypi.org/project/pip-system-certs/) to use the Windows certificate store: `pip install pip-system-certs`
 
@@ -261,11 +271,11 @@ A record is the same one `--format=json` prints, so the shapes described for the
 CLI hold here too.
 
 **Configuration.** Passing `url`, `token` or `config` configures an instance from
-those alone - the `/api/` suffix is added when missing, and `config` takes the
-other settings, such as `{"PHAB_SPACE": "S2"}`. Nothing is read from the
+those alone - `url` is the instance, as `PHORGE_HOST` names it, and `config` takes
+the other settings, such as `{"PHORGE_SPACE": "S2"}`. Nothing is read from the
 environment or any file, so the program behaves the same whoever runs it.
 With no arguments, `Maniphest()` discovers its configuration exactly as the
-command does: `PHAB_URL` and `PHAB_TOKEN` from the environment, `~/.arcrc`,
+command does: `PHORGE_HOST` and `PHORGE_TOKEN` from the environment, `~/.arcrc`,
 `.arcconfig` in the git root, and the yaml files under `/etc` and
 `~/.config`. When `~/.arcrc` holds several hosts and nothing picks one,
 `select_host=` is called with the list to choose from; without it that is an

@@ -1537,7 +1537,7 @@ class Maniphest(Phabfive):
             The constraint the instance refused, when it could be isolated.
         """
         keys = _search_key_for_constraint()
-        instance = self.conf.get("PHAB_URL") or "this instance"
+        instance = self.conf.get("PHORGE_HOST") or "this instance"
 
         def described(name):
             return f"'{name}' (from '{keys[name]}')" if name in keys else f"'{name}'"
@@ -2234,7 +2234,7 @@ class Maniphest(Phabfive):
             log.info(f"Filtering to space(s): {space}")
         else:
             # Default to configured space(s) - supports glob patterns and comma-separated
-            default_space = self.conf.get("PHAB_SPACE", "S1")
+            default_space = self.conf.get("PHORGE_SPACE", "S1")
             try:
                 # Split by comma to support multiple default spaces
                 space_patterns = [s.strip() for s in default_space.split(",")]
@@ -2242,7 +2242,7 @@ class Maniphest(Phabfive):
                 space_phids = self._resolve_space_patterns(space_patterns)
 
                 log.info(
-                    f"Filtering to space(s): {default_space} (from PHAB_SPACE). "
+                    f"Filtering to space(s): {default_space} (from PHORGE_SPACE). "
                     "Tasks in other spaces are excluded; "
                     "use --space='*' to include all spaces."
                 )
@@ -2877,7 +2877,7 @@ class Maniphest(Phabfive):
         space : str, optional
             Space to create the task in, by monogram, name, or a pattern that
             matches exactly one Space. The server's default Space is used when
-            omitted; PHAB_SPACE filters searches and is deliberately not
+            omitted; PHORGE_SPACE filters searches and is deliberately not
             consulted here.
         visible_to : str, optional
             Who can see the new task, in the grammar phabfive.policy accepts.

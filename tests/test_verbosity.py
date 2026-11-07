@@ -2,7 +2,7 @@
 
 """Verbosity of the filter notices emitted by `maniphest search`.
 
-`maniphest search` always narrows to a Space, taking `PHAB_SPACE` (default
+`maniphest search` always narrows to a Space, taking `PHORGE_SPACE` (default
 S1) when `--space` is not given. That implicit narrowing used to be
 announced with a `log.warning`, which made it the one informational
 message loud enough to reach an unconfigured logger, so it printed on
@@ -38,7 +38,7 @@ def _maniphest(conf=None, project_phids=None):
     maniphest = Maniphest()
     maniphest.phab = MagicMock()
     maniphest.url = "https://phabricator.example.com"
-    maniphest.conf = conf if conf is not None else {"PHAB_SPACE": "S1"}
+    maniphest.conf = conf if conf is not None else {"PHORGE_SPACE": "S1"}
 
     def lookup(names):
         return {name: SPACES[name] for name in names if name in SPACES}
@@ -78,7 +78,7 @@ class TestFilterNoticeLevels:
         # The whole point of the change: this must not be a warning, or it
         # reaches users who never asked for it.
         assert record.levelno == logging.INFO
-        assert "PHAB_SPACE" in record.getMessage()
+        assert "PHORGE_SPACE" in record.getMessage()
         assert "--space='*'" in record.getMessage()
 
     def test_implicit_space_notice_is_silent_by_default(self, mock_init, caplog):
@@ -96,7 +96,7 @@ class TestFilterNoticeLevels:
         assert matches[0].levelno == logging.INFO
         assert "S1,S2" in matches[0].getMessage()
         # An explicit choice needs no nudge about the default
-        assert "PHAB_SPACE" not in matches[0].getMessage()
+        assert "PHORGE_SPACE" not in matches[0].getMessage()
 
     def test_single_tag_is_announced(self, mock_init, caplog):
         caplog.set_level(logging.INFO)
@@ -109,7 +109,7 @@ class TestFilterNoticeLevels:
 
     def test_unresolvable_configured_space_still_warns(self, mock_init, caplog):
         caplog.set_level(logging.INFO)
-        maniphest = _maniphest(conf={"PHAB_SPACE": "SNope"})
+        maniphest = _maniphest(conf={"PHORGE_SPACE": "SNope"})
         maniphest.task_search(tag="TeamA")
 
         matches = _records(caplog, "Could not resolve default space")

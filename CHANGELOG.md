@@ -2,6 +2,26 @@
 
 ## Upgrade Notes
 
+* **phabfive is configured with `PHORGE_HOST` and `PHORGE_TOKEN`, named the way glab
+  names `GITLAB_HOST` and `GITLAB_TOKEN`.** `PHORGE_HOST` is the instance,
+  `phorge.example.com` or `https://phorge.example.com` - a bare host is reached over
+  https, and a pasted `/api/` endpoint is forgiven - and it is the root of every link
+  phabfive returns and, as a rule, where it calls Conduit, at `PHORGE_HOST/api/`.
+  `PHORGE_API_HOST` names another address to call when the two come apart behind an
+  ingress, as glab's `GITLAB_API_HOST` does; on its own it is refused, since the address
+  people open cannot be derived from it. Every other setting moved with them:
+  `PHORGE_SPACE`, `PHORGE_FALLBACK`, `PHORGE_CACHE`, `PHORGE_CACHE_TTL`,
+  `PHORGE_CACHE_DIR`, `PHORGE_RETRY`, `PHORGE_BACKOFF_MAX`, `PHORGE_PACE`,
+  `PHORGE_PROFILE`, `PHORGE_PROFILE_KEEP`, `PHORGE_PROFILE_DIR` and
+  `PHORGE_PROFILER_ORIGIN`, in the environment, in the yaml files and in a program's
+  `config`. **The old names still work:** `PHAB_URL` and `PHAB_WEB_URL` are read as
+  `PHORGE_HOST`, `PHAB_API_URL` as `PHORGE_API_HOST`, `PHAB_TOKEN` as `PHORGE_TOKEN` and
+  `PHAB_X` as `PHORGE_X`, each with a deprecation warning naming the successor - once per
+  run, and never during shell completion. The new name wins when both are given. The
+  token in `~/.arcrc` and the completion cache stay keyed by the endpoint, so nothing
+  already stored is orphaned by the rename. `Phabfive.has_explicit_phab_url()` is now
+  `has_explicit_host()`; the old name still answers
+
 * **Breaking change: `passphrase show` hides the secret unless `--show-secret` (`-s`) is
   given.** It used to print it unless `--no-secret` was, which put a secret into
   scrollback, screen shares and agent transcripts by default. Without `--show-secret`

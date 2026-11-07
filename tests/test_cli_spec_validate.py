@@ -7,7 +7,7 @@ Three things are pinned here, and they are the three the issue asks for.
 on a machine that has never seen a Phorge token, so it must not construct an
 app at all. That is asserted twice: in process, by patching the one function
 that would build one and asserting it was never called; and out of process,
-by running the real entry point with `PHAB_URL`, `PHAB_TOKEN` and `HOME`
+by running the real entry point with `PHORGE_HOST`, `PHORGE_TOKEN` and `HOME`
 taken away. The in-process half alone proves nothing - `phabfive.core` and
 `phabricator` are already imported by the time this module runs.
 
@@ -120,7 +120,7 @@ def invoke(*args):
 def an_online_app(url="https://phorge.example.com/api/"):
     """An app the online layer can be handed, which asks nothing."""
     instance = MagicMock()
-    instance.conf = {"PHAB_URL": url}
+    instance.conf = {"PHORGE_HOST": url}
     return instance
 
 
@@ -179,7 +179,7 @@ class TestOfflineConstructsNothing:
 def scrubbed_environment():
     """As little environment as an interpreter needs to start.
 
-    No `PHAB_URL`, no `PHAB_TOKEN`, and a `HOME` that does not exist, so
+    No `PHORGE_HOST`, no `PHORGE_TOKEN`, and a `HOME` that does not exist, so
     `~/.arcrc` and `~/.config/phabfive.yaml` cannot be read. The same
     technique as tests/test_spec_isolation.py, for the same reason: in
     process, everything is already imported and every such assertion passes
@@ -206,8 +206,8 @@ def scrubbed_environment():
     environment["PYTHONPATH"] = str(REPOSITORY)
     environment["TERM"] = "dumb"
 
-    assert "PHAB_URL" not in environment
-    assert "PHAB_TOKEN" not in environment
+    assert "PHORGE_HOST" not in environment
+    assert "PHORGE_TOKEN" not in environment
 
     return environment
 
@@ -264,8 +264,8 @@ class TestOfflineWithoutAnyConfiguration:
             "--format=json", "spec", "validate", str(SHIPPED_SEARCH), "--offline"
         )
 
-        assert "PHAB_TOKEN" not in result.stderr
-        assert "PHAB_URL" not in result.stderr
+        assert "PHORGE_TOKEN" not in result.stderr
+        assert "PHORGE_HOST" not in result.stderr
         assert result.stderr.strip().endswith("no problems found (offline).")
 
 
@@ -352,7 +352,7 @@ class TestExitStatus:
         pair, not a mapping - getting that wrong turned a clean exit 3 into
         an AttributeError traceback.
         """
-        configuration = ({"PHAB_URL": "https://named.example.com/api/"}, True)
+        configuration = ({"PHORGE_HOST": "https://named.example.com/api/"}, True)
 
         with patch.object(
             cli_spec,
@@ -382,7 +382,7 @@ class TestExitStatus:
         with patch.object(
             cli_spec,
             "_online_app",
-            side_effect=cli_spec.Unconfigured("PHAB_TOKEN is not set"),
+            side_effect=cli_spec.Unconfigured("PHORGE_TOKEN is not set"),
         ):
             result = invoke("--format=json", "spec", "validate", write(tmp_path, CLEAN))
 
@@ -393,7 +393,7 @@ class TestExitStatus:
         assert record["code"] == "unreachable"
         assert record["layer"] == "online"
         assert record["object"] == "$"
-        assert "PHAB_TOKEN" in record["reason"]
+        assert "PHORGE_TOKEN" in record["reason"]
 
     def test_declining_the_setup_wizard_is_unconfigured(self):
         """`_online_app` turns a declined wizard into the signal, not Exit(1)."""
@@ -401,7 +401,7 @@ class TestExitStatus:
 
         with patch(
             "phabfive.cli.apps.new_app",
-            side_effect=PhabfiveConfigException("PHAB_URL is not set"),
+            side_effect=PhabfiveConfigException("PHORGE_HOST is not set"),
         ):
             with patch("phabfive.setup.offer_setup_on_error", return_value=False):
                 with pytest.raises(cli_spec.Unconfigured):

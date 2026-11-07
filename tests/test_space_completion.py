@@ -179,7 +179,7 @@ class TestTheCache:
         assert Api(SEEDED).complete() != []
 
     def test_every_tab_probes_when_caching_is_off(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         api = Api(SEEDED)
         api.complete()
         after_first = api.probes

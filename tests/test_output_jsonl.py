@@ -75,7 +75,7 @@ class TestFormatRegistration:
 
     @pytest.mark.parametrize("value", ["yaml", "json", "jsonl", "ndjson"])
     def test_fallback_accepts_machine_readable_formats(self, value):
-        assert re.match(VALIDATORS["PHAB_FALLBACK"], value)
+        assert re.match(VALIDATORS["PHORGE_FALLBACK"], value)
 
     def test_table_is_an_output_format(self):
         assert OutputFormat.table.value == "table"
@@ -90,7 +90,7 @@ class TestFormatRegistration:
         """A fallback is for a pipe. table cuts cells and drops columns, so
         it is a human format and deliberately not one of them - and neither
         is value, which prints one field with no way to tell which."""
-        assert not re.match(VALIDATORS["PHAB_FALLBACK"], value)
+        assert not re.match(VALIDATORS["PHORGE_FALLBACK"], value)
 
 
 class TestFormatAliases:
@@ -141,7 +141,7 @@ class TestFormatAliases:
 
 
 class TestFallbackFormat:
-    """PHAB_FALLBACK picks the format when stdout is not a TTY."""
+    """PHORGE_FALLBACK picks the format when stdout is not a TTY."""
 
     def test_jsonl_is_used_when_stdout_is_not_a_tty(self, restore_output_format):
         with patch.object(Phabfive, "_fallback_format", "jsonl"):
@@ -154,11 +154,11 @@ class TestFallbackFormat:
                 assert Phabfive._get_auto_format() == "rich"
 
     def test_ndjson_in_config_is_resolved_to_jsonl(self):
-        """The command applies PHAB_FALLBACK when it builds its app."""
+        """The command applies PHORGE_FALLBACK when it builds its app."""
         from phabfive.cli.apps import new_app
 
         # CONF's token is not 32 characters, which the validator demands
-        conf = dict(CONF, PHAB_TOKEN="api-" + "a" * 28, PHAB_FALLBACK="ndjson")
+        conf = dict(CONF, PHORGE_TOKEN="api-" + "a" * 28, PHORGE_FALLBACK="ndjson")
         with patch.object(Phabfive, "read_config", return_value=(conf, True)):
             with patch("phabfive.core.Phabricator"):
                 new_app(Phabfive)
@@ -167,7 +167,7 @@ class TestFallbackFormat:
 
     def test_constructing_leaves_the_fallback_alone(self):
         """A library constructing an instance does not set process-wide state."""
-        conf = dict(CONF, PHAB_TOKEN="api-" + "a" * 28, PHAB_FALLBACK="jsonl")
+        conf = dict(CONF, PHORGE_TOKEN="api-" + "a" * 28, PHORGE_FALLBACK="jsonl")
         with patch.object(Phabfive, "read_config", return_value=(conf, True)):
             with patch("phabfive.core.Phabricator"):
                 Phabfive()
@@ -178,7 +178,7 @@ def _maniphest_with_two_tasks():
     """A Maniphest whose Conduit returns two tasks, one with a newline."""
     maniphest = Maniphest()
     maniphest.url = "https://phabricator.example.com"
-    maniphest.conf = {"PHAB_SPACE": "S1"}
+    maniphest.conf = {"PHORGE_SPACE": "S1"}
     maniphest.phab = MagicMock()
     maniphest.phab.phid.lookup.return_value = {
         "S1": {

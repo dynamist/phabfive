@@ -20,7 +20,7 @@ What is worth saying here is why 3 exists at all, since the issue's table
 had only three: a ``PhabfiveRemoteException`` out of the online pass is not
 a bad spec, and reporting it as 2 would tell a deploy pipeline the spec is
 broken when the network was - which is exactly the distinction the separate
-codes exist for. A machine with no ``PHAB_URL`` and no ``~/.arcrc`` is the
+codes exist for. A machine with no ``PHORGE_HOST`` and no ``~/.arcrc`` is the
 same answer for the same reason: the offline layer passed and the online one
 never ran.
 """
@@ -252,7 +252,7 @@ def spec_validate(
         where = None
 
         if instance is not None:
-            where = instance.conf.get("PHAB_URL")
+            where = instance.conf.get("PHORGE_HOST")
         else:
             # The construction itself failed, so there is no app to ask.
             # read_config is a classmethod for exactly this: the URL without
@@ -264,7 +264,7 @@ def spec_validate(
                 # Falsy means "not configured", which is None in a record
                 # rather than an empty string that reads like a URL nobody
                 # typed
-                where = configuration.get("PHAB_URL") or None
+                where = configuration.get("PHORGE_HOST") or None
             except Exception:
                 # Naming the instance is a nicety; failing to is not a
                 # second failure worth reporting on top of the first

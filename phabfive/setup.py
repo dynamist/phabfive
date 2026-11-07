@@ -49,7 +49,7 @@ class SetupWizard:
                 "\n[yellow]Warning:[/yellow] A working configuration already exists."
             )
             self.console.print(
-                f"Currently connected to [bold]{phabfive.conf['PHAB_URL']}[/bold] "
+                f"Currently connected to [bold]{phabfive.conf['PHORGE_HOST']}[/bold] "
                 f"as [bold]{username}[/bold].\n"
             )
 
@@ -120,7 +120,7 @@ class SetupWizard:
             normalized = self._normalize_url(url)
 
             # Validate against pattern
-            if not re.match(VALIDATORS["PHAB_URL"], normalized):
+            if not re.match(VALIDATORS["PHORGE_API_HOST"], normalized):
                 self.console.print(
                     "[red]Invalid URL format. "
                     "Expected format: https://phorge.example.com[/red]"
@@ -160,7 +160,7 @@ class SetupWizard:
                 continue
 
             # Validate token format
-            if not re.match(VALIDATORS["PHAB_TOKEN"], token):
+            if not re.match(VALIDATORS["PHORGE_TOKEN"], token):
                 self.console.print(
                     "[red]Invalid token format. Token should be 32 alphanumeric "
                     "characters (typically starts with 'cli-')[/red]"
@@ -298,7 +298,7 @@ def _setup_arcconfig(console) -> bool:
         )
         console.print("Either:")
         console.print("  1. Run phabfive from inside a git repository")
-        console.print("  2. Set PHAB_URL environment variable")
+        console.print("  2. Set PHORGE_HOST environment variable")
         console.print(
             "  3. Run [bold]phabfive user setup[/bold] to configure ~/.arcrc\n"
         )
@@ -361,8 +361,8 @@ def offer_setup_on_error(error_message: str) -> bool:
     """Offer to run setup when configuration error occurs.
 
     Routes to the appropriate wizard based on what's missing:
-    - Missing PHAB_URL: offer to create .arcconfig
-    - Missing PHAB_TOKEN or other errors: offer full setup wizard (~/.arcrc)
+    - Missing PHORGE_HOST: offer to create .arcconfig
+    - Missing PHORGE_TOKEN or other errors: offer full setup wizard (~/.arcrc)
 
     Args:
         error_message: The configuration error message to display
@@ -379,7 +379,9 @@ def offer_setup_on_error(error_message: str) -> bool:
     console = Console()
     console.print(f"\n[red]ERROR: {error_message}[/red]\n")
 
-    is_url_error = "PHAB_URL" in error_message and "PHAB_TOKEN" not in error_message
+    is_url_error = (
+        "PHORGE_HOST" in error_message and "PHORGE_TOKEN" not in error_message
+    )
 
     if is_url_error:
         if Confirm.ask(

@@ -9,7 +9,7 @@ phabfive --profile maniphest search --assigned=@me
 phabfive profile
 ```
 
-A command mostly waits: on Conduit, on a retry's backoff, on `PHAB_PACE`, on
+A command mostly waits: on Conduit, on a retry's backoff, on `PHORGE_PACE`, on
 you at a prompt. The profile shows each of those as a marker, and colours the
 timeline by what the command was waiting on, so a slow search reads as one long
 blue stretch per page, a struggling server as orange backoff between them.
@@ -18,13 +18,13 @@ Recording is off unless asked for, and costs nothing then.
 
 ## Recording
 
-`--profile` records one command. To record every command, set `PHAB_PROFILE`:
+`--profile` records one command. To record every command, set `PHORGE_PROFILE`:
 
 ```bash
-PHAB_PROFILE=1 phabfive maniphest show T123
+PHORGE_PROFILE=1 phabfive maniphest show T123
 ```
 
-or put `PHAB_PROFILE: true` in `~/.config/phabfive.yaml`. A recorded command
+or put `PHORGE_PROFILE: true` in `~/.config/phabfive.yaml`. A recorded command
 says where it saved the profile, on stderr:
 
 ```
@@ -41,7 +41,7 @@ Profile saved to /home/me/.local/share/phabfive/profiles/profile-20261026-101500
 | Loading Python modules | From the start of the command until it began running: importing phabfive and its libraries |
 | Configuring and connecting | Reading the configuration and checking the connection, before the command's own work |
 | Network | One marker per Conduit call, with the method, its parameters and how it ended |
-| Sleep | A retry's backoff, `PHAB_PACE` between the writes of a batch, waiting for a repository |
+| Sleep | A retry's backoff, `PHORGE_PACE` between the writes of a batch, waiting for a repository |
 | Waiting for input | A prompt, or `$EDITOR`, waiting for you |
 | Cache | A lookup in the [cache](caching.md), and whether it hit |
 | Log | Every log record, debug included, whatever `-v` or `-q` showed on the console |
@@ -156,8 +156,8 @@ Profiles open at `https://profiler.dynamist.cloud`, a copy of the Firefox
 Profiler. Any other instance can open them too:
 
 ```bash
-PHAB_PROFILER_ORIGIN=https://profiler.firefox.com phabfive profile
-PHAB_PROFILER_ORIGIN=http://localhost:4242 phabfive profile    # one you run yourself
+PHORGE_PROFILER_ORIGIN=https://profiler.firefox.com phabfive profile
+PHORGE_PROFILER_ORIGIN=http://localhost:4242 phabfive profile    # one you run yourself
 ```
 
 Chromium-based browsers may ask whether the profiler's page may access devices on
@@ -181,10 +181,10 @@ yarn start                     # serves the profiler at http://localhost:4242
 and in another terminal:
 
 ```bash
-PHAB_PROFILER_ORIGIN=http://localhost:4242 phabfive profile
+PHORGE_PROFILER_ORIGIN=http://localhost:4242 phabfive profile
 ```
 
-Put `PHAB_PROFILER_ORIGIN: http://localhost:4242` in `~/.config/phabfive.yaml` to
+Put `PHORGE_PROFILER_ORIGIN: http://localhost:4242` in `~/.config/phabfive.yaml` to
 make it the default. The `production` branch is what profiler.firefox.com runs;
 `git pull` and `yarn install` again to update it.
 
@@ -194,7 +194,7 @@ result, `yarn start-prod` writes the static site to `dist/` and serves it at
 
 ```bash
 yarn start-prod
-PHAB_PROFILER_ORIGIN=http://localhost:4243 phabfive profile
+PHORGE_PROFILER_ORIGIN=http://localhost:4243 phabfive profile
 ```
 
 `dist/` can go behind any web server that answers unknown paths with
@@ -208,10 +208,10 @@ obligations on you; publishing a modified copy does.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `PHAB_PROFILE` | `false` | Record every command, as `--profile` records one |
-| `PHAB_PROFILE_KEEP` | `20` | How many profiles to keep; the oldest beyond it are deleted. `0` keeps them all |
-| `PHAB_PROFILE_DIR` | `~/.local/share/phabfive/profiles` | Where profiles are saved |
-| `PHAB_PROFILER_ORIGIN` | `https://profiler.dynamist.cloud` | The Firefox Profiler `phabfive profile` opens |
+| `PHORGE_PROFILE` | `false` | Record every command, as `--profile` records one |
+| `PHORGE_PROFILE_KEEP` | `20` | How many profiles to keep; the oldest beyond it are deleted. `0` keeps them all |
+| `PHORGE_PROFILE_DIR` | `~/.local/share/phabfive/profiles` | Where profiles are saved |
+| `PHORGE_PROFILER_ORIGIN` | `https://profiler.dynamist.cloud` | The Firefox Profiler `phabfive profile` opens |
 
 Like every setting they can go in the environment or in
 `~/.config/phabfive.yaml`. The default directory follows the platform: on macOS

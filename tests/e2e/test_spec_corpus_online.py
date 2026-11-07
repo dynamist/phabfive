@@ -110,7 +110,7 @@ def test_every_create_spec_plans(path, phabfive_raw):
         )
         # The sentence is on stderr whenever the plan itself is on stdout as
         # records, which is every machine format - and a non-TTY run takes
-        # one from PHAB_FALLBACK, so this is the normal case here.
+        # one from PHORGE_FALLBACK, so this is the normal case here.
         assert "would create" in result.stdout + result.stderr
         return
 

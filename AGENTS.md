@@ -37,7 +37,7 @@ make test-k8s                        # smoke, seed data and isolation tests agai
 make test-e2e                        # end-to-end tests of the CLI against the deployed Phorge
 
 # Test against local Phorge (safe to run data-altering operations)
-PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
+PHORGE_HOST=http://phorge.localhost PHORGE_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive ...
 
 # Merge PRs (rebase only - merge and squash are disabled), see Before Merging below
 gh pr merge --rebase --delete-branch
@@ -247,7 +247,7 @@ Complex features use a consistent subpackage structure:
   written for it - today `Maniphest._get_api_status_map` (namespace `status-map`)
   and the `--icon` warning in `cli/lookups.py`
 - `Phabfive.read_config()` is a classmethod so the cache can key entries by
-  `PHAB_URL` without constructing `Phabfive()`, which validates a whole
+  the endpoint without constructing `Phabfive()`, which validates a whole
   configuration the key does not need. Constructing makes no request any more -
   the client is built on first use - but that first use still costs an
   `update_interfaces` round trip before the lookup
@@ -266,16 +266,35 @@ Complex features use a consistent subpackage structure:
 
 ### Configuration
 
-Required: `PHAB_TOKEN` and `PHAB_URL`
+Required: `PHORGE_TOKEN` and `PHORGE_HOST`, named as glab names `GITLAB_TOKEN` and
+`GITLAB_HOST`: `PHORGE_HOST` is the instance (`phorge.example.com` or
+`https://phorge.example.com`, a pasted `/api/` endpoint forgiven), and the Conduit
+endpoint is `PHORGE_HOST/api/` unless `PHORGE_API_HOST` names another address this
+process calls, as `GITLAB_API_HOST` does. `Phabfive._resolve_hosts` settles both:
+`conf["PHORGE_HOST"]` is the root with no trailing slash and the root of every link,
+`conf["PHORGE_API_HOST"]` always holds the endpoint downstream, which is what the
+client, `~/.arcrc` and the cache key on.
+
+Every setting had a `PHAB_*` name before (`PHAB_URL` and `PHAB_WEB_URL` for
+`PHORGE_HOST`, `PHAB_API_URL` for `PHORGE_API_HOST`, `PHAB_X` for `PHORGE_X`), listed
+in `LEGACY_CONFIGURABLES`. `phabfive/settings.py` renames them wherever a setting can
+be given - `modernize` for a mapping, `env_setting` for a reader that wants one value
+straight from the environment - and warns once per process per place and name
+(`warn_legacy`; `tests/conftest.py` forgets between tests). A `config` dict warns with
+a `DeprecationWarning` instead, since that is a program's deprecation. The new name
+wins when both are given. A reader that runs before `init_logging`, or during shell
+completion - `cache.py`, `cli/profile.py:wants_profile` - reads under `settings.quiet()`
+and leaves the warning to the command's own read. Nothing else may read
+`os.environ["PHAB_*"]` or `os.environ["PHORGE_*"]` directly
 
 Config precedence (later overrides earlier):
 1. Hard-coded defaults
 2. `/etc/phabfive.yaml`
 3. `/etc/phabfive.d/*.yaml`
-4. `~/.config/phabfive.yaml` (PHAB_URL/PHAB_TOKEN deprecated here, use for PHAB_SPACE/PHAB_FALLBACK/PHAB_CACHE/PHAB_CACHE_TTL/PHAB_CACHE_DIR/PHAB_RETRY/PHAB_BACKOFF_MAX/PHAB_PACE/PHAB_PROFILE/PHAB_PROFILE_KEEP/PHAB_PROFILE_DIR/PHAB_PROFILER_ORIGIN)
+4. `~/.config/phabfive.yaml` (PHORGE_HOST/PHORGE_TOKEN deprecated here, use for PHORGE_SPACE/PHORGE_FALLBACK/PHORGE_CACHE/PHORGE_CACHE_TTL/PHORGE_CACHE_DIR/PHORGE_RETRY/PHORGE_BACKOFF_MAX/PHORGE_PACE/PHORGE_PROFILE/PHORGE_PROFILE_KEEP/PHORGE_PROFILE_DIR/PHORGE_PROFILER_ORIGIN)
 5. `~/.config/phabfive.d/*.yaml`
-6. `.arcconfig` in git root (provides PHAB_URL from `phabricator.uri`)
-7. `~/.arcrc` (provides PHAB_TOKEN for matched URL)
+6. `.arcconfig` in git root (provides PHORGE_HOST from `phabricator.uri`)
+7. `~/.arcrc` (provides PHORGE_TOKEN for matched URL)
 8. Environment variables
 
 That order applies only when a class is constructed with no arguments. `Phabfive(url=,
@@ -305,8 +324,8 @@ nothing is discovered.
 - One policy for every Conduit call: `phabfive/conduit.py` mounts an adapter built from the
   instance's `RetryPolicy` on each Resource - kept across a read's calls, so the pages of a
   search share a pooled connection, and fresh for every unsafe write - replacing the `phabricator` library's own retry
-  (immediate, and willing to repeat a POST after a read timeout). `PHAB_RETRY` and
-  `PHAB_BACKOFF_MAX` configure it; docs/retries.md is the user-facing description
+  (immediate, and willing to repeat a POST after a read timeout). `PHORGE_RETRY` and
+  `PHORGE_BACKOFF_MAX` configure it; docs/retries.md is the user-facing description
 - The policy is a `urllib3.Retry` subclass. urllib3 already retries a connect error for any
   method and a read error or retryable status only for an allowed method, so a read allows
   POST and a write allows nothing - which retries a write only when it never reached the
@@ -323,14 +342,14 @@ nothing is discovered.
   fakes the transport at `urllib3.connectionpool.HTTPConnectionPool._make_request`, so the
   real adapter, Retry and client run and no socket is opened. It must pass on urllib3 1.26
   as well as 2.x, since `urllib3>=1.26` is the declared floor
-- `Pacer` (`PHAB_PACE`) spaces out the writes of a batch edit, in `edit_tasks_batch` and
+- `Pacer` (`PHORGE_PACE`) spaces out the writes of a batch edit, in `edit_tasks_batch` and
   `Edit.apply_all`
 
 ### Profiling (`profiler.py`, `cli/profile.py`)
 
-- `--profile` or `PHAB_PROFILE` records a command as a Firefox Profiler processed profile
+- `--profile` or `PHORGE_PROFILE` records a command as a Firefox Profiler processed profile
   (format version in `PROCESSED_PROFILE_VERSION`); `phabfive profile` serves it once from
-  127.0.0.1 to `PHAB_PROFILER_ORIGIN` through `/from-url/`. docs/profiling.md is the
+  127.0.0.1 to `PHORGE_PROFILER_ORIGIN` through `/from-url/`. docs/profiling.md is the
   user-facing description
 - **Licensing: written only from the public Firefox Profiler format** (its docs and type
   definitions), as Apache-2.0. Never copy or translate code from the profiler itself or
@@ -347,7 +366,7 @@ nothing is discovered.
   A new hook that records free text needs the same treatment
 - The samples are generated from the markers by `build_segments`, not sampled, so the
   timeline colours by what the run waited on
-- `tests/conftest.py` sets `PHAB_PROFILE=0` and a temporary `PHAB_PROFILE_DIR` for every
+- `tests/conftest.py` sets `PHORGE_PROFILE=0` and a temporary `PHORGE_PROFILE_DIR` for every
   test, and switches the recorder off afterwards
 
 ### Editing (`edit/`)
@@ -368,7 +387,7 @@ nothing is discovered.
   is a `phabfive.conduit.Conduit` that builds the client and calls `update_interfaces` on
   first use. The command wants to fail fast, and to prompt for an `~/.arcrc` host, so it
   constructs through `phabfive/cli/apps.py` (`get_app`/`new_app`), which passes
-  `verify=True, select_host=prompt_host` and applies `PHAB_FALLBACK`. A new command must use
+  `verify=True, select_host=prompt_host` and applies `PHORGE_FALLBACK`. A new command must use
   `get_app` rather than constructing an app itself
 - **No terminal, no process state in core.** Nothing under `phabfive/` outside `cli/`,
   `setup.py`, `repl.py` and the display modules may print, prompt, `sys.exit` or write
@@ -422,7 +441,7 @@ When implementing new Phorge apps (countdown, paste, maniphest, etc.), **verify 
    - a wrong key fails with `ERR-INVALID-CONSTRAINT`, so check it against the
      instance before assuming another app's name carries over:
      ```bash
-     curl -s "$PHAB_URL/paste.search" -d "api.token=$PHAB_TOKEN" \
+     curl -s "$PHORGE_HOST/paste.search" -d "api.token=$PHORGE_TOKEN" \
        -d 'constraints[authors][0]=PHID-USER-...'
      ```
 
@@ -437,8 +456,8 @@ When implementing new Phorge apps (countdown, paste, maniphest, etc.), **verify 
 When using the local Phorge development instance, it is **safe to run data-altering operations** (create, edit, delete) without `--dry-run`:
 
 ```bash
-PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest create "Test task"
-PHAB_URL=http://phorge.localhost/api/ PHAB_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest edit T123 --status=resolved
+PHORGE_HOST=http://phorge.localhost PHORGE_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest create "Test task"
+PHORGE_HOST=http://phorge.localhost PHORGE_TOKEN=api-supersecr3tapikeyfordevelop1 uv run phabfive maniphest edit T123 --status=resolved
 ```
 
 This is a disposable test environment. These specific credentials indicate a safe-to-modify development instance.
@@ -476,7 +495,7 @@ phabfive --format=jsonl maniphest search --tag=projectname | wc -l
 phabfive --format=jsonl maniphest search --assigned=@me >> tasks.jsonl
 ```
 
-`--format=ndjson` is accepted as a spelling of `jsonl`. `PHAB_FALLBACK` sets the format
+`--format=ndjson` is accepted as a spelling of `jsonl`. `PHORGE_FALLBACK` sets the format
 used when stdout is not a TTY and accepts `yaml`, `json` and `jsonl`.
 
 ## Dependency Updates

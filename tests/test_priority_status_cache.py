@@ -120,7 +120,7 @@ class TestValueCache:
     def test_every_tab_asks_the_api_when_caching_is_off(
         self, monkeypatch, namespace, make_api, answer, expected
     ):
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         api = make_api(*answer)
         api.complete()
         after_first = _calls(api)

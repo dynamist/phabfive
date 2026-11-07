@@ -33,7 +33,7 @@ def prompt_host(hosts):
     with profiler.user_input(message):
         selected = inquirer.select(message=message, choices=list(hosts)).execute()
     print(
-        f"Tip: to skip this prompt, set PHAB_URL or add "
+        f"Tip: to skip this prompt, set PHORGE_HOST or add "
         f'"config":{{"default":"{selected}"}} to ~/.arcrc',
         file=sys.stderr,
     )
@@ -52,9 +52,9 @@ def new_app(cls):
 
     with profiler.phase("Configuring and connecting"):
         app = cls(verify=True, select_host=prompt_host)
-    # PHAB_FALLBACK is configuration, but the format it names is the
+    # PHORGE_FALLBACK is configuration, but the format it names is the
     # command's concern, so it is the command that applies it.
-    app.set_fallback_format(app.conf.get("PHAB_FALLBACK", "yaml"))
+    app.set_fallback_format(app.conf.get("PHORGE_FALLBACK", "yaml"))
     # So is remembering instance configuration between runs: a program asks
     # the server every time, the command keeps the answer in its cache
     from phabfive.cli.lookups import CommandLookups

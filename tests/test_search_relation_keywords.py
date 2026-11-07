@@ -40,7 +40,7 @@ def _maniphest(tasks, commits):
         maniphest = Maniphest()
     maniphest.phab = MagicMock()
     maniphest.url = "https://phorge.example.com"
-    maniphest.conf = {"PHAB_SPACE": "S1"}
+    maniphest.conf = {"PHORGE_SPACE": "S1"}
     maniphest.phab.project.query.return_value = {"data": {}}
 
     def search(**kwargs):

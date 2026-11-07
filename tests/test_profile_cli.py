@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Recording a command with --profile or PHAB_PROFILE, and `phabfive profile`."""
+"""Recording a command with --profile or PHORGE_PROFILE, and `phabfive profile`."""
 
 import json
 import sys
@@ -23,7 +23,7 @@ ORIGIN = "https://profiler.example.com"
 
 @pytest.fixture
 def profiles(tmp_path):
-    """The directory conftest points PHAB_PROFILE_DIR at."""
+    """The directory conftest points PHORGE_PROFILE_DIR at."""
     return tmp_path / "profiles"
 
 
@@ -45,20 +45,20 @@ class TestWhenARunIsRecorded:
         assert begin(["phabfive", "--profile", "cache", "info"], ["cache", "info"])
 
     def test_phab_profile_in_the_environment_asks_for_every_run(self, monkeypatch):
-        monkeypatch.setenv("PHAB_PROFILE", "true")
+        monkeypatch.setenv("PHORGE_PROFILE", "true")
         assert begin(["phabfive", "cache", "info"], ["cache", "info"])
 
     def test_phab_profile_in_the_configuration_asks_for_every_run(self, monkeypatch):
-        monkeypatch.delenv("PHAB_PROFILE")
+        monkeypatch.delenv("PHORGE_PROFILE")
         with mock.patch.object(
-            profile_cli, "_read_config", return_value={"PHAB_PROFILE": True}
+            profile_cli, "_read_config", return_value={"PHORGE_PROFILE": True}
         ):
             assert wants_profile(["cache", "info"]) is True
         with mock.patch.object(profile_cli, "_read_config", return_value={}):
             assert wants_profile(["cache", "info"]) is False
 
     def test_the_environment_spares_reading_the_configuration(self, monkeypatch):
-        monkeypatch.setenv("PHAB_PROFILE", "1")
+        monkeypatch.setenv("PHORGE_PROFILE", "1")
         with mock.patch.object(profile_cli, "_read_config") as read:
             assert wants_profile([]) is True
         read.assert_not_called()
@@ -159,12 +159,14 @@ class TestARecordedRun:
         assert len(list_profiles(profiles)) == 1
 
     def test_a_profile_that_cannot_be_saved_is_a_warning(self, monkeypatch, capsys):
-        monkeypatch.setenv("PHAB_PROFILE_KEEP", "-1")
+        monkeypatch.setenv("PHORGE_PROFILE_KEEP", "-1")
         status = run_entrypoint(
             monkeypatch, "--profile", "--format=json", "cache", "info"
         )
         assert status == 0
-        assert "the profile was not saved: PHAB_PROFILE_KEEP" in capsys.readouterr().err
+        assert (
+            "the profile was not saved: PHORGE_PROFILE_KEEP" in capsys.readouterr().err
+        )
 
     def test_the_recorder_is_off_afterwards(self, monkeypatch):
         run_entrypoint(monkeypatch, "--profile", "--format=json", "cache", "info")
@@ -231,7 +233,7 @@ class TestOpen:
     def test_the_browser_is_sent_to_the_newest_profile(self, profiles, monkeypatch):
         _saved(profiles, "profile-20261026-101500-1.json")
         newest = _saved(profiles, "profile-20261026-101600-1.json")
-        monkeypatch.setenv("PHAB_PROFILER_ORIGIN", ORIGIN + "/")
+        monkeypatch.setenv("PHORGE_PROFILER_ORIGIN", ORIGIN + "/")
         fetched = {}
         fetchers = []
 

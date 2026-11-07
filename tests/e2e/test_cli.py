@@ -16,6 +16,7 @@ import pytest
 import requests
 from ruamel.yaml import YAML
 
+from tests.e2e.conftest import conduit_url
 from tests.phorge_versions import (
     missing_before,
     phorge_older_than,
@@ -25,14 +26,14 @@ from tests.phorge_versions import (
 def test_whoami(phabfive, live_env):
     [host] = phabfive("user", "whoami", json_output=True)
     assert host["User"]["UserName"] == "admin"
-    assert host["Host"] == urlparse(live_env["PHAB_URL"]).hostname
+    assert host["Host"] == urlparse(live_env["PHORGE_HOST"]).hostname
 
 
 def test_whoami_as_dynatron(live_env):
     """The bot's token, k8s/base/secret.env's PHORGE_DYNATRON_TOKEN, is not the
     admin's, and reads what Dynatron's standup page reads."""
     token = os.environ.get("PHORGE_DYNATRON_TOKEN", "api-dynatr0nb0tapikeyfordevelop1")
-    env = dict(live_env, PHAB_TOKEN=token)
+    env = dict(live_env, PHORGE_TOKEN=token)
 
     def run(*args):
         result = subprocess.run(
@@ -239,9 +240,9 @@ def test_maniphest_edit_has_no_interact_transaction(live_env):
     Nothing is created - the type is rejected before any object is.
     """
     response = requests.post(
-        live_env["PHAB_URL"].rstrip("/") + "/maniphest.edit",
+        conduit_url(live_env["PHORGE_HOST"]) + "maniphest.edit",
         data={
-            "api.token": live_env["PHAB_TOKEN"],
+            "api.token": live_env["PHORGE_TOKEN"],
             "transactions[0][type]": "interact",
             "transactions[0][value]": "public",
         },

@@ -141,7 +141,7 @@ def _project_app(records=()):
     project.phab.phid.query.return_value = {}
     project.url = URL
     # "*" so no Space is resolved: this file is about the other constraints
-    project.conf = {"PHAB_SPACE": "*"}
+    project.conf = {"PHORGE_SPACE": "*"}
     project.format_link = lambda url, text=None, **kwargs: url
 
     return project

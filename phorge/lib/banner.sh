@@ -207,7 +207,7 @@ print_banner() {
     echo ""
   fi
   echo "💡 TIP: The API token works immediately without logging in!"
-  echo "   PHAB_URL=${PHORGE_URL}/api/ PHAB_TOKEN=${PHORGE_ADMIN_TOKEN} phabfive user whoami"
+  echo "   PHORGE_HOST=${PHORGE_URL} PHORGE_TOKEN=${PHORGE_ADMIN_TOKEN} phabfive user whoami"
   echo "================================"
 }
 

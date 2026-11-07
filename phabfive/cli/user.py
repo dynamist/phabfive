@@ -51,7 +51,7 @@ def whoami(
         False,
         "--all",
         "-a",
-        help="Query every host in ~/.arcrc, even when PHAB_URL selects one.",
+        help="Query every host in ~/.arcrc, even when PHORGE_HOST selects one.",
     ),
 ) -> None:
     """Show the current user for the configured host.
@@ -68,7 +68,7 @@ def whoami(
     try:
         user = new_app(User)
 
-        if all_hosts or not user.has_explicit_phab_url():
+        if all_hosts or not user.has_explicit_host():
             results = user.whoami_all_hosts()
         else:
             results = [user.whoami_configured_host()]

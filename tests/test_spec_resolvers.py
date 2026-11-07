@@ -88,8 +88,8 @@ def scrubbed_environment():
     environment["PYTHONPATH"] = str(REPOSITORY)
     environment["TERM"] = "dumb"
 
-    assert "PHAB_URL" not in environment
-    assert "PHAB_TOKEN" not in environment
+    assert "PHORGE_HOST" not in environment
+    assert "PHORGE_TOKEN" not in environment
 
     return environment
 
@@ -192,7 +192,7 @@ def an_app(phab):
 
     app.phab = phab
     app.url = "http://phorge.localhost"
-    app.conf = {"PHAB_URL": "http://phorge.localhost"}
+    app.conf = {"PHORGE_HOST": "http://phorge.localhost"}
     return app
 
 

@@ -132,7 +132,7 @@ def invoke(*args):
 def an_instance():
     """An app the planner can be handed, which asks nothing."""
     instance = MagicMock()
-    instance.conf = {"PHAB_URL": "https://phorge.example.com/api/"}
+    instance.conf = {"PHORGE_HOST": "https://phorge.example.com/api/"}
     return instance
 
 

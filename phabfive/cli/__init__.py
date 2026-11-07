@@ -385,7 +385,7 @@ def cli_entrypoint() -> None:
     sys.argv = preprocess_format_alias(sys.argv)
     sys.argv = preprocess_monograms(sys.argv)
 
-    # --profile or PHAB_PROFILE: the session records the run and saves the
+    # --profile or PHORGE_PROFILE: the session records the run and saves the
     # profile on the way out, whatever the exit status
     session = begin_profile(sys.argv, _command_words(sys.argv), _command_name)
     if session is None:

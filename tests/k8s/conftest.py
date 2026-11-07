@@ -74,7 +74,7 @@ def cdn_url():
 @pytest.fixture(scope="session")
 def conduit(phorge_url):
     return Conduit(
-        phorge_url, os.environ.get("PHAB_TOKEN", "api-supersecr3tapikeyfordevelop1")
+        phorge_url, os.environ.get("PHORGE_TOKEN", "api-supersecr3tapikeyfordevelop1")
     )
 
 

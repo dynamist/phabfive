@@ -33,6 +33,7 @@ from phabfive.constants import (
     CACHE_TTL_DEFAULT,
     CACHE_TTLS,
 )
+from phabfive.settings import env_setting, quiet
 from phabfive.profiler import profiler
 
 # 3rd party imports
@@ -42,7 +43,7 @@ import appdirs
 # than None so that a cached None or [] is still a hit.
 MISS = object()
 
-# Values that mean "off" for PHAB_CACHE, whether they arrive as a string from
+# Values that mean "off" for PHORGE_CACHE, whether they arrive as a string from
 # the environment or as a real bool from a yaml config
 _FALSEY = {"0", "false", "no", "off", "", "none"}
 
@@ -70,12 +71,17 @@ def _int(value, default=0):
 def enabled():
     """Whether caching is switched on, without loading any configuration.
 
-    PHAB_CACHE is read straight from the environment so that PHAB_CACHE=0
+    PHORGE_CACHE is read straight from the environment so that PHORGE_CACHE=0
     costs nothing and takes effect before anything touches the filesystem.
     The same key is also honoured from a yaml config in instance_dir(), which
     is loading configuration anyway.
+
+    Quietly, as every read here: the cache serves shell completion, where a
+    deprecation warning would land in the terminal mid-keystroke, and the
+    command's own read of the configuration warns about the same names.
     """
-    return _truthy(os.environ.get("PHAB_CACHE"))
+    with quiet():
+        return _truthy(env_setting("PHORGE_CACHE"))
 
 
 def _read_config():
@@ -85,7 +91,8 @@ def _read_config():
         # phabfive.core, not every phabfive invocation
         from phabfive.core import Phabfive
 
-        conf, _ = Phabfive.read_config()
+        with quiet():
+            conf, _ = Phabfive.read_config()
         return conf
     except Exception:
         return None
@@ -93,7 +100,9 @@ def _read_config():
 
 def root(conf=None):
     """Return the directory holding every instance's cache."""
-    configured = os.environ.get("PHAB_CACHE_DIR") or (conf or {}).get("PHAB_CACHE_DIR")
+    with quiet():
+        configured = env_setting("PHORGE_CACHE_DIR")
+    configured = configured or (conf or {}).get("PHORGE_CACHE_DIR")
     base = configured or appdirs.user_cache_dir("phabfive")
     return os.path.join(base, f"v{CACHE_SCHEMA_VERSION}")
 
@@ -112,40 +121,60 @@ def _slug(url, token):
     return f"{safe}-{digest}"
 
 
-def _instance_dir(conf):
-    """Return where this configuration's entries live, or None without a URL."""
-    url = (conf or {}).get("PHAB_URL")
+def _endpoint(conf):
+    """The Conduit endpoint `conf` names, or None when it names no host.
+
+    Entries are keyed by the endpoint - the address a token authenticates
+    against - which read_config settles into PHORGE_API_HOST. A
+    configuration built by hand may carry only PHORGE_HOST, so that is
+    turned into its endpoint here the same way.
+    """
+    conf = conf or {}
+    url = (conf.get("PHORGE_API_HOST") or conf.get("PHORGE_HOST") or "").strip()
     if not url:
         return None
-    return os.path.join(root(conf), _slug(url, (conf or {}).get("PHAB_TOKEN") or ""))
+    if "://" not in url:
+        url = f"https://{url}"
+    url = url.rstrip("/")
+    if not url.endswith("/api"):
+        url += "/api"
+    return url + "/"
+
+
+def _instance_dir(conf):
+    """Return where this configuration's entries live, or None without a URL."""
+    url = _endpoint(conf)
+    if not url:
+        return None
+    return os.path.join(root(conf), _slug(url, (conf or {}).get("PHORGE_TOKEN") or ""))
 
 
 def instance_dir():
     """Return the cache directory for the configured instance, or None.
 
     None means "do not cache": the cache is switched off, the configuration
-    could not be read, or no PHAB_URL is configured to key entries by.
+    could not be read, or no PHORGE_HOST is configured to key entries by.
     """
     if not enabled():
         return None
 
     conf = _read_config()
-    if not conf or not _truthy(conf.get("PHAB_CACHE")):
+    if not conf or not _truthy(conf.get("PHORGE_CACHE")):
         return None
 
     return _instance_dir(conf)
 
 
 def _ttl_from(conf, namespace):
-    """Return the TTL for a namespace, honouring a PHAB_CACHE_TTL override."""
-    override = _int((conf or {}).get("PHAB_CACHE_TTL"), 0)
+    """Return the TTL for a namespace, honouring a PHORGE_CACHE_TTL override."""
+    override = _int((conf or {}).get("PHORGE_CACHE_TTL"), 0)
     if override > 0:
         return override
     return CACHE_TTLS.get(namespace, CACHE_TTL_DEFAULT)
 
 
 def ttl_for(namespace):
-    """Return the TTL for a namespace, honouring a PHAB_CACHE_TTL override."""
+    """Return the TTL for a namespace, honouring a PHORGE_CACHE_TTL override."""
     return _ttl_from(_read_config(), namespace)
 
 
@@ -167,7 +196,7 @@ def context(namespace, conf=None):
 
     if conf is None:
         conf = _read_config()
-    if not conf or not _truthy(conf.get("PHAB_CACHE")):
+    if not conf or not _truthy(conf.get("PHORGE_CACHE")):
         return None, 0
 
     return _instance_dir(conf), _ttl_from(conf, namespace)
@@ -221,7 +250,7 @@ def _get(namespace, key, ttl, directory):
             return MISS
 
         # Against the caller's TTL, not the one that was stored, so that
-        # lowering PHAB_CACHE_TTL takes effect at once. An entry is fresh for
+        # lowering PHORGE_CACHE_TTL takes effect at once. An entry is fresh for
         # strictly less than ttl seconds: >= rather than > so that a ttl of 0
         # means "expired" even where the clock is too coarse to have ticked
         # since the entry was written, as on Windows.
@@ -477,7 +506,7 @@ def other_cached_accounts():
     what makes "Removed 0" misleading on its own.
     """
     conf = _read_config() or {}
-    url = conf.get("PHAB_URL")
+    url = _endpoint(conf)
     if not url:
         return 0, None
 
@@ -559,15 +588,17 @@ def describe():
     never included.
     """
     conf = _read_config() or {}
-    url = conf.get("PHAB_URL")
+    url = _endpoint(conf)
     directory = _instance_dir(conf)
 
-    if os.environ.get("PHAB_CACHE") is not None and not enabled():
-        state, why = False, "disabled by PHAB_CACHE in the environment"
-    elif not _truthy(conf.get("PHAB_CACHE")):
-        state, why = False, "disabled by PHAB_CACHE in the configuration"
+    with quiet():
+        switched = env_setting("PHORGE_CACHE")
+    if switched is not None and not enabled():
+        state, why = False, "disabled by PHORGE_CACHE in the environment"
+    elif not _truthy(conf.get("PHORGE_CACHE")):
+        state, why = False, "disabled by PHORGE_CACHE in the configuration"
     elif not url:
-        state, why = False, "no PHAB_URL is configured"
+        state, why = False, "no PHORGE_HOST is configured"
     else:
         state, why = True, "enabled"
 

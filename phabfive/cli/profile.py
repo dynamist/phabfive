@@ -2,7 +2,7 @@
 """Recording a command's profile, and `phabfive profile` to open one.
 
 A run is recorded only when asked for: `--profile` on the command line, or
-PHAB_PROFILE in the environment or configuration. `ProfileSession` wraps the
+PHORGE_PROFILE in the environment or configuration. `ProfileSession` wraps the
 whole command, and saves the profile when it ends however it ends.
 
 `phabfive profile` hands a saved profile to the Firefox Profiler through its
@@ -30,6 +30,7 @@ import typer
 from phabfive.cli import clock
 from phabfive.cli.output import _get_output_format
 from phabfive.exceptions import PhabfiveInputException
+from phabfive.settings import env_setting, quiet
 from phabfive.profiler import (
     Category,
     MarkerType,
@@ -65,12 +66,15 @@ DEFAULT_VIEW = "marker-chart"
 def _read_config():
     """The configuration, or {} when it cannot be read.
 
-    A broken configuration is the command's to report, not the recorder's.
+    A broken configuration is the command's to report, not the recorder's,
+    and so is a deprecated name in it: this runs before the command has set
+    logging up, and the command reads the configuration again.
     """
     try:
         from phabfive.core import Phabfive
 
-        conf, _ = Phabfive.read_config()
+        with quiet():
+            conf, _ = Phabfive.read_config()
         return conf
     except Exception:
         return {}
@@ -79,15 +83,17 @@ def _read_config():
 def wants_profile(args):
     """Whether this run is to be recorded, from its arguments and configuration.
 
-    `--profile` asks for one run. Otherwise PHAB_PROFILE decides, read from
+    `--profile` asks for one run. Otherwise PHORGE_PROFILE decides, read from
     the environment when it is set there, so that only a run that has to
     pays for reading the configuration files.
     """
     if "--profile" in args:
         return True
-    if "PHAB_PROFILE" in os.environ:
-        return truthy(os.environ["PHAB_PROFILE"])
-    return truthy(_read_config().get("PHAB_PROFILE"))
+    with quiet():
+        configured = env_setting("PHORGE_PROFILE")
+    if configured is not None:
+        return truthy(configured)
+    return truthy(_read_config().get("PHORGE_PROFILE"))
 
 
 def begin(argv, command_words, name_command=None):
@@ -474,8 +480,8 @@ def profile_command(
     """Open a recorded profile in the Firefox Profiler.
 
     Record a command with `phabfive --profile <command>`, or set
-    PHAB_PROFILE to record every one. The profile is served once from
-    127.0.0.1 and opened in the profiler at PHAB_PROFILER_ORIGIN, so it
+    PHORGE_PROFILE to record every one. The profile is served once from
+    127.0.0.1 and opened in the profiler at PHORGE_PROFILER_ORIGIN, so it
     stays on this machine unless you upload it from there.
 
     \b
@@ -486,7 +492,7 @@ def profile_command(
         phabfive profile --summary
         phabfive --format=json profile --summary
         phabfive profile ~/.local/share/phabfive/profiles/profile-20261026-101500-4242.json
-        PHAB_PROFILER_ORIGIN=https://profiler.firefox.com phabfive profile
+        PHORGE_PROFILER_ORIGIN=https://profiler.firefox.com phabfive profile
     """
     if list_profiles_ and summary:
         typer.echo("Error: --list and --summary cannot be combined", err=True)

@@ -16,8 +16,8 @@ from phabfive.exceptions import PhabfiveDataException, PhabfiveNotFoundException
 def mock_config(monkeypatch):
     """Mock phabfive configuration for all tests."""
     # Token must be exactly 32 alphanumeric characters
-    monkeypatch.setenv("PHAB_TOKEN", "cli-testtoken1234567890123456789")
-    monkeypatch.setenv("PHAB_URL", "https://phabricator.example.com/api/")
+    monkeypatch.setenv("PHORGE_TOKEN", "cli-testtoken1234567890123456789")
+    monkeypatch.setenv("PHORGE_HOST", "https://phabricator.example.com/api/")
 
     # Mock the Phabricator client to avoid network calls
     mock_phab = mock.MagicMock()
@@ -779,7 +779,7 @@ class TestBuildTaskEdit:
         maniphest = Maniphest()
         maniphest.phab = mock.MagicMock()
         maniphest.url = "https://phorge.example.com/"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
         maniphest._get_task_data = mock.MagicMock(return_value=self._task())
         return maniphest
 
@@ -912,7 +912,7 @@ class TestBuildTaskEditColumn:
         maniphest = Maniphest()
         maniphest.phab = mock.MagicMock()
         maniphest.url = "https://phorge.example.com/"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
         with mock.patch(
             "phabfive.maniphest.fetchers.get_column_info",
             side_effect=lambda phab, board_phid: self.COLUMNS[board_phid],

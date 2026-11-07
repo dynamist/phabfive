@@ -69,12 +69,12 @@ class TestOfferSetupOnError:
     def test_non_interactive_shows_hint(self, capsys):
         """Test that non-interactive mode shows hint about phabfive user setup."""
         with mock.patch("sys.stdin.isatty", return_value=False):
-            result = offer_setup_on_error("PHAB_TOKEN is not configured")
+            result = offer_setup_on_error("PHORGE_TOKEN is not configured")
 
         assert result is False
         captured = capsys.readouterr()
         assert "phabfive user setup" in captured.err
-        assert "PHAB_TOKEN is not configured" in captured.err
+        assert "PHORGE_TOKEN is not configured" in captured.err
 
     def test_non_interactive_returns_false(self):
         """Test that non-interactive mode returns False."""
@@ -93,7 +93,7 @@ class TestOfferSetupOnError:
         assert result is False
 
     def test_phab_url_error_offers_arcconfig(self):
-        """Test that PHAB_URL error offers .arcconfig setup, not full wizard."""
+        """Test that PHORGE_HOST error offers .arcconfig setup, not full wizard."""
         with (
             mock.patch("sys.stdin.isatty", return_value=True),
             mock.patch(
@@ -101,14 +101,14 @@ class TestOfferSetupOnError:
             ) as mock_confirm,
             mock.patch("phabfive.setup.Console"),
         ):
-            offer_setup_on_error("PHAB_URL is not configured")
+            offer_setup_on_error("PHORGE_HOST is not configured")
 
         # Should ask about .arcconfig, not generic setup
         call_args = mock_confirm.call_args[0][0]
         assert ".arcconfig" in call_args
 
     def test_phab_token_error_offers_full_setup(self):
-        """Test that PHAB_TOKEN error offers full setup wizard."""
+        """Test that PHORGE_TOKEN error offers full setup wizard."""
         with (
             mock.patch("sys.stdin.isatty", return_value=True),
             mock.patch(
@@ -116,7 +116,7 @@ class TestOfferSetupOnError:
             ) as mock_confirm,
             mock.patch("phabfive.setup.Console"),
         ):
-            offer_setup_on_error("PHAB_TOKEN is not configured")
+            offer_setup_on_error("PHORGE_TOKEN is not configured")
 
         call_args = mock_confirm.call_args[0][0]
         assert "interactive setup" in call_args

@@ -310,7 +310,7 @@ class TestLookupCost:
     be repeated per probe - that costs more than the round trips it saves."""
 
     def test_a_completion_reads_the_configuration_once(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "1")
+        monkeypatch.setenv("PHORGE_CACHE", "1")
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ) as read_config:
@@ -323,7 +323,7 @@ class TestLookupCost:
             assert read_config.call_count == 1
 
     def test_a_disabled_cache_reads_the_configuration_not_at_all(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         with patch("phabfive.core.Phabfive.read_config") as read_config:
             Api(USERS).complete("son")
         read_config.assert_not_called()
@@ -331,7 +331,7 @@ class TestLookupCost:
 
 class TestDisabled:
     def test_every_tab_asks_the_api_when_caching_is_off(self, monkeypatch):
-        monkeypatch.setenv("PHAB_CACHE", "0")
+        monkeypatch.setenv("PHORGE_CACHE", "0")
         with patch(
             "phabfive.core.Phabfive.read_config", return_value=(dict(CONF), True)
         ):

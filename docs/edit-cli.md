@@ -661,14 +661,14 @@ as long as it carries no comment - setting a field twice changes nothing, while 
 comment would be posted twice. An edit with `--comment` whose answer is lost is
 reported as possibly applied, and not sent again.
 
-`PHAB_PACE` keeps a pause between the writes of a batch, so it does not carry on at
+`PHORGE_PACE` keeps a pause between the writes of a batch, so it does not carry on at
 full speed against a server that is already struggling:
 
 ```bash
-phabfive --format=yaml maniphest search --assigned=@me | PHAB_PACE=1 phabfive edit --status=resolved --yes
+phabfive --format=yaml maniphest search --assigned=@me | PHORGE_PACE=1 phabfive edit --status=resolved --yes
 ```
 
-See [Retries](retries.md) for the policy and `PHAB_RETRY`/`PHAB_BACKOFF_MAX`.
+See [Retries](retries.md) for the policy and `PHORGE_RETRY`/`PHORGE_BACKOFF_MAX`.
 
 ## Tips and Best Practices
 

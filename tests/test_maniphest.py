@@ -798,7 +798,7 @@ class TestYAMLOutput:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Mock the phab API
         maniphest.phab = MagicMock()
@@ -999,7 +999,7 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
@@ -1065,7 +1065,7 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
@@ -1132,7 +1132,7 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
@@ -1201,7 +1201,7 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
@@ -1268,7 +1268,7 @@ class TestYAMLQuoting:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         maniphest.phab = MagicMock()
         maniphest.phab.phid.lookup.return_value = {
@@ -1340,7 +1340,7 @@ class TestStrictFormat:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Set strict output format
         Phabfive.set_output_options(output_format="strict")
@@ -1412,7 +1412,7 @@ class TestStrictFormat:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Set strict output format
         Phabfive.set_output_options(output_format="strict")
@@ -1502,7 +1502,7 @@ class TestTaskShowOrdering:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
         maniphest.phab.project.query.return_value = {"data": {}}
 
         # API returns newest first, opposite of the requested order
@@ -1528,7 +1528,7 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
@@ -1571,7 +1571,7 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
@@ -1632,7 +1632,7 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
@@ -1691,7 +1691,7 @@ class TestTaskSearchTextQuery:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
@@ -1718,7 +1718,7 @@ class TestTaskSearchTextQuery:
         mock_init.return_value = None
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
         maniphest.phab.phid.lookup.return_value = {
             "S1": {
                 "phid": "PHID-SPCE-1",
@@ -1746,7 +1746,7 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
         maniphest.phab.phid.lookup.return_value = {
             "S1": {"phid": "PHID-SPCE-1", "name": "Global", "fullName": "Global"}
         }
@@ -1818,7 +1818,7 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
@@ -1864,7 +1864,7 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
@@ -1911,7 +1911,7 @@ class TestTaskSearchTextQuery:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
 
         # Mock phid.lookup for space resolution
         maniphest.phab.phid.lookup.return_value = {
@@ -2006,7 +2006,7 @@ class TestTaskSearchIncludeExclude:
         maniphest = Maniphest()
         maniphest.phab = MagicMock()
         maniphest.url = "https://phabricator.example.com"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
         maniphest.phab.phid.lookup.return_value = {
             "S1": {
                 "phid": "PHID-SPCE-1",

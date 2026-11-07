@@ -621,8 +621,8 @@ def _scrubbed_environment():
     environment["PYTHONPATH"] = str(REPOSITORY)
     environment["TERM"] = "dumb"
 
-    assert "PHAB_URL" not in environment
-    assert "PHAB_TOKEN" not in environment
+    assert "PHORGE_HOST" not in environment
+    assert "PHORGE_TOKEN" not in environment
     assert "TYPER_USE_RICH" not in environment
 
     return environment

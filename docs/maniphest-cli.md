@@ -572,7 +572,7 @@ may have just set them.
 ### Listing Every Task
 
 `--status=any` on its own is a deliberate request for every task, open or
-closed. Like every search it is confined to the default Space (`PHAB_SPACE`,
+closed. Like every search it is confined to the default Space (`PHORGE_SPACE`,
 `S1` unless configured), so add `--space='*'` to reach tasks in every Space, and
 `-l 0` to lift the default limit of 100:
 
@@ -1550,7 +1550,7 @@ is decides who can see it. Phabfive names a Space by monogram (`S3`), by name
 
 ### Searching within a Space
 
-Every search narrows to a Space - `PHAB_SPACE`, default `S1` - even when
+Every search narrows to a Space - `PHORGE_SPACE`, default `S1` - even when
 `--space` is not given, so tasks in other Spaces are silently excluded:
 
 ```bash
@@ -1596,7 +1596,7 @@ $ phabfive maniphest edit T123 --space='*rch*' --dry-run
   Space: S1 (Default) → S10 (Archive)
 ```
 
-`PHAB_SPACE` is a search filter and nothing more. A create with no `--space`
+`PHORGE_SPACE` is a search filter and nothing more. A create with no `--space`
 lands wherever the server puts it, which is the instance's own default Space,
 so set it explicitly when it matters. A create spec takes a `space` field per
 task - see [Creating with Specs](create-specs.md).
@@ -1722,13 +1722,13 @@ on stderr, so stdout stays clean for `--format=json` and `--format=jsonl` consum
 # Which Space and project(s) did this actually search?
 phabfive -v maniphest search --tag backend
 
-INFO - Filtering to space(s): S1 (from PHAB_SPACE). Tasks in other spaces are excluded; use --space='*' to include all spaces.
+INFO - Filtering to space(s): S1 (from PHORGE_SPACE). Tasks in other spaces are excluded; use --space='*' to include all spaces.
 INFO - Filtering to open statuses: ['open']
 INFO - Filtering to tag(s): backend (1 project(s))
 ```
 
 This is worth reaching for when a search returns fewer tasks than expected.
-Every search narrows to a Space - `PHAB_SPACE`, default `S1` - even when
+Every search narrows to a Space - `PHORGE_SPACE`, default `S1` - even when
 `--space` is not given, so tasks in other Spaces are silently excluded.
 Use `--space='*'` to search them all, and see [Spaces](#spaces) for placing a
 task in one.

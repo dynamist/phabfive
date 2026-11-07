@@ -164,7 +164,7 @@ class TestCreatingInASpace:
         maniphest = Maniphest()
         maniphest.phab = phab
         maniphest.url = "https://phorge.example.com/"
-        maniphest.conf = conf if conf is not None else {"PHAB_SPACE": "S1"}
+        maniphest.conf = conf if conf is not None else {"PHORGE_SPACE": "S1"}
 
         phab.maniphest.edit.return_value = {"object": {"id": 5, "phid": "PHID-TASK-5"}}
         maniphest.get_task_info = MagicMock(
@@ -184,10 +184,10 @@ class TestCreatingInASpace:
         assert {"type": "space", "value": "PHID-SPCE-10"} in self._transactions(phab)
 
     def test_without_a_space_the_server_decides(self, mock_init):
-        # PHAB_SPACE narrows searches. Honouring it here would silently move
+        # PHORGE_SPACE narrows searches. Honouring it here would silently move
         # where tasks land, on an instance whose default Space is not S1.
         phab = _phab({1: "Default", 10: "Archive"})
-        maniphest = self._maniphest(phab, conf={"PHAB_SPACE": "S10"})
+        maniphest = self._maniphest(phab, conf={"PHORGE_SPACE": "S10"})
 
         maniphest.create_task(title="Task")
 
@@ -230,7 +230,7 @@ class TestCreatingFromATemplate:
         maniphest = Maniphest()
         maniphest.phab = phab
         maniphest.url = "https://phorge.example.com/"
-        maniphest.conf = {"PHAB_SPACE": "S1"}
+        maniphest.conf = {"PHORGE_SPACE": "S1"}
         phab.user.search.return_value = {"data": []}
         phab.project.search.return_value = {"data": []}
         phab.maniphest.edit.return_value = {"object": {"id": 5, "phid": "PHID-TASK-5"}}

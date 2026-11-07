@@ -54,7 +54,7 @@ def _maniphest(matched):
         maniphest = Maniphest()
     maniphest.phab = MagicMock()
     maniphest.url = URL
-    maniphest.conf = {"PHAB_SPACE": "S1"}
+    maniphest.conf = {"PHORGE_SPACE": "S1"}
     maniphest.phab.project.query.return_value = {"data": {}}
     maniphest.phab.edge.search.side_effect = _edge_search
     maniphest.phab.phid.query.return_value = {

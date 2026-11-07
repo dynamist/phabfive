@@ -223,7 +223,7 @@ class TestTheCommandOptsIn:
 
     def test_entries_are_filed_under_the_apps_instance(self, enabled_cache):
         """Not the instance reading the configuration again would name."""
-        other = {**CONF, "PHAB_URL": "https://other.example.com/api/"}
+        other = {**CONF, "PHORGE_HOST": "https://other.example.com/api/"}
         CommandLookups(other).set(STATUS_MAP_CACHE_NAMESPACE, STATUSES)
 
         assert CommandLookups(other).get(STATUS_MAP_CACHE_NAMESPACE) == STATUSES

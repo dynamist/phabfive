@@ -1,6 +1,6 @@
 ---
 name: phabfive
-description: "Read and change Phabricator/Phorge objects - Maniphest tasks, Pastes, Diffusion repositories, Projects and Passphrase credentials - through the phabfive CLI. Use when the user names phabfive or a Phabricator/Phorge instance, or refers to a T, P, K or R monogram such as T123. Do not use for other issue trackers such as Jira, GitHub or GitLab. Requires PHAB_URL and PHAB_TOKEN."
+description: "Read and change Phabricator/Phorge objects - Maniphest tasks, Pastes, Diffusion repositories, Projects and Passphrase credentials - through the phabfive CLI. Use when the user names phabfive or a Phabricator/Phorge instance, or refers to a T, P, K or R monogram such as T123. Do not use for other issue trackers such as Jira, GitHub or GitLab. Requires PHORGE_HOST and PHORGE_TOKEN."
 ---
 
 # phabfive
@@ -18,8 +18,9 @@ phabfive user whoami
 It reports the host and the user phabfive is authenticated as, and exits 1 if every
 configured host failed. If it fails, say phabfive is not configured and stop. Do **not**
 run `phabfive user setup` to fix it: that is an interactive wizard and it will hang.
-Configuration comes from `PHAB_URL` and `PHAB_TOKEN`, from `~/.arcrc`, and from
-`.arcconfig` in the repository root.
+Configuration comes from `PHORGE_HOST` and `PHORGE_TOKEN`, from `~/.arcrc`, and from
+`.arcconfig` in the repository root. The older `PHAB_URL` and `PHAB_TOKEN` still work,
+with a deprecation warning on stderr.
 
 ## Learn the installed CLI
 
@@ -83,7 +84,7 @@ Global options must come **before** the subcommand. `phabfive maniphest show T12
   `simple` as an alias for `value`, which it used to be called.
 
 When stdout is not a terminal phabfive already defaults to YAML, but pass `--format`
-explicitly so the output does not change under you. `PHAB_FALLBACK` changes that default
+explicitly so the output does not change under you. `PHORGE_FALLBACK` changes that default
 to `json` or `jsonl`, and does not accept `table`.
 
 Data goes to stdout; logging, diagnostics, status lines, and the help a bare group or search prints, go
@@ -276,7 +277,7 @@ the credential is locked or its secret destroyed, and always for a note, whose t
 
 ## Spaces hide objects that exist
 
-Searches are silently scoped to the Space in `PHAB_SPACE`, which defaults to `S1`. A task
+Searches are silently scoped to the Space in `PHORGE_SPACE`, which defaults to `S1`. A task
 that exists in another Space returns no results and looks deleted.
 
 ```bash
@@ -289,7 +290,7 @@ phabfive -v maniphest search --tag Backend                          # what was s
 `-v` reports on stderr which Space and which projects the search actually used — reach for
 it whenever a search returns fewer results than expected.
 
-`PHAB_SPACE` is deliberately not consulted when creating; a new task lands in the server's
+`PHORGE_SPACE` is deliberately not consulted when creating; a new task lands in the server's
 default Space unless `--space` says otherwise.
 
 ## Search tasks
@@ -831,7 +832,7 @@ refused.
 the argument. `--icon` and `--color` match what Phorge shows: a milestone is the
 `milestone` icon and its parent's color, and an archived project matches the color it
 was given, not the `disabled` it is shown as. An unknown color is refused; an unknown
-icon (they are instance configuration) matches nothing. Like `maniphest search` it looks only in `PHAB_SPACE` unless `--space`
+icon (they are instance configuration) matches nothing. Like `maniphest search` it looks only in `PHORGE_SPACE` unless `--space`
 names other Spaces, so every project on the instance is
 `--status=any --space='*' -l 0`; `--show-policy` costs one extra lookup for the whole
 listing, not one per project.
@@ -948,7 +949,7 @@ phabfive --format=json spec validate specs/create/sprint-tasks.yaml
 ```
 
 There are two layers and both commands run both before writing or asking anything. The
-**offline** layer needs no token, no `PHAB_URL` and no network - shapes, keys, variables,
+**offline** layer needs no token, no `PHORGE_HOST` and no network - shapes, keys, variables,
 `$local-id` links - and is all `--offline` runs. The **online** layer resolves the names
 the file uses against the instance: users, projects, Spaces, workboard columns. So a
 spec whose tenth task names a user who does not exist creates nothing at all. Under
@@ -989,7 +990,7 @@ the code it produces. `docs/phorge-spec.md` defines the format itself;
 
 Only shell-completion data is cached on disk, keyed by instance and token, and never
 secrets or task content. `phabfive cache info` reports counts and sizes without printing
-values; `phabfive cache clear` drops them. Set `PHAB_CACHE=0` to disable. Nothing here
+values; `phabfive cache clear` drops them. Set `PHORGE_CACHE=0` to disable. Nothing here
 touches the server.
 
 ## Profiling a slow command

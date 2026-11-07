@@ -426,18 +426,20 @@ class TestConfiguration:
         assert (policy.retries, policy.backoff_max) == (3, 5.0)
 
     def test_strings_from_the_environment(self):
-        policy = RetryPolicy.from_conf({"PHAB_RETRY": "8", "PHAB_BACKOFF_MAX": "60"})
+        policy = RetryPolicy.from_conf(
+            {"PHORGE_RETRY": "8", "PHORGE_BACKOFF_MAX": "60"}
+        )
         assert (policy.retries, policy.backoff_max) == (8, 60.0)
 
     @pytest.mark.parametrize(
         "conf",
         [
-            {"PHAB_RETRY": "lots"},
-            {"PHAB_RETRY": "-1"},
-            {"PHAB_BACKOFF_MAX": "x"},
+            {"PHORGE_RETRY": "lots"},
+            {"PHORGE_RETRY": "-1"},
+            {"PHORGE_BACKOFF_MAX": "x"},
             # A nan wait never waits, and an infinite cap is no cap.
-            {"PHAB_BACKOFF_MAX": "nan"},
-            {"PHAB_BACKOFF_MAX": "inf"},
+            {"PHORGE_BACKOFF_MAX": "nan"},
+            {"PHORGE_BACKOFF_MAX": "inf"},
         ],
     )
     def test_a_bad_value_is_a_config_error(self, conf):
@@ -446,12 +448,15 @@ class TestConfiguration:
 
     @pytest.mark.parametrize("value", ["abc", "-1", "nan", "inf"])
     def test_a_bad_pace_is_a_config_error(self, value):
-        with pytest.raises(PhabfiveConfigException, match="PHAB_PACE"):
-            Pacer.from_conf({"PHAB_PACE": value})
+        with pytest.raises(PhabfiveConfigException, match="PHORGE_PACE"):
+            Pacer.from_conf({"PHORGE_PACE": value})
 
     @pytest.mark.parametrize(
         "config, key",
-        [({"PHAB_RETRY": "often"}, "PHAB_RETRY"), ({"PHAB_PACE": "abc"}, "PHAB_PACE")],
+        [
+            ({"PHORGE_RETRY": "often"}, "PHORGE_RETRY"),
+            ({"PHORGE_PACE": "abc"}, "PHORGE_PACE"),
+        ],
     )
     def test_constructing_an_app_checks_it(self, config, key):
         from phabfive import Phabfive
@@ -462,7 +467,7 @@ class TestConfiguration:
     def test_an_app_uses_its_policy(self):
         from phabfive import Phabfive
 
-        app = Phabfive(url=HOST, token="t" * 32, config={"PHAB_RETRY": 7})
+        app = Phabfive(url=HOST, token="t" * 32, config={"PHORGE_RETRY": 7})
         assert object.__getattribute__(app.phab, "_retry").retries == 7
 
 
@@ -492,7 +497,7 @@ class TestPacer:
 
         monkeypatch.setattr("phabfive.retry.time.monotonic", lambda: 0.0)
         maniphest = mock.MagicMock()
-        maniphest.conf = {"PHAB_PACE": "1.5"}
+        maniphest.conf = {"PHORGE_PACE": "1.5"}
         maniphest._get_task_data.return_value = {
             "fields": {"name": "t", "description": {"raw": ""}},
             "attachments": {"columns": {"boards": {}}},
@@ -513,7 +518,7 @@ class TestPacer:
 
         monkeypatch.setattr("phabfive.retry.time.monotonic", lambda: 0.0)
         edit = Edit.__new__(Edit)
-        edit.conf = {"PHAB_PACE": "2"}
+        edit.conf = {"PHORGE_PACE": "2"}
         edit.maniphest = mock.MagicMock()
         change = [{"type": "status", "value": "resolved"}]
         plan = EditPlan(

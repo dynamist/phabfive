@@ -334,7 +334,7 @@ def project_search(
     space: Optional[str] = typer.Option(
         None,
         "--space",
-        help="Projects in these Spaces (name, monogram or pattern; comma-separated; '*' for all). Default: PHAB_SPACE",
+        help="Projects in these Spaces (name, monogram or pattern; comma-separated; '*' for all). Default: PHORGE_SPACE",
         autocompletion=complete_space_filter,
     ),
     show_policy: bool = typer.Option(
@@ -359,9 +359,9 @@ def project_search(
 ) -> None:
     """Search projects.
 
-    With no filter at all it lists every active project in PHAB_SPACE,
+    With no filter at all it lists every active project in PHORGE_SPACE,
     subprojects and milestones included. --status=archived lists the archived ones, and
-    --status=any lists both. Like `maniphest search` it looks in PHAB_SPACE
+    --status=any lists both. Like `maniphest search` it looks in PHORGE_SPACE
     unless --space names other Spaces; --space='*' looks in every one.
 
     Naming the policies costs one extra lookup for the whole listing, not one
