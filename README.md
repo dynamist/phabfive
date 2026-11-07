@@ -222,27 +222,29 @@ though a token belongs in `~/.arcrc` rather than there.
 
 **When the endpoint is not the address people open:**
 
-`PHORGE_HOST` is the root of every link phabfive returns and, as a rule, where it
-calls Conduit, at `PHORGE_HOST/api/`. Those are the same address almost everywhere,
-and come apart behind an ingress or split-horizon DNS -- a process inside a
-Kubernetes cluster reaches Phorge at a Service name, while the report it renders is
-read by people whose browsers cannot resolve one. `PHORGE_API_HOST` is then where
-phabfive calls:
+`PHORGE_HOST` is both the Conduit endpoint phabfive calls, at `PHORGE_HOST/api/`,
+and the root of every link it returns. Those are the same address almost
+everywhere, and come apart behind an ingress or split-horizon DNS -- a process
+inside a Kubernetes cluster reaches Phorge at a Service name, while the report it
+renders is read by people whose browsers cannot resolve one. Configure the two
+halves instead:
 
 ```bash
-export PHORGE_HOST=https://phorge.example.com                   # what links point at
 export PHORGE_API_HOST=http://web.phorge.svc.cluster.local      # what phabfive calls
+export PHORGE_WEB_HOST=https://phorge.example.com               # what links point at
 ```
 
-`PHORGE_API_HOST` on its own is refused, because the address people open cannot
-be derived from the one you gave. The token in `~/.arcrc` and the completion cache
-stay keyed by the endpoint, so adopting the split does not orphan either.
+Either `PHORGE_HOST` alone, or both of these -- half the pair is refused, because
+the missing address cannot be derived from the one you gave. The token in
+`~/.arcrc` and the completion cache stay keyed by the endpoint, so adopting the
+pair does not orphan either.
 
 **The old names still work.** `PHAB_URL`, `PHAB_TOKEN`, `PHAB_API_URL`,
 `PHAB_WEB_URL` and every other `PHAB_*` setting are read as before -- from the
 environment, a yaml file or a program's `config` -- and renamed to their
-`PHORGE_*` successor with a deprecation warning that names it. `PHAB_URL` and
-`PHAB_WEB_URL` both become `PHORGE_HOST`, `PHAB_API_URL` becomes `PHORGE_API_HOST`.
+`PHORGE_*` successor with a deprecation warning that names it: `PHAB_URL` becomes
+`PHORGE_HOST`, `PHAB_API_URL` and `PHAB_WEB_URL` become `PHORGE_API_HOST` and
+`PHORGE_WEB_HOST`.
 
 **Windows SSL certificates:** If you encounter certificate errors, install [pip-system-certs](https://pypi.org/project/pip-system-certs/) to use the Windows certificate store: `pip install pip-system-certs`
 

@@ -40,7 +40,6 @@ class TestExplicitConfiguration:
         app = Phabfive(url=HOST, token=TOKEN)
 
         assert app.conf["PHORGE_HOST"] == HOST
-        assert app.conf["PHORGE_API_HOST"] == URL
         assert app.conf["PHORGE_TOKEN"] == TOKEN
         assert app.url == HOST
 
@@ -59,16 +58,18 @@ class TestExplicitConfiguration:
     def test_the_endpoint_is_forgiven(self, phabricator):
         """A pasted /api/ endpoint names the instance as well as its root."""
         app = Phabfive(url=URL, token=TOKEN)
+        app.phab.client
 
         assert app.conf["PHORGE_HOST"] == HOST
-        assert app.conf["PHORGE_API_HOST"] == URL
+        assert phabricator.call_args.kwargs["host"] == URL
 
     def test_a_bare_host_is_reached_over_https(self, phabricator):
         """No scheme means https."""
         app = Phabfive(url="phorge.example.com", token=TOKEN)
+        app.phab.client
 
         assert app.conf["PHORGE_HOST"] == HOST
-        assert app.conf["PHORGE_API_HOST"] == URL
+        assert phabricator.call_args.kwargs["host"] == URL
 
     def test_config_sets_other_values(self, phabricator):
         app = Phabfive(url=URL, token=TOKEN, config={"PHORGE_SPACE": "S2"})

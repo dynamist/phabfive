@@ -28,25 +28,26 @@ __all__ = [
     "deprecation_message",
     "env_setting",
     "forget_warnings",
-    "legacy_names",
+    "legacy_name",
     "modernize",
     "quiet",
     "warn_legacy",
 ]
 
-# When both legacy names of one setting are given, the later one here wins:
-# PHAB_WEB_URL over PHAB_URL, as the PHAB_API_URL/PHAB_WEB_URL pair used to
-# win over PHAB_URL.
-_PRECEDENCE = {old: index for index, old in enumerate(LEGACY_CONFIGURABLES)}
+# The order the names are listed in, which is the order a warning names them
+_ORDER = {old: index for index, old in enumerate(LEGACY_CONFIGURABLES)}
 
 #: (where, legacy name) pairs already warned about
 _warned: set[tuple[str, str]] = set()
 _quiet = 0
 
 
-def legacy_names(name):
-    """The deprecated names of the setting `name`, in order of precedence."""
-    return [old for old, new in LEGACY_CONFIGURABLES.items() if new == name]
+def legacy_name(name):
+    """The deprecated name of the setting `name`, or None when it never had one."""
+    for old, new in LEGACY_CONFIGURABLES.items():
+        if new == name:
+            return old
+    return None
 
 
 def _join(names):
@@ -66,7 +67,7 @@ def deprecation_message(found, where):
     where : str
         Where they were given, e.g. ``"the environment"`` or a file path.
     """
-    found = sorted(set(found), key=_PRECEDENCE.get)
+    found = sorted(set(found), key=_ORDER.get)
     successors = []
     for old in found:
         new = LEGACY_CONFIGURABLES[old]
@@ -125,16 +126,14 @@ def modernize(mapping):
     tuple
         ``(renamed, found)``: a new dict in which every ``PHAB_*`` key has
         become its ``PHORGE_*`` successor, and the legacy names that were
-        there, in order of precedence. A successor that is itself in
-        `mapping` wins over any legacy name; between two legacy names of one
-        setting the later one in ``LEGACY_CONFIGURABLES`` wins. Keys that are
-        neither are kept as they are.
+        there. A successor that is itself in `mapping` wins over its legacy
+        name. Keys that are neither are kept as they are.
     """
     renamed = {
         key: value for key, value in mapping.items() if key not in LEGACY_CONFIGURABLES
     }
     found = sorted(
-        (key for key in mapping if key in LEGACY_CONFIGURABLES), key=_PRECEDENCE.get
+        (key for key in mapping if key in LEGACY_CONFIGURABLES), key=_ORDER.get
     )
     for old in found:
         new = LEGACY_CONFIGURABLES[old]
@@ -154,8 +153,8 @@ def env_setting(name, environ=None):
     environ = os.environ if environ is None else environ
     if name in environ:
         return environ[name]
-    for old in reversed(legacy_names(name)):
-        if old in environ:
-            warn_legacy([old], "the environment")
-            return environ[old]
+    old = legacy_name(name)
+    if old is not None and old in environ:
+        warn_legacy([old], "the environment")
+        return environ[old]
     return None

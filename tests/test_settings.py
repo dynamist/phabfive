@@ -88,13 +88,10 @@ class TestRenaming:
 
         assert renamed == {"PHORGE_HOST": URL}
 
-    def test_the_web_half_of_the_old_pair_wins_over_phab_url(self):
-        """As the pair used to win over PHAB_URL."""
-        renamed, _ = modernize(
-            {"PHAB_URL": URL, "PHAB_WEB_URL": WEB, "PHAB_API_URL": API}
-        )
+    def test_the_old_pair_becomes_the_new_pair(self):
+        renamed, _ = modernize({"PHAB_WEB_URL": WEB, "PHAB_API_URL": API})
 
-        assert renamed == {"PHORGE_HOST": WEB, "PHORGE_API_HOST": API}
+        assert renamed == {"PHORGE_WEB_HOST": WEB, "PHORGE_API_HOST": API}
 
     def test_the_message_names_the_successors(self):
         message = deprecation_message(["PHAB_TOKEN", "PHAB_URL"], "the environment")
@@ -122,7 +119,6 @@ class TestFromTheEnvironment:
         app.phab.client
 
         assert app.conf["PHORGE_HOST"] == HOST
-        assert app.conf["PHORGE_API_HOST"] == URL
         assert app.conf["PHORGE_TOKEN"] == TOKEN
         assert app.conf["PHORGE_SPACE"] == "S2"
         assert phabricator.call_args.kwargs["host"] == URL
@@ -169,15 +165,33 @@ class TestFromTheEnvironment:
 
         assert conf["PHORGE_HOST"] == HOST
 
-    def test_the_old_pair_becomes_host_and_api_host(self, only_the_environment):
+    def test_the_old_pair_still_splits_the_addresses(self, only_the_environment):
         only_the_environment.setenv("PHAB_TOKEN", TOKEN)
         only_the_environment.setenv("PHAB_API_URL", API)
         only_the_environment.setenv("PHAB_WEB_URL", WEB)
 
         conf, _ = Phabfive.read_config()
 
+        assert conf["PHORGE_API_HOST"] == API
+        assert conf["PHORGE_WEB_HOST"] == WEB
+        assert conf["PHORGE_HOST"] == WEB
+
+    def test_the_old_pair_still_wins_over_phab_url(self, only_the_environment):
+        """As it did: the pair is the deliberate configuration, with a warning."""
+        only_the_environment.setenv("PHAB_TOKEN", TOKEN)
+        only_the_environment.setenv("PHAB_URL", URL)
+        only_the_environment.setenv("PHAB_API_URL", API)
+        only_the_environment.setenv("PHAB_WEB_URL", WEB)
+
+        with mock.patch("phabfive.core.log") as log:
+            conf, _ = Phabfive.read_config()
+
         assert conf["PHORGE_HOST"] == WEB
         assert conf["PHORGE_API_HOST"] == API
+        assert (
+            "PHORGE_HOST (https://phorge.example.com) is ignored"
+            in (log.warning.call_args.args[0])
+        )
 
     def test_the_old_name_still_matches_the_token_in_arcrc(
         self, only_the_environment, tmp_path
