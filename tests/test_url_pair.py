@@ -9,8 +9,8 @@ split-horizon DNS -- a caller inside a Kubernetes cluster reaches Phorge at a
 Service name, while the report it renders is read by people who need links
 that open in a browser.
 
-`PHORGE_API_HOST` carries the other half when they differ, the way glab's
-`GITLAB_API_HOST` does. The tests below pin what makes the split safe rather
+`PHORGE_API_HOST` carries the other half when they differ. The tests below pin
+what makes the split safe rather
 than merely possible: an endpoint on its own is refused instead of guessed at,
 and everything keyed by instance -- the token in `~/.arcrc`, the cache
 directory -- keeps keying on the endpoint, so adopting the split does not
@@ -100,7 +100,7 @@ class TestTwoAddresses:
         assert app.conf["PHORGE_API_HOST"] == API
 
     def test_the_endpoint_suffix_is_added(self, phabricator):
-        """As for PHORGE_HOST: the address is enough, as glab takes GITLAB_API_HOST."""
+        """As for PHORGE_HOST: the address is enough."""
         app = Phabfive(
             token=TOKEN,
             config={

@@ -64,7 +64,7 @@ class TestExplicitConfiguration:
         assert app.conf["PHORGE_API_HOST"] == URL
 
     def test_a_bare_host_is_reached_over_https(self, phabricator):
-        """As glab takes GITLAB_HOST: no scheme means https."""
+        """No scheme means https."""
         app = Phabfive(url="phorge.example.com", token=TOKEN)
 
         assert app.conf["PHORGE_HOST"] == HOST

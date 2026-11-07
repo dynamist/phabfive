@@ -266,11 +266,10 @@ Complex features use a consistent subpackage structure:
 
 ### Configuration
 
-Required: `PHORGE_TOKEN` and `PHORGE_HOST`, named as glab names `GITLAB_TOKEN` and
-`GITLAB_HOST`: `PHORGE_HOST` is the instance (`phorge.example.com` or
-`https://phorge.example.com`, a pasted `/api/` endpoint forgiven), and the Conduit
-endpoint is `PHORGE_HOST/api/` unless `PHORGE_API_HOST` names another address this
-process calls, as `GITLAB_API_HOST` does. `Phabfive._resolve_hosts` settles both:
+Required: `PHORGE_TOKEN` and `PHORGE_HOST`. `PHORGE_HOST` is the instance
+(`phorge.example.com` or `https://phorge.example.com`, a pasted `/api/` endpoint
+forgiven), and the Conduit endpoint is `PHORGE_HOST/api/` unless `PHORGE_API_HOST`
+names another address this process calls. `Phabfive._resolve_hosts` settles both:
 `conf["PHORGE_HOST"]` is the root with no trailing slash and the root of every link,
 `conf["PHORGE_API_HOST"]` always holds the endpoint downstream, which is what the
 client, `~/.arcrc` and the cache key on.

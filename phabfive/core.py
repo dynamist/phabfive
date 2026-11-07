@@ -877,8 +877,7 @@ class Phabfive:
         """
         Normalize an instance's address to its root, with no trailing slash.
 
-        PHORGE_HOST is taken the way glab takes GITLAB_HOST: a bare host is
-        reached over https, and a pasted endpoint is forgiven.
+        A bare host is reached over https, and a pasted endpoint is forgiven.
 
         - phorge.example.com -> https://phorge.example.com
         - https://phorge.example.com/ -> https://phorge.example.com
@@ -916,8 +915,7 @@ class Phabfive:
         back and, as a rule, where it calls Conduit, at PHORGE_HOST/api/.
         Those come apart behind an ingress or split-horizon DNS, where a
         caller reaching a Service name still has to emit links a reader can
-        open; PHORGE_API_HOST is then where this process calls, the way
-        glab's GITLAB_API_HOST is.
+        open; PHORGE_API_HOST is then where this process calls.
 
         Both are normalized here: PHORGE_HOST to a root with no trailing
         slash, PHORGE_API_HOST to the endpoint - and PHORGE_API_HOST holds the
