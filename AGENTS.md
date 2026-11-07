@@ -267,15 +267,18 @@ Complex features use a consistent subpackage structure:
 ### Configuration
 
 Required: `PHORGE_TOKEN` and `PHORGE_HOST`. `PHORGE_HOST` is the instance
-(`phorge.example.com` or `https://phorge.example.com`, a pasted `/api/` endpoint
-forgiven), and the Conduit endpoint is `PHORGE_HOST/api/` unless `PHORGE_API_HOST`
-names another address this process calls. `Phabfive._resolve_hosts` settles both:
-`conf["PHORGE_HOST"]` is the root with no trailing slash and the root of every link,
-`conf["PHORGE_API_HOST"]` always holds the endpoint downstream, which is what the
-client, `~/.arcrc` and the cache key on.
+(`phorge.example.com` or `https://phorge.example.com`, a bare host reached over https
+and a pasted `/api/` endpoint forgiven): the Conduit endpoint is `PHORGE_HOST/api/` and
+every link is rooted at it. When the two come apart (issue #540), `PHORGE_API_HOST` and
+`PHORGE_WEB_HOST` carry the halves, both or neither - half a pair is refused, since the
+missing half cannot be derived. `Phabfive._resolve_hosts` settles them: the pair resolves
+into `conf["PHORGE_HOST"]`, which always holds the root a reader opens, with no trailing
+slash, and `conf["PHORGE_API_HOST"]` holds the endpoint when it differs. Readers of the
+endpoint - the client, `_load_arcrc`, `cache._endpoint` - take `PHORGE_API_HOST` when it
+is set and `PHORGE_HOST/api/` otherwise.
 
-Every setting had a `PHAB_*` name before (`PHAB_URL` and `PHAB_WEB_URL` for
-`PHORGE_HOST`, `PHAB_API_URL` for `PHORGE_API_HOST`, `PHAB_X` for `PHORGE_X`), listed
+Every setting had a `PHAB_*` name before (`PHAB_URL` for `PHORGE_HOST`, `PHAB_API_URL`
+and `PHAB_WEB_URL` for `PHORGE_API_HOST` and `PHORGE_WEB_HOST`, `PHAB_X` for `PHORGE_X`), listed
 in `LEGACY_CONFIGURABLES`. `phabfive/settings.py` renames them wherever a setting can
 be given - `modernize` for a mapping, `env_setting` for a reader that wants one value
 straight from the environment - and warns once per process per place and name

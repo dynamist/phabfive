@@ -44,6 +44,19 @@ def test_host_validator_refuses_a_path_and_a_bare_name():
     assert not re.match(pattern, "http://2001:db8::1")
 
 
+def test_web_host_validator_takes_an_origin_or_nothing():
+    from phabfive.constants import VALIDATORS
+
+    pattern = VALIDATORS["PHORGE_WEB_HOST"]
+
+    assert re.match(pattern, "")
+    assert re.match(pattern, "https://phorge.example.com")
+    assert re.match(pattern, "http://phorge.localhost:8080")
+    # An endpoint pasted into the web half is a named error, not a bad link
+    assert not re.match(pattern, "https://phorge.example.com/api/")
+    assert not re.match(pattern, "https://phorge.example.com/x")
+
+
 def test_api_host_validator_without_port():
     from phabfive.constants import VALIDATORS
 

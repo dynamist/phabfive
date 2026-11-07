@@ -383,6 +383,7 @@ CONFIGURABLES = [
     "PHORGE_TOKEN",
     "PHORGE_HOST",
     "PHORGE_API_HOST",
+    "PHORGE_WEB_HOST",
     "PHORGE_SPACE",
     "PHORGE_FALLBACK",
     "PHORGE_CACHE",
@@ -399,15 +400,13 @@ CONFIGURABLES = [
 
 # The names the settings had before PHORGE_HOST and PHORGE_TOKEN replaced
 # them. Every one is still read, from the environment, a yaml file or a
-# `config` dict, and
-# renamed to its successor with a deprecation warning; see phabfive.settings.
-# PHAB_URL and PHAB_WEB_URL both become PHORGE_HOST: PHAB_URL was the Conduit
-# endpoint, which PHORGE_HOST forgives, and when both are given PHAB_WEB_URL
-# wins, as the pair used to win over PHAB_URL.
+# `config` dict, and renamed to its successor with a deprecation warning; see
+# phabfive.settings. PHAB_URL was the Conduit endpoint, which PHORGE_HOST
+# forgives.
 LEGACY_CONFIGURABLES = {
     "PHAB_URL": "PHORGE_HOST",
-    "PHAB_WEB_URL": "PHORGE_HOST",
     "PHAB_API_URL": "PHORGE_API_HOST",
+    "PHAB_WEB_URL": "PHORGE_WEB_HOST",
     "PHAB_TOKEN": "PHORGE_TOKEN",
     "PHAB_SPACE": "PHORGE_SPACE",
     "PHAB_FALLBACK": "PHORGE_FALLBACK",
@@ -426,12 +425,13 @@ LEGACY_CONFIGURABLES = {
 DEFAULTS = {
     "PHORGE_TOKEN": "",
     # The instance, phorge.example.com or https://phorge.example.com: the
-    # root of every link phabfive hands back.
-    # The Conduit endpoint is PHORGE_HOST/api/ unless PHORGE_API_HOST says the
-    # process reaches the instance at another address than a reader does;
-    # see Phabfive._resolve_hosts.
+    # Conduit endpoint phabfive calls, at PHORGE_HOST/api/, and the root of
+    # every link it hands back.
     "PHORGE_HOST": "",
+    # The split pair, for an instance whose Conduit endpoint is not the address
+    # a reader can open. Both or neither, see Phabfive._resolve_hosts.
     "PHORGE_API_HOST": "",
+    "PHORGE_WEB_HOST": "",
     "PHORGE_SPACE": "S1",
     "PHORGE_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml, json or jsonl)
     "PHORGE_CACHE": True,  # Cache API lookups that shell completion repeats
@@ -469,19 +469,23 @@ CACHE_TTL_DEFAULT = 300
 # completion offers
 STATUS_MAP_CACHE_NAMESPACE = "status-map"
 REQUIRED = ["PHORGE_TOKEN", "PHORGE_HOST"]
-# Judged after Phabfive._resolve_hosts has normalized the addresses: the host
-# is an origin with no path, which is what turns a pasted sub-path into a named
-# error rather than links nobody can open, and the endpoint ends in /api/.
-# Empty is how PHORGE_API_HOST says "unset", since most instances need none.
+# Judged after Phabfive._resolve_hosts has normalized the addresses. A host is
+# an origin with no path, which is what turns a pasted sub-path into a named
+# error rather than links nobody can open; the endpoint ends in /api/. Empty is
+# how the pair says "unset", since most instances need neither.
+# The pair is judged before the host it resolves into, so that an endpoint
+# pasted into PHORGE_WEB_HOST is named as that, not as a malformed PHORGE_HOST.
 VALIDATORS = {
-    "PHORGE_HOST": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?$",
     "PHORGE_API_HOST": r"^$|^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?/api(/)?$",
+    "PHORGE_WEB_HOST": r"^$|^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?$",
+    "PHORGE_HOST": r"^http(s)?://([a-zA-Z0-9._-]+|\[[a-fA-F0-9:\.]+\])(:[0-9]+)?$",
     "PHORGE_TOKEN": "^[a-zA-Z0-9-]{32}$",
     "PHORGE_FALLBACK": "^(yaml|json|jsonl|ndjson)$",
 }
 VALIDATION_HINTS = {
     "PHORGE_HOST": "example: https://we.phorge.it",
     "PHORGE_API_HOST": "the address this process calls, example: http://web.phorge.svc.cluster.local",
+    "PHORGE_WEB_HOST": "the address a reader opens, no /api/ suffix, example: https://we.phorge.it",
 }
 MISSING_CONFIG_HINTS = {
     "PHORGE_TOKEN": "add token to ~/.arcrc or run: phabfive user setup",

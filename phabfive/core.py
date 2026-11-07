@@ -343,8 +343,9 @@ class Phabfive:
         Pacer.from_conf(self.conf)
         self.phab = Conduit(self._client_factory(), RetryPolicy.from_conf(self.conf))
 
-        # Every link phabfive hands back is rooted at the host, whether or not
-        # PHORGE_API_HOST says this process reaches the instance elsewhere.
+        # Every link phabfive hands back is rooted here: the host, or the
+        # address PHORGE_WEB_HOST says a reader reaches the instance at when
+        # this process reaches it elsewhere - _resolve_hosts has settled that
         self.url = self.conf["PHORGE_HOST"]
 
         if verify:
@@ -377,7 +378,7 @@ class Phabfive:
         if token is not None:
             conf["PHORGE_TOKEN"] = token
 
-        return cls._resolve_hosts(conf)
+        return cls._resolve_hosts(conf, supersedes_explicit=url is not None)
 
     @classmethod
     def _from_parent(cls, parent):
@@ -812,14 +813,16 @@ class Phabfive:
         # Everything merged so far (site and user yaml, .arcconfig) plus the
         # environment means the user pointed phabfive at a specific host; a
         # host that only comes out of ~/.arcrc does not.
-        explicit_host = any(
-            bool(conf.get(key)) or bool(environ.get(key))
-            for key in ("PHORGE_HOST", "PHORGE_API_HOST")
+        explicit_host = bool(conf.get("PHORGE_HOST")) or bool(
+            environ.get("PHORGE_HOST")
         )
 
         # Load from Arcanist .arcrc file (supports single or multiple hosts).
         # Include the host from the environment so .arcrc can match the right
-        # one even though env vars are formally merged later
+        # one even though env vars are formally merged later. A token
+        # authenticates against the endpoint, so ~/.arcrc keys it by the
+        # endpoint: a split configuration has to match on PHORGE_API_HOST or
+        # it looks up a host that was never written; _load_arcrc prefers it
         arcrc_lookup_conf = dict(conf)
         for key in ("PHORGE_HOST", "PHORGE_API_HOST"):
             if environ.get(key):
@@ -832,9 +835,15 @@ class Phabfive:
         log.debug("Loading configuration from environment variables")
         anyconfig.merge(conf, environ)
 
-        # Last, so that the addresses are settled on the merged configuration:
-        # a host in one layer and an endpoint in another is an ordinary split
-        return cls._resolve_hosts(conf), explicit_host
+        # Last, so that the two shapes are judged on the merged configuration.
+        # Half a pair in one layer and half in another is a valid split, and a
+        # per-layer check would reject it.
+        conf = cls._resolve_hosts(conf, supersedes_explicit=explicit_host)
+
+        if conf.get("PHORGE_API_HOST"):
+            explicit_host = True
+
+        return conf, explicit_host
 
     def has_explicit_host(self):
         """
@@ -893,6 +902,20 @@ class Phabfive:
         return host.rstrip("/")
 
     @classmethod
+    def _web_root(cls, host):
+        """
+        Normalize an address a reader opens: a scheme when missing, no slash.
+
+        Unlike `_host_root` this keeps a path, so that an endpoint pasted
+        into PHORGE_WEB_HOST is refused by its validator rather than turned
+        into links that look right and open nothing.
+        """
+        host = host.strip()
+        if host and "://" not in host:
+            host = f"https://{host}"
+        return host.rstrip("/")
+
+    @classmethod
     def _normalize_url(cls, url):
         """
         Normalize an instance's address to its Conduit endpoint.
@@ -907,42 +930,86 @@ class Phabfive:
         return f"{cls._host_root(url)}/api/"
 
     @classmethod
-    def _resolve_hosts(cls, conf):
+    def _resolve_hosts(cls, conf, supersedes_explicit=False):
         """
-        Settle PHORGE_HOST and PHORGE_API_HOST into a configuration.
+        Settle PHORGE_HOST, PHORGE_API_HOST and PHORGE_WEB_HOST into a configuration.
 
-        PHORGE_HOST is the instance: the root of every link phabfive hands
-        back and, as a rule, where it calls Conduit, at PHORGE_HOST/api/.
-        Those come apart behind an ingress or split-horizon DNS, where a
-        caller reaching a Service name still has to emit links a reader can
-        open; PHORGE_API_HOST is then where this process calls.
+        PHORGE_HOST is one address doing two jobs: the Conduit endpoint
+        phabfive calls, at PHORGE_HOST/api/, and the root of every link it
+        hands back. Those are the same address almost everywhere, which is
+        why one setting has held up; they come apart behind an ingress or
+        split-horizon DNS, where a caller reaching a Service name still has
+        to emit links a reader can open.
 
-        Both are normalized here: PHORGE_HOST to a root with no trailing
-        slash, PHORGE_API_HOST to the endpoint - and PHORGE_API_HOST holds the
-        endpoint downstream whether or not it was configured, so that
-        everything keyed by instance -- the token in ~/.arcrc, the cache
-        directory -- keys on the address it authenticates against, which is
-        what those keys mean by an instance. An endpoint with no host is left
-        for the REQUIRED check to name: the address a reader opens cannot be
-        derived from the one a process calls.
+        So a configuration has exactly two valid shapes: PHORGE_HOST on its
+        own, or PHORGE_API_HOST and PHORGE_WEB_HOST together. Half a pair is
+        an error rather than a guess, because the missing half is precisely
+        what cannot be derived -- stripping /api/ off an endpoint is the
+        assumption that fails in the only case this exists for.
+
+        The pair resolves *into* PHORGE_HOST, which then holds the address a
+        reader opens, so every link is rooted at one setting downstream. The
+        endpoint stays in PHORGE_API_HOST, and everything keyed by instance
+        -- the token in ~/.arcrc, the cache directory -- keys on it when it
+        is set and on PHORGE_HOST/api/ otherwise: the address it
+        authenticates against, which is what those keys mean by an instance.
 
         Parameters
         ----------
         conf : dict
             A merged configuration.
+        supersedes_explicit : bool
+            Whether a PHORGE_HOST in `conf` was chosen deliberately rather
+            than read out of ~/.arcrc. Only then is being superseded worth a
+            word: ~/.arcrc carries a host for every stored token, so warning
+            about that one would fire on every ordinary run.
 
         Returns
         -------
         dict
-            `conf`, with both addresses normalized.
+            `conf`, with every address normalized and PHORGE_HOST holding
+            the address a reader opens.
+
+        Raises
+        ------
+        PhabfiveConfigException
+            When one half of the pair is configured without the other.
         """
         host = (conf.get("PHORGE_HOST") or "").strip()
         api = (conf.get("PHORGE_API_HOST") or "").strip()
+        web = (conf.get("PHORGE_WEB_HOST") or "").strip()
 
         if host:
             conf["PHORGE_HOST"] = cls._host_root(host)
-        if api or host:
-            conf["PHORGE_API_HOST"] = cls._normalize_url(api or host)
+
+        if not api and not web:
+            return conf
+
+        if not api or not web:
+            given, missing = (
+                ("PHORGE_WEB_HOST", "PHORGE_API_HOST")
+                if web
+                else ("PHORGE_API_HOST", "PHORGE_WEB_HOST")
+            )
+            raise PhabfiveConfigException(
+                f"{given} is configured without {missing}. Neither address can "
+                f"be derived from the other: configure both, or configure "
+                f"PHORGE_HOST alone when the endpoint and the address a reader "
+                f"opens are the same"
+            )
+
+        conf["PHORGE_API_HOST"] = cls._normalize_url(api)
+        conf["PHORGE_WEB_HOST"] = cls._web_root(web)
+
+        previous = conf.get("PHORGE_HOST") or ""
+        if supersedes_explicit and previous and previous != conf["PHORGE_WEB_HOST"]:
+            log.warning(
+                f"PHORGE_HOST ({previous}) is ignored because PHORGE_API_HOST and "
+                f"PHORGE_WEB_HOST are configured; the endpoint is "
+                f"{conf['PHORGE_API_HOST']} and links open at "
+                f"{conf['PHORGE_WEB_HOST']}"
+            )
+        conf["PHORGE_HOST"] = conf["PHORGE_WEB_HOST"]
 
         return conf
 
