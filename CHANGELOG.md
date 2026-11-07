@@ -2,13 +2,12 @@
 
 ## Upgrade Notes
 
-* **phabfive is configured with `PHORGE_HOST` and `PHORGE_TOKEN`, named the way glab
-  names `GITLAB_HOST` and `GITLAB_TOKEN`.** `PHORGE_HOST` is the instance,
+* **phabfive is configured with `PHORGE_HOST` and `PHORGE_TOKEN`.** `PHORGE_HOST` is the instance,
   `phorge.example.com` or `https://phorge.example.com` - a bare host is reached over
   https, and a pasted `/api/` endpoint is forgiven - and it is the root of every link
   phabfive returns and, as a rule, where it calls Conduit, at `PHORGE_HOST/api/`.
   `PHORGE_API_HOST` names another address to call when the two come apart behind an
-  ingress, as glab's `GITLAB_API_HOST` does; on its own it is refused, since the address
+  ingress; on its own it is refused, since the address
   people open cannot be derived from it. Every other setting moved with them:
   `PHORGE_SPACE`, `PHORGE_FALLBACK`, `PHORGE_CACHE`, `PHORGE_CACHE_TTL`,
   `PHORGE_CACHE_DIR`, `PHORGE_RETRY`, `PHORGE_BACKOFF_MAX`, `PHORGE_PACE`,

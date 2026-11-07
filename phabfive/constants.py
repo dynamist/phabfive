@@ -397,9 +397,9 @@ CONFIGURABLES = [
     "PHORGE_PROFILER_ORIGIN",
 ]
 
-# The names the settings had before PHORGE_HOST and PHORGE_TOKEN, named the
-# way glab names GITLAB_HOST and GITLAB_TOKEN, replaced them. Every one is
-# still read, from the environment, a yaml file or a `config` dict, and
+# The names the settings had before PHORGE_HOST and PHORGE_TOKEN replaced
+# them. Every one is still read, from the environment, a yaml file or a
+# `config` dict, and
 # renamed to its successor with a deprecation warning; see phabfive.settings.
 # PHAB_URL and PHAB_WEB_URL both become PHORGE_HOST: PHAB_URL was the Conduit
 # endpoint, which PHORGE_HOST forgives, and when both are given PHAB_WEB_URL
@@ -425,8 +425,8 @@ LEGACY_CONFIGURABLES = {
 
 DEFAULTS = {
     "PHORGE_TOKEN": "",
-    # The instance, as glab takes GITLAB_HOST: phorge.example.com or
-    # https://phorge.example.com, the root of every link phabfive hands back.
+    # The instance, phorge.example.com or https://phorge.example.com: the
+    # root of every link phabfive hands back.
     # The Conduit endpoint is PHORGE_HOST/api/ unless PHORGE_API_HOST says the
     # process reaches the instance at another address than a reader does;
     # see Phabfive._resolve_hosts.

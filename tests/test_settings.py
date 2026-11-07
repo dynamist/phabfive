@@ -2,8 +2,8 @@
 
 """The settings' names, and the names they had before.
 
-phabfive is configured the way glab is: `PHORGE_HOST` and `PHORGE_TOKEN`, with
-`PHORGE_*` beside them. They used to be `PHAB_URL`, `PHAB_TOKEN` and `PHAB_*`,
+phabfive is configured with `PHORGE_HOST` and `PHORGE_TOKEN`, with `PHORGE_*`
+beside them. They used to be `PHAB_URL`, `PHAB_TOKEN` and `PHAB_*`,
 and a configuration written for those still has to work - from the
 environment, from a yaml file and from a program's `config` dict - with a
 warning that says what to write instead, once per run rather than once per

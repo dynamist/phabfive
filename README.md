@@ -210,8 +210,7 @@ secrets never are.
 }
 ```
 
-**Or environment variables**, named the way [glab](https://gitlab.com/gitlab-org/cli)
-names `GITLAB_HOST` and `GITLAB_TOKEN`:
+**Or environment variables:**
 
 ```bash
 export PHORGE_HOST=yourserver.com        # or https://yourserver.com; a pasted /api/ is forgiven
@@ -228,7 +227,7 @@ calls Conduit, at `PHORGE_HOST/api/`. Those are the same address almost everywhe
 and come apart behind an ingress or split-horizon DNS -- a process inside a
 Kubernetes cluster reaches Phorge at a Service name, while the report it renders is
 read by people whose browsers cannot resolve one. `PHORGE_API_HOST` is then where
-phabfive calls, as glab's `GITLAB_API_HOST` is:
+phabfive calls:
 
 ```bash
 export PHORGE_HOST=https://phorge.example.com                   # what links point at

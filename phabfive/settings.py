@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """The names of the settings, and the names they had before.
 
-phabfive is configured the way glab is: ``PHORGE_HOST`` names the instance
-and ``PHORGE_TOKEN`` authenticates against it, with the rest of
+``PHORGE_HOST`` names the instance and ``PHORGE_TOKEN`` authenticates
+against it, with the rest of
 ``CONFIGURABLES`` beside them. They used to be ``PHAB_URL``, ``PHAB_TOKEN``
 and ``PHAB_*``. Every old name still works, wherever a setting can be given -
 the environment, a yaml file, a ``config`` dict - and is renamed to its
