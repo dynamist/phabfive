@@ -687,7 +687,8 @@ class TestOutOfProcess:
     """
 
     @pytest.fixture(scope="class")
-    def answer(self):
+    @classmethod
+    def answer(cls):
         result = subprocess.run(
             [sys.executable, "-c", SCRIPT],
             env=_scrubbed_environment(),
