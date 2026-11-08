@@ -1,4 +1,4 @@
-# Unreleased
+# 0.12.0 (2026-11-08)
 
 ## Upgrade Notes
 
@@ -6,21 +6,16 @@
   instance, `phorge.example.com` or `https://phorge.example.com` - a bare host is reached
   over https, and a pasted `/api/` endpoint is forgiven - and it is both the Conduit
   endpoint phabfive calls, at `PHORGE_HOST/api/`, and the root of every link it returns.
-  `PHORGE_API_HOST` and `PHORGE_WEB_HOST` carry the two halves when they come apart
-  behind an ingress, both or neither, as `PHAB_API_URL` and `PHAB_WEB_URL` did. Every
-  other setting moved with them:
-  `PHORGE_SPACE`, `PHORGE_FALLBACK`, `PHORGE_CACHE`, `PHORGE_CACHE_TTL`,
-  `PHORGE_CACHE_DIR`, `PHORGE_RETRY`, `PHORGE_BACKOFF_MAX`, `PHORGE_PACE`,
-  `PHORGE_PROFILE`, `PHORGE_PROFILE_KEEP`, `PHORGE_PROFILE_DIR` and
-  `PHORGE_PROFILER_ORIGIN`, in the environment, in the yaml files and in a program's
-  `config`. **The old names still work:** `PHAB_URL` is read as `PHORGE_HOST`,
-  `PHAB_API_URL` and `PHAB_WEB_URL` as `PHORGE_API_HOST` and `PHORGE_WEB_HOST`,
-  `PHAB_TOKEN` as `PHORGE_TOKEN` and `PHAB_X` as `PHORGE_X`, each with a deprecation
-  warning naming the successor - once per
-  run, and never during shell completion. The new name wins when both are given. The
-  token in `~/.arcrc` and the completion cache stay keyed by the endpoint, so nothing
-  already stored is orphaned by the rename. `Phabfive.has_explicit_phab_url()` is now
-  `has_explicit_host()`; the old name still answers
+  Every other setting moved with them: `PHORGE_SPACE`, `PHORGE_FALLBACK`, `PHORGE_CACHE`,
+  `PHORGE_CACHE_TTL`, `PHORGE_CACHE_DIR`, `PHORGE_RETRY`, `PHORGE_BACKOFF_MAX` and
+  `PHORGE_PACE`, in the environment, in the yaml files and in a program's `config`.
+  **The old names still work:** `PHAB_URL` is read as `PHORGE_HOST`, `PHAB_TOKEN` as
+  `PHORGE_TOKEN` and `PHAB_X` as `PHORGE_X`, each with a deprecation warning naming the
+  successor - once per run, and never during shell completion. The new name wins when
+  both are given. The token in `~/.arcrc` and the completion cache stay keyed by the
+  endpoint, so nothing already stored is orphaned by the rename.
+  `Phabfive.has_explicit_phab_url()` is now `has_explicit_host()`; the old name still
+  answers
 
 * **Breaking change: `passphrase show` hides the secret unless `--show-secret` (`-s`) is
   given.** It used to print it unless `--no-secret` was, which put a secret into
@@ -58,7 +53,62 @@
   know is now refused with exit status 1 instead of listing the active repositories, and
   the positional and `--status` cannot disagree
 
+* **`maniphest edit --tag` adds the tag.** `--tag` on `maniphest edit` and `phabfive
+  edit` was only the board for `--column`, so `--tag` alone fell through to `$EDITOR` and
+  changed nothing. It now tags the task, is repeatable and comma-separated, and its first
+  value is still the board `--column` moves the card on. #514
+
+* **`maniphest comment T123 -` reads the comment from stdin.** It used to post `-` as
+  the comment. Omitting the text opens `$EDITOR`, as on `paste comment`. #535
+
+* **`maniphest search --tag` naming no project exits 1.** It logged `Project 'nosuch'
+  not found` and exited 0 with nothing on stdout, which a script cannot tell from a
+  search that found nothing - also inside a pattern, `--tag a,nosuch` or `a+nosuch`. A
+  search spec exits 2, its status for a reference that does not resolve. #523
+
+* **An empty search prints `[]` with `--format=json` or `yaml`.** It wrote nothing, which
+  is not a JSON document and is what a failed command prints, so `jq length` failed
+  rather than answering 0. `jsonl` and the terminal formats still print nothing on stdout.
+  #522
+
+* **An unknown key on a create item in a spec is refused.** A task written with `tags:`
+  instead of `projects:` passed `spec validate` and was then created attached to nothing.
+  It is now `unknown-key`, offline and online, and a key spelled like a field's CLI flag
+  suggests that field: `tags` points at `projects`. #518
+
 ## New Features
+
+* **`--untag` removes a tag from a task or paste (#514).** On `maniphest edit`,
+  `phabfive edit` and `paste edit`, repeatable and comma-separated, with hidden
+  `--add-tag` and `--remove-tag` aliases. Tags resolve exactly, never by wildcard, and
+  only a change is sent. A project both added and removed is refused before anything is
+  sent, and so is untagging the board `--column` moves the task on
+
+* **`--assigned=@none` finds unassigned tasks (#513).** `@none` is a keyword like `@me`,
+  also as `assigned:` in a search spec, and mixes with users as OR:
+  `--assigned=@none,@me` is unassigned or mine. `--assign=@none` on `maniphest edit` and
+  `phabfive edit` clears the owner, the same as `--unassign`. Every other option that
+  takes a user refuses `@none`; the bare `none` is a user called that
+
+* **`--profile` records where a command's time went.** `phabfive --profile
+  <command>`, or `PHORGE_PROFILE` for every command, saves a Firefox Profiler profile:
+  start-up, configuration, each Conduit call, retry backoff, `PHORGE_PACE` and repository
+  waits, prompts and `$EDITOR`, cache lookups and every log record. `phabfive profile`
+  opens the latest in the profiler at `PHORGE_PROFILER_ORIGIN`, `--summary` sums it up in
+  the terminal and `--list` lists what is saved; `PHORGE_PROFILE_KEEP` (20) and
+  `PHORGE_PROFILE_DIR` say how many and where. Tokens, descriptions, comments and other
+  written text are left out of a profile. See `docs/profiling.md`
+
+* **`PHORGE_API_HOST` and `PHORGE_WEB_HOST` split the endpoint from the links (#540).**
+  Behind an ingress or split-horizon DNS, the address phabfive reaches Conduit at and the
+  one a reader's browser opens can differ. Set both, or neither: half a pair is refused,
+  since the missing half cannot be derived. The token in `~/.arcrc` and the completion
+  cache are keyed by the endpoint
+
+* **Phabricator is supported, and `docs/support-matrix.md` says what works where.**
+  Every Phorge release from 2022.37 and Phabricator as Phacility left it are tested in
+  CI, and the support matrix lists which versions phabfive works with and the few gaps
+  on older ones
 
 * **`maniphest stats` counts tasks created and closed per period (#598).**
   `phabfive maniphest stats --tag Development --since 2026-07-01` prints one row per ISO
@@ -154,6 +204,25 @@
   goes after the text: `phabfive T123 "text" --dry-run`. #577
 
 ## Bug Fixes
+
+* **`project search`, `show` and `audit` work on Phabricator and Phorge before 2025.51
+  (#433, #434).** Those have no status constraint on `project.search` and report no
+  project status, and the commands failed there. phabfive still sends the constraint, and
+  when it is refused filters on the client, reading which projects are archived from
+  `project.query`
+
+* **`maniphest search --tag a,b` and `--tag a+b` find tasks of projects without a
+  workboard (#519).** Membership was read off the workboards, so every task of a
+  board-less project was dropped, and two tags that found 3 tasks each found none
+  together
+
+* **A policy that would lock you out is explained on every version.** Phabricator and
+  Phorge before 2025.51 word the refusal differently, and phabfive passed theirs on raw.
+  `project edit`, `diffusion repo edit` and `maniphest edit` now end it with `Nothing was
+  changed; choose a policy that still includes you.` everywhere
+
+* **`maniphest create --with` accepts a spec under typer 0.26 and later.** Every option
+  counted as given, so any spec was refused
 
 * **An empty `diffusion repo list` or `diffusion uri list` says so on stderr (#395).**
   They printed nothing there, so "the repository has no URIs", "every URI was filtered
