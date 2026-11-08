@@ -76,6 +76,12 @@
   It is now `unknown-key`, offline and online, and a key spelled like a field's CLI flag
   suggests that field: `tags` points at `projects`. #518
 
+* **The container image has no `pip`.** The Python under `/opt/phabfive/python` no
+  longer carries `pip`, its launchers or the wheel `ensurepip` installs it from, since
+  they vendor a CA bundle that `uv.lock` does not update. phabfive never ran it. An image
+  that installed packages with `/opt/phabfive/python/*/bin/pip` needs a Python of its
+  own; `python -m venv` still works with `--without-pip`
+
 ## New Features
 
 * **`--untag` removes a tag from a task or paste (#514).** On `maniphest edit`,
@@ -205,16 +211,16 @@
 
 ## Bug Fixes
 
-* **The container image no longer trusts the compromised emSign root CAs.** It is built
-  from `uv.lock`, which held `certifi` 2026.2.25, so phabfive in
-  `ghcr.io/dynamist/phabfive` - every image up to and including `0.11.0` - verified
-  the server's TLS certificate against a bundle that still trusts emSign roots whose
-  intermediate CA keys are compromised
-  ([GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2)). The lock
-  now holds `certifi` 2026.10.23. The wheel and the standalone executables were not
-  affected: they install without the lock, so they took the newest `certifi` when they
-  were built or installed. An existing `pip install phabfive` has whatever `certifi`
-  its environment resolved; `pip install -U certifi` updates it
+* **The container image no longer trusts the compromised emSign root CA.** Every
+  `ghcr.io/dynamist/phabfive` image up to and including `0.11.0` held two CA bundles
+  that trust `emSign ECC Root CA - G3`, whose intermediate CA keys are compromised
+  ([GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2)): the
+  `certifi` 2026.2.25 from `uv.lock`, which phabfive verifies a server's TLS certificate
+  against, and the one vendored in the bundled Python's own `pip`. The lock now holds
+  `certifi` 2026.10.23, and `pip` is gone from the image. The wheel and the standalone
+  executables were not affected: they install without the lock, so they took the newest
+  `certifi` when they were built or installed. An existing `pip install phabfive` has
+  whatever `certifi` its environment resolved; `pip install -U certifi` updates it
 
 * **`project search`, `show` and `audit` work on Phabricator and Phorge before 2025.51
   (#433, #434).** Those have no status constraint on `project.search` and report no

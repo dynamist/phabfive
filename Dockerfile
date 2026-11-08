@@ -33,9 +33,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY README.md /src/
 COPY phabfive/ /src/phabfive/
+# The interpreter's own pip, and the wheel ensurepip installs it from, vendor a
+# certifi that uv.lock does not reach, so its CA bundle would age with the
+# Python release rather than with the lock. phabfive never runs pip.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable \
     && rm -rf /opt/phabfive/python/.lock /opt/phabfive/python/.temp /opt/phabfive/python/.cache \
+    && rm -rf /opt/phabfive/python/*/bin/pip* \
+              /opt/phabfive/python/*/lib/python3*/site-packages/pip \
+              /opt/phabfive/python/*/lib/python3*/site-packages/pip-*.dist-info \
+              /opt/phabfive/python/*/lib/python3*/ensurepip/_bundled/*.whl \
     && mkdir /opt/phabfive/bin \
     && ln -s ../venv/bin/phabfive /opt/phabfive/bin/phabfive
 
