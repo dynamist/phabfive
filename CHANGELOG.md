@@ -205,6 +205,17 @@
 
 ## Bug Fixes
 
+* **The container image no longer trusts the compromised emSign root CAs.** It is built
+  from `uv.lock`, which held `certifi` 2026.2.25, so phabfive in
+  `ghcr.io/dynamist/phabfive` - every image up to and including `0.11.0` - verified
+  the server's TLS certificate against a bundle that still trusts emSign roots whose
+  intermediate CA keys are compromised
+  ([GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2)). The lock
+  now holds `certifi` 2026.10.23. The wheel and the standalone executables were not
+  affected: they install without the lock, so they took the newest `certifi` when they
+  were built or installed. An existing `pip install phabfive` has whatever `certifi`
+  its environment resolved; `pip install -U certifi` updates it
+
 * **`project search`, `show` and `audit` work on Phabricator and Phorge before 2025.51
   (#433, #434).** Those have no status constraint on `project.search` and report no
   project status, and the commands failed there. phabfive still sends the constraint, and
