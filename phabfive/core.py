@@ -28,7 +28,7 @@ from phabfive.exceptions import (
     PhabfiveDataException,
     PhabfiveInputException,
 )
-from phabfive.settings import deprecation_message, modernize, warn_legacy
+from phabfive.settings import deprecation_message, modernize, warn_legacy, warn_once
 
 # 3rd party imports
 import anyconfig
@@ -612,13 +612,13 @@ class Phabfive:
     @classmethod
     def _load_arcconfig(cls):
         """
-        Load PHORGE_HOST and PHORGE_PROJECT from .arcconfig in the git root.
+        Load PHORGE_HOST and PHORGE_WORKBOARD from .arcconfig in the git root.
 
         Walks up from the current working directory looking for `.git`, then
         reads .arcconfig in that directory. `phabricator.uri` is Arcanist's
-        key, normalized to the instance's root address. `phabfive.project` is
-        phabfive's own, naming the project a repository's tasks live on;
-        Arcanist ignores keys it does not know without a word.
+        key, normalized to the instance's root address. The `phabfive` object
+        is phabfive's own, read by `_read_phabfive_block`; Arcanist ignores a
+        key it does not know without a word.
 
         `.git` is a directory in a clone, and a file in a linked worktree or
         a submodule, where it points at the real one. Either marks the root
@@ -627,7 +627,7 @@ class Phabfive:
         Returns
         -------
         dict
-            Configuration dict with PHORGE_HOST and/or PHORGE_PROJECT if
+            Configuration dict with PHORGE_HOST and/or PHORGE_WORKBOARD if
             found, empty dict otherwise
         """
         # Walk up from cwd looking for .git
@@ -678,16 +678,87 @@ class Phabfive:
         else:
             log.debug("No phabricator.uri found in .arcconfig")
 
-        project = arcconfig_data.get("phabfive.project")
-        if isinstance(project, str) and project.strip():
-            result["PHORGE_PROJECT"] = project.strip()
-            log.debug(f"Using PHORGE_PROJECT from .arcconfig: {project.strip()}")
-        elif project is not None:
-            log.warning(
-                f"Ignoring phabfive.project in {arcconfig_path}: expected a "
-                f"project name, #hashtag, ID or PHID as a string"
+        if "phabfive" in arcconfig_data:
+            result.update(
+                cls._read_phabfive_block(arcconfig_data["phabfive"], arcconfig_path)
             )
 
+        return result
+
+    @staticmethod
+    def _read_phabfive_block(block, path):
+        """Read the `phabfive` object of an .arcconfig.
+
+        One object rather than dotted keys beside Arcanist's, so that
+        everything in it is phabfive's and can be checked strictly: a key
+        phabfive does not know is a typo, and is said to be one, where a
+        dotted key could as well have been another tool's.
+
+            "phabfive": {
+              "tags": {
+                "workboard": "dynatron",
+                "hints": {"security-risk": "what makes one here", "textarion": null}
+              }
+            }
+
+        `tags.workboard` is the project a repository's tasks live on, as
+        `--tag` takes it, and becomes PHORGE_WORKBOARD. `tags.hints` names
+        other tags worth considering, each with an optional note; it is
+        checked here and not yet used. Whatever is malformed is warned about
+        and left out, never fatal, so a bad .arcconfig cannot stop a command
+        that does not need it.
+
+        Returns
+        -------
+        dict
+            {"PHORGE_WORKBOARD": ...} when a workboard is named, else {}
+        """
+
+        def warn(where, expected):
+            warn_once(path, f"Ignoring {where} in {path}: expected {expected}")
+
+        def unknown(where, mapping, known):
+            for key in sorted(set(mapping) - known):
+                warn_once(
+                    path,
+                    f"Ignoring unknown key {where}.{key} in {path}; "
+                    f"known keys: {', '.join(sorted(known))}",
+                )
+
+        if not isinstance(block, dict):
+            warn("phabfive", "an object")
+            return {}
+        unknown("phabfive", block, {"tags"})
+
+        tags = block.get("tags")
+        if tags is None:
+            return {}
+        if not isinstance(tags, dict):
+            warn("phabfive.tags", "an object")
+            return {}
+        unknown("phabfive.tags", tags, {"workboard", "hints"})
+
+        hints = tags.get("hints")
+        if hints is not None:
+            if not isinstance(hints, dict):
+                warn("phabfive.tags.hints", "an object of tag: note")
+            else:
+                for tag, note in hints.items():
+                    if note is not None and not isinstance(note, str):
+                        warn(
+                            f"phabfive.tags.hints.{tag}", "a note as a string, or null"
+                        )
+
+        result = {}
+        workboard = tags.get("workboard")
+        if isinstance(workboard, str) and workboard.strip():
+            result["PHORGE_WORKBOARD"] = workboard.strip()
+            log.debug(f"Using PHORGE_WORKBOARD from .arcconfig: {workboard.strip()}")
+        elif workboard is not None:
+            warn(
+                "phabfive.tags.workboard",
+                "a project name, #hashtag, ID or PHID as a string",
+            )
         return result
 
     @staticmethod
@@ -740,7 +811,7 @@ class Phabfive:
           3. `/etc/phabfive.d/*.yaml`
           4. `~/.config/phabfive.yaml`
           5. `~/.config/phabfive.d/*.yaml`
-          6. `.arcconfig` in git root (PHORGE_HOST, PHORGE_PROJECT)
+          6. `.arcconfig` in git root (PHORGE_HOST, PHORGE_WORKBOARD)
           7. `~/.arcrc` (Arcanist configuration)
           8. environment variables
 

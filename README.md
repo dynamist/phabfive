@@ -225,17 +225,24 @@ though a token belongs in `~/.arcrc` rather than there.
 ```json
 {
   "phabricator.uri": "https://yourserver.com/",
-  "phabfive.project": "backend"
+  "phabfive": {
+    "tags": {
+      "workboard": "backend"
+    }
+  }
 }
 ```
 
 `phabricator.uri` is Arcanist's own key and picks the instance, which is what
-settles it when `~/.arcrc` holds several. `phabfive.project` is phabfive's, and
-takes anything `--tag` does: inside the repository, `maniphest search` and
-`maniphest stats` are scoped to that project and `maniphest create` tags the new
-task with it, whenever no `--tag` is given. Each says so on stderr. `--ids`,
-`--phids`, a spec given with `--with`, and `edit` are never scoped, and
-`PHORGE_PROJECT` overrides it from the environment - `PHORGE_PROJECT=` for none.
+settles it when `~/.arcrc` holds several. The `phabfive` object is phabfive's,
+and Arcanist ignores it. `tags.workboard` takes anything `--tag` does: inside
+the repository, `maniphest search` and `maniphest stats` are scoped to that
+workboard and `maniphest create` tags the new task with it, whenever no `--tag`
+is given. Each says so on stderr. `--ids`, `--phids`, a spec given with
+`--with`, and `edit` are never scoped, and `PHORGE_WORKBOARD` overrides it from
+the environment - `PHORGE_WORKBOARD=` for none. `tags.hints`, an object of tag
+to note (or `null`), is accepted and reserved for naming other tags worth
+considering. A key phabfive does not know inside the object is warned about.
 
 **When the endpoint is not the address people open:**
 

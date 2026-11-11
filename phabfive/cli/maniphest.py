@@ -64,8 +64,8 @@ def _get_maniphest_app():
 def _default_tag(app, doing):
     """The repository's project, when the command line named none.
 
-    `PHORGE_PROJECT`, usually from `phabfive.project` in the repository's
-    .arcconfig, scopes `search` and `stats` and tags what `create` makes. It
+    `PHORGE_WORKBOARD`, usually from `phabfive.tags.workboard` in the
+    repository's .arcconfig, scopes `search` and `stats` and tags what `create` makes. It
     is the command's choice, never the library's: a program calling
     `Maniphest` gets exactly the filters it passed. What was applied is said
     on stderr, so a scoped result is never mistaken for the whole instance,
@@ -83,13 +83,14 @@ def _default_tag(app, doing):
     str or None
         The project, as --tag would take it, or None when none is set.
     """
-    project = app.conf.get("PHORGE_PROJECT")
+    project = app.conf.get("PHORGE_WORKBOARD")
     if not isinstance(project, str) or not project.strip():
         return None
     project = project.strip()
     typer.echo(
-        f"{doing} project {project} (phabfive.project in .arcconfig, or "
-        f"PHORGE_PROJECT); pass --tag for another, or PHORGE_PROJECT= for none",
+        f"{doing} workboard {project} (phabfive.tags.workboard in .arcconfig, "
+        f"or PHORGE_WORKBOARD); pass --tag for another, or PHORGE_WORKBOARD= "
+        f"for none",
         err=True,
     )
     return project

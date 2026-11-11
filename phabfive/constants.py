@@ -385,7 +385,7 @@ CONFIGURABLES = [
     "PHORGE_API_HOST",
     "PHORGE_WEB_HOST",
     "PHORGE_SPACE",
-    "PHORGE_PROJECT",
+    "PHORGE_WORKBOARD",
     "PHORGE_FALLBACK",
     "PHORGE_CACHE",
     "PHORGE_CACHE_TTL",
@@ -434,10 +434,10 @@ DEFAULTS = {
     "PHORGE_API_HOST": "",
     "PHORGE_WEB_HOST": "",
     "PHORGE_SPACE": "S1",
-    # The project a repository's tasks live on, usually from `phabfive.project` in
-    # .arcconfig. The command scopes search, stats and create to it when no --tag
-    # is given; the library never applies it
-    "PHORGE_PROJECT": "",
+    # The project a repository's tasks live on, usually from
+    # `phabfive.tags.workboard` in .arcconfig. The command scopes search, stats
+    # and create to it when no --tag is given; the library never applies it
+    "PHORGE_WORKBOARD": "",
     "PHORGE_FALLBACK": "yaml",  # Output format when stdout is not a TTY (yaml, json or jsonl)
     "PHORGE_CACHE": True,  # Cache API lookups that shell completion repeats
     "PHORGE_CACHE_TTL": 0,  # 0 means use the per-namespace CACHE_TTLS below

@@ -32,6 +32,7 @@ __all__ = [
     "modernize",
     "quiet",
     "warn_legacy",
+    "warn_once",
 ]
 
 # The order the names are listed in, which is the order a warning names them
@@ -94,6 +95,19 @@ def warn_legacy(found, where):
         return
     _warned.update((where, old) for old in unseen)
     log.warning(deprecation_message(unseen, where))
+
+
+def warn_once(where, message):
+    """Warn `message` about `where` once per process, the way warn_legacy does.
+
+    For a configuration problem found every time the configuration is read,
+    which a command does more than once. Under `quiet()` nothing is logged
+    or remembered, so the command's own read still warns.
+    """
+    if _quiet or (where, message) in _warned:
+        return
+    _warned.add((where, message))
+    log.warning(message)
 
 
 @contextlib.contextmanager
