@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""A repository's default project, from `phabfive.project` in .arcconfig.
+"""A repository's workboard, from `phabfive.tags.workboard` in .arcconfig.
 
 The command scopes `maniphest search` and `stats` to it, and tags what
 `maniphest create` makes with it, whenever the command line names no --tag.
@@ -32,12 +32,12 @@ def _repo(tmp_path, arcconfig, git_is_file=False):
 
 
 class TestArcconfig:
-    def test_the_project_is_read(self, tmp_path):
+    def test_the_workboard_is_read(self, tmp_path):
         root = _repo(
             tmp_path,
             {
                 "phabricator.uri": "https://phorge.example.com/",
-                "phabfive.project": "dynatron",
+                "phabfive": {"tags": {"workboard": "dynatron"}},
             },
         )
 
@@ -46,21 +46,76 @@ class TestArcconfig:
 
         assert result == {
             "PHORGE_HOST": "https://phorge.example.com",
-            "PHORGE_PROJECT": "dynatron",
+            "PHORGE_WORKBOARD": "dynatron",
         }
 
-    def test_a_project_without_a_host_is_still_read(self, tmp_path):
-        root = _repo(tmp_path, {"phabfive.project": "#textarion"})
+    def test_a_workboard_without_a_host_is_still_read(self, tmp_path):
+        root = _repo(tmp_path, {"phabfive": {"tags": {"workboard": "#textarion"}}})
 
         with mock.patch("os.getcwd", return_value=str(root)):
-            assert Phabfive._load_arcconfig() == {"PHORGE_PROJECT": "#textarion"}
+            assert Phabfive._load_arcconfig() == {"PHORGE_WORKBOARD": "#textarion"}
+
+    def test_hints_are_accepted_and_change_nothing(self, tmp_path, caplog):
+        root = _repo(
+            tmp_path,
+            {
+                "phabfive": {
+                    "tags": {
+                        "workboard": "dynatron",
+                        "hints": {"security-risk": "auth changes", "textarion": None},
+                    }
+                }
+            },
+        )
+
+        with mock.patch("os.getcwd", return_value=str(root)):
+            assert Phabfive._load_arcconfig() == {"PHORGE_WORKBOARD": "dynatron"}
+        assert not [r for r in caplog.records if r.levelname == "WARNING"]
 
     @pytest.mark.parametrize("value", [42, ["dynatron"], "", "  "])
-    def test_a_project_that_is_not_a_name_is_ignored(self, tmp_path, value):
-        root = _repo(tmp_path, {"phabfive.project": value})
+    def test_a_workboard_that_is_not_a_name_is_ignored(self, tmp_path, value):
+        root = _repo(tmp_path, {"phabfive": {"tags": {"workboard": value}}})
 
         with mock.patch("os.getcwd", return_value=str(root)):
             assert Phabfive._load_arcconfig() == {}
+
+    @pytest.mark.parametrize(
+        "block, named",
+        [
+            ("dynatron", "phabfive in"),
+            ({"tag": {"workboard": "x"}}, "phabfive.tag "),
+            ({"tags": ["x"]}, "phabfive.tags in"),
+            ({"tags": {"workbord": "x"}}, "phabfive.tags.workbord"),
+            ({"tags": {"hints": ["textarion"]}}, "phabfive.tags.hints in"),
+            ({"tags": {"hints": {"textarion": 1}}}, "phabfive.tags.hints.textarion"),
+        ],
+    )
+    def test_what_phabfive_does_not_know_is_named(self, tmp_path, caplog, block, named):
+        root = _repo(tmp_path, {"phabfive": block})
+
+        with mock.patch("os.getcwd", return_value=str(root)):
+            assert Phabfive._load_arcconfig() == {}
+        assert named in caplog.text
+
+    def test_each_problem_is_warned_about_once(self, tmp_path, caplog):
+        root = _repo(tmp_path, {"phabfive": {"tags": {"workbord": "x"}}})
+
+        with mock.patch("os.getcwd", return_value=str(root)):
+            Phabfive._load_arcconfig()
+            Phabfive._load_arcconfig()
+
+        assert caplog.text.count("phabfive.tags.workbord") == 1
+
+    def test_a_malformed_block_keeps_the_host(self, tmp_path):
+        root = _repo(
+            tmp_path,
+            {"phabricator.uri": "https://phorge.example.com/", "phabfive": 1},
+        )
+
+        with mock.patch("os.getcwd", return_value=str(root)):
+            assert Phabfive._load_arcconfig() == {
+                "PHORGE_HOST": "https://phorge.example.com"
+            }
 
     def test_a_worktree_finds_its_arcconfig(self, tmp_path):
         root = _repo(
@@ -77,7 +132,7 @@ class TestArcconfig:
         assert result == {"PHORGE_HOST": "https://phorge.example.com"}
 
     def test_the_environment_wins_and_empty_turns_it_off(self, tmp_path):
-        root = _repo(tmp_path, {"phabfive.project": "dynatron"})
+        root = _repo(tmp_path, {"phabfive": {"tags": {"workboard": "dynatron"}}})
         environ = {
             "PHORGE_HOST": "https://phorge.example.com",
             "PHORGE_TOKEN": "api-" + "a" * 28,
@@ -99,16 +154,16 @@ class TestArcconfig:
                 mock.patch.dict(os.environ, {**environ, **extra}, clear=True),
             ):
                 conf, _ = Phabfive.read_config()
-            return conf["PHORGE_PROJECT"]
+            return conf["PHORGE_WORKBOARD"]
 
         assert read({}) == "dynatron"
-        assert read({"PHORGE_PROJECT": "textarion"}) == "textarion"
-        assert read({"PHORGE_PROJECT": ""}) == ""
+        assert read({"PHORGE_WORKBOARD": "textarion"}) == "textarion"
+        assert read({"PHORGE_WORKBOARD": ""}) == ""
 
 
 def _maniphest(project="dynatron"):
     instance = MagicMock()
-    instance.conf = {"PHORGE_PROJECT": project}
+    instance.conf = {"PHORGE_WORKBOARD": project}
     instance.task_search.return_value = {"tasks": [], "project_names": {}}
     instance.create_task.return_value = {"id": 1, "uri": "http://x/T1"}
     return instance
@@ -131,7 +186,7 @@ class TestSearch:
 
         assert result.exit_code == 0, result.output
         assert _searched_tag(instance) == "dynatron"
-        assert "Searching project dynatron" in result.output
+        assert "Searching workboard dynatron" in result.output
 
     def test_an_explicit_tag_replaces_it(self):
         instance = _maniphest()
@@ -140,7 +195,7 @@ class TestSearch:
 
         assert result.exit_code == 0, result.output
         assert _searched_tag(instance) == "textarion"
-        assert "Searching project" not in result.output
+        assert "Searching workboard" not in result.output
 
     @pytest.mark.parametrize("option", ["--ids=T1", "--phids=PHID-TASK-x"])
     def test_tasks_asked_for_by_id_are_found_anywhere(self, option):
@@ -158,7 +213,7 @@ class TestSearch:
 
         # Still the help, rather than a search of the whole instance
         assert not instance.task_search.called
-        assert "Searching project" not in result.output
+        assert "Searching workboard" not in result.output
 
 
 class TestStats:
@@ -174,7 +229,7 @@ class TestStats:
             result = _invoke(instance, "stats", "--since=2026-01-01")
 
         assert seen["tag"] == "dynatron"
-        assert "Counting project dynatron" in result.output
+        assert "Counting workboard dynatron" in result.output
 
     def test_an_explicit_tag_replaces_it(self):
         instance = _maniphest()
@@ -198,7 +253,7 @@ class TestCreate:
 
         assert result.exit_code == 0, result.output
         assert instance.create_task.call_args.kwargs["tags"] == ["dynatron"]
-        assert "Tagging with project dynatron" in result.output
+        assert "Tagging with workboard dynatron" in result.output
 
     def test_an_explicit_tag_replaces_it(self):
         instance = _maniphest()
