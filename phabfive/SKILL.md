@@ -31,6 +31,13 @@ without `--tag` puts the new task on it; stderr then says `Searching workboard <
 different project, or prefix the command with `PHORGE_WORKBOARD=` to search every project.
 `--ids`, `--phids`, `--with` and `edit` are never scoped.
 
+The same object can list `"hints"`: other tags this repository's tasks often need, as
+`"tags": {"hints": {"<tag>": "<when it applies here>"}}`. A `null` note means the
+project's own description on Phorge says when (read it with `phabfive project show`).
+Before creating a task in such a repository, read the hints in `.arcconfig`. Add a hinted
+tag with `--tag` only when the task matches its note or description; phabfive never adds
+one by itself, and no command lists them yet.
+
 ## Learn the installed CLI
 
 The installed binary is the authority for command syntax. Start with:
