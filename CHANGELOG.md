@@ -1,5 +1,24 @@
 # Unreleased
 
+## New Features
+
+* **A repository can name its project.** Add `"phabfive.project": "dynatron"` to the
+  repository's `.arcconfig`, next to `phabricator.uri`, and inside that repository
+  `maniphest search` and `maniphest stats` are scoped to the project and `maniphest
+  create` tags the new task with it, whenever no `--tag` is given. A bare `phabfive
+  maniphest search` then lists the workboard's open tasks rather than printing help, and
+  `--column` on create needs no `--tag`. Each such command says on stderr which project it
+  used. `--tag` names another, `--ids` and `--phids` find tasks wherever they are, a spec
+  (`--with`) is never touched, nor is `edit`, and `PHORGE_PROJECT` sets or, set empty,
+  clears it for one run. The library never applies it. Arcanist ignores the key
+
+## Bug Fixes
+
+* **`.arcconfig` is found in a git worktree and in a submodule.** phabfive looked for a
+  `.git` directory to find the repository root, and in both of those `.git` is a file,
+  so the repository's `.arcconfig` was silently ignored there. `phabfive user setup`
+  had the same blind spot when it offered to create one
+
 # 0.12.0 (2026-11-08)
 
 ## Upgrade Notes

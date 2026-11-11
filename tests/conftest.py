@@ -71,6 +71,12 @@ def isolated_cache(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def unscoped_project(monkeypatch):
+    """Keep a developer's PHORGE_PROJECT from scoping the suite's searches."""
+    monkeypatch.delenv("PHORGE_PROJECT", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolated_profiles(monkeypatch, tmp_path):
     """Keep a developer's PHORGE_PROFILE from recording the suite's commands.
 

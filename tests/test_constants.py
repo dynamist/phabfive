@@ -126,7 +126,10 @@ def test_api_host_validator_invalid():
 def test_every_legacy_name_has_a_configurable_successor():
     from phabfive.constants import CONFIGURABLES, LEGACY_CONFIGURABLES
 
-    assert set(LEGACY_CONFIGURABLES.values()) == set(CONFIGURABLES)
+    assert set(LEGACY_CONFIGURABLES.values()) <= set(CONFIGURABLES)
+    # Settings that came after the rename never had a PHAB_ name. Listing them
+    # keeps a renamed setting that lost its legacy entry from passing too
+    assert set(CONFIGURABLES) - set(LEGACY_CONFIGURABLES.values()) == {"PHORGE_PROJECT"}
     assert all(old.startswith("PHAB_") for old in LEGACY_CONFIGURABLES)
     assert not any(old in CONFIGURABLES for old in LEGACY_CONFIGURABLES)
 

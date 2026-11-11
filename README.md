@@ -220,6 +220,23 @@ export PHORGE_TOKEN=cli-ABC123
 A bare host is reached over https. The same keys work in `~/.config/phabfive.yaml`,
 though a token belongs in `~/.arcrc` rather than there.
 
+**Per repository, in a committed `.arcconfig`:**
+
+```json
+{
+  "phabricator.uri": "https://yourserver.com/",
+  "phabfive.project": "backend"
+}
+```
+
+`phabricator.uri` is Arcanist's own key and picks the instance, which is what
+settles it when `~/.arcrc` holds several. `phabfive.project` is phabfive's, and
+takes anything `--tag` does: inside the repository, `maniphest search` and
+`maniphest stats` are scoped to that project and `maniphest create` tags the new
+task with it, whenever no `--tag` is given. Each says so on stderr. `--ids`,
+`--phids`, a spec given with `--with`, and `edit` are never scoped, and
+`PHORGE_PROJECT` overrides it from the environment - `PHORGE_PROJECT=` for none.
+
 **When the endpoint is not the address people open:**
 
 `PHORGE_HOST` is both the Conduit endpoint phabfive calls, at `PHORGE_HOST/api/`,
