@@ -612,23 +612,30 @@ class Phabfive:
     @classmethod
     def _load_arcconfig(cls):
         """
-        Load PHORGE_HOST from .arcconfig in the git repository root.
+        Load PHORGE_HOST and PHORGE_PROJECT from .arcconfig in the git root.
 
-        Walks up from the current working directory looking for a .git directory,
-        then reads .arcconfig in that directory. Extracts `phabricator.uri` and
-        normalizes it to the instance's root address.
+        Walks up from the current working directory looking for `.git`, then
+        reads .arcconfig in that directory. `phabricator.uri` is Arcanist's
+        key, normalized to the instance's root address. `phabfive.project` is
+        phabfive's own, naming the project a repository's tasks live on;
+        Arcanist ignores keys it does not know without a word.
+
+        `.git` is a directory in a clone, and a file in a linked worktree or
+        a submodule, where it points at the real one. Either marks the root
+        that holds the checkout's .arcconfig.
 
         Returns
         -------
         dict
-            Configuration dict with PHORGE_HOST if found, empty dict otherwise
+            Configuration dict with PHORGE_HOST and/or PHORGE_PROJECT if
+            found, empty dict otherwise
         """
-        # Walk up from cwd looking for .git directory
+        # Walk up from cwd looking for .git
         current = os.getcwd()
         git_root = None
 
         while True:
-            if os.path.isdir(os.path.join(current, ".git")):
+            if os.path.exists(os.path.join(current, ".git")):
                 git_root = current
                 break
             parent = os.path.dirname(current)
@@ -658,15 +665,30 @@ class Phabfive:
             log.warning(f"Failed to read {arcconfig_path}: {e}")
             return {}
 
-        uri = arcconfig_data.get("phabricator.uri")
-
-        if not uri:
-            log.debug("No phabricator.uri found in .arcconfig")
+        if not isinstance(arcconfig_data, dict):
+            log.warning(f"Ignoring {arcconfig_path}: not a JSON object")
             return {}
 
-        normalized = cls._host_root(uri)
-        log.debug(f"Using PHORGE_HOST from .arcconfig: {normalized}")
-        return {"PHORGE_HOST": normalized}
+        result = {}
+
+        uri = arcconfig_data.get("phabricator.uri")
+        if uri:
+            result["PHORGE_HOST"] = cls._host_root(uri)
+            log.debug(f"Using PHORGE_HOST from .arcconfig: {result['PHORGE_HOST']}")
+        else:
+            log.debug("No phabricator.uri found in .arcconfig")
+
+        project = arcconfig_data.get("phabfive.project")
+        if isinstance(project, str) and project.strip():
+            result["PHORGE_PROJECT"] = project.strip()
+            log.debug(f"Using PHORGE_PROJECT from .arcconfig: {project.strip()}")
+        elif project is not None:
+            log.warning(
+                f"Ignoring phabfive.project in {arcconfig_path}: expected a "
+                f"project name, #hashtag, ID or PHID as a string"
+            )
+
+        return result
 
     @staticmethod
     def _site_config_base():
@@ -718,7 +740,7 @@ class Phabfive:
           3. `/etc/phabfive.d/*.yaml`
           4. `~/.config/phabfive.yaml`
           5. `~/.config/phabfive.d/*.yaml`
-          6. `.arcconfig` in git root
+          6. `.arcconfig` in git root (PHORGE_HOST, PHORGE_PROJECT)
           7. `~/.arcrc` (Arcanist configuration)
           8. environment variables
 

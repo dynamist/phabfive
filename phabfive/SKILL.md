@@ -22,6 +22,14 @@ Configuration comes from `PHORGE_HOST` and `PHORGE_TOKEN`, from `~/.arcrc`, and 
 `.arcconfig` in the repository root. The older `PHAB_URL` and `PHAB_TOKEN` still work,
 with a deprecation warning on stderr.
 
+A repository's `.arcconfig` can also name its project, as `"phabfive.project"`. Inside it,
+`maniphest search` and `maniphest stats` without `--tag` are scoped to that project, and
+`maniphest create` without `--tag` puts the new task on its board; stderr then says
+`Searching project <name>`, `Counting project <name>` or `Tagging with project <name>`. So
+a bare `phabfive maniphest search` lists the repository's open tasks. Pass `--tag` for a
+different project, or prefix the command with `PHORGE_PROJECT=` to search every project.
+`--ids`, `--phids`, `--with` and `edit` are never scoped.
+
 ## Learn the installed CLI
 
 The installed binary is the authority for command syntax. Start with:

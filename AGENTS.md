@@ -295,7 +295,10 @@ Config precedence (later overrides earlier):
 3. `/etc/phabfive.d/*.yaml`
 4. `~/.config/phabfive.yaml` (PHORGE_HOST/PHORGE_TOKEN deprecated here, use for PHORGE_SPACE/PHORGE_FALLBACK/PHORGE_CACHE/PHORGE_CACHE_TTL/PHORGE_CACHE_DIR/PHORGE_RETRY/PHORGE_BACKOFF_MAX/PHORGE_PACE/PHORGE_PROFILE/PHORGE_PROFILE_KEEP/PHORGE_PROFILE_DIR/PHORGE_PROFILER_ORIGIN)
 5. `~/.config/phabfive.d/*.yaml`
-6. `.arcconfig` in git root (provides PHORGE_HOST from `phabricator.uri`)
+6. `.arcconfig` in git root (provides PHORGE_HOST from `phabricator.uri`, and PHORGE_PROJECT from
+   phabfive's own `phabfive.project`, which the command - never the library - applies as the
+   default `--tag` of `maniphest search`, `stats` and `create`; see `_default_tag` in
+   `phabfive/cli/maniphest.py`). `.git` may be a file, as in a worktree
 7. `~/.arcrc` (provides PHORGE_TOKEN for matched URL)
 8. Environment variables
 

@@ -61,6 +61,40 @@ def _get_maniphest_app():
     return get_app(Maniphest)
 
 
+def _default_tag(app, doing):
+    """The repository's project, when the command line named none.
+
+    `PHORGE_PROJECT`, usually from `phabfive.project` in the repository's
+    .arcconfig, scopes `search` and `stats` and tags what `create` makes. It
+    is the command's choice, never the library's: a program calling
+    `Maniphest` gets exactly the filters it passed. What was applied is said
+    on stderr, so a scoped result is never mistaken for the whole instance,
+    and piped output stays clean.
+
+    Parameters
+    ----------
+    app : Phabfive
+        The app whose configuration names the project.
+    doing : str
+        What the project is used for, e.g. "Searching", for the note.
+
+    Returns
+    -------
+    str or None
+        The project, as --tag would take it, or None when none is set.
+    """
+    project = app.conf.get("PHORGE_PROJECT")
+    if not isinstance(project, str) or not project.strip():
+        return None
+    project = project.strip()
+    typer.echo(
+        f"{doing} project {project} (phabfive.project in .arcconfig, or "
+        f"PHORGE_PROJECT); pass --tag for another, or PHORGE_PROJECT= for none",
+        err=True,
+    )
+    return project
+
+
 def _split_values_to_add(values, option):
     """Split a list option of ``maniphest create``, still accepting ``+``.
 
@@ -534,6 +568,10 @@ def create(
                     raise typer.Exit(0)
 
         tags = _split_values_to_add(tag, "--tag")
+        if not tags:
+            default = _default_tag(maniphest, "Tagging with")
+            if default:
+                tags = [default]
         subscribers = _split_values_to_add(
             [*(subscribe or []), *(add_subscriber or [])], "--subscribe"
         )
@@ -830,6 +868,11 @@ def search(
 
     _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
+
+    # A spec names its own filters, and tasks asked for by ID are wanted
+    # wherever they are, so the repository's project only fills an empty --tag
+    if tag is None and not with_template and not ids and not phids:
+        tag = _default_tag(maniphest, "Searching")
 
     if with_template:
         # `maniphest search --with` reads the spec through the pre-spec
@@ -1209,6 +1252,9 @@ def stats(
 
     _setup_output_options(ctx)
     maniphest = _get_maniphest_app()
+
+    if tag is None and not ids and not phids:
+        tag = _default_tag(maniphest, "Counting")
 
     # Planned and run exactly as a `type: task-stats` item in a search spec
     # is, so the command and `phabfive search -f` cannot read a filter
