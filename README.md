@@ -227,22 +227,30 @@ though a token belongs in `~/.arcrc` rather than there.
   "phabricator.uri": "https://yourserver.com/",
   "phabfive": {
     "tags": {
-      "workboard": "backend"
+      "workboard": "backend",
+      "hints": {
+        "security-risk": "Anything that changes who can log in or what they can see",
+        "policy": null
+      }
     }
   }
 }
 ```
 
-`phabricator.uri` is Arcanist's own key and picks the instance, which is what
-settles it when `~/.arcrc` holds several. The `phabfive` object is phabfive's,
-and Arcanist ignores it. `tags.workboard` takes anything `--tag` does: inside
-the repository, `maniphest search` and `maniphest stats` are scoped to that
-workboard and `maniphest create` tags the new task with it, whenever no `--tag`
-is given. Each says so on stderr. `--ids`, `--phids`, a spec given with
-`--with`, and `edit` are never scoped, and `PHORGE_WORKBOARD` overrides it from
-the environment - `PHORGE_WORKBOARD=` for none. `tags.hints`, an object of tag
-to note (or `null`), is accepted and reserved for naming other tags worth
-considering. A key phabfive does not know inside the object is warned about.
+- **`phabricator.uri`** picks the instance, so a repository finds the right host
+  even when `~/.arcrc` holds several. It is Arcanist's own key.
+- **`workboard`** is where this repository's tasks go. Inside the repository,
+  `maniphest search`, `stats` and `create` use it whenever you don't pass `--tag`,
+  so a bare `phabfive maniphest search` lists the board's open tasks.
+  `PHORGE_WORKBOARD=` turns it off for one command.
+- **`hints`** lists the other tags this repository's tasks often need, each with a
+  note on when it applies here, or `null` when the tag's own description on Phorge
+  says enough. They are suggestions for whoever writes a task, person or agent,
+  and phabfive never adds one by itself. No command shows them yet.
+
+Arcanist ignores the `phabfive` object. See
+[Repository Configuration](docs/repository-config.md) for when the workboard is
+left out, how hints are meant to be written, and what is warned about.
 
 **When the endpoint is not the address people open:**
 
@@ -392,6 +400,7 @@ are not library code at all.
 ## Documentation
 
 - **[Full CLI Reference](https://phabfive.readthedocs.io)** - Complete command documentation
+- **[Repository Configuration](docs/repository-config.md)** - A repository's instance, workboard and tag hints in `.arcconfig`
 - **[Profiling](docs/profiling.md)** - Record a slow command and open it in the Firefox Profiler
 - **[Development Guide](docs/development.md)** - Set up dev environment, run tests, local Phorge/Phabricator setup
 - **[Release Process](docs/releasing.md)** - How to build and publish releases

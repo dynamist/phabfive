@@ -13,7 +13,8 @@
   touched, nor is `edit`, and `PHORGE_WORKBOARD` sets or, set empty, clears it for one
   run. The library never applies it. `tags.hints` is accepted for tags worth considering,
   each with an optional note, and not used yet. A key phabfive does not know inside the
-  object is warned about, and Arcanist ignores the object
+  object is warned about, and Arcanist ignores the object. See
+  [Repository Configuration](docs/repository-config.md)
 
 ## Bug Fixes
 

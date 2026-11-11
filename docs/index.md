@@ -80,6 +80,7 @@ For detailed setup instructions, see the [README](https://github.com/dynamist/ph
 
 ### CLI Reference
 
+- **[Repository Configuration](repository-config.md)** - Name a repository's instance, workboard and tag hints in its `.arcconfig`
 - **[Maniphest CLI](maniphest-cli.md)** - Complete guide to task management, including advanced transition filtering
 - **[Project CLI](project-cli.md)** - Show, search, create and edit projects, subprojects and milestones
 - **[Edit CLI](edit-cli.md)** - Unified editing with auto-detection, batch operations, and smart navigation
