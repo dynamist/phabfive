@@ -2,8 +2,6 @@
 
 """Data formatting functions for Diffusion module."""
 
-from ruamel.yaml.scalarstring import PreservedScalarString
-
 from phabfive.constants import (
     POLICY_NOT_HOSTED,
     REPO_POLICY_FIELDS,
@@ -12,6 +10,7 @@ from phabfive.constants import (
 )
 from phabfive.maniphest.utils import format_timestamp
 from phabfive.policy import policy_label
+from phabfive.text import remarkup
 
 
 def ref_names(refs, ref_type="branch"):
@@ -461,11 +460,7 @@ def build_repository_display_data(
             if isinstance(description, dict):
                 description = description.get("raw") or ""
 
-            record["Repository"]["Description"] = (
-                PreservedScalarString(description)
-                if "\n" in description
-                else description
-            )
+            record["Repository"]["Description"] = remarkup(description)
 
         hosted = repository_is_hosted(repo)
 

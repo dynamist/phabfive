@@ -14,6 +14,7 @@ from ruamel.yaml.scalarstring import PreservedScalarString
 from phabfive.constants import FORMAT_ALIASES
 from phabfive.json_output import emit_records
 from phabfive.table import display_records_table
+from phabfive.text import render_text
 
 
 #: The formats whose output is one document holding a list of records.
@@ -242,8 +243,8 @@ def _display_task_rich(console, task_dict, phabfive_instance, show_description=T
         if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
             # Multi-line value
             console.print(f"    {key}: |-")
-            for line in str(value).splitlines():
-                console.print(f"      {_escape_for_rich(line)}")
+            for line in render_text(value):
+                console.print(f"      {line}")
         else:
             console.print(f"    {key}: {_escape_for_rich(value)}")
 
@@ -346,10 +347,10 @@ def _display_task_rich(console, task_dict, phabfive_instance, show_description=T
         for comment in comments:
             if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
                 # Multi-line comment
-                lines = str(comment).splitlines()
-                console.print(f"    - {_escape_for_rich(lines[0])}")
+                lines = render_text(comment)
+                console.print(f"    - {lines[0]}")
                 for line in lines[1:]:
-                    console.print(f"      {_escape_for_rich(line)}")
+                    console.print(f"      {line}")
             else:
                 console.print(f"    - {_escape_for_rich(comment)}")
 
@@ -407,10 +408,8 @@ def _display_task_tree(console, task_dict, phabfive_instance, show_description=T
 
         if isinstance(value, (str, PreservedScalarString)) and "\n" in str(value):
             # Truncate multi-line descriptions in tree view
-            first_line = str(value).split("\n")[0]
-            if len(first_line) > 60:
-                first_line = first_line[:57] + "..."
-            task_branch.add(f"{key}: {_escape_for_rich(first_line)}")
+            first_line = render_text(value, width=60)[0]
+            task_branch.add(f"{key}: {first_line}")
         else:
             task_branch.add(f"{key}: {_escape_for_rich(value)}")
 
@@ -502,10 +501,8 @@ def _display_task_tree(console, task_dict, phabfive_instance, show_description=T
         for comment in comments:
             if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
                 # Truncate multi-line comments in tree view
-                first_line = str(comment).split("\n")[0]
-                if len(first_line) > 60:
-                    first_line = first_line[:57] + "..."
-                comments_branch.add(_escape_for_rich(first_line))
+                first_line = render_text(comment, width=60)[0]
+                comments_branch.add(first_line)
             else:
                 comments_branch.add(_escape_for_rich(str(comment)))
 

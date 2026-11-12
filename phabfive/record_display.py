@@ -37,6 +37,7 @@ from phabfive.display import (
 )
 from phabfive.json_output import emit_records
 from phabfive.table import display_records_table
+from phabfive.text import render_text
 
 # How far a tree node's value is allowed to run before it is cut short.
 _TREE_VALUE_WIDTH = 60
@@ -117,8 +118,8 @@ def _print_pair(console, key, value, lead, indent, phabfive_instance):
         console.print(f"{lead}{key}: ''")
     elif isinstance(value, str) and "\n" in value:
         console.print(f"{lead}{key}: |-")
-        for line in value.splitlines():
-            console.print(f"{pad}{_escape_for_rich(line)}")
+        for line in render_text(value):
+            console.print(f"{pad}{line}")
     else:
         phabfive_instance.check_line_width(value, key)
         console.print(f"{lead}{key}: {_escape_for_rich(_yaml_scalar(value))}")
@@ -213,10 +214,10 @@ def _add_mapping(branch, mapping):
         elif isinstance(value, str) and "\n" in value:
             # A paste's content, or a description. One line would be the
             # block indicator alone, so each line gets a node of its own.
-            lines = value.splitlines()
+            lines = render_text(value)
             sub = branch.add(key)
             for line in lines[:_TREE_VALUE_LINES]:
-                sub.add(_escape_for_rich(line))
+                sub.add(line)
             if len(lines) > _TREE_VALUE_LINES:
                 sub.add("...")
         else:

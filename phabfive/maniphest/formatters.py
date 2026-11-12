@@ -6,6 +6,8 @@ import logging
 
 from ruamel.yaml.scalarstring import PreservedScalarString
 
+from phabfive.text import remarkup
+
 from phabfive.constants import TASK_POLICY_FIELDS
 from phabfive.maniphest.fetchers import get_column_info
 from phabfive.maniphest.utils import format_timestamp
@@ -837,12 +839,9 @@ def build_task_display_data(
         if fields.get("dateClosed"):
             task_data["Closed"] = format_timestamp(fields["dateClosed"])
 
-        # Description - use PreservedScalarString for multi-line descriptions
+        # Description, as Remarkup: a block in yaml when it has several lines
         description_raw = fields.get("description", {}).get("raw", "")
-        if description_raw and "\n" in description_raw:
-            task_data["Description"] = PreservedScalarString(description_raw)
-        else:
-            task_data["Description"] = description_raw if description_raw else ""
+        task_data["Description"] = remarkup(description_raw) or ""
 
         task_dict["Task"] = task_data
 
