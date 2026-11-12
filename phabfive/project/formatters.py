@@ -2,11 +2,10 @@
 
 """Build the display record for a project."""
 
-from ruamel.yaml.scalarstring import PreservedScalarString
-
 from phabfive.constants import PROJECT_POLICY_FIELDS
 from phabfive.maniphest.utils import format_timestamp
 from phabfive.policy import policy_label
+from phabfive.text import remarkup
 
 
 def project_link_url(url, project):
@@ -239,11 +238,7 @@ def build_project_display_data(
             if isinstance(description, dict):
                 description = description.get("raw") or ""
 
-            record["Project"]["Description"] = (
-                PreservedScalarString(description)
-                if "\n" in description
-                else description
-            )
+            record["Project"]["Description"] = remarkup(description)
 
         space_phid = fields.get("spacePHID")
         if space_phid:

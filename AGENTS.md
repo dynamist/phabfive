@@ -216,6 +216,13 @@ what fails where and why. Keep it true:
   `preprocess_format_alias()`
 - Every JSON emitter goes through `phabfive/json_output.py`, which is what keeps
   `json` and `jsonl` emitting the same records from the same builders
+- Text that Phorge stores as Remarkup (task, project and repository descriptions) is
+  marked by the formatters with `phabfive.text.remarkup()`. yaml prints it as a block
+  when it has several lines, and json as a plain string. The rich and tree printers turn
+  every multi-line value into lines through `phabfive.text.render_text()`, so rendering
+  Remarkup for humans is a change to that one function. Comments are not marked yet:
+  each is one string that starts with a header (date, author, `T1@2`) before the
+  Remarkup
 
 ### Feature Modules
 Complex features use a consistent subpackage structure:
