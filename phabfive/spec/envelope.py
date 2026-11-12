@@ -99,6 +99,7 @@ class Kind(enum.Enum):
 
     CREATE = "create"
     SEARCH = "search"
+    EDIT = "edit"
 
 
 # The body keys that hold items, per kind. These are what a multi-document
@@ -114,6 +115,7 @@ class Kind(enum.Enum):
 _ITEM_KEYS: dict[Kind, tuple[str, ...]] = {
     Kind.CREATE: ("tasks", "projects", "pastes", "passphrases"),
     Kind.SEARCH: ("searches",),
+    Kind.EDIT: ("tasks",),
 }
 
 # The item keys a document may be *offered*, which is the item keys minus
@@ -128,6 +130,11 @@ _OFFERED_KEYS: dict[Kind, tuple[str, ...]] = {
 
 # Which body keys mean which kind, for inference. "search" (singular) is the
 # legacy flat shape; "searches" is the normalized one.
+#
+# `Kind.EDIT` is deliberately absent from this and from `_OFFERED_KEYS`: an
+# edit document is never inferred. Its sections are spelled like a create
+# document's, so `tasks:` alone means create, and a document that changes
+# objects that already exist has to say `kind: edit` in so many words.
 _KIND_KEYS: dict[Kind, tuple[str, ...]] = {
     Kind.SEARCH: ("search", "searches"),
     Kind.CREATE: _ITEM_KEYS[Kind.CREATE],

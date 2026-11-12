@@ -44,6 +44,7 @@ _REPO = Path(__file__).resolve().parent.parent
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+from phabfive.spec.edit import EDIT_OBJECT_KEYS, IDENTITY_KEYS  # noqa: E402
 from phabfive.spec.envelope import (  # noqa: E402
     DEFAULT_SEARCH_TYPE,
     ENVELOPE_KEYS,
@@ -81,7 +82,7 @@ PAIRS: tuple[tuple[str, str], ...] = tuple(
     (object_type, verb)
     for verb in ("create", "search")
     for object_type in ("task", "project", "paste", "passphrase")
-) + (("task-stats", "search"),)
+) + (("task-stats", "search"), ("task", "edit"))
 
 #: What each problem code means, and which layer reports it. A code is a
 #: promise to whoever branches on it, so it is documented here rather than in
@@ -115,7 +116,7 @@ CODE_MEANINGS: dict[str, tuple[str, str, str]] = {
     "missing-required": (
         "offline",
         "error",
-        "An item leaves out a key it cannot be created without.",
+        "An item leaves out a key it cannot be created, or found, without.",
     ),
     "unknown-value": (
         "offline",
@@ -151,6 +152,34 @@ CODE_MEANINGS: dict[str, tuple[str, str, str]] = {
         "A declared variable with no value, no default and no override.",
     ),
     "circular-variable": ("offline", "error", "Variables that define each other."),
+    "bad-timestamp": (
+        "offline",
+        "error",
+        "Not an ISO 8601 instant such as `2026-01-31T09:30:00Z`.",
+    ),
+    "mixed-list": (
+        "offline",
+        "error",
+        "A list in an edit document where some entries carry `+` or `-` and "
+        "some do not.",
+    ),
+    "relative-value": (
+        "offline",
+        "error",
+        "A value in an edit document that names a move, such as `raise` or "
+        "`forward`, rather than a result.",
+    ),
+    "duplicate-object": (
+        "offline",
+        "error",
+        "Two items of an edit document name the same object.",
+    ),
+    "stale": (
+        "online",
+        "error",
+        "The object was modified after the `modified:` an edit item carries, "
+        "and the item would change it.",
+    ),
     "interpolation-off": (
         "offline",
         "error",
@@ -247,6 +276,7 @@ KIND_NAMES: dict[FieldKind, str] = {
     FieldKind.INT: "integer",
     FieldKind.BOOL: "boolean",
     FieldKind.TIME: "time",
+    FieldKind.TIMESTAMP: "timestamp",
     FieldKind.ENUM: "enum",
     FieldKind.ORDER: "order",
     FieldKind.PATTERN: "pattern",
@@ -431,9 +461,9 @@ def _envelope_block() -> list[str]:
             "the reader's own revision is assumed."
         ),
         "kind": (
-            "`"
-            + "` or `".join(sorted(kind.value for kind in Kind))
-            + "`. Absent means inferred from the body keys."
+            ", ".join(f"`{kind.value}`" for kind in Kind)
+            + ". Absent means inferred from the body keys, which never "
+            "infers `edit`."
         ),
         "metadata": "What the *file* is, for a person reading it. Nothing acts on it.",
         "interpolate": (
@@ -488,6 +518,18 @@ def _kinds_block() -> list[str]:
             creatable,
             f"One section per object type, each a list of items. An item creates "
             f"something when it names it: {creation}.",
+        ),
+        (
+            "`edit`",
+            ", ".join(f"`{key}:`" for key, _ in EDIT_OBJECT_KEYS),
+            "One section per object type, each a list of items. An item names "
+            "an object that exists, "
+            + " or ".join(
+                f"a {object_type} by its `{IDENTITY_KEYS[object_type]}:`"
+                for _, object_type in EDIT_OBJECT_KEYS
+            )
+            + ", and states what it should be. Never inferred: the document "
+            "says `kind: edit`.",
         ),
         (
             "`search`",

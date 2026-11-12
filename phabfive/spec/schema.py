@@ -41,6 +41,8 @@ import functools
 import re
 from typing import Any, Optional
 
+from phabfive.exceptions import PhabfiveInputException
+from phabfive.spec.edit import ADD, EDIT_OBJECT_KEYS, IDENTITY_KEYS, REMOVE
 from phabfive.spec.envelope import (
     DEFAULT_SEARCH_TYPE,
     LEGACY_SEARCH_KEYS,
@@ -70,6 +72,7 @@ __all__ = [
     "LEGACY_SEARCH_KEYS",
     "SEARCH_ITEM_KEYS",
     "TIME_PATTERN",
+    "TIMESTAMP_PATTERN",
     "build_schema",
     "enum_list_pattern",
     "monogram_grammar_alternatives",
@@ -370,6 +373,16 @@ def _kind_schema(field: Field) -> dict[str, Any]:
             ]
         }
 
+    if kind is FieldKind.TIMESTAMP:
+        # A string only: JSON has no timestamp, and what YAML and TOML make
+        # of an unquoted one is not a JSON value at all. `format` is an
+        # annotation in 2020-12, so the pattern is what constrains.
+        return {
+            "type": "string",
+            "format": "date-time",
+            "pattern": TIMESTAMP_PATTERN,
+        }
+
     if kind is FieldKind.ENUM:
         if field.multiple:
             # As MONOGRAM below: the scalar spelling of a list filter is the
@@ -646,6 +659,92 @@ def _create_item_schema(object_type: str) -> dict[str, Any]:
     return schema
 
 
+#: An ISO 8601 instant to the second or finer, with `Z`, an offset, or
+#: neither - what `phabfive.spec.edit.parse_stamp` reads from text.
+TIMESTAMP_PATTERN = r"^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}:\d{2}([Zz]|[+-]\d{2}:\d{2})?$"
+
+
+def _edit_list_schema(field: Field) -> dict[str, Any]:
+    """A list-valued edit key: the full set, or `+`/`-` entries.
+
+    The item grammar is left as text here. A `+T123` is a monogram with an
+    operator, a `-#infra` a project with one, and saying so per field kind
+    would restate `phabfive.spec.edit.parse_list_edit` as five regular
+    expressions; the offline pass strips the operator and checks what is
+    left. What a schema can say, and does, is the rule that is about the
+    list rather than its entries: all of them carry an operator, or none.
+    """
+    operators = re.escape(ADD) + re.escape(REMOVE)
+    marked = {"type": "string", "pattern": f"^[{operators}]"}
+    plain = {"type": "string", "pattern": f"^[^{operators}]"}
+
+    schema: dict[str, Any] = {
+        "anyOf": [
+            {"type": "string"},
+            {"type": "array", "items": plain},
+            {"type": "array", "items": marked},
+        ]
+    }
+
+    if field.help:
+        schema["description"] = (
+            f"{field.help} A list is the full set; a list of +name and "
+            f"-name entries adds and removes and leaves the rest."
+        )
+
+    return schema
+
+
+def _edit_item_schema(object_type: str) -> dict[str, Any]:
+    """One edited object: the key that names it, and what it should be."""
+    schema = _fields_schema(object_type, "edit")
+    properties: dict[str, Any] = dict(schema.get("properties") or {})
+
+    for field in fields_for(object_type, "edit"):
+        if field.multiple:
+            properties[field.name] = _edit_list_schema(field)
+
+    # One object, so one monogram, where a monogram key otherwise takes a
+    # comma-separated list of them
+    identity = IDENTITY_KEYS[object_type]
+    named = next(
+        field for field in fields_for(object_type, "edit") if field.name == identity
+    )
+    one = "|".join(sorted(monogram_grammar_alternatives(named.monograms)))
+    properties[identity] = {
+        "type": "string",
+        "pattern": f"^[ \\t]*(?:{one})[ \\t]*$",
+        "description": named.help,
+    }
+
+    schema["properties"] = properties
+    schema["required"] = [identity]
+
+    return schema
+
+
+def _edit_schema() -> dict[str, Any]:
+    """The whole document an edit spec is."""
+    properties = _envelope_properties(Kind.EDIT)
+    defs: dict[str, Any] = {}
+
+    for key, object_type in EDIT_OBJECT_KEYS:
+        defs[object_type] = _edit_item_schema(object_type)
+        properties[key] = {
+            "type": "array",
+            "items": {"$ref": f"#/$defs/{object_type}"},
+        }
+
+    return {
+        "type": "object",
+        "properties": properties,
+        # An edit document is never inferred, so it has to say what it is
+        "required": ["kind"],
+        "additionalProperties": False,
+        "$defs": defs,
+    }
+
+
 def _create_schema() -> dict[str, Any]:
     """The whole document a create spec is."""
     properties = _envelope_properties(Kind.CREATE)
@@ -732,12 +831,24 @@ def build_schema(
         if resolved is Kind.SEARCH:
             body = _search_item_schema(object_type)
             title = f"One {object_type} search of a Phorge search spec"
+        elif resolved is Kind.EDIT:
+            if object_type not in dict(EDIT_OBJECT_KEYS).values():
+                raise PhabfiveInputException(
+                    f"An edit spec has no {object_type} items. It edits: "
+                    f"{', '.join(sorted(dict(EDIT_OBJECT_KEYS).values()))}"
+                )
+            body = _edit_item_schema(object_type)
+            title = f"One {object_type} of a Phorge edit spec"
         else:
             body = _create_item_schema(object_type)
             title = f"One {object_type} of a Phorge create spec"
         identifier = f"{resolved.value}/{object_type}"
     else:
-        body = _search_schema() if resolved is Kind.SEARCH else _create_schema()
+        body = {
+            Kind.SEARCH: _search_schema,
+            Kind.EDIT: _edit_schema,
+            Kind.CREATE: _create_schema,
+        }[resolved]()
         title = f"Phorge {resolved.value} spec"
         identifier = resolved.value
 

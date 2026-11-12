@@ -1,0 +1,34 @@
+# Changing tasks that already exist.
+#
+#   phabfive apply -f specs/edit/close-out.yaml --dry-run
+#
+# `kind: edit` is never inferred: its `tasks:` section is spelled like a
+# create document's, so the kind has to be written. Each item names the task
+# it edits with `task:` and states what the task should be. Only the
+# difference is sent, so a task that already matches is left alone and
+# applying this file a second time changes nothing.
+#
+# A key that is absent is left alone. A list is either the full set - T1's
+# `projects:` below is every project T1 should be tagged into, and anything
+# else is removed - or a delta: T2's `subscribers:` adds one person and
+# leaves whoever else is subscribed.
+spec: phorge/v1alpha1
+kind: edit
+metadata:
+  name: close-out
+  description: Resolve two tasks, retag one and subscribe a reviewer to the other.
+  version: "1"
+  author: phabfive
+
+tasks:
+  - task: T1
+    status: resolved
+    assignment: tommy.svensson
+    projects:
+      - Security
+      - Infrastructure
+
+  - task: T2
+    status: resolved
+    subscribers:
+      - +sebastian.soderberg
