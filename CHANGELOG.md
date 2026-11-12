@@ -18,6 +18,9 @@
 
 ## Bug Fixes
 
+* **`maniphest create --tag` takes a `#hashtag`.** The `#` is optional everywhere else,
+  `maniphest edit` included, but create looked the name up with it and answered "Project(s)
+  not found", so a workboard written as `#name` in `.arcconfig` failed every create
 * **`.arcconfig` is found in a git worktree and in a submodule.** phabfive looked for a
   `.git` directory to find the repository root, and in both of those `.git` is a file,
   so the repository's `.arcconfig` was silently ignored there. `phabfive user setup`

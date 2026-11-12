@@ -163,6 +163,11 @@ class TestCreateResolution:
         result = resolve_project_phids_for_create(_mock_phab(), ["deploy"])
         assert result["phids"] == ["PHID-PROJ-11"]
 
+    @pytest.mark.parametrize("tag", ["#deploy", "#Release"])
+    def test_the_hash_of_a_hashtag_is_optional(self, tag):
+        bare = resolve_project_phids_for_create(_mock_phab(), [tag[1:]])
+        assert resolve_project_phids_for_create(_mock_phab(), [tag]) == bare
+
     def test_create_and_search_agree(self):
         """The same unique name resolves to the same project in both paths."""
         phab = _mock_phab()
