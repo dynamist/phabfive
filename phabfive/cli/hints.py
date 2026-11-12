@@ -116,6 +116,8 @@ def remind_of_hints(app, tag_lists):
 
 def _project_section(app, hint):
     """One project of `Maniphest.tag_hints`, as a section of the record."""
+    from ruamel.yaml.scalarstring import PreservedScalarString
+
     from phabfive.project.formatters import project_link_url
 
     section = {}
@@ -129,7 +131,13 @@ def _project_section(app, hint):
     if hint.get("problem"):
         section["Problem"] = hint["problem"]
 
-    section["Description"] = hint.get("description")
+    # A multi-line description keeps its lines in YAML, as `project show`
+    # prints it, rather than becoming one string of escaped newlines
+    description = hint.get("description")
+    if isinstance(description, str) and "\n" in description:
+        description = PreservedScalarString(description)
+
+    section["Description"] = description
     return section
 
 

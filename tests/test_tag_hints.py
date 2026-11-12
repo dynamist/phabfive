@@ -331,6 +331,29 @@ class TestHintsCommand:
         assert "Link" not in stale
         assert "Warning: security-risk" in result.stderr
 
+    def test_a_multi_line_description_keeps_its_lines_in_yaml(self, monkeypatch):
+        monkeypatch.delenv("PHORGE_HOST", raising=False)
+        monkeypatch.delenv("PHORGE_API_HOST", raising=False)
+        instance = _cli_maniphest()
+        instance.tag_hints.return_value = [
+            {**WORKBOARD, "description": "How the board is used\n\n= Columns ="}
+        ]
+
+        with (
+            patch("phabfive.cli.apps.new_app", MagicMock(return_value=instance)),
+            patch.object(
+                Phabfive, "repository_config", return_value=instance.repository
+            ),
+            patch.object(Phabfive, "arcrc_hosts", return_value=[]),
+        ):
+            result = runner.invoke(app, ["--format=yaml", "hints"])
+
+        assert result.exit_code == 0, result.output
+        # A block scalar, the way `project show` prints it, not escaped \n
+        assert "Description: |-\n" in result.stdout
+        assert "      = Columns =\n" in result.stdout
+        assert "\\n" not in result.stdout
+
     def test_a_repository_on_another_instance_says_why_its_hints_are_left_out(self):
         instance = _cli_maniphest(
             hints={"security-risk": None}, repository_host="https://other.example.com"
