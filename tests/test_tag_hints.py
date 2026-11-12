@@ -411,9 +411,15 @@ class TestHintsCommand:
         instance.tag_hints.assert_called_once_with({}, workboard="dynatron")
 
 
+def _home(monkeypatch, path):
+    """Make `~` mean `path`: HOME on POSIX, USERPROFILE on Windows."""
+    monkeypatch.setenv("HOME", str(path))
+    monkeypatch.setenv("USERPROFILE", str(path))
+
+
 class TestArcrcHosts:
     def test_the_hosts_are_listed_by_their_root(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        _home(monkeypatch, tmp_path)
         (tmp_path / ".arcrc").write_text(
             json.dumps(
                 {
@@ -428,7 +434,7 @@ class TestArcrcHosts:
         assert Phabfive.arcrc_hosts() == [HOST, "https://we.phorge.it"]
 
     def test_no_file_no_hosts(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        _home(monkeypatch, tmp_path)
 
         assert Phabfive.arcrc_hosts() == []
 
