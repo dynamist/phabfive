@@ -19,6 +19,7 @@ from ruamel.yaml import YAML
 from tests.e2e.conftest import conduit_url
 from tests.phorge_versions import (
     missing_before,
+    no_task_paging,
     phorge_older_than,
 )
 
@@ -1063,6 +1064,7 @@ def test_search_publishes_relations_when_asked(phabfive, create_task, conduit):
     assert "Parents" not in search()[child]
 
 
+@no_task_paging
 def test_search_relations_survive_edges_created_in_one_second(phabfive, conduit):
     """#547: edge.search pages by (dateCreated, seq), which ties for edges
     created in the same second, and skips the tied ones past a page. One
@@ -1492,6 +1494,7 @@ def test_each_command_refuses_the_other_kind_by_name(phabfive_raw, tmp_path):
     assert refused_search.stdout.strip() == ""
 
 
+@no_task_paging
 def test_search_runs_every_object_type_one_spec_holds(phabfive_raw, tmp_path):
     """One file, a task search and a project search, in document order."""
     spec = tmp_path / "readiness.yaml"

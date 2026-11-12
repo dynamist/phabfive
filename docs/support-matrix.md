@@ -2,7 +2,7 @@
 
 Which Phorge and Phabricator versions phabfive works with, and what does not work where. Every row here comes from running phabfive's test suites against that version, see [How This Is Tested](#how-this-is-tested).
 
-Last measured on [2026-10-08](https://github.com/dynamist/phabfive/actions/runs/37768364218).
+Last measured on [2026-11-12](https://github.com/dynamist/phabfive/actions/runs/43222497659).
 
 ## Versions
 
@@ -13,7 +13,8 @@ Last measured on [2026-10-08](https://github.com/dynamist/phabfive/actions/runs/
 | Phorge 2026.27 | 8.5 | Supported |
 | Phorge 2025.51 | 8.5 | Supported, except creating milestones ([T16605](https://we.phorge.it/T16605)) |
 | Phorge 2025.18 | 8.4 | Supported, except creating milestones ([T16605](https://we.phorge.it/T16605)) |
-| Phorge 2023.32 to 2024.35 | 8.3 | Supported, except creating milestones ([T16605](https://we.phorge.it/T16605)) |
+| Phorge 2023.49 to 2024.35 | 8.3 | Supported, except creating milestones ([T16605](https://we.phorge.it/T16605)) |
+| Phorge 2023.32 | 8.3 | Supported, except creating milestones ([T16605](https://we.phorge.it/T16605)) and task searches that read more than 100 tasks |
 | Phorge 2022.37 to 2023.23 | 8.0 | Supported, except creating milestones ([T16605](https://we.phorge.it/T16605)) |
 | Phabricator (`stable` and `master`, as Phacility left it in 2022) | 8.0 | Supported, except creating milestones ([T16605](https://we.phorge.it/T16605)) |
 
@@ -29,6 +30,7 @@ Phabricator and Phorge before 2025.51 have no `status` constraint on `project.se
 |------|----------|-----|
 | `project create --milestone-of` | Phabricator, Phorge before 2026.27 | Phorge answers HTTP 500, [T16605](https://we.phorge.it/T16605), fixed upstream in 2026.27 |
 | A repository's link is `/source/<name>/` | Phabricator, Phorge before 2026.27 | There is no `browseUri` field, and phabfive links `/R<id>` instead, which works the same |
+| A task search that reads more than 100 tasks | Phorge 2023.32 on PHP 8.1 or newer | `maniphest.search` cannot read the cursor of a second page: it takes `strlen()` of a part the cursor does not have, which PHP 8.1 deprecates and Phorge turns into `ERR-CONDUIT-CORE: strlen(): Passing null to parameter #1`. `maniphest search` reads every task its constraints match before it applies `--limit`, so it fails as soon as they match more than 100. Fixed upstream in 2023.49, and older releases only run on PHP 8.0, which has no such deprecation |
 | A task title over 255 characters is refused | Phabricator, Phorge before 2024.35 | These versions accept it, so a create spec that relies on the refusal creates the task |
 | Workboard column order, and which column is hidden or the default | Phabricator, Phorge before 2023.32 | `project.column.search` reports no `sequence`, `isHidden` or `isDefaultColumn` (added in Phorge 2023.32). `project show` lists the columns in the order they were created, milestones last, with `Sequence`, `Hidden` and `Default` empty (`null` in JSON), and lists hidden columns too, with a warning on stderr. `--columns=hidden` is refused. `--column=forward`/`backward` on `edit` is refused, naming a column works. `maniphest search --column` patterns that ask for a direction (`forward`, `backward`, `from:X:forward`) never match |
 

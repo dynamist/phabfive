@@ -40,3 +40,15 @@ def missing_before(release, reason):
         reason=f"before Phorge {release}: {reason}",
         strict=True,
     )
+
+
+#: Expect a test that reads more than one page of tasks to fail on Phorge
+#: 2023.32, whose `maniphest.search` cannot read the cursor of a next page on
+#: PHP 8.1 and newer (fixed in 2023.49, and older releases run on PHP 8.0).
+#: Not strict: it only fails once the instance holds more than 100 tasks,
+#: which depends on what ran before.
+no_task_paging = pytest.mark.xfail(
+    os.environ.get("PHORGE_VERSION", "") == "2023.32",
+    reason="Phorge 2023.32: maniphest.search cannot read a second page",
+    strict=False,
+)
