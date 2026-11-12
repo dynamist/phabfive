@@ -449,7 +449,7 @@ class TestImportHygiene:
             eager = sorted(
                 name
                 for name in sys.modules
-                if name.split(".")[0] in ("ruamel", "jinja2", "tomli")
+                if name.split(".")[0] in ("ruamel", "jinja2", "tomllib")
                 or name.startswith("phabfive.spec")
             )
             assert not eager, eager

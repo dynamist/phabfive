@@ -55,7 +55,7 @@ import json
 import logging
 import os
 import re
-import sys
+import tomllib
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -70,11 +70,6 @@ from phabfive.exceptions import (
 )
 from phabfive.spec.envelope import DATA_SOURCE as _DATA_SOURCE
 from phabfive.spec.envelope import Kind, Spec, as_kind
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # Python 3.10 has no tomllib; tomli is the same parser
-    import tomli as tomllib
 
 log = logging.getLogger(__name__)
 
@@ -108,7 +103,7 @@ _EXTENSIONS = {
     "toml": SpecFormat.TOML,
 }
 
-# "Invalid value (at line 1, column 9)", as tomli writes it before 2.2
+# "Invalid value (at line 1, column 9)", as tomllib writes it before 3.14
 _TOML_POSITION = re.compile(r"\s*\(at line (\d+), column (\d+)\)\s*$")
 
 
@@ -216,7 +211,7 @@ def _parse_failure(
     """One sentence naming the file, the format and the position.
 
     Every parser reports a position differently - ruamel hands over a
-    `problem_mark`, json a `lineno`/`colno`, tomli a message with the
+    `problem_mark`, json a `lineno`/`colno`, tomllib a message with the
     position inside it - so they are normalized here and nowhere else.
     """
     where = ""
@@ -298,7 +293,7 @@ def _parse_toml(text: str, source: str) -> list[Any]:
         # multi-document form beyond its list keys
         return [tomllib.loads(text)]
     except tomllib.TOMLDecodeError as error:
-        # 3.14 and tomli 2.2 carry lineno/colno/msg; older tomli only puts
+        # 3.14 carries lineno/colno/msg; an older tomllib only puts
         # the position inside the message, which _TOML_POSITION peels off so
         # that one sentence does not name the position twice
         line = getattr(error, "lineno", None)

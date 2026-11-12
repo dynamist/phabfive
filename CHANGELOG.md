@@ -45,6 +45,16 @@
   so the repository's `.arcconfig` was silently ignored there. `phabfive user setup`
   had the same blind spot when it offered to create one
 
+## Upgrade Notes
+
+* **Python 3.10 is no longer supported; phabfive needs Python 3.11 or newer.** The tools
+  phabfive is tested with have moved on from 3.10 - tox, coverage and the fixed releases
+  of filelock all need 3.11 - so that version could no longer be tested, or given
+  security updates in the development environment. `pip` on 3.10 keeps installing 0.12.
+  The standalone executables and the container image carry their own Python and are not
+  affected. `tomli` is no longer a dependency: `tomllib` is in the standard library from
+  3.11 on
+
 # 0.12.0 (2026-11-08)
 
 ## Upgrade Notes

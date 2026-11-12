@@ -21,18 +21,10 @@ import ast
 import pathlib
 import re
 import sys
+import tomllib
 from importlib.metadata import packages_distributions
 
 import pytest
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    tomllib = None
-
-pytestmark = pytest.mark.skipif(
-    tomllib is None, reason="reading pyproject.toml needs tomllib (Python 3.11+)"
-)
 
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
