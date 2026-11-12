@@ -402,7 +402,8 @@ tasks:
 
 Each item is compared with the object as the instance has it, and **only the
 difference is sent**. An object that already matches is left alone, so applying
-a document twice changes nothing the second time.
+a document twice changes nothing the second time, and a document written from an
+object - an export - applies as no change at all until somebody edits it.
 
 An edit item is flat. It has no `id:`, no nested `tasks:` and no `$local-id`
 reference: those link objects that do not exist yet, and every object here does.

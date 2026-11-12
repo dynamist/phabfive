@@ -968,22 +968,30 @@ linked to each other by the `$local-id`s the file gives them. `search` runs ever
 a `kind: search` spec holds, in document order, through one client. Handed the other's
 kind, each refuses by name and prints the command that does run it, exit 1.
 
-`apply` also runs a `kind: edit` spec, which changes tasks that already exist:
+`apply` also runs a `kind: edit` spec, which changes tasks that already exist, and
+`export` writes one from a task as it is:
 
 ```bash
-phabfive apply -f specs/edit/close-out.yaml --dry-run   # only the difference
-phabfive apply -f specs/edit/close-out.yaml
+phabfive export T123 > task.yaml          # the task in the spelling a spec takes
+phabfive export T123 | phabfive apply -f - --dry-run   # reports no change
+phabfive apply -f task.yaml --dry-run     # after editing: only the difference
+phabfive apply -f task.yaml
+phabfive export T123 --as create | phabfive apply -f -   # a new task like T123
+phabfive maniphest search --tag=backend | phabfive export > backend.yaml
 ```
 
-An edit item names its task with `task: T123` and states what the task
+Use `export`, not `show`, when the output is going to be edited and sent back: `show`
+prints display labels (`Status: Resolved`) that no option accepts, and leaves out tags
+and subscribers. An edit item names its task with `task: T123` and states what the task
 should be. **A key that is absent is left alone**, so `{task: T123, status: resolved}`
 is a whole edit. A list is the full set (`[alice, bob]`, anyone else is removed) or a
 delta (`["+carol", "-bob"]`), never a mix. `kind: edit` must be written; it is never
 inferred. Only the difference is sent, so applying a file twice changes nothing the
 second time and still exits 0, each record saying `edited` or `unchanged`.
 
-An item may carry `modified:`, an ISO 8601 timestamp. `apply` refuses, exit 2 and code
-`stale`, to change a task modified after it; pass `--force` to let the file win. Any problem with any item - a name that does not resolve, a task that does
+An export stamps each task with `modified:`. `apply` refuses, exit 2 and code `stale`,
+to change a task modified after its stamp; export again, or pass `--force` to let the
+file win. Any problem with any item - a name that does not resolve, a task that does
 not exist - refuses the whole file before anything is written. `apply -f -` reads the
 spec from standard input. Tasks only, for now.
 

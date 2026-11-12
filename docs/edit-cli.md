@@ -780,7 +780,7 @@ phabfive edit T123 --priority=high --dry-run
 - [Policies](policies.md) - Who can see, edit and interact with an object
 - [Searching with Specs](search-specs.md) - Reusable searches in a file
 - [Creating with Specs](create-specs.md) - Bulk creation from a file
-- [Editing with Specs](edit-specs.md) - Changing tasks with a file instead of flags
+- [Exporting and Editing with Specs](edit-specs.md) - A task as a file: export it, change it, apply it
 - [Retries](retries.md) - What is retried, how long it waits, and pacing
 
 ## Architecture and Future Support

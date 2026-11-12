@@ -12,6 +12,10 @@
 # `projects:` below is every project T1 should be tagged into, and anything
 # else is removed - or a delta: T2's `subscribers:` adds one person and
 # leaves whoever else is subscribed.
+#
+# `phabfive export T1` writes a document of this kind from the task as it
+# is, with a `modified:` stamp that refuses a change to a task somebody else
+# has touched since.
 spec: phorge/v1alpha1
 kind: edit
 metadata:

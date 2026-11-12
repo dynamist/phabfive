@@ -685,8 +685,8 @@ class _TaskPlanner:
             (
                 f"{self.monogram} was modified at {format_stamp(modified)}, "
                 f"after the {format_stamp(stamp)} this item was written "
-                f"against, and the item would change it. Write it against the "
-                f"task as it is now, or apply with --force to overwrite"
+                f"against, and the item would change it. Export it again, or "
+                f"apply with --force to overwrite"
             ),
             code="stale",
         )
