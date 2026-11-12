@@ -16,6 +16,7 @@ SUBCOMMANDS = [
     "apply",
     "search",
     # The mirror of `apply`: objects that exist, written as a spec
+    "export",
     # Opens a recorded profile, a command like the two above
     "profile",
     # What to know before working here, aware of the repository it runs in

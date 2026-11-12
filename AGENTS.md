@@ -399,7 +399,7 @@ nothing is discovered.
   `phabfive.cli.edit_flow.run_edit`
 - `phabfive/cli/editor.py` holds `$EDITOR`, the prompts and `typer.confirm`
 
-### Specs That Write: Create and Edit
+### Specs That Write: Create, Edit and Export
 
 - `kind: create` and `kind: edit` are kept apart on purpose. `phabfive.spec.create`
   **never** sends an `objectIdentifier`; an edit document cannot bring an object into
@@ -412,7 +412,7 @@ nothing is discovered.
 - `phabfive/spec/edit.py` is the vocabulary (standard library only): the identity key
   per object type, the `+`/`-` list grammar, the stamp. The edit keys are **derived**
   from the create declarations in `registry._edit_fields()`, so a key cannot drift
-  between the two kinds
+  between the two kinds - an export has to be readable as either
 - `phabfive/edit/spec.py` is the planner. It builds no transaction: each key goes to
   `Maniphest.build_task_edit`, key by key so every problem is reported under its own
   key. A full-set list becomes "add these, remove whatever else is there"; nothing is
@@ -420,10 +420,14 @@ nothing is discovered.
   nothing, applying twice is applying once, and `modified:` is compared **only when the
   item would change something** - otherwise the rerun after a successful or partial
   apply would be refused for the modification the first run made
-- Adding an object type to edit: its section in `spec.edit.EDIT_OBJECT_KEYS` and
-  `IDENTITY_KEYS`, its keys in `registry._EDITED`, a planner beside `_TaskPlanner`, and
-  its cases in `tests/e2e/test_edit_spec.py`. Passphrase cannot join: Phorge has no
-  `passphrase.edit`
+- `phabfive/export/` writes values in **input grammar**, never display labels, which is
+  why it is not a `--format` of `show`. `dump_spec` parses its own output back and falls
+  back to JSON when YAML would not round-trip. An export says `interpolate: false`
+- Adding an object type to edit and export: its section in `spec.edit.EDIT_OBJECT_KEYS`
+  and `IDENTITY_KEYS`, its keys in `registry._EDITED`, a planner beside `_TaskPlanner`,
+  an exporter in `phabfive/export/`, and the e2e round trip in
+  `tests/e2e/test_export_edit.py` - an unchanged export must apply as no change.
+  Passphrase cannot join: Phorge has no `passphrase.edit`
 
 ### Constructing an App
 

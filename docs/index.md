@@ -93,7 +93,7 @@ A spec is one file that says what should exist, or what to look for, across appl
 
 - **[The Phorge spec format](phorge-spec.md)** - The normative definition: the envelope, every key, the reference grammar, the variables, the serializations and the two validation layers
 - **[Creating with Specs](create-specs.md)** - Writing a create spec, previewing it with `--dry-run`, and fixing what it reports
-- **[Editing with Specs](edit-specs.md)** - Writing an edit spec for tasks that already exist, previewing it with `--dry-run`, and applying it
+- **[Exporting and Editing with Specs](edit-specs.md)** - Writing an existing task as a spec with `phabfive export`, changing it, and applying it back
 - **[Searching with Specs](search-specs.md)** - Writing a search spec, running several searches and several applications from one file
 
 ### Behaviour

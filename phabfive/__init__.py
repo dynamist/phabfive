@@ -156,6 +156,7 @@ _SUBMODULES = (
     "diffusion",
     "edit",
     "exceptions",
+    "export",
     "fulltext",
     "maniphest",
     "options",
