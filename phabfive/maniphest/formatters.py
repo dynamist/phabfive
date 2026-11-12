@@ -4,9 +4,8 @@
 
 import logging
 
-from ruamel.yaml.scalarstring import PreservedScalarString
 
-from phabfive.text import remarkup
+from phabfive.text import CommentText, remarkup
 
 from phabfive.constants import TASK_POLICY_FIELDS
 from phabfive.maniphest.fetchers import get_column_info
@@ -161,9 +160,10 @@ def build_comments(phab, comment_transactions, task_id):
 
     Returns
     -------
-    list
-        List of formatted comment strings like:
-        "2026-01-09T05:15:20 [admin T5@93] Comment text here..."
+    list of CommentText
+        One per comment, each the string
+        "2026-01-09T05:15:20 [admin T5@93] Comment text here...", with its
+        header and Remarkup body kept apart
     """
     if not comment_transactions:
         return []
@@ -200,20 +200,11 @@ def build_comments(phab, comment_transactions, task_id):
         # Format timestamp
         timestamp_str = format_timestamp(date_created) if date_created else "Unknown"
 
-        # Format: compact for single-line, block scalar for multi-line
-        # Include comment reference (T5@93) for future edit/remove commands
+        # The header, then the Remarkup on the same first line. The comment
+        # reference (T5@93) is what an edit or remove command would take
         comment_ref = f"T{task_id}@{comment_id}"
-        if "\n" in text:
-            # Multi-line: use block scalar to preserve formatting
-            # Put first line on same line as header
-            lines = text.split("\n")
-            header = f"{timestamp_str} [{author_name} {comment_ref}] {lines[0]}"
-            remaining = "\n".join(lines[1:])
-            full_text = f"{header}\n{remaining}"
-            comments.append(PreservedScalarString(full_text))
-        else:
-            # Single-line: show full text
-            comments.append(f"{timestamp_str} [{author_name} {comment_ref}] {text}")
+        header = f"{timestamp_str} [{author_name} {comment_ref}]"
+        comments.append(CommentText(header, text))
 
     return comments
 
