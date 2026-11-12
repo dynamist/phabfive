@@ -246,11 +246,18 @@ though a token belongs in `~/.arcrc` rather than there.
 - **`hints`** lists the other tags this repository's tasks often need, each with a
   note on when it applies here, or `null` when the tag's own description on Phorge
   says enough. They are suggestions for whoever writes a task, person or agent,
-  and phabfive never adds one by itself. No command shows them yet.
+  and phabfive never adds one by itself.
+
+`phabfive hints` shows the instance and what chose it, the workboard, with its
+description and columns, and each hint with its project's description and the note. How the board itself is
+used - what the columns mean, how priority and assignment are used - is written in
+the workboard project's description on Phorge, since every repository using the board
+shares it. `maniphest create` reminds you on stderr of the hinted tags a new task
+doesn't have.
 
 Arcanist ignores the `phabfive` object. See
 [Repository Configuration](docs/repository-config.md) for when the workboard is
-left out, how hints are meant to be written, and what is warned about.
+left out, how hints are meant to be written and shown, and what is warned about.
 
 **When the endpoint is not the address people open:**
 

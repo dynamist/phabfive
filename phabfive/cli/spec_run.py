@@ -335,6 +335,10 @@ def apply_command(
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(EXIT_ONLINE) from None
 
+    from phabfive.cli.hints import remind_of_plan_hints
+
+    remind_of_plan_hints(instance, plan)
+
     if dry_run:
         _preview(plan, source, output_format)
         raise typer.Exit(EXIT_CLEAN)

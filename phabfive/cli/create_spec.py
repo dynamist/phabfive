@@ -243,6 +243,10 @@ def run_create_spec(
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1) from None
 
+    from phabfive.cli.hints import remind_of_plan_hints
+
+    remind_of_plan_hints(app, plan)
+
     if dry_run:
         _preview(plan, source, output_format)
         return

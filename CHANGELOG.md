@@ -11,10 +11,29 @@
   no `--tag`. Each such command says on stderr which workboard it used. `--tag` names
   another, `--ids` and `--phids` find tasks wherever they are, a spec (`--with`) is never
   touched, nor is `edit`, and `PHORGE_WORKBOARD` sets or, set empty, clears it for one
-  run. The library never applies it. `tags.hints` is accepted for tags worth considering,
-  each with an optional note, and not used yet. A key phabfive does not know inside the
-  object is warned about, and Arcanist ignores the object. See
+  run. The library never applies it. A key phabfive does not know inside the object is
+  warned about, and Arcanist ignores the object. See
   [Repository Configuration](docs/repository-config.md)
+* **`phabfive hints`: what to know before working here.** One command, aware of where it
+  runs. It always shows the instance phabfive would use and what chose it - `PHORGE_HOST`,
+  a repository's `.arcconfig`, the configuration files or `~/.arcrc` - and outside a
+  repository every instance `~/.arcrc` holds, or how to pick one when several are there.
+  Inside a repository it shows the `.arcconfig`, the workboard with its description and the
+  columns its board shows, and the repository's tag hints: `"tags": {"hints":
+  {"security-risk": "when it applies here", "policy": null}}` in the same `phabfive` object
+  lists the other tags its tasks often need, and each is shown with its project's
+  description and the note. How a board is used belongs in the workboard project's
+  description on Phorge, which every repository on the board shares. It is one record in
+  every `--format`, with each section only where it applies, it never prompts, and it asks
+  the instance nothing unless there is a workboard or a hint to look up. A hint naming no
+  project is listed with its problem rather than dropped, and hints are left out, with the
+  reason, when phabfive talks to another instance than the repository names.
+  `maniphest create` names the hinted tags a new task lacks on stderr, in a dry run too
+  and for every task of a spec given to `--with` or `phabfive apply -f`, and never adds one. For a program,
+  `Phabfive.repository_config()` returns the repository's `.arcconfig` as a
+  `RepositoryConfig`, a constructed app holds it as `repository`, `Phabfive.arcrc_hosts()`
+  lists the instances in `~/.arcrc` without their tokens, and `Maniphest.tag_hints()` looks
+  the hints up
 
 ## Bug Fixes
 

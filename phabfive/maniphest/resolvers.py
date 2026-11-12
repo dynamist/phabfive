@@ -663,30 +663,15 @@ def resolve_project_tags(phab, values, option=None):
                 f"Wildcards are not allowed in {named}project names: '{value}'"
             )
 
-    name_to_phid, _, ambiguous_names = fetch_project_lookup_maps(phab)
+    resolved, ambiguous, not_found = _match_projects(phab, values)
 
-    resolved = {}
-    not_found = []
-
-    for value in values:
-        key = (value[1:] if value.startswith("#") else value).lower()
-        if key in name_to_phid:
-            resolved[value] = name_to_phid[key]
-            continue
-
-        if key in ambiguous_names:
-            matches = ambiguous_names[key]
-            raise PhabfiveInputException(
-                ambiguous_project_message(
-                    value, fetch_projects_by_phid(phab, matches) or matches
-                )
+    if ambiguous:
+        value, matches = next(iter(ambiguous.items()))
+        raise PhabfiveInputException(
+            ambiguous_project_message(
+                value, fetch_projects_by_phid(phab, matches) or matches
             )
-
-        proj = lookup_project_by_id(phab, value)
-        if proj:
-            resolved[value] = proj["phid"]
-        else:
-            not_found.append(value)
+        )
 
     if not_found:
         raise PhabfiveNotFoundException(f"Project(s) not found: {', '.join(not_found)}")
@@ -698,6 +683,122 @@ def resolve_project_tags(phab, values, option=None):
     }
 
     return {value: (phid, names.get(phid)) for value, phid in resolved.items()}
+
+
+def _match_projects(phab, values):
+    """Match project names, hashtags, IDs and PHIDs exactly, failing nothing.
+
+    The one matching rule of `resolve_project_tags` and `resolve_tag_hints`:
+    a hashtag or a name nobody else has, case-insensitively and with the
+    ``#`` optional, else a numeric ID or a PHID. Wildcards are the callers'
+    to refuse.
+
+    Returns
+    -------
+    tuple(dict, dict, list)
+        (value to PHID, value to the PHIDs of the projects sharing that
+        name, the values that are no project), each in the order given
+    """
+    name_to_phid, _, ambiguous_names = fetch_project_lookup_maps(phab)
+
+    resolved = {}
+    ambiguous = {}
+    not_found = []
+
+    for value in values:
+        key = (value[1:] if value.startswith("#") else value).lower()
+        if key in name_to_phid:
+            resolved[value] = name_to_phid[key]
+        elif key in ambiguous_names:
+            ambiguous[value] = ambiguous_names[key]
+        else:
+            proj = lookup_project_by_id(phab, value)
+            if proj:
+                resolved[value] = proj["phid"]
+            else:
+                not_found.append(value)
+
+    return resolved, ambiguous, not_found
+
+
+def resolve_tag_hints(phab, tags):
+    """
+    Look up the projects a repository's tag hints name, one by one.
+
+    Unlike `resolve_project_tags`, a tag that names no project, or several,
+    fails only itself: one stale hint in a repository's .arcconfig must not
+    hide the others. What went wrong is said in the tag's ``problem``.
+
+    Parameters
+    ----------
+    phab : Phabricator
+        Phabricator API client
+    tags : list
+        Project names, hashtags (the ``#`` is optional), numeric IDs or PHIDs
+
+    Raises
+    ------
+    PhabfiveRemoteException
+        When the instance cannot be asked
+
+    Returns
+    -------
+    dict
+        Each tag, in the order given, to a dict of ``phid``, ``id``,
+        ``name`` and ``description`` (None where unknown) and ``problem``
+        (None, or why the tag names no one project)
+    """
+    found = {
+        tag: {
+            "phid": None,
+            "id": None,
+            "name": None,
+            "description": None,
+            "problem": None,
+        }
+        for tag in tags
+    }
+
+    exact = [tag for tag in tags if "*" not in tag]
+    for tag in tags:
+        if "*" in tag:
+            found[tag]["problem"] = "A hint names one project; wildcards match many"
+
+    resolved, ambiguous, not_found = (
+        _match_projects(phab, exact) if exact else ({}, {}, [])
+    )
+
+    for tag in not_found:
+        found[tag]["problem"] = "No project has this name, hashtag, ID or PHID"
+
+    phids = set(resolved.values()) | {p for many in ambiguous.values() for p in many}
+    # Asked directly rather than through fetch_projects_by_phid, which
+    # answers a failure with nothing: an unreachable instance must fail the
+    # command, not make every hint look stale
+    projects = {}
+    if phids:
+        data = phab.project.search(constraints={"phids": sorted(phids)}).get("data")
+        projects = {proj["phid"]: proj for proj in data or []}
+
+    for tag, matches in ambiguous.items():
+        found[tag]["problem"] = ambiguous_project_message(
+            tag, [projects[phid] for phid in matches if phid in projects] or matches
+        )
+
+    for tag, phid in resolved.items():
+        proj = projects.get(phid) or {}
+        fields = proj.get("fields") or {}
+        description = fields.get("description")
+        if isinstance(description, dict):
+            description = description.get("raw")
+        found[tag].update(
+            phid=phid,
+            id=proj.get("id"),
+            name=fields.get("name"),
+            description=description or None,
+        )
+
+    return found
 
 
 TASK_PHID_PREFIX = "PHID-TASK-"

@@ -2,6 +2,7 @@
 
 # python std lib
 import copy
+import dataclasses
 import glob
 import json
 import logging
@@ -10,6 +11,8 @@ import re
 import stat
 import sys
 import warnings
+from types import MappingProxyType
+from typing import Mapping, Optional
 
 # phabfive imports
 from phabfive.conduit import Conduit
@@ -39,6 +42,39 @@ from phabricator import Phabricator
 log = logging.getLogger(__name__)
 
 
+@dataclasses.dataclass(frozen=True)
+class RepositoryConfig:
+    """What a repository's .arcconfig says to phabfive.
+
+    Read by :meth:`Phabfive.repository_config`, which also warns about
+    whatever in it is malformed and leaves that out. Nothing here touches
+    the network: a hint is the tag as the repository wrote it, and only
+    :meth:`phabfive.maniphest.Maniphest.tag_hints` asks the instance which
+    project it is.
+
+    Attributes
+    ----------
+    path : str
+        The .arcconfig that was read.
+    host : str or None
+        The instance from `phabricator.uri`, as its root address.
+    workboard : str or None
+        `phabfive.tags.workboard`: where this repository's tasks go, in any
+        form `--tag` takes.
+    hints : mapping
+        `phabfive.tags.hints`: other tags this repository's tasks often
+        need, each mapped to a note on when it applies here, or to None when
+        the project's own description says enough. In the order written.
+    """
+
+    path: str
+    host: Optional[str] = None
+    workboard: Optional[str] = None
+    hints: Mapping[str, Optional[str]] = dataclasses.field(
+        default_factory=lambda: MappingProxyType({})
+    )
+
+
 class Phabfive:
     # Output formatting options. The defaults suit a program: plain strings
     # rather than rich hyperlinks in returned records, and no rich-only line
@@ -55,6 +91,10 @@ class Phabfive:
     # every time rather than writing to the user's cache directory; the
     # command gives its apps one, see phabfive.cli.lookups.
     lookup_store = None
+    # The repository the configuration was discovered in, a RepositoryConfig,
+    # or None: outside a repository, and for an instance configured
+    # explicitly, where nothing is discovered.
+    repository = None
 
     # Monogram patterns for object type detection
     TASK_PATTERN = re.compile(r"[Tt](\d+)")
@@ -390,7 +430,14 @@ class Phabfive:
         build and connect a second client to the same host.
         """
         child = cls.__new__(cls)
-        for name in ("conf", "url", "phab", "_explicit_host", "lookup_store"):
+        for name in (
+            "conf",
+            "url",
+            "phab",
+            "_explicit_host",
+            "lookup_store",
+            "repository",
+        ):
             if hasattr(parent, name):
                 setattr(child, name, getattr(parent, name))
         return child
@@ -476,6 +523,28 @@ class Phabfive:
                 "The file may contain sensitive credentials and should only be readable by you. "
                 f"Please run: chmod 600 {file_path}"
             )
+
+    @classmethod
+    def arcrc_hosts(cls):
+        """The instances ~/.arcrc holds tokens for, as their root addresses.
+
+        Only the addresses: no token is read out, and nothing is asked of
+        any instance. An unreadable or missing file holds none.
+
+        Returns
+        -------
+        list
+            Root addresses, in the order the file lists them
+        """
+        arcrc_path = os.path.expanduser("~/.arcrc")
+        try:
+            with open(arcrc_path, "r") as f:
+                hosts = json.load(f).get("hosts") or {}
+        except (OSError, ValueError, AttributeError):
+            return []
+        if not isinstance(hosts, dict):
+            return []
+        return [cls._host_root(host) for host in hosts]
 
     @classmethod
     def _load_arcrc(cls, current_conf, select_host=None):
@@ -610,9 +679,8 @@ class Phabfive:
         return result
 
     @classmethod
-    def _load_arcconfig(cls):
-        """
-        Load PHORGE_HOST and PHORGE_WORKBOARD from .arcconfig in the git root.
+    def repository_config(cls):
+        """Read the .arcconfig of the repository the working directory is in.
 
         Walks up from the current working directory looking for `.git`, then
         reads .arcconfig in that directory. `phabricator.uri` is Arcanist's
@@ -626,9 +694,9 @@ class Phabfive:
 
         Returns
         -------
-        dict
-            Configuration dict with PHORGE_HOST and/or PHORGE_WORKBOARD if
-            found, empty dict otherwise
+        RepositoryConfig or None
+            None outside a repository, when it has no .arcconfig, or when
+            that cannot be read as a JSON object
         """
         # Walk up from cwd looking for .git
         current = os.getcwd()
@@ -645,13 +713,13 @@ class Phabfive:
 
         if git_root is None:
             log.debug("Not in a git repository, skipping .arcconfig")
-            return {}
+            return None
 
         arcconfig_path = os.path.join(git_root, ".arcconfig")
 
         if not os.path.exists(arcconfig_path):
             log.debug(f"No .arcconfig found at {arcconfig_path}")
-            return {}
+            return None
 
         log.debug(f"Loading configuration from {arcconfig_path}")
 
@@ -659,29 +727,61 @@ class Phabfive:
             with open(arcconfig_path, "r") as f:
                 arcconfig_data = json.load(f)
         except json.JSONDecodeError as e:
-            log.warning(f"Failed to parse {arcconfig_path}: {e}")
-            return {}
+            warn_once(arcconfig_path, f"Failed to parse {arcconfig_path}: {e}")
+            return None
         except IOError as e:
-            log.warning(f"Failed to read {arcconfig_path}: {e}")
-            return {}
+            warn_once(arcconfig_path, f"Failed to read {arcconfig_path}: {e}")
+            return None
 
         if not isinstance(arcconfig_data, dict):
-            log.warning(f"Ignoring {arcconfig_path}: not a JSON object")
+            warn_once(arcconfig_path, f"Ignoring {arcconfig_path}: not a JSON object")
+            return None
+
+        uri = arcconfig_data.get("phabricator.uri")
+        host = cls._host_root(uri) if uri else None
+
+        workboard, hints = None, {}
+        if "phabfive" in arcconfig_data:
+            workboard, hints = cls._read_phabfive_block(
+                arcconfig_data["phabfive"], arcconfig_path
+            )
+
+        return RepositoryConfig(
+            path=arcconfig_path,
+            host=host,
+            workboard=workboard,
+            hints=MappingProxyType(hints),
+        )
+
+    @classmethod
+    def _load_arcconfig(cls):
+        """
+        Load PHORGE_HOST and PHORGE_WORKBOARD from .arcconfig in the git root.
+
+        The settings `repository_config` finds, as configuration. The hints
+        are not settings, and stay on the RepositoryConfig.
+
+        Returns
+        -------
+        dict
+            Configuration dict with PHORGE_HOST and/or PHORGE_WORKBOARD if
+            found, empty dict otherwise
+        """
+        repository = cls.repository_config()
+        if repository is None:
             return {}
 
         result = {}
 
-        uri = arcconfig_data.get("phabricator.uri")
-        if uri:
-            result["PHORGE_HOST"] = cls._host_root(uri)
-            log.debug(f"Using PHORGE_HOST from .arcconfig: {result['PHORGE_HOST']}")
+        if repository.host:
+            result["PHORGE_HOST"] = repository.host
+            log.debug(f"Using PHORGE_HOST from .arcconfig: {repository.host}")
         else:
             log.debug("No phabricator.uri found in .arcconfig")
 
-        if "phabfive" in arcconfig_data:
-            result.update(
-                cls._read_phabfive_block(arcconfig_data["phabfive"], arcconfig_path)
-            )
+        if repository.workboard:
+            result["PHORGE_WORKBOARD"] = repository.workboard
+            log.debug(f"Using PHORGE_WORKBOARD from .arcconfig: {repository.workboard}")
 
         return result
 
@@ -702,16 +802,16 @@ class Phabfive:
             }
 
         `tags.workboard` is the project a repository's tasks live on, as
-        `--tag` takes it, and becomes PHORGE_WORKBOARD. `tags.hints` names
-        other tags worth considering, each with an optional note; it is
-        checked here and not yet used. Whatever is malformed is warned about
-        and left out, never fatal, so a bad .arcconfig cannot stop a command
-        that does not need it.
+        `--tag` takes it. `tags.hints` names other tags worth considering,
+        each with an optional note. Whatever is malformed is warned about and
+        left out, never fatal, so a bad .arcconfig cannot stop a command that
+        does not need it.
 
         Returns
         -------
-        dict
-            {"PHORGE_WORKBOARD": ...} when a workboard is named, else {}
+        tuple
+            (workboard or None, {tag: note or None}), the hints in the order
+            written
         """
 
         def warn(where, expected):
@@ -727,39 +827,44 @@ class Phabfive:
 
         if not isinstance(block, dict):
             warn("phabfive", "an object")
-            return {}
+            return None, {}
         unknown("phabfive", block, {"tags"})
 
         tags = block.get("tags")
         if tags is None:
-            return {}
+            return None, {}
         if not isinstance(tags, dict):
             warn("phabfive.tags", "an object")
-            return {}
+            return None, {}
         unknown("phabfive.tags", tags, {"workboard", "hints"})
 
-        hints = tags.get("hints")
-        if hints is not None:
-            if not isinstance(hints, dict):
+        hints = {}
+        written = tags.get("hints")
+        if written is not None:
+            if not isinstance(written, dict):
                 warn("phabfive.tags.hints", "an object of tag: note")
             else:
-                for tag, note in hints.items():
-                    if note is not None and not isinstance(note, str):
+                for tag, note in written.items():
+                    if not tag.strip():
+                        warn("an empty tag in phabfive.tags.hints", "a project")
+                    elif note is not None and not isinstance(note, str):
                         warn(
                             f"phabfive.tags.hints.{tag}", "a note as a string, or null"
                         )
+                    else:
+                        hints[tag.strip()] = (
+                            note.strip() or None if isinstance(note, str) else None
+                        )
 
-        result = {}
         workboard = tags.get("workboard")
         if isinstance(workboard, str) and workboard.strip():
-            result["PHORGE_WORKBOARD"] = workboard.strip()
-            log.debug(f"Using PHORGE_WORKBOARD from .arcconfig: {workboard.strip()}")
-        elif workboard is not None:
+            return workboard.strip(), hints
+        if workboard is not None:
             warn(
                 "phabfive.tags.workboard",
                 "a project name, #hashtag, ID or PHID as a string",
             )
-        return result
+        return None, hints
 
     @staticmethod
     def _site_config_base():
@@ -784,6 +889,10 @@ class Phabfive:
         """
         conf, explicit_host = type(self).read_config(select_host=select_host)
         self._explicit_host = explicit_host
+        # Read a second time rather than threaded through read_config, which
+        # the cache calls for the endpoint alone; warn_once keeps what is
+        # malformed in it to one warning.
+        self.repository = type(self).repository_config()
         return conf
 
     @classmethod
@@ -1171,4 +1280,4 @@ class Phabfive:
         return results
 
 
-__all__ = ["Phabfive"]
+__all__ = ["Phabfive", "RepositoryConfig"]

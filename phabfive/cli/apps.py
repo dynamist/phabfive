@@ -40,18 +40,20 @@ def prompt_host(hosts):
     return selected
 
 
-def new_app(cls):
+def new_app(cls, *, verify=True, select_host=prompt_host):
     """Construct `cls` the way the command always has.
 
     The configuration is discovered and the connection is verified, so a
     command fails before it has done anything rather than halfway through.
     Several ~/.arcrc hosts and nothing to choose between them is answered
-    with a prompt at a terminal.
+    with a prompt at a terminal. A command that reports the configuration
+    rather than using it - `phabfive hints` - passes `verify=False` and
+    `select_host=None`, so it neither connects nor asks.
     """
     from phabfive.profiler import profiler
 
     with profiler.phase("Configuring and connecting"):
-        app = cls(verify=True, select_host=prompt_host)
+        app = cls(verify=verify, select_host=select_host)
     # PHORGE_FALLBACK is configuration, but the format it names is the
     # command's concern, so it is the command that applies it.
     app.set_fallback_format(app.conf.get("PHORGE_FALLBACK", "yaml"))
