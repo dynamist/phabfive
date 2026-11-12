@@ -55,8 +55,18 @@ import difflib
 from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional
 
-from phabfive.exceptions import PhabfiveException
+from phabfive.exceptions import PhabfiveException, PhabfiveInputException
 from phabfive.me import is_none
+from phabfive.spec.edit import (
+    CREATE_ONLY_KEYS,
+    EDIT_OBJECT_KEYS,
+    IDENTITY_KEYS,
+    RELATIVE_VALUES,
+    STAMP_KEY,
+    MixedListError,
+    parse_list_edit,
+    parse_stamp,
+)
 from phabfive.spec.envelope import (
     METADATA_KEYS,
     SUPPORTED_SPEC_VERSIONS,
@@ -164,6 +174,27 @@ def _replacement(key: str) -> str:
     replacement = _REPLACED_KEYS.get(key)
 
     return f" Write {replacement} instead." if replacement else ""
+
+
+def _edit_key(key: str, object_type: str, verb: str) -> str:
+    """ " ... add kind: edit." for an edit item's own key in a create item.
+
+    This is what an edit document that lost its `kind:` looks like. Its
+    sections are spelled like a create document's, so it is read as one, and
+    the key naming an existing object is the first thing that does not fit.
+    The sentence says what the file is rather than offering `tasks` as a
+    spelling of `task`.
+    """
+    if verb != "create":
+        return ""
+
+    if key not in (IDENTITY_KEYS.get(object_type), STAMP_KEY):
+        return ""
+
+    return (
+        f" {key}: belongs to an edit document, which changes a {object_type} "
+        f"that exists. If that is what this is, say so with kind: edit"
+    )
 
 
 def _type_name(value: object) -> str:
@@ -556,18 +587,24 @@ def _check_uncreatable(spec: "Spec") -> list[Problem]:
     ]
 
 
+def _sections(spec: "Spec") -> tuple[tuple[str, str], ...]:
+    """The body keys a spec of this kind holds, with each one's object type."""
+    from phabfive.spec.references import CREATE_OBJECT_KEYS
+
+    if spec.kind is Kind.SEARCH:
+        return (("searches", "search"),)
+
+    if spec.kind is Kind.EDIT:
+        return EDIT_OBJECT_KEYS
+
+    return CREATE_OBJECT_KEYS
+
+
 def _check_document_keys(spec: "Spec") -> list[Problem]:
     """The body's own top-level keys."""
-    from phabfive.spec.references import (
-        CREATE_OBJECT_KEYS,
-        UNCREATABLE_OBJECT_KEYS,
-    )
+    from phabfive.spec.references import UNCREATABLE_OBJECT_KEYS
 
-    known: tuple[str, ...] = (
-        ("searches",)
-        if spec.kind is Kind.SEARCH
-        else tuple(key for key, _ in CREATE_OBJECT_KEYS)
-    )
+    known: tuple[str, ...] = tuple(key for key, _ in _sections(spec))
 
     # A recognised-but-refused section is reported once, by
     # `_check_uncreatable`, which says why. Reporting it here as well would
@@ -613,15 +650,9 @@ def _check_shape(spec: "Spec") -> list[Problem]:
     it named. The top-level form of the same mistake was always reported;
     depth is not what decides whether a mistake is one.
     """
-    from phabfive.spec.references import CREATE_OBJECT_KEYS
-
-    sections: tuple[tuple[str, str], ...] = (
-        (("searches", "search"),) if spec.kind is Kind.SEARCH else CREATE_OBJECT_KEYS
-    )
-
     problems: list[Problem] = []
 
-    for key, object_type in sections:
+    for key, object_type in _sections(spec):
         for index, item in enumerate(spec.items(key)):
             if not isinstance(item, Mapping):
                 problems.append(
@@ -638,7 +669,7 @@ def _check_shape(spec: "Spec") -> list[Problem]:
                 )
                 continue
 
-            if object_type == "task":
+            if object_type == "task" and spec.kind is Kind.CREATE:
                 problems += _check_nested_shape(item, f"{key}[{index}]")
 
     return problems
@@ -744,6 +775,21 @@ def _check_value(
 
     if kind is FieldKind.TIME:
         return _check_time(object_path, field_path, field, value)
+
+    if kind is FieldKind.TIMESTAMP:
+        try:
+            parse_stamp(value)
+        except PhabfiveInputException as error:
+            return [
+                problem(
+                    object_path,
+                    field=field_path,
+                    value=value,
+                    reason=f"{field.name} is a point in time: {error}",
+                    code="bad-timestamp",
+                )
+            ]
+        return []
 
     if kind is FieldKind.PATTERN:
         return _check_pattern(object_path, field_path, field, value)
@@ -1157,7 +1203,7 @@ def _check_fields(
                     value=mapping[raw_key],
                     reason=(
                         f"A {object_type} {verb} has no key {key!r}."
-                        f"{_replacement(key) or _flag_suggestion(key, declared) or _suggestion(key, known)}"
+                        f"{_edit_key(key, object_type, verb) or _replacement(key) or _flag_suggestion(key, declared) or _suggestion(key, known)}"
                     ),
                     code="unknown-key",
                 )
@@ -1199,6 +1245,9 @@ def _check_schema(
     problems += _check_document_keys(spec)
     problems += _check_shape(spec)
 
+    if spec.kind is Kind.EDIT:
+        return problems + _check_edit_items(spec, templated)
+
     for spec_object in iter_objects(spec):
         if spec_object.object_type == "search":
             problems += _check_search_item(
@@ -1214,6 +1263,181 @@ def _check_schema(
             "create",
             templated,
         )
+
+    return problems
+
+
+def _check_edit_items(
+    spec: "Spec", templated: frozenset[tuple[str, str]] = frozenset()
+) -> list[Problem]:
+    """Every item of an edit document: which object, and what it should be.
+
+    An edit item is flat - it names one object that exists and holds no
+    children and no local ids - so none of the create walk applies and this
+    is the whole of it: the keys, the values, and the three rules
+    `phabfive.spec.edit` states.
+    """
+    problems: list[Problem] = []
+
+    for key, object_type in EDIT_OBJECT_KEYS:
+        identity = IDENTITY_KEYS[object_type]
+        seen: dict[str, str] = {}
+
+        for index, item in enumerate(spec.items(key)):
+            if not isinstance(item, Mapping):
+                continue
+
+            path = f"{key}[{index}]"
+            problems += _check_edit_item(path, item, object_type, templated)
+
+            named = item.get(identity)
+
+            if not named:
+                problems.append(
+                    problem(
+                        path,
+                        field=identity,
+                        value=named,
+                        reason=(
+                            f"An edit item names the {object_type} it edits: "
+                            f"{identity}: {MONOGRAM_EXAMPLES[object_type]}"
+                        ),
+                        code="missing-required",
+                    )
+                )
+                continue
+
+            if _unrendered(named):
+                continue
+
+            # One object, so one monogram: the list and the comma-separated
+            # spellings a monogram key otherwise takes name several
+            letters = field_by_name(identity, object_type, "edit")
+            prefixes = letters.monograms if letters else ()
+
+            if not isinstance(named, str) or not is_monogram(
+                named.strip(), prefixes=prefixes
+            ):
+                problems.append(
+                    problem(
+                        path,
+                        field=identity,
+                        value=named,
+                        reason=(
+                            f"{named!r} is not one {object_type}. Expected "
+                            f"format: {MONOGRAM_EXAMPLES[object_type]}"
+                        ),
+                        code="bad-monogram",
+                    )
+                )
+                continue
+
+            name = named.strip().upper()
+
+            if name in seen:
+                problems.append(
+                    problem(
+                        path,
+                        field=identity,
+                        value=named,
+                        reason=(
+                            f"{name} is already edited by {seen[name]}. One "
+                            f"item per {object_type}: two would be applied "
+                            f"one after the other, and the second would see "
+                            f"the first's change as somebody else's"
+                        ),
+                        code="duplicate-object",
+                    )
+                )
+            else:
+                seen[name] = path
+
+    return problems
+
+
+#: What an identity key's value looks like, for the sentence that asks for one.
+MONOGRAM_EXAMPLES: Mapping[str, str] = {"task": "T123"}
+
+
+def _check_edit_item(
+    path: str,
+    item: Mapping[str, Any],
+    object_type: str,
+    templated: frozenset[tuple[str, str]],
+) -> list[Problem]:
+    """One edit item's keys and values."""
+    problems: list[Problem] = []
+    checked = dict(item)
+
+    # Checked by the caller, as the one object it has to be
+    checked.pop(IDENTITY_KEYS[object_type], None)
+
+    # A create item's structure, written in an edit. Named, with what to
+    # write instead, rather than answered with a spelling suggestion
+    for key, instead in CREATE_ONLY_KEYS.get(object_type, {}).items():
+        if key in checked:
+            problems.append(
+                problem(
+                    path,
+                    field=key,
+                    value=checked.pop(key),
+                    reason=f"A {object_type} edit has no key {key!r}. {instead}",
+                    code="unknown-key",
+                )
+            )
+
+    for field in fields_for(object_type, "edit"):
+        value = checked.get(field.name)
+
+        if value is None or not field.multiple:
+            continue
+
+        # The operators are this kind's own grammar, on top of whatever the
+        # field takes, so they come off before the field's check sees them
+        try:
+            edit = parse_list_edit(value)
+        except MixedListError as error:
+            problems.append(
+                problem(
+                    path,
+                    field=field.name,
+                    value=checked.pop(field.name),
+                    reason=str(error),
+                    code="mixed-list",
+                )
+            )
+        except PhabfiveInputException as error:
+            problems.append(
+                problem(
+                    path,
+                    field=field.name,
+                    value=checked.pop(field.name),
+                    reason=f"{field.name} takes text: {error}",
+                    code="wrong-type",
+                )
+            )
+        else:
+            checked[field.name] = list(edit.named)
+
+    problems += _check_fields(path, "", checked, object_type, "edit", templated)
+
+    for key, relative in RELATIVE_VALUES.get(object_type, {}).items():
+        value = item.get(key)
+
+        if isinstance(value, str) and value.strip().lower() in relative:
+            problems.append(
+                problem(
+                    path,
+                    field=key,
+                    value=value,
+                    reason=(
+                        f"{key}: {value} is a move from wherever the "
+                        f"{object_type} is, so applying this twice would move "
+                        f"it twice. Name the {key} it should end up with"
+                    ),
+                    code="relative-value",
+                )
+            )
 
     return problems
 
@@ -1742,6 +1966,11 @@ def _check_column_context(spec: "Spec") -> list[Problem]:
 
 def _check_semantics(spec: "Spec") -> list[Problem]:
     """What a JSON Schema structurally cannot say about a spec."""
+    if spec.kind is Kind.EDIT:
+        # Local ids, anchors and nesting are how a create document links
+        # objects that do not exist yet. An edit item has none of them.
+        return []
+
     problems, local_ids = _check_local_ids(spec)
     problems += _check_references(spec, local_ids)
     problems += _check_local_id_targets(spec, local_ids)

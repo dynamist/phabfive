@@ -65,7 +65,7 @@ CREATE_OBJECT_TYPES = ("task", "project", "paste")
 #: word *in* the directory name rather than as the whole of it, so a corpus
 #: renamed again - to `create-specs/`, or back to a compound name - keeps
 #: declaring the same thing without touching this file.
-KIND_WORDS = (("create", Kind.CREATE), ("search", Kind.SEARCH))
+KIND_WORDS = (("create", Kind.CREATE), ("search", Kind.SEARCH), ("edit", Kind.EDIT))
 
 
 def _shipped_specs():
@@ -109,12 +109,13 @@ def _declared_kind(path):
 
 CREATE_SPECS = [path for path in SPECS if _declared_kind(path) is Kind.CREATE]
 SEARCH_SPECS = [path for path in SPECS if _declared_kind(path) is Kind.SEARCH]
+EDIT_SPECS = [path for path in SPECS if _declared_kind(path) is Kind.EDIT]
 
 # A directory that names no kind is legal and is not checked for one: the
 # format-parity examples sit together because they are the same spec in four
 # serializations, and half of them are creates and half searches. They are
 # still loaded and validated like everything else.
-FILED_SPECS = CREATE_SPECS + SEARCH_SPECS
+FILED_SPECS = CREATE_SPECS + SEARCH_SPECS + EDIT_SPECS
 
 
 def _walk_items(items):
@@ -250,6 +251,7 @@ def test_specs_are_shipped():
     assert SPECS, f"No spec files found under {where}"
     assert CREATE_SPECS, f"No create specs found under {where}"
     assert SEARCH_SPECS, f"No search specs found under {where}"
+    assert EDIT_SPECS, f"No edit specs found under {where}"
 
 
 @pytest.mark.parametrize("path", SPECS, ids=_spec_id)

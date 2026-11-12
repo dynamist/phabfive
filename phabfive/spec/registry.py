@@ -15,7 +15,7 @@ cheap and free of every import that would make either of those expensive.
 """
 
 import enum
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from dataclasses import field as _field
 from types import MappingProxyType
 from typing import Mapping, Optional
@@ -50,6 +50,9 @@ class FieldKind(enum.Enum):
     INT = "int"
     BOOL = "bool"
     TIME = "time"  # "1h", "7d", "2w" - parse_time_to_days in maniphest/utils.py
+    # One instant, ISO 8601: "2026-01-31T09:30:00Z". Not TIME, which is a
+    # length of time counted back from now.
+    TIMESTAMP = "timestamp"
     ENUM = "enum"  # genuinely static; choices on the Field
     ORDER = "order"  # "<field>[:asc|:desc]"
     PATTERN = "pattern"  # transition grammar: from:/in:/been:/never:/to:
@@ -69,9 +72,10 @@ class FieldKind(enum.Enum):
 # one - Phase 1 declares task search fields and nothing else.
 OBJECT_TYPES = frozenset({"task", "project", "paste", "passphrase", "task-stats"})
 
-# What a spec does with an object. One registry serves both, so a create-only
-# key and a search-only key can share a name without sharing a declaration.
-VERBS = frozenset({"search", "create"})
+# What a spec does with an object. One registry serves them all, so a
+# create-only key and a search-only key can share a name without sharing a
+# declaration.
+VERBS = frozenset({"search", "create", "edit"})
 
 #: `phabfive.constants.RELATION_KEYWORDS`, spelled out: this module imports
 #: only the standard library (tests/test_spec_registry.py), and a test holds
@@ -185,6 +189,7 @@ _PASTE = frozenset({"paste"})
 _PASSPHRASE = frozenset({"passphrase"})
 _SEARCH = frozenset({"search"})
 _CREATE = frozenset({"create"})
+_EDIT = frozenset({"edit"})
 
 # The create-side shared key sets. A key two object types spell the same way
 # and mean the same thing by is one Field carrying both, exactly as
@@ -1122,6 +1127,135 @@ FIELDS: tuple[Field, ...] = (
 )
 
 
+# --- edit ----------------------------------------------------------------
+#
+# An edit item states what an existing object should be, in the keys a
+# create item describes a new one with. So the value keys are not declared a
+# second time: each is the create declaration of the same name, carried over
+# with the verb changed. A key renamed, retyped or given a new grammar on
+# the create side changes here in the same commit, which is the whole point
+# - a document exported from an object has to be readable as either kind.
+#
+# What an edit adds is the key that names the object, the stamp that guards
+# it, and - for a task - `parents:` and `subtasks:` as plain task lists. On
+# the create side those two are structure rather than fields, because there
+# they may be a `$local-id`; an edit document has no local ids, so here they
+# are ordinary monogram fields and `$epic` is a `bad-monogram`.
+
+#: The create keys an edit item also takes, per object type. Only what the
+#: edit engine can set *and* compare with the object as it is: a key listed
+#: here that the planner ignored would validate and then do nothing.
+_EDITED: Mapping[str, tuple[str, ...]] = MappingProxyType(
+    {
+        "task": (
+            "title",
+            "description",
+            "priority",
+            "status",
+            "assignment",
+            "subscribers",
+            "projects",
+            "column",
+            "space",
+            "visible-to",
+            "editable-by",
+            "commits",
+        ),
+    }
+)
+
+# Where the create wording is about creating. Everything else reads the same
+# for an object that exists.
+_EDIT_HELP: Mapping[str, str] = MappingProxyType(
+    {
+        "assignment": "Assignee: a username, @me, a user PHID, or @none for nobody.",
+        "projects": "The projects it is tagged into, by name, #hashtag or PHID.",
+        "column": "Workboard column to move it to, on the one board it is on.",
+        "space": "The Space it belongs in, by name or monogram.",
+        "commits": (
+            "The commits attached to it, by rCALLSIGNhash, R1:hash, a bare "
+            "hash or a PHID."
+        ),
+    }
+)
+
+
+def _edit_fields() -> tuple[Field, ...]:
+    """The edit-side declarations: identity, stamp, and the carried-over keys.
+
+    A create field shared by several object types stays one field here too,
+    carrying the object types that edit it, so "one declaration per key and
+    verb" holds on this side as it does on the others.
+    """
+    identity = (
+        Field(
+            name="task",
+            kind=FieldKind.MONOGRAM,
+            objects=_TASK,
+            verbs=_EDIT,
+            monograms=("T",),
+            help="The task this item edits, as T123. Required.",
+        ),
+        Field(
+            name="modified",
+            kind=FieldKind.TIMESTAMP,
+            objects=_TASK,
+            verbs=_EDIT,
+            help=(
+                "When it was last modified as this document saw it, ISO 8601. "
+                "A change to an object modified since is refused."
+            ),
+        ),
+    )
+
+    carried = []
+    for declared in FIELDS:
+        if "create" not in declared.verbs:
+            continue
+
+        objects = frozenset(
+            object_type
+            for object_type, names in _EDITED.items()
+            if declared.name in names and object_type in declared.objects
+        )
+
+        if objects:
+            carried.append(
+                replace(
+                    declared,
+                    objects=objects,
+                    verbs=_EDIT,
+                    help=_EDIT_HELP.get(declared.name, declared.help),
+                )
+            )
+
+    relations = tuple(
+        Field(
+            name=name,
+            kind=FieldKind.MONOGRAM,
+            objects=_TASK,
+            verbs=_EDIT,
+            monograms=("T",),
+            multiple=True,
+            help=help_text,
+        )
+        for name, help_text in (
+            ("parents", "The tasks it is a subtask of, as T123."),
+            ("subtasks", "The tasks that are subtasks of it, as T123."),
+        )
+    )
+
+    # In the order `_EDITED` lists them, which is the order a document reads
+    # in, rather than wherever each happened to be declared for create
+    order = list(dict.fromkeys(name for names in _EDITED.values() for name in names))
+    carried.sort(key=lambda declared: order.index(declared.name))
+
+    return identity + tuple(carried) + relations
+
+
+FIELDS = FIELDS + _edit_fields()
+
+
 #: The ``(object type, verb)`` pairs whose declared key set is **complete**,
 #: and therefore the only ones an undeclared key is reported as
 #: ``unknown-key`` for.
@@ -1155,6 +1289,7 @@ DECLARED_COMPLETE: frozenset[tuple[str, str]] = frozenset(
         ("task", "create"),
         ("project", "create"),
         ("paste", "create"),
+        ("task", "edit"),
     }
 )
 

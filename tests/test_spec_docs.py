@@ -327,12 +327,13 @@ def test_the_page_is_in_the_navigation():
 #: resolution result, which `online.py` copies into the record's `code`.
 SLUG_KEYWORDS = ("code", "problem")
 
-#: Codes in the vocabulary that nothing in `phabfive/spec/` emits, and which
-#: `## Implementations` therefore has to name as gaps in the reader rather
-#: than leave a reader of the table to assume the check runs. Frozen here on
-#: purpose: adding the missing check, or adding a code before its check,
-#: fails this and makes the page say so in the same change.
-UNEMITTED_CODES = frozenset({"unknown-priority", "unknown-status"})
+#: Codes in the vocabulary that nothing emits, and which `## Implementations`
+#: therefore has to name as gaps in the reader rather than leave a reader of
+#: the table to assume the check runs. Frozen here on purpose: adding a code
+#: before its check fails this and makes the page say so in the same change.
+#: Empty since the edit kind's planner began reporting `unknown-status` and
+#: `unknown-priority`, and deliberately kept: it is the mechanism.
+UNEMITTED_CODES: frozenset = frozenset()
 
 
 def _emitted_codes():
@@ -344,10 +345,16 @@ def _emitted_codes():
     """
     import ast
 
-    root = REPO / "phabfive" / "spec"
     found = set()
 
-    for path in sorted(root.rglob("*.py")):
+    # `phabfive/edit/spec.py` is the edit kind's online layer: it reports
+    # problems in this vocabulary although it lives beside the engine it
+    # drives rather than under `phabfive/spec/`.
+    paths = sorted((REPO / "phabfive" / "spec").rglob("*.py")) + [
+        REPO / "phabfive" / "edit" / "spec.py"
+    ]
+
+    for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"))
 
         for node in ast.walk(tree):
