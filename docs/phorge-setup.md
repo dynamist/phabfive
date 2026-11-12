@@ -357,6 +357,8 @@ Phorge turns a deprecation that PHP raises while it runs into an error, so a rel
 
 `PHP=` builds on another series, one of the stages in `phorge/Dockerfile`: `make reset && make up VERSION=2025.18 PHP=8.5`.
 
+PHP 8.0 is end of life, and its image is 8.0.30 from 2023. It will never get the fix for PHP2Shell (CVE-2026-109618 and CVE-2026-109619, remote code execution through a `multipart/form-data` request, fixed in 8.3.36, 8.4.27 and 8.5.12), and the image runs PHP as Apache's mod_php, where no setting closes CVE-2026-109618. The 8.3, 8.4 and 8.5 stages follow their series, so a build gets the fixed release once `docker pull php:<series>-apache` has fetched it. Whatever the version, this Phorge is for testing only: keep it on loopback, as the cluster publishes it, and run a Phorge on PHP 8.0 no longer than the test needs.
+
 ## Configure phabfive
 
 Use the pre-configured API token:
