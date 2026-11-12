@@ -40,6 +40,7 @@ from phabfive.cli.spec_flags import with_spec_option
 from phabfive.commits import COMMIT_GRAMMAR
 from phabfive.constants import MONOGRAMS
 from phabfive.cli.editor import merge_title, resolve_assume_yes
+from phabfive.cli.hints import remind_of_hints
 from phabfive.exceptions import (
     PhabfiveConfigException,
     PhabfiveDataException,
@@ -573,6 +574,7 @@ def create(
             default = _default_tag(maniphest, "Tagging with")
             if default:
                 tags = [default]
+        remind_of_hints(maniphest, [tags])
         subscribers = _split_values_to_add(
             [*(subscribe or []), *(add_subscriber or [])], "--subscribe"
         )

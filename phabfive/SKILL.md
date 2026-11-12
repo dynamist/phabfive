@@ -32,11 +32,31 @@ different project, or prefix the command with `PHORGE_WORKBOARD=` to search ever
 `--ids`, `--phids`, `--with` and `edit` are never scoped.
 
 The same object can list `"hints"`: other tags this repository's tasks often need, as
-`"tags": {"hints": {"<tag>": "<when it applies here>"}}`. A `null` note means the
-project's own description on Phorge says when (read it with `phabfive project show`).
-Before creating a task in such a repository, read the hints in `.arcconfig`. Add a hinted
-tag with `--tag` only when the task matches its note or description; phabfive never adds
-one by itself, and no command lists them yet.
+`"tags": {"hints": {"<tag>": "<when it applies here>"}}`.
+
+Run `phabfive --format=yaml hints` before working with tasks, and read all of it. It
+never prompts or changes anything. It is one record whose sections appear only where they
+apply:
+
+- `Instance`: the instance phabfive will use (`URL`) and what chose it (`From`). A null
+  `URL` means none is chosen; `From` says how to choose, and `Instances` lists the ones in
+  `~/.arcrc`. Ask the user which to use rather than picking one.
+- `Workboard`: where the repository's tasks go. Its `Description` says how the board is
+  used (what the columns mean, how priority and assignment are used), and `Columns` lists
+  its columns, in board order on Phorge 2023.32 and later. Phabricator and older Phorge
+  don't report the order, so there the list is in creation order and may include hidden
+  columns: take the order from the description, not the list. Follow the description when
+  choosing a column, priority or assignee.
+- `Tags`: each hinted tag, with its project's `Description` and the repository's `Note` on
+  when it applies here; a null note means the description says enough. Add a hinted tag
+  with `--tag` only when the task matches its note or description; phabfive never adds one
+  by itself. A tag with a `Problem` names no project: mention it to the user rather than
+  guessing.
+- `Repository`: the `.arcconfig` read. A `Problem` there means its hints were left out,
+  because phabfive is using another instance.
+
+`maniphest create` and `phabfive apply -f` repeat the hinted tags a task lacks on stderr
+as `Not tagged: ...`, in a dry run too, so read that line before creating for real.
 
 ## Learn the installed CLI
 

@@ -26,6 +26,7 @@ from phabfive.cli.maniphest import maniphest_app
 from phabfive.cli.passphrase import passphrase_app
 from phabfive.cli.paste import paste_app
 from phabfive.cli.profile import begin as begin_profile
+from phabfive.cli.hints import hints_command
 from phabfive.cli.profile import profile_command
 from phabfive.cli.project import project_app
 from phabfive.cli.repl import repl_app
@@ -353,6 +354,7 @@ app.add_typer(spec_app, name="spec")
 app.command(name="apply")(apply_command)
 app.command(name="search")(search_command)
 app.command(name="profile")(profile_command)
+app.command(name="hints")(hints_command)
 # Show repl command only if ptpython is installed (phabfive[repl])
 try:
     import ptpython  # noqa: F401

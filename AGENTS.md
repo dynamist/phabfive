@@ -299,7 +299,13 @@ Config precedence (later overrides earlier):
    from `phabfive.tags.workboard` in phabfive's own `phabfive` object, read strictly by
    `Phabfive._read_phabfive_block`. The command - never the library - applies it as the
    default `--tag` of `maniphest search`, `stats` and `create`; see `_default_tag` in
-   `phabfive/cli/maniphest.py`). `.git` may be a file, as in a worktree
+   `phabfive/cli/maniphest.py`). `.git` may be a file, as in a worktree. The whole file is
+   `Phabfive.repository_config()`, a `RepositoryConfig`, which a discovered app keeps as
+   `repository` (None when configured explicitly). `tags.hints` lives only there, never in
+   `conf`: `phabfive hints` and the reminder on `create` read it through
+   `phabfive/cli/hints.py`. `phabfive hints` constructs its app with `new_app(...,
+   verify=False, select_host=None)`: it reports the configuration, so it never connects
+   or prompts just to start
 7. `~/.arcrc` (provides PHORGE_TOKEN for matched URL)
 8. Environment variables
 

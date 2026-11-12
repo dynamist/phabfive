@@ -157,6 +157,11 @@ The dry run names the projects:
   Tags: Removed: Frontend
 ```
 
+In a repository whose `.arcconfig` names a workboard and tag hints,
+`phabfive hints` shows the board's description and columns and each
+hinted tag with its note, and `maniphest create` names on stderr the hinted tags a
+new task lacks. See [Repository Configuration](repository-config.md#before-working-here-phabfive-hints).
+
 ### Commits
 
 `maniphest edit` (and `phabfive edit`) attaches commits with `--attach` and

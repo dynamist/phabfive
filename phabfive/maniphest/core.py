@@ -60,6 +60,7 @@ from phabfive.maniphest.resolvers import (
     resolve_project_phids_for_create,
     resolve_project_tags,
     resolve_space,
+    resolve_tag_hints,
     resolve_space_phids,
     resolve_task_phids,
 )
@@ -372,6 +373,70 @@ class Maniphest(Phabfive):
     def _resolve_project_phids_for_create(self, project_names):
         """Resolve project names to PHIDs and slugs for task creation."""
         return resolve_project_phids_for_create(self.phab, project_names)
+
+    def tag_hints(self, hints, workboard=None):
+        """What to know before tagging a task: the workboard and the tag hints.
+
+        A repository lists them in its .arcconfig, which
+        `Phabfive.repository_config` reads; this only asks the instance
+        about the tags it is given, so a program can pass any. A tag that
+        names no project, or several, is still returned, with what is wrong
+        in ``problem``, so a stale hint is seen rather than dropped.
+
+        Parameters
+        ----------
+        hints : mapping
+            Tag to a note on when it applies, or None, as
+            `RepositoryConfig.hints` holds them
+        workboard : str, optional
+            The repository's workboard, returned first with role "workboard"
+
+        Returns
+        -------
+        list of dict
+            One per tag, the workboard first and then the hints in the order
+            given: ``tag``, ``role`` ("workboard" or "hint"), ``note``, and
+            ``phid``, ``id``, ``name``, ``description`` and ``problem`` as
+            `resolve_tag_hints` gives them. The workboard also has
+            ``columns``: the names of the columns its board shows, in board
+            order, empty when it has no board or could not be found. Its
+            description is where a board says how it is used, so it is
+            what a reader of the hints reads first
+        """
+        entries = []
+        if workboard:
+            entries.append((workboard, "workboard", None))
+        entries.extend((tag, "hint", note) for tag, note in hints.items())
+        if not entries:
+            return []
+
+        found = resolve_tag_hints(
+            self.phab, list(dict.fromkeys(t for t, _, _ in entries))
+        )
+
+        columns = {}
+        board = found[workboard]["phid"] if workboard else None
+        if board:
+            from phabfive.project.fetchers import fetch_boards_columns
+            from phabfive.project.formatters import format_column
+
+            boards, proxies = fetch_boards_columns(self.phab, [board])
+            # The columns the board shows. A server that does not say which
+            # are hidden (Phabricator, Phorge before 2023.32) shows them all.
+            columns[board] = [
+                format_column(column, proxies)["Name"]
+                for column in boards.get(board, [])
+                if column.get("fields", {}).get("isHidden") is not True
+            ]
+
+        records = []
+        for tag, role, note in entries:
+            record = {"tag": tag, "role": role, "note": note}
+            record.update(found[tag])
+            if role == "workboard":
+                record["columns"] = columns.get(record["phid"], [])
+            records.append(record)
+        return records
 
     def _resolve_project_tags(self, values, option=None):
         """Resolve the projects an edit adds or removes to (PHID, name), exactly."""
