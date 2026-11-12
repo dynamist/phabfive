@@ -18,15 +18,6 @@ import sys
 
 import pytest
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    tomllib = None
-
-pytestmark = pytest.mark.skipif(
-    tomllib is None, reason="reading pyproject.toml needs tomllib (Python 3.11+)"
-)
-
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
 
 from check_version import main  # noqa: E402

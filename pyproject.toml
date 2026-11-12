@@ -9,7 +9,7 @@ description = "CLI for Phabricator and Phorge - built for humans and AI agents"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Rickard Eriksson", email = "rickard@dynamist.se" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: System Administrators",
@@ -17,7 +17,6 @@ classifiers = [
   "Operating System :: OS Independent",
   "Environment :: Console",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -41,9 +40,6 @@ dependencies = [
   "requests>=2.26",
   "rich>=13.0.0",
   "ruamel-yaml>=0.18.0",
-  # Imported directly by phabfive.spec.loader, to read a TOML spec. tomllib
-  # is the same parser and is stdlib from 3.11 on; requires-python is 3.10.
-  "tomli>=2.0; python_version < '3.11'",
   "typer>=0.12.0",
   # Imported directly by phabfive.retry, whose policy is a urllib3 Retry.
   # 1.26 is the first with allowed_methods and a per-kind `other` budget.
@@ -66,10 +62,6 @@ test = [
   "pytest-cov>=7.1.0",
   # Capped until dynamist/phabfive#322, 0.16 widened the default rule set
   "ruff>=0.15.22,<0.16",
-  # Unconditionally, unlike the runtime marker above: mypy runs with
-  # python_version = "3.10", so it type checks the tomli branch of
-  # phabfive.spec.loader whatever the interpreter running it is.
-  "tomli>=2.5.0",
   "types-appdirs>=1.4.3.5",
   "types-pyyaml>=6.0.12.20260906",
   "types-requests>=2.33.0.20260906",
@@ -93,7 +85,7 @@ packages = ["phabfive"]
 [tool.mypy]
 files = ["phabfive"]
 # The oldest supported Python, so syntax only a newer one allows is caught
-python_version = "3.10"
+python_version = "3.11"
 # What a consumer's mypy applies to `from phabfive import X`, so the package
 # is checked the same way: a name re-exported without __all__ or `as X` fails
 no_implicit_reexport = true

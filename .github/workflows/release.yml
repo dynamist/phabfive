@@ -291,7 +291,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.14"]
+        python-version: ["3.11", "3.14"]
         package: [wheel]
         include:
           # An sdist that will not build breaks pip install for anyone

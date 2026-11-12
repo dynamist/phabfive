@@ -73,7 +73,7 @@ jobs:
       fail-fast: true
       matrix:
         os: ${{ fromJSON(needs.scope.outputs.docs-only == 'true' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
-        python-version: ${{ fromJSON(needs.scope.outputs.docs-only == 'true' && '["3.13"]' || '["3.10", "3.11", "3.12", "3.13", "3.14"]') }}
+        python-version: ${{ fromJSON(needs.scope.outputs.docs-only == 'true' && '["3.13"]' || '["3.11", "3.12", "3.13", "3.14"]') }}
     permissions:
       contents: read
     steps:
@@ -117,10 +117,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The ends of the supported range. 3.10 also matters because
-        # tests/test_declared_dependencies.py skips there for want of
-        # tomllib, so on that leg this is the only cover.
-        python-version: ["3.10", "3.14"]
+        # The ends of the supported range
+        python-version: ["3.11", "3.14"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

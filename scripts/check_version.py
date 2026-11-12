@@ -30,10 +30,7 @@ Stdlib only, like scripts/smoke.py: it has to run on a bare CI runner.
 import sys
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    tomllib = None
+import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -47,8 +44,6 @@ DEV_MARKERS = ("dev",)
 
 def project_version(pyproject: Path) -> str:
     """The version pyproject.toml declares, and that hatchling will build."""
-    if tomllib is None:
-        sys.exit("reading pyproject.toml needs tomllib (Python 3.11+)")
 
     with pyproject.open("rb") as handle:
         data = tomllib.load(handle)

@@ -19,7 +19,7 @@ uv run phabfive --help
 uv run pytest                        # quick test with current Python
 uv run pytest tests/test_foo.py      # run single test file
 uv run pytest -k test_name           # run specific test
-uv run tox                           # test all Python versions (3.10-3.14)
+uv run tox                           # test all Python versions (3.11-3.14)
 
 # Lint, format and type check
 uv run ruff check phabfive/ tests/

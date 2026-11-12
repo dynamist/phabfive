@@ -86,7 +86,7 @@ build, so what you run locally is what CI runs.
 
 ## Run Unit Tests
 
-This repo uses `pytest` as the test runner and `tox` to orchestrate tests for various Python versions (3.10-3.13).
+This repo uses `pytest` as the test runner and `tox` to orchestrate tests for various Python versions (3.11-3.14).
 
 **Quick test run:**
 
@@ -109,7 +109,7 @@ uv run tox
 
 # Run specific environment
 uv run tox -e py313
-uv run tox -e py310
+uv run tox -e py311
 
 # Run linting
 uv run tox -e flake8
