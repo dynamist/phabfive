@@ -70,7 +70,7 @@ SPEC_VERSION = "phorge/v1alpha1"
 SUPPORTED_SPEC_VERSIONS = frozenset({SPEC_VERSION})
 
 #: The keys that belong to the envelope rather than to the body.
-ENVELOPE_KEYS = frozenset({"spec", "kind", "metadata"})
+ENVELOPE_KEYS = frozenset({"spec", "kind", "metadata", "interpolate"})
 
 #: The `metadata:` keys with a meaning. Anything else is kept in
 #: `Metadata.extra`, where the offline validation pass reports it as a
@@ -225,6 +225,14 @@ class Envelope:
 
     metadata: Metadata = dataclasses.field(default_factory=lambda: Metadata())
     """What the file says about itself; empty when it says nothing."""
+
+    interpolate: Any = True
+    """`interpolate:` exactly as written, True when the file said nothing.
+
+    Only `False` switches interpolation off - see `Spec.interpolates`. It is
+    kept as written rather than coerced so the offline pass can report an
+    `interpolate: "no"` instead of quietly reading it as one or the other.
+    """
 
 
 def _kind_names() -> str:
@@ -521,6 +529,7 @@ def normalize_documents(
     spec_version, _ = _declared(parsed, "spec", source=source)
     declared_kind, kind_declared = _declared(parsed, "kind", source=source)
     metadata, _ = _declared(parsed, "metadata", source=source)
+    interpolate, interpolate_declared = _declared(parsed, "interpolate", source=source)
 
     if spec_version is not None and spec_version not in SUPPORTED_SPEC_VERSIONS:
         supported = ", ".join(sorted(SUPPORTED_SPEC_VERSIONS))
@@ -556,6 +565,7 @@ def normalize_documents(
         kind=resolved,
         kind_declared=kind_declared,
         metadata=Metadata.from_data(metadata, source=source),
+        interpolate=interpolate if interpolate_declared else True,
     )
 
     body = _merged(
@@ -628,6 +638,16 @@ class Spec:
     def metadata(self) -> Metadata:
         """Shorthand for `spec.envelope.metadata`."""
         return self.envelope.metadata
+
+    @property
+    def interpolates(self) -> bool:
+        """Whether `{{ name }}` in this spec is a variable rather than text.
+
+        False only for a document that says `interpolate: false`: every
+        string in it is then sent exactly as written, which is what a
+        description quoting a template of its own needs.
+        """
+        return self.envelope.interpolate is not False
 
     @classmethod
     def from_data(
@@ -744,9 +764,24 @@ class Spec:
             value nor a default, or a cycle between them. This raises rather
             than reporting because a half-rendered spec is not a spec;
             `validate_offline` is what reports the same mistakes as problems
-            a person can read all at once.
+            a person can read all at once. Also when values are given to a
+            spec that says `interpolate: false`, which has nothing to put
+            them in.
+
+        Notes
+        -----
+        A spec that says `interpolate: false` comes back with its body
+        untouched and `rendered` True: there is nothing left to render.
         """
         from phabfive.spec.variables import render_tree, resolve_variables
+
+        if not self.interpolates:
+            if self.variables or variables:
+                raise PhabfiveDataException(
+                    f"{self.source} says interpolate: false, so it takes no variables"
+                )
+
+            return dataclasses.replace(self, rendered=True)
 
         values = resolve_variables(self.variables, variables)
 
@@ -824,6 +859,9 @@ class Spec:
         metadata = self.envelope.metadata.as_data()
         if metadata:
             data["metadata"] = metadata
+
+        if self.envelope.interpolate is not True:
+            data["interpolate"] = self.envelope.interpolate
 
         if self.variables:
             data[VARIABLES_KEY] = copy.deepcopy(dict(self.variables))

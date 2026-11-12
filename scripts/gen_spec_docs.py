@@ -151,6 +151,12 @@ CODE_MEANINGS: dict[str, tuple[str, str, str]] = {
         "A declared variable with no value, no default and no override.",
     ),
     "circular-variable": ("offline", "error", "Variables that define each other."),
+    "interpolation-off": (
+        "offline",
+        "error",
+        "A variable declared for, or supplied to, a document that says "
+        "`interpolate: false`.",
+    ),
     "duplicate-local-id": (
         "offline",
         "error",
@@ -430,6 +436,10 @@ def _envelope_block() -> list[str]:
             + "`. Absent means inferred from the body keys."
         ),
         "metadata": "What the *file* is, for a person reading it. Nothing acts on it.",
+        "interpolate": (
+            "`false` sends every string exactly as written: `{{ name }}` is "
+            "text, not a variable. Absent means `true`."
+        ),
     }
 
     rows = [(f"`{key}`", "optional", described[key]) for key in sorted(ENVELOPE_KEYS)]
