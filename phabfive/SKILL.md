@@ -975,7 +975,9 @@ thing written two ways.
 
 Every string is rendered with Jinja2. A `{{ name }}` the file does not declare under
 `variables:` and no `--set NAME=VALUE` supplies is an error before anything runs, not an
-empty string. `--set` is repeatable and beats the file's own default.
+empty string. `--set` is repeatable and beats the file's own default. A file whose text
+quotes `{{ ... }}` itself says `interpolate: false` at the top level: every string is
+then sent as written, and the file takes no variables.
 
 Check a file without running it:
 

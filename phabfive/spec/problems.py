@@ -48,6 +48,7 @@ CODES: tuple[str, ...] = (
     "undefined-variable",
     "missing-variable",
     "circular-variable",
+    "interpolation-off",
     # The offline layer: local ids
     "duplicate-local-id",
     "unknown-local-id",
