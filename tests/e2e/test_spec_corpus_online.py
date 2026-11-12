@@ -77,6 +77,7 @@ def _name(path):
 
 ALL_SPECS = _specs()
 CREATE_SPECS = _specs("create")
+EDIT_SPECS = _specs("edit")
 
 
 def test_there_is_a_corpus_to_check():
@@ -123,3 +124,15 @@ def test_every_create_spec_plans(path, phabfive_raw):
         f"{_name(path)} was refused for a different reason than the one "
         f"recorded:\n{result.stderr}"
     )
+
+
+@pytest.mark.parametrize("path", EDIT_SPECS, ids=_name)
+def test_every_edit_spec_plans(path, phabfive_raw):
+    """`--dry-run`, never a real apply: the corpus names seeded tasks."""
+    result = phabfive_raw("apply", "-f", str(path), "--dry-run")
+
+    assert result.returncode == 0, (
+        f"{_name(path)} does not plan (exit {result.returncode}):\n"
+        f"{result.stdout}\n{result.stderr}"
+    )
+    assert "would edit" in result.stdout + result.stderr

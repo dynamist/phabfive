@@ -25,7 +25,8 @@ which command to run instead.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any
+import sys
+from typing import TYPE_CHECKING, Any, Callable
 
 import typer
 
@@ -38,8 +39,10 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "COMMAND_OF_KIND",
+    "STDIN",
     "dispatch_kind",
     "load_of_kind",
+    "read_spec",
     "warn_with_deprecated",
     "with_spec_option",
 ]
@@ -50,8 +53,13 @@ __all__ = [
 #: what the new form is called.
 COMMAND_OF_KIND = {
     "create": "phabfive apply -f",
+    "edit": "phabfive apply -f",
     "search": "phabfive search -f",
 }
+
+#: The FILE that means "read the spec from standard input", so the output of
+#: one command can be the spec of the next. The format is told from the content, there being no suffix.
+STDIN = "-"
 
 #: The sentence that differs between the two kinds, and the only part of
 #: `--with`'s help that may. A create spec is applied whole - combining it
@@ -122,6 +130,45 @@ _OTHER_KIND_OBJECTS = {
 }
 
 
+def read_spec(source: str, kind: Any = None) -> "Callable[..., Spec]":
+    """A loader for one spec, which may be asked more than once.
+
+    Standard input can be read only once, and `load_of_kind` may need to
+    read a spec twice, so the text is taken here and what comes back parses
+    it under whichever kind it is given. For a file it is `load_spec`.
+
+    This is where `-` is read rather than in `phabfive.spec.loader`: reading
+    a process's standard input is the command's business, and a library
+    asked to load a file called `-` should say there is no such file.
+
+    Raises
+    ------
+    PhabfiveDataException
+        Standard input is not UTF-8 text.
+    """
+    from phabfive.exceptions import PhabfiveDataException
+    from phabfive.spec import load_spec, parse_spec
+
+    if source != STDIN:
+
+        def from_file(as_kind: Any = kind) -> "Spec":
+            return load_spec(source, kind=as_kind)
+
+        return from_file
+
+    try:
+        text = sys.stdin.buffer.read().decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise PhabfiveDataException(
+            f"The spec on standard input is not UTF-8 text: {error}"
+        ) from error
+
+    def from_text(as_kind: Any = kind) -> "Spec":
+        return parse_spec(text, source="<stdin>", kind=as_kind)
+
+    return from_text
+
+
 def load_of_kind(source: str, wanted: str) -> "Spec":
     """Read a spec without telling the loader what it is.
 
@@ -156,13 +203,14 @@ def load_of_kind(source: str, wanted: str) -> "Spec":
         reports it; nothing here prints.
     """
     from phabfive.exceptions import PhabfiveException
-    from phabfive.spec import load_spec
+
+    load = read_spec(source)
 
     try:
-        return load_spec(source)
+        return load()
     except PhabfiveException as first:
         try:
-            retried = load_spec(source, kind=wanted)
+            retried = load(wanted)
         except PhabfiveException:
             raise first from None
 
@@ -196,11 +244,15 @@ def dispatch_kind(spec: Any, wanted: str, source: str) -> None:
     """
     found = spec.envelope.kind.value
 
-    if found == wanted:
+    # `apply` runs both kinds that write, so what is compared is the command
+    # each kind belongs to rather than the kind itself
+    if COMMAND_OF_KIND[found] == COMMAND_OF_KIND[wanted]:
         return
 
+    article = "an" if found[:1] in "aeiou" else "a"
+
     typer.echo(
-        f"Error: {source} is a {found} spec. Run it with\n"
+        f"Error: {source} is {article} {found} spec. Run it with\n"
         f"  {COMMAND_OF_KIND[found]} {source}",
         err=True,
     )

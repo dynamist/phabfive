@@ -251,6 +251,117 @@ def _record_line(record: Any) -> str:
     return line
 
 
+def _change_lines(changes: Any) -> List[str]:
+    """One line per change, indented under the object it belongs to."""
+    lines = []
+
+    for change in changes:
+        old, new = change.get("old"), change.get("new")
+
+        if old is None:
+            lines.append(f"      {change['field']}: {new}")
+        else:
+            lines.append(f"      {change['field']}: {old} -> {new}")
+
+    return lines
+
+
+def _apply_edit(
+    spec: Any, source: str, output_format: str, *, dry_run: bool, force: bool
+) -> None:
+    """The edit half of ``apply -f``: plan every item, then send the changes.
+
+    The same ladder as a create, with one difference in what a clean run
+    means. An item whose object already matches is `unchanged`, not an
+    error and not a write, so a document that describes the instance as it
+    is leaves with 0 having sent nothing - which is what makes a spec kept
+    in a repository something to apply again.
+    """
+    from phabfive.cli.spec_report import plural
+    from phabfive.edit.spec import (
+        EditPlanError,
+        EditReport,
+        apply_edit_plan,
+        plan_edit,
+    )
+    from phabfive.json_output import emit_record
+
+    machine = is_machine_format(output_format)
+    instance = _instance()
+
+    try:
+        plan = plan_edit(instance, spec, force=force)
+    except EditPlanError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(EXIT_OFFLINE) from None
+    except PhabfiveRemoteException as error:
+        typer.echo(f"Error: the instance could not be asked: {error}", err=True)
+        raise typer.Exit(EXIT_UNREACHABLE) from None
+
+    if not plan.ok:
+        # Every problem of every item, and nothing applied: half a document
+        # is a state nobody wrote down
+        report(list(plan.problems), source, LAYERS, output_format)
+        raise typer.Exit(EXIT_ONLINE)
+
+    if dry_run:
+        changing = len(plan.edits)
+        sentence = (
+            f"{source}: would edit {plural(changing, 'object')}, "
+            f"{len(plan.items) - changing} already as written."
+        )
+
+        if machine:
+            emit_data(plan.as_records(), output_format)
+            typer.echo(sentence, err=True)
+        else:
+            typer.echo(f"[DRY RUN] {sentence}")
+
+            for item in plan.items:
+                marker = "  (unchanged) " if item.noop else "  - "
+                title = f" {item.title!r}" if item.title else ""
+                typer.echo(f"{marker}{item.object_type} {item.monogram}{title}")
+
+                for line in _change_lines(item.changes):
+                    typer.echo(line)
+
+        raise typer.Exit(EXIT_CLEAN)
+
+    records = []
+
+    for record in apply_edit_plan(instance, plan):
+        records.append(record)
+
+        if output_format == "jsonl":
+            emit_record(record.as_record(), "jsonl")
+        elif not machine:
+            line = f"{record.status:<9} {record.label}"
+
+            if record.reason and record.status == "failed":
+                line = f"{line}: {record.reason}"
+
+            typer.echo(line)
+
+            if record.status == "edited":
+                for change_line in _change_lines(record.changes):
+                    typer.echo(change_line)
+
+    done = EditReport(records=tuple(records))
+
+    if machine and output_format != "jsonl":
+        emit_data(done.as_records(), output_format)
+
+    if done.ok:
+        typer.echo(done.summary, err=machine)
+        raise typer.Exit(EXIT_CLEAN)
+
+    typer.echo(f"Error: {done.summary}", err=True)
+
+    # As for a create: 4 says something was written before the run stopped,
+    # 2 says the instance refused and nothing was
+    raise typer.Exit(EXIT_PARTIAL if done.edited else EXIT_ONLINE)
+
+
 def apply_command(
     ctx: typer.Context,
     spec_file: str = typer.Option(
@@ -258,13 +369,24 @@ def apply_command(
         "-f",
         "--spec",
         metavar="FILE",
-        help="The create spec to apply: YAML, JSON, JSONL or TOML.",
+        help=(
+            "The create or edit spec to apply: YAML, JSON, JSONL or TOML. "
+            "- reads it from standard input."
+        ),
         autocompletion=complete_spec_file,
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Print what would be created and write nothing.",
+        help="Print what would be created or changed and write nothing.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Edit spec only: change an object even though it was modified "
+            "after the modified: its item carries."
+        ),
     ),
     variables: Optional[List[str]] = typer.Option(
         None,
@@ -273,24 +395,35 @@ def apply_command(
         help="Supply a variable the spec declares. Repeatable.",
     ),
 ) -> None:
-    """Create everything a spec describes, whatever object types it holds.
+    """Create what a create spec describes, or change what an edit spec names.
 
-    One file can create a project, a milestone of it and the tasks tagged
-    into it, linked to each other by the `$local-id`s the spec gives them.
-    Every name in it is resolved before anything is written, so a spec whose
-    tenth task names a user who does not exist creates nothing at all.
+    A create spec (kind: create): one file can create a project, a milestone
+    of it and the tasks tagged into it, linked to each other by the
+    `$local-id`s the spec gives them.
+
+    An edit spec (kind: edit): each item names an object that exists and
+    says what it should be. Only the difference is sent, so an object that
+    already matches is left alone and applying the same file twice changes
+    nothing the second time. An item carrying modified: is refused when the
+    object changed after that and the item would change it; --force applies
+    it anyway.
+
+    Either way every name is resolved before anything is written, so a spec
+    whose tenth item names a user who does not exist writes nothing at all.
 
     A search spec is refused by name, with the command that runs it.
 
     \b
     Exit status (`phabfive.cli.spec_report` is where the table is defined):
-        0  everything was created, or --dry-run planned cleanly
+        0  everything was created or is as the spec says, or --dry-run
+           planned cleanly
         1  the file could not be read, is a search spec, or the offline
            layer found an error
-        2  the online layer failed: a reference does not resolve, or the
-           instance refused what was asked
+        2  the online layer failed: a reference does not resolve, an object
+           changed since the spec was written, or the instance refused
+           what was asked
         3  the instance could not be asked, or nothing names one
-        4  the run stopped partway and objects exist
+        4  the run stopped partway and objects were created or changed
     A usage mistake - an unknown flag, a missing -f - also leaves with 2,
     which is click's own; the message says which it was.
 
@@ -299,6 +432,8 @@ def apply_command(
         phabfive apply -f specs/create/platform-bootstrap.yaml --dry-run
         phabfive apply -f specs/create/sprint-tasks.yaml --set sprint=42
         phabfive --format=json apply -f specs/create/sprint-tasks.yaml
+        phabfive apply -f specs/edit/close-out.yaml --dry-run
+        cat spec.yaml | phabfive apply -f - --dry-run
     """
     _setup_output_options(ctx)
     output_format = _get_output_format(ctx)
@@ -309,6 +444,18 @@ def apply_command(
 
     spec = _loaded(source, "create", output_format)
     spec = _checked(spec, source, overrides, output_format)
+
+    if spec.envelope.kind.value == "edit":
+        _apply_edit(spec, source, output_format, dry_run=dry_run, force=force)
+        return
+
+    if force:
+        typer.echo(
+            f"Error: --force is for an edit spec, and {source} is a create "
+            f"spec. A create spec has no object to overwrite.",
+            err=True,
+        )
+        raise typer.Exit(EXIT_OFFLINE)
 
     # Imported here rather than at module import: every other phabfive
     # command would otherwise pay for the spec engine, and statically enough

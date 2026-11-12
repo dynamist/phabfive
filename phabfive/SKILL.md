@@ -965,8 +965,27 @@ phabfive --format=json apply -f specs/create/platform-bootstrap.yaml --dry-run
 
 `apply` creates everything a `kind: create` spec holds - tasks, projects, milestones,
 linked to each other by the `$local-id`s the file gives them. `search` runs every search
-a `kind: search` spec holds, in document order, through one client. Handed the other
+a `kind: search` spec holds, in document order, through one client. Handed the other's
 kind, each refuses by name and prints the command that does run it, exit 1.
+
+`apply` also runs a `kind: edit` spec, which changes tasks that already exist:
+
+```bash
+phabfive apply -f specs/edit/close-out.yaml --dry-run   # only the difference
+phabfive apply -f specs/edit/close-out.yaml
+```
+
+An edit item names its task with `task: T123` and states what the task
+should be. **A key that is absent is left alone**, so `{task: T123, status: resolved}`
+is a whole edit. A list is the full set (`[alice, bob]`, anyone else is removed) or a
+delta (`["+carol", "-bob"]`), never a mix. `kind: edit` must be written; it is never
+inferred. Only the difference is sent, so applying a file twice changes nothing the
+second time and still exits 0, each record saying `edited` or `unchanged`.
+
+An item may carry `modified:`, an ISO 8601 timestamp. `apply` refuses, exit 2 and code
+`stale`, to change a task modified after it; pass `--force` to let the file win. Any problem with any item - a name that does not resolve, a task that does
+not exist - refuses the whole file before anything is written. `apply -f -` reads the
+spec from standard input. Tasks only, for now.
 
 `apply -f` and `search -f` read YAML, JSON, JSONL and TOML, chosen by extension:
 `.yaml`/`.yml`, `.json`, `.jsonl`/`.ndjson`, `.toml`. Several `---` documents in one file are folded into one
@@ -1019,10 +1038,10 @@ it override what the spec says. `maniphest search` runs task searches only, so a
 holding a project, paste or passphrase search is refused by name there — every other
 `search --with` runs all of them. Prefer `apply -f` and `search -f`.
 
-`specs/` in the repository holds runnable examples of both kinds and of all four
+`specs/` in the repository holds runnable examples of every kind and of all four
 serializations; `specs/broken/` holds files that are wrong on purpose, each named after
 the code it produces. `docs/phorge-spec.md` defines the format itself;
-`docs/create-specs.md` and `docs/search-specs.md` are the guides.
+`docs/create-specs.md`, `docs/edit-specs.md` and `docs/search-specs.md` are the guides.
 
 ## Caching
 

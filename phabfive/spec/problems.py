@@ -41,6 +41,7 @@ CODES: tuple[str, ...] = (
     "missing-required",
     "unknown-value",
     "bad-time",
+    "bad-timestamp",
     "bad-pattern",
     "bad-policy",
     "bad-monogram",
@@ -54,6 +55,10 @@ CODES: tuple[str, ...] = (
     "unknown-local-id",
     "local-id-cycle",
     "bad-local-id",
+    # The offline layer: edit documents
+    "mixed-list",
+    "relative-value",
+    "duplicate-object",
     # The online layer
     "unknown-user",
     "unknown-project",
@@ -71,6 +76,7 @@ CODES: tuple[str, ...] = (
     "hashtag-taken",
     "not-creatable",
     "unknown-reference",
+    "stale",
     # `phabfive spec validate` itself, for the two things that raise rather
     # than report: a file it could not read, an instance it could not ask
     "unreadable",
