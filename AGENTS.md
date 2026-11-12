@@ -399,6 +399,32 @@ nothing is discovered.
   `phabfive.cli.edit_flow.run_edit`
 - `phabfive/cli/editor.py` holds `$EDITOR`, the prompts and `typer.confirm`
 
+### Specs That Write: Create and Edit
+
+- `kind: create` and `kind: edit` are kept apart on purpose. `phabfive.spec.create`
+  **never** sends an `objectIdentifier`; an edit document cannot bring an object into
+  being. Do not merge them into an upsert: which of the two a file is decides what
+  applying it twice does
+- `kind: edit` is **never inferred** - its `tasks:` is spelled like a create's - and a
+  create item carrying `task:` or `modified:` is refused with a sentence naming
+  `kind: edit`. That refusal is what stops an edit that lost its kind from creating a
+  duplicate; keep it when adding an object type
+- `phabfive/spec/edit.py` is the vocabulary (standard library only): the identity key
+  per object type, the `+`/`-` list grammar, the stamp. The edit keys are **derived**
+  from the create declarations in `registry._edit_fields()`, so a key cannot drift
+  between the two kinds
+- `phabfive/edit/spec.py` is the planner. It builds no transaction: each key goes to
+  `Maniphest.build_task_edit`, key by key so every problem is reported under its own
+  key. A full-set list becomes "add these, remove whatever else is there"; nothing is
+  ever sent as `.set`. Its three invariants are tested: a matching document plans
+  nothing, applying twice is applying once, and `modified:` is compared **only when the
+  item would change something** - otherwise the rerun after a successful or partial
+  apply would be refused for the modification the first run made
+- Adding an object type to edit: its section in `spec.edit.EDIT_OBJECT_KEYS` and
+  `IDENTITY_KEYS`, its keys in `registry._EDITED`, a planner beside `_TaskPlanner`, and
+  its cases in `tests/e2e/test_edit_spec.py`. Passphrase cannot join: Phorge has no
+  `passphrase.edit`
+
 ### Constructing an App
 
 - **Library defaults, command choices.** `Phabfive(url=None, token=None, *, config=None,

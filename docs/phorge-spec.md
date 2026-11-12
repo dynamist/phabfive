@@ -45,7 +45,7 @@ reader does not implement is **refused by name**, never half-parsed and never
 read as a best effort. That refusal is the whole compatibility story of the
 alpha, and it is what makes churn cheap rather than dangerous.
 
-`phorge/v1` is promoted only once every object type and both kinds have settled.
+`phorge/v1` is promoted only once every object type and every kind has settled.
 From `v1` on, a key that exists keeps its meaning, a key is removed only after a
 release that warns about it, and a document written for `v1` is readable by every
 later `v1.x` reader.
@@ -135,7 +135,7 @@ Four keys describe the document itself rather than the objects in it.
 | Key | Required | Meaning |
 |---|---|---|
 | `interpolate` | optional | `false` sends every string exactly as written: `{{ name }}` is text, not a variable. Absent means `true`. |
-| `kind` | optional | `create` or `search`. Absent means inferred from the body keys. |
+| `kind` | optional | `create`, `search`, `edit`. Absent means inferred from the body keys, which never infers `edit`. |
 | `metadata` | optional | What the *file* is, for a person reading it. Nothing acts on it. |
 | `spec` | optional | The revision of the format, `phorge/v1alpha1`. Absent means the reader's own revision is assumed. |
 
@@ -167,6 +167,12 @@ document holds: `search:`/`searches:` means `search`, and
 both families is **refused**, not guessed; a document holding neither is refused
 as well.
 
+**`edit` is never inferred.** An edit document's sections are spelled like a
+create document's, so `tasks:` alone means `create`, and a document that changes
+objects that already exist says `kind: edit` in so many words. A document that
+lost its `kind:` is then read as a create and refused for the `task:` key no
+create item has, rather than applied as something it is not.
+
 Inference is an ergonomic convenience and not a compatibility promise: it exists
 so that a short document need not state the obvious. A reader may also be told
 the kind out of band, by whoever is holding the document, which is the only way
@@ -175,17 +181,24 @@ no body key, so nothing to infer from.
 
 ---
 
-## The two kinds
+## The kinds
 
 `kind:` carries the **verb**, never the object type. That is what lets one
 document create a project and the tasks tagged into it, and what lets one
 document search three applications.
+
+`create` and `edit` are the two that write, and they are kept apart on purpose.
+A create document cannot touch an object that exists; an edit document cannot
+bring one into being. Which of the two a file is decides what applying it twice
+does: a create makes a second set of objects, an edit finds nothing left to
+change.
 
 <!-- BEGIN GENERATED kinds -->
 
 | `kind:` | Body keys | What it holds |
 |---|---|---|
 | `create` | `tasks:`, `projects:`, `pastes:` | One section per object type, each a list of items. An item creates something when it names it: a paste by its `title:`; a project by its `name:`; a task by its `title:`. |
+| `edit` | `tasks:` | One section per object type, each a list of items. An item names an object that exists, a task by its `task:`, and states what it should be. Never inferred: the document says `kind: edit`. |
 | `search` | `searches:` | One list of items, each naming what it searches with its own `type:`: `passphrase`, `paste`, `project`, `task`, `task-stats`. `type:` defaults to `task`. |
 
 Refused by name rather than ignored: `passphrases:` &mdash; passphrases cannot be created: Phorge exposes no passphrase.edit endpoint. Credentials must be created in the web UI. Passphrase search specs are supported.
@@ -365,6 +378,131 @@ A document that wants either is asking for an edit, which is not this kind.
 No `passphrases:` section exists. Passphrases cannot be created: Phorge exposes no passphrase.edit endpoint. Credentials must be created in the web UI. Passphrase search specs are supported.
 
 <!-- END GENERATED keys passphrase/create -->
+
+---
+
+## Edit documents
+
+An edit document names objects that exist and states what each should be.
+
+```yaml
+spec: phorge/v1alpha1
+kind: edit
+tasks:
+  - task: T123
+    modified: "2026-01-31T09:30:00Z"
+    status: resolved
+    assignment: tommy.svensson
+    projects:
+      - Security
+      - Infrastructure
+    subscribers:
+      - +sebastian.soderberg
+```
+
+Each item is compared with the object as the instance has it, and **only the
+difference is sent**. An object that already matches is left alone, so applying
+a document twice changes nothing the second time.
+
+An edit item is flat. It has no `id:`, no nested `tasks:` and no `$local-id`
+reference: those link objects that do not exist yet, and every object here does.
+
+### A key that is absent is left alone
+
+So is a key written with nothing after it. `{task: T123, status: resolved}` is a
+whole edit, and nothing about T123 but its status is looked at.
+
+Clearing is therefore said out loud: `assignment: "@none"` for nobody, and an
+empty list for a list that should hold nothing.
+
+### A list is the full set, or a delta
+
+| Written | Means |
+|---|---|
+| `[alice, bob]` | Exactly these. Whatever else is there is removed. |
+| `[]` | Nothing. Everything there is removed. |
+| `["+carol", "-bob"]` | Add `carol`, remove `bob`, leave the rest. |
+
+One list is one or the other. A list mixing plain entries with `+` or `-` ones
+is the error `mixed-list`: guessing which was meant would either drop everything
+not listed or keep everything that was meant to go.
+
+A delta is still a statement about the result, not an instruction to repeat:
+an entry already there is not added again, and one already gone is not removed.
+
+`+` and `-` are text, and `+1` without quotes is a number in YAML. An entry that
+could be read as one is quoted.
+
+Whichever form is written, the instance is sent additions and removals, never a
+replacement of the whole list - the same rule a create document obeys, for the
+same reason: a replacement computed from a list read a moment ago discards
+whatever was added in between.
+
+### A value is a state, not a move
+
+`priority: raise` and `column: forward` describe a change from wherever the
+object is, so applying the document twice would move it twice. They are the
+error `relative-value`. An edit names the priority or column the object should
+end up with.
+
+### The stamp
+
+`modified:` is when the object was last modified as the document's writer saw
+it, in ISO 8601: `"2026-01-31T09:30:00Z"`. It is optional, and it is what makes
+a document safe to apply some time after it was written.
+
+An item that **would change** an object modified after its stamp is the error
+`stale`, and the document is not applied: somebody else has changed the object,
+and the difference the item would send was computed against a state that is
+gone. Write the document again from the object as it is, or tell the reader to
+apply it regardless.
+
+The stamp guards a change, not a look. An item with nothing to change is not
+checked against it - which is what keeps the run after a successful one, and
+the rerun after a failure halfway through, from being refused for the
+modification the first run made.
+
+Text without `Z` or an offset is read as UTC. An unquoted timestamp is a native
+one in YAML and TOML and the same instant; JSON has only the text form, so a
+document meant for every serialization quotes it.
+
+### The keys of each object type
+
+#### task
+
+<!-- BEGIN GENERATED keys task/edit -->
+
+| Key | Value | Repeatable | Meaning |
+|---|---|---|---|
+| `task` | monogram: `T123` | &mdash; | The task this item edits, as T123. Required. |
+| `modified` | timestamp | &mdash; | When it was last modified as this document saw it, ISO 8601. A change to an object modified since is refused. |
+| `title` | text | &mdash; | What it is called; the web UI labels this Name. |
+| `description` | text | &mdash; | The body text, in remarkup. |
+| `priority` | instance enum | &mdash; | Priority name, e.g. high or needs-triage. |
+| `status` | instance enum | &mdash; | Status key, e.g. open or resolved. |
+| `assignment` | user reference | &mdash; | Assignee: a username, @me, a user PHID, or @none for nobody. |
+| `subscribers` | user reference | yes | Subscribers: usernames, @me, or user PHIDs. |
+| `projects` | project reference | yes | The projects it is tagged into, by name, #hashtag or PHID. |
+| `column` | instance enum | &mdash; | Workboard column to move it to, on the one board it is on. |
+| `space` | Space reference | &mdash; | The Space it belongs in, by name or monogram. |
+| `visible-to` | policy | &mdash; | View policy: a keyword, #project, @user or PHID. |
+| `editable-by` | policy | &mdash; | Edit policy: a keyword, #project, @user or PHID. |
+| `commits` | commit reference | yes | The commits attached to it, by rCALLSIGNhash, R1:hash, a bare hash or a PHID. |
+| `parents` | monogram: `T123` | yes | The tasks it is a subtask of, as T123. |
+| `subtasks` | monogram: `T123` | yes | The tasks that are subtasks of it, as T123. |
+
+<!-- END GENERATED keys task/edit -->
+
+`task:` is required, and one task is edited by one item: two items naming the
+same task are the error `duplicate-object`.
+
+`column:` names a column without a board, so it needs exactly one board to be
+on: the one workboard the task is on, or - for a task on none - the one project
+the same item tags it into.
+
+Projects, pastes and repositories have edit endpoints and will get sections of
+their own. A passphrase has none: Phorge exposes no `passphrase.edit`, so a
+credential can be read but neither created nor edited from a document.
 
 ---
 
@@ -888,9 +1026,10 @@ record to, and a clean report for a check that never ran is worse than an error.
 | `unknown-key` | offline | error, warning under `metadata:` | A key that object type and verb does not define. |
 | `deprecated-key` | offline | warning | The key still works; the reason names its replacement. |
 | `wrong-type` | offline | error | The value is a number, list or mapping where the key takes text, or the other way round. |
-| `missing-required` | offline | error | An item leaves out a key it cannot be created without. |
+| `missing-required` | offline | error | An item leaves out a key it cannot be created, or found, without. |
 | `unknown-value` | offline | error | The value is outside a statically known set, such as an order or a project colour. |
 | `bad-time` | offline | error | Not `<number>[h\|d\|w\|m\|y]`. |
+| `bad-timestamp` | offline | error | Not an ISO 8601 instant such as `2026-01-31T09:30:00Z`. |
 | `bad-pattern` | offline | error | Not the transition grammar: an unknown condition type, keyword or direction. |
 | `bad-policy` | offline | error | Not a policy keyword, `#project`, `@user` or PHID. |
 | `bad-monogram` | offline and online | error | Not a monogram at all, or a monogram of an application this key does not accept. |
@@ -902,6 +1041,9 @@ record to, and a clean report for a check that never ran is worse than an error.
 | `unknown-local-id` | offline | error | A `$ref` naming a local id the document never declares, or one of the wrong object type for the key. |
 | `local-id-cycle` | offline | error | Local references that depend on each other, so no order creates them. |
 | `bad-local-id` | offline | error | An `id:` outside `[A-Za-z0-9][A-Za-z0-9_.-]*`. |
+| `mixed-list` | offline | error | A list in an edit document where some entries carry `+` or `-` and some do not. |
+| `relative-value` | offline | error | A value in an edit document that names a move, such as `raise` or `forward`, rather than a result. |
+| `duplicate-object` | offline | error | Two items of an edit document name the same object. |
 | `unknown-user` | online | error | No such user on the instance. |
 | `unknown-project` | online | error | No such project on the instance. |
 | `ambiguous-project` | online | error | A name several projects answer to; use the hashtag or the PHID. |
@@ -915,6 +1057,7 @@ record to, and a clean report for a check that never ran is worse than an error.
 | `hashtag-taken` | online | error | A project hashtag something already answers to. |
 | `not-creatable` | offline | error | A section naming an object type no endpoint creates. |
 | `unknown-reference` | online | error | A reference that resolved to nothing and no more specific code fits. |
+| `stale` | online | error | The object was modified after the `modified:` an edit item carries, and the item would change it. |
 | `unreadable` | neither | error | The document could not be parsed, so there was nothing to validate. |
 | `unreachable` | neither | error | The instance could not be asked, so the online layer never ran. |
 
@@ -1232,17 +1375,21 @@ rule that needs a particular program to be true is not a rule of the format.
 Two gaps in that implementation are worth knowing about while reading the
 tables above, because they are gaps in a reader and not in the format:
 
-- `unknown-status` and `unknown-priority` are part of the code vocabulary before
-  any check emits them; a status or priority the instance does not define is
-  refused at create time with a sentence naming the instance's own list, rather
-  than reported as a problem;
+- `unknown-status` and `unknown-priority` are reported for an **edit** document
+  only. In a create document a status or priority the instance does not define
+  is refused at create time with a sentence naming the instance's own list,
+  rather than reported as a problem;
 - `unknown-spec-version` is likewise in the vocabulary, but a `spec:` the reader
   does not implement is refused while the document is being read, before layer 1
   begins, so what a caller actually sees is `unreadable` carrying the same
   reason.
 
-It declares all seven (object type, verb) pairs complete, so an unknown key on
-any create item or search is reported `unknown-key` under
+An edit document's online layer is its plan: every object it names is read, and
+every name in it resolved, by the engine that would apply it. Nothing is
+written.
+
+It declares all eight (object type, verb) pairs complete, so an unknown key on
+any create item, edit item or search is reported `unknown-key` under
 [Layer 1](#layer-1-offline). A create item's key set is its keys in the tables
 above together with [the structural keys](#the-structural-keys).
 

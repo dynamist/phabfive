@@ -353,6 +353,7 @@ app.add_typer(spec_app, name="spec")
 # required positional would have spent that slot on a filename.
 app.command(name="apply")(apply_command)
 app.command(name="search")(search_command)
+# The mirror of `apply`: what exists, written as a spec `apply -f` reads.
 app.command(name="profile")(profile_command)
 app.command(name="hints")(hints_command)
 # Show repl command only if ptpython is installed (phabfive[repl])

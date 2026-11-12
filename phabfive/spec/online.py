@@ -100,6 +100,7 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from phabfive.me import is_me, is_none, refuse_none
 from phabfive.pagination import search_all_pages
+from phabfive.spec.envelope import Kind
 from phabfive.spec.problems import Layer, Problem, Severity, problem
 from phabfive.spec.references import (
     Reference,
@@ -804,6 +805,14 @@ def validate_online(
         refused it. Neither is a bad reference and neither is converted into
         a problem - the caller decides what a failed check means.
     """
+    if spec.kind is Kind.EDIT:
+        # An edit document's online layer is its plan: the objects it names
+        # have to be read to know whether they exist, and every name in it
+        # is resolved by the engine that would apply it. Nothing is written.
+        from phabfive.edit.spec import plan_edit
+
+        return list(plan_edit(app, spec).problems)
+
     return list(resolve_references(spec, app, resolvers=resolvers).problems)
 
 

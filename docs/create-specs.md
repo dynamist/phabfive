@@ -435,7 +435,8 @@ the old one and none is planned: `v1alpha1` promises nothing about key names, an
 ## See Also
 
 - [The Phorge spec format](phorge-spec.md) — the normative definition: every key, every rule
-- [Searching with Specs](search-specs.md) — the other `kind:`
+- [Searching with Specs](search-specs.md) — `kind: search`
+- [Editing with Specs](edit-specs.md) — `kind: edit`, for objects that already exist
 - [Maniphest CLI](maniphest-cli.md) — the single-task commands
 - [Project CLI](project-cli.md) — the single-project commands
 - [Phorge Setup](phorge-setup.md) — the local instance the shipped specs are written against

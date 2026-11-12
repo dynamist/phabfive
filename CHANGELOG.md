@@ -34,6 +34,22 @@
   `RepositoryConfig`, a constructed app holds it as `repository`, `Phabfive.arcrc_hosts()`
   lists the instances in `~/.arcrc` without their tokens, and `Maniphest.tag_hints()` looks
   the hints up
+* **A third kind of spec, `kind: edit`, changes objects that already exist.** A create
+  spec can never touch an existing object, by design; an edit spec is the counterpart.
+  Each item names its task with `task: T123` and states what it should be. A key that is
+  absent is left alone, so `{task: T123, status: resolved}` is a whole edit. A list is
+  the full set, or a delta of `+name` and `-name` entries. Only the difference is sent,
+  through the engine `phabfive edit` uses, so a task that already matches is left alone
+  and applying a file twice changes nothing the second time. An item carrying
+  `modified:` is refused as `stale` when the task was modified
+  after it and the item would change it; `apply --force` overrides. Every item is planned
+  before any is applied, and a problem with one refuses the file. `kind: edit` is never
+  inferred, so a file that loses the line is refused rather than applied as a create.
+  See [Editing with Specs](docs/edit-specs.md).
+  `phabfive.edit` gains `plan_edit` and `apply_edit_plan` for a program
+* **`phabfive apply -f -` and `phabfive spec validate -` read the spec from standard
+  input**, so a spec another program writes can be piped in. The serialization is told
+  from the content
 * **A spec can switch interpolation off with `interpolate: false`.** Every string in a
   spec is a Jinja2 template, so a task description or paste that only quotes one -
   `{{ .Values.tag }}` in a Helm example - was refused as an undefined variable, and no

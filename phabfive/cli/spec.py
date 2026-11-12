@@ -79,6 +79,7 @@ class SpecKind(str, enum.Enum):
 
     create = "create"
     search = "search"
+    edit = "edit"
 
 
 def _online_app() -> Any:
@@ -199,11 +200,12 @@ def spec_validate(
     # Imported here rather than at module import: `phabfive spec --help` and
     # every other phabfive command would otherwise pay for ruamel, jinja2 and
     # the schema generator.
-    from phabfive.spec import load_spec, validate_offline, validate_online
+    from phabfive.cli.spec_flags import read_spec
+    from phabfive.spec import validate_offline, validate_online
     from phabfive.spec.problems import Layer, Problem, Severity
 
     try:
-        spec = load_spec(source, kind=kind.value if kind else None)
+        spec = read_spec(source, kind.value if kind else None)()
     except PhabfiveException as error:
         # A file that does not parse is not a Problem - there is no spec to
         # hang one on, which is why the loader raises. A --format=json
@@ -219,7 +221,7 @@ def spec_validate(
         _report(problems, source, layers, output_format)
         raise typer.Exit(EXIT_OFFLINE if offline_errors else EXIT_CLEAN)
 
-    if overrides:
+    if overrides or (spec.variables and spec.kind.value == "edit"):
         # The online layer has to see the values --set supplied, not the
         # `{{ who }}` they replace: `index_references` skips any value still
         # holding a template, so an unrendered spec would have its
