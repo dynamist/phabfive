@@ -14,7 +14,7 @@ nav:
     - Policies: 'policies.md'
     - Phorge Spec Format: 'phorge-spec.md'
     - Creating with Specs: 'create-specs.md'
-    - Editing with Specs: 'edit-specs.md'
+    - Exporting and Editing with Specs: 'edit-specs.md'
     - Searching with Specs: 'search-specs.md'
     - Caching: 'caching.md'
     - Retries: 'retries.md'

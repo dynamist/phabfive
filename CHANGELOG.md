@@ -34,6 +34,14 @@
   `RepositoryConfig`, a constructed app holds it as `repository`, `Phabfive.arcrc_hosts()`
   lists the instances in `~/.arcrc` without their tokens, and `Maniphest.tag_hints()` looks
   the hints up
+* **`phabfive export` writes a task as a spec, and `phabfive apply -f` applies it back.**
+  What `show` prints is for a person - `Status: Resolved`, `Visible To: All Users`, no
+  tags and no subscribers - and cannot be typed back in. `phabfive export T123` writes the
+  same task in the spelling a spec takes: a status by its key, a project by its hashtag,
+  a policy by its keyword. Edit the file and `phabfive apply -f` sends the difference.
+  `--as create` writes a create spec instead, for a new task like the old one, and
+  monograms can be piped in from a search: `phabfive maniphest search --tag=x | phabfive
+  export`. Tasks only, for now. See [Exporting and Editing with Specs](docs/edit-specs.md)
 * **A third kind of spec, `kind: edit`, changes objects that already exist.** A create
   spec can never touch an existing object, by design; an edit spec is the counterpart.
   Each item names its task with `task: T123` and states what it should be. A key that is
@@ -41,15 +49,14 @@
   the full set, or a delta of `+name` and `-name` entries. Only the difference is sent,
   through the engine `phabfive edit` uses, so a task that already matches is left alone
   and applying a file twice changes nothing the second time. An item carrying
-  `modified:` is refused as `stale` when the task was modified
+  `modified:` - an export writes one - is refused as `stale` when the task was modified
   after it and the item would change it; `apply --force` overrides. Every item is planned
   before any is applied, and a problem with one refuses the file. `kind: edit` is never
   inferred, so a file that loses the line is refused rather than applied as a create.
-  See [Editing with Specs](docs/edit-specs.md).
   `phabfive.edit` gains `plan_edit` and `apply_edit_plan` for a program
 * **`phabfive apply -f -` and `phabfive spec validate -` read the spec from standard
-  input**, so a spec another program writes can be piped in. The serialization is told
-  from the content
+  input**, so `phabfive export T123 | phabfive apply -f - --dry-run` works. The
+  serialization is told from the content
 * **A spec can switch interpolation off with `interpolate: false`.** Every string in a
   spec is a Jinja2 template, so a task description or paste that only quotes one -
   `{{ .Values.tag }}` in a Helm example - was refused as an undefined variable, and no

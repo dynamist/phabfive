@@ -33,6 +33,7 @@ from phabfive.cli.repl import repl_app
 from phabfive.cli.shell_completion import MonogramGroup, install_bash_escaping
 from phabfive.cli.spec import spec_app
 from phabfive.cli.spec_run import apply_command, search_command
+from phabfive.cli.export import export_command
 from phabfive.cli.user import user_app
 from phabfive.constants import (
     AutoOption,
@@ -354,6 +355,7 @@ app.add_typer(spec_app, name="spec")
 app.command(name="apply")(apply_command)
 app.command(name="search")(search_command)
 # The mirror of `apply`: what exists, written as a spec `apply -f` reads.
+app.command(name="export")(export_command)
 app.command(name="profile")(profile_command)
 app.command(name="hints")(hints_command)
 # Show repl command only if ptpython is installed (phabfive[repl])
