@@ -58,7 +58,8 @@ COMMAND_OF_KIND = {
 }
 
 #: The FILE that means "read the spec from standard input", so the output of
-#: one command can be the spec of the next. The format is told from the content, there being no suffix.
+#: one command can be the spec of the next: `phabfive export T1 | phabfive
+#: apply -f -`. The format is told from the content, there being no suffix.
 STDIN = "-"
 
 #: The sentence that differs between the two kinds, and the only part of

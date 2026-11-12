@@ -433,7 +433,7 @@ def apply_command(
         phabfive apply -f specs/create/sprint-tasks.yaml --set sprint=42
         phabfive --format=json apply -f specs/create/sprint-tasks.yaml
         phabfive apply -f specs/edit/close-out.yaml --dry-run
-        cat spec.yaml | phabfive apply -f - --dry-run
+        phabfive export T123 | phabfive apply -f - --dry-run
     """
     _setup_output_options(ctx)
     output_format = _get_output_format(ctx)
