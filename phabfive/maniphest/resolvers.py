@@ -591,7 +591,8 @@ def resolve_project_phids_for_create(phab, project_names):
                 f"Wildcards not allowed in project names for task creation: '{name}'"
             )
 
-        name_lower = name.lower()
+        # The # of a hashtag is optional, as it is for an edit
+        name_lower = (name[1:] if name.startswith("#") else name).lower()
         if name_lower in name_to_phid:
             phids.append(name_to_phid[name_lower])
             slugs.append(name_to_slug[name_lower])
