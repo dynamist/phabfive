@@ -220,9 +220,9 @@ what fails where and why. Keep it true:
   marked by the formatters with `phabfive.text.remarkup()`. yaml prints it as a block
   when it has several lines, and json as a plain string. The rich and tree printers turn
   every multi-line value into lines through `phabfive.text.render_text()`, so rendering
-  Remarkup for humans is a change to that one function. Comments are not marked yet:
-  each is one string that starts with a header (date, author, `T1@2`) before the
-  Remarkup
+  Remarkup for humans is a change to that one function. A task comment is a
+  `CommentText`: the one string every format prints (date, author and `T1@2`, then the
+  text), with its header and its Remarkup body kept apart for `render_text()`
 
 ### Feature Modules
 Complex features use a consistent subpackage structure:

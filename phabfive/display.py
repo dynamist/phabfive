@@ -345,14 +345,11 @@ def _display_task_rich(console, task_dict, phabfive_instance, show_description=T
     if comments:
         console.print("  Comments:")
         for comment in comments:
-            if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
-                # Multi-line comment
-                lines = render_text(comment)
-                console.print(f"    - {lines[0]}")
-                for line in lines[1:]:
-                    console.print(f"      {line}")
-            else:
-                console.print(f"    - {_escape_for_rich(comment)}")
+            # A list item, its further lines under its first
+            first, *rest = render_text(comment)
+            console.print(f"    - {first}")
+            for line in rest:
+                console.print(f"      {line}")
 
     # Print Metadata section
     if metadata:
@@ -499,12 +496,9 @@ def _display_task_tree(console, task_dict, phabfive_instance, show_description=T
     if comments:
         comments_branch = tree.add("Comments")
         for comment in comments:
-            if isinstance(comment, PreservedScalarString) or "\n" in str(comment):
-                # Truncate multi-line comments in tree view
-                first_line = render_text(comment, width=60)[0]
-                comments_branch.add(first_line)
-            else:
-                comments_branch.add(_escape_for_rich(str(comment)))
+            # A multi-line comment is cut to a preview of its first line
+            width = 60 if "\n" in str(comment) else None
+            comments_branch.add(render_text(comment, width=width)[0])
 
     # Add Metadata section
     if metadata:

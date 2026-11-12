@@ -5,7 +5,7 @@ from io import StringIO
 
 from ruamel.yaml import YAML
 
-from phabfive.text import RemarkupText, remarkup, render_text
+from phabfive.text import CommentText, RemarkupText, remarkup, render_text
 
 
 def _printed(markup):
@@ -75,6 +75,65 @@ class TestRenderText:
         assert _printed(line) == "[bold]" + "x" * 54
 
 
+class TestCommentText:
+    HEADER = "2026-01-01T00:00:00 [alice T1@2]"
+
+    def test_is_the_string_every_format_prints(self):
+        comment = CommentText(self.HEADER, "first\n[[/T2]]")
+
+        assert comment == f"{self.HEADER} first\n[[/T2]]"
+        assert comment.header == self.HEADER
+        assert isinstance(comment.body, RemarkupText)
+
+    def test_is_one_string_in_yaml_and_json(self):
+        for text in ("one line", "first\nsecond"):
+            comment = CommentText(self.HEADER, text)
+
+            assert _yaml({"c": [comment]}) == _yaml({"c": [str(comment)]})
+            assert json.dumps(comment) == json.dumps(str(comment))
+
+    def test_survives_a_copy(self):
+        import copy
+
+        comment = copy.deepcopy(CommentText(self.HEADER, "a\nb"))
+
+        assert (comment.header, comment.body) == (self.HEADER, "a\nb")
+        assert isinstance(comment.body, RemarkupText)
+
+    def test_an_empty_body(self):
+        comment = CommentText(self.HEADER, "")
+
+        assert render_text(comment) == render_text(str(comment))
+
+    def test_renders_as_the_whole_string_would(self):
+        # The header's [alice T1@2] and the body's Remarkup are each escaped
+        for text in ("one line", "first\n[ ] todo\n[[/T2 | x]]", "[bold]x[/bold]"):
+            comment = CommentText(self.HEADER, text)
+
+            assert render_text(comment) == render_text(str(comment))
+            assert render_text(comment, width=30) == render_text(str(comment), width=30)
+            printed = [_printed(line) for line in render_text(comment)]
+            assert printed == str(comment).split("\n")
+
+    def test_renders_its_body_as_its_own_text(self, monkeypatch):
+        # The hook: what the body renders to is what the comment shows
+        import phabfive.text as text
+
+        real = text.render_text
+
+        def fake(value, width=None):
+            if isinstance(value, RemarkupText):
+                return ["RENDERED"]
+            return real(value, width)
+
+        monkeypatch.setattr(text, "render_text", fake)
+
+        # The header as written, escaped for Rich; the body as rendered
+        assert text.render_text(CommentText(self.HEADER, "**x**")) == [
+            "2026-01-01T00:00:00 \\[alice T1@2] RENDERED"
+        ]
+
+
 class TestFormattersMarkRemarkup:
     def test_project_description(self):
         from phabfive.project.formatters import build_project_display_data
@@ -91,6 +150,29 @@ class TestFormattersMarkRemarkup:
         assert isinstance(record["Project"]["Description"], RemarkupText)
 
 
+class TestBuildComments:
+    def test_each_comment_keeps_its_header_and_body_apart(self):
+        from unittest.mock import MagicMock
+
+        from phabfive.maniphest.formatters import build_comments
+
+        phab = MagicMock()
+        phab.user.search.return_value = {
+            "data": [{"phid": "PHID-USER-a", "fields": {"username": "alice"}}]
+        }
+        transactions = [
+            {"id": 3, "authorPHID": "PHID-USER-a", "text": "b\nc", "dateCreated": 2},
+            {"id": 2, "authorPHID": "PHID-USER-a", "text": "a", "dateCreated": 1},
+        ]
+
+        first, second = build_comments(phab, transactions, task_id=1)
+
+        assert isinstance(first, CommentText)
+        assert first.header.endswith(" [alice T1@2]")
+        assert (first.body, second.body) == ("a", "b\nc")
+        assert second == f"{second.header} b\nc"
+
+
 class TestTaskPrinters:
     """A multi-line comment, which no task in the real-output comparison had."""
 
@@ -98,7 +180,10 @@ class TestTaskPrinters:
         "_link": "https://p.test/T1",
         "_url": "https://p.test/T1",
         "Task": {"Name": "x", "Description": remarkup("[ ] first\nsecond")},
-        "Comments": ["2026-01-01 [alice T1@2] [[/T2]]\nmore"],
+        "Comments": [
+            CommentText("2026-01-01 [alice T1@2]", "[[/T2]]\nmore"),
+            CommentText("2026-01-02 [bob T1@3]", "x" * 80),
+        ],
     }
 
     def _print(self, printer):
@@ -117,6 +202,7 @@ class TestTaskPrinters:
 
         assert "    Description: |-\n      [ ] first\n      second\n" in out
         assert "    - 2026-01-01 [alice T1@2] [[/T2]]\n      more\n" in out
+        assert f"    - 2026-01-02 [bob T1@3] {'x' * 80}\n" in out
 
     def test_tree(self):
         from phabfive.display import _display_task_tree
@@ -125,3 +211,5 @@ class TestTaskPrinters:
 
         assert "Description: [ ] first" in out
         assert "2026-01-01 [alice T1@2] [[/T2]]" in out
+        # A one-line comment is shown whole; only a multi-line one is cut
+        assert f"2026-01-02 [bob T1@3] {'x' * 80}" in out
