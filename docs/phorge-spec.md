@@ -128,12 +128,13 @@ priority = "high"
 
 ## The envelope
 
-Three keys describe the document itself rather than the objects in it.
+Four keys describe the document itself rather than the objects in it.
 
 <!-- BEGIN GENERATED envelope -->
 
 | Key | Required | Meaning |
 |---|---|---|
+| `interpolate` | optional | `false` sends every string exactly as written: `{{ name }}` is text, not a variable. Absent means `true`. |
 | `kind` | optional | `create` or `search`. Absent means inferred from the body keys. |
 | `metadata` | optional | What the *file* is, for a person reading it. Nothing acts on it. |
 | `spec` | optional | The revision of the format, `phorge/v1alpha1`. Absent means the reader's own revision is assumed. |
@@ -702,6 +703,35 @@ under `variables:` is what makes `{{ sprint }}` optional. It is written once, wh
 the name is introduced, so every use of the name is covered by it and a reader can
 settle the whole question by reading `variables:`.
 
+### Switching interpolation off
+
+A document whose text only *quotes* a template - a task description showing a Helm
+value, a paste holding a Jinja2 file - has no use for any of the above, and under the
+undefined-name rule it is an error. The envelope key says so once, for the whole
+document:
+
+```yaml
+spec: phorge/v1alpha1
+kind: create
+interpolate: false
+tasks:
+  - title: Document the image tag
+    description: "Set image.tag to {{ .Values.tag }}"
+```
+
+With `interpolate: false` every string is sent **exactly as written**: no name is
+looked up and nothing is rendered. It applies to every kind, and to every document of
+a multi-document file - two documents that disagree about it are refused, like any
+other envelope key.
+
+Such a document takes no variables. A `variables:` section, or a value supplied from
+outside, is the error `interpolation-off` rather than something quietly ignored. The
+value is `true` or `false`; anything else is `wrong-type` and leaves interpolation on.
+
+There is deliberately no per-string escape. `{% raw %}` is outside the portable
+subset, and whether it is consumed depends on whether a reader renders a document
+that declares no variables.
+
 ---
 
 ## Grammars
@@ -867,6 +897,7 @@ record to, and a clean report for a check that never ran is worse than an error.
 | `undefined-variable` | offline | error | A `{{ name }}` nothing declares, overrides or defaults. |
 | `missing-variable` | offline | error | A declared variable with no value, no default and no override. |
 | `circular-variable` | offline | error | Variables that define each other. |
+| `interpolation-off` | offline | error | A variable declared for, or supplied to, a document that says `interpolate: false`. |
 | `duplicate-local-id` | offline | error | Two items declare the same `id:`. |
 | `unknown-local-id` | offline | error | A `$ref` naming a local id the document never declares, or one of the wrong object type for the key. |
 | `local-id-cycle` | offline | error | Local references that depend on each other, so no order creates them. |

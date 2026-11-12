@@ -34,6 +34,13 @@
   `RepositoryConfig`, a constructed app holds it as `repository`, `Phabfive.arcrc_hosts()`
   lists the instances in `~/.arcrc` without their tokens, and `Maniphest.tag_hints()` looks
   the hints up
+* **A spec can switch interpolation off with `interpolate: false`.** Every string in a
+  spec is a Jinja2 template, so a task description or paste that only quotes one -
+  `{{ .Values.tag }}` in a Helm example - was refused as an undefined variable, and no
+  escape survived both the check and the render. With `interpolate: false` in the
+  envelope every string is sent exactly as written, in a create and a search spec
+  alike. Such a spec takes no variables: a `variables:` section or a `--set` is the new
+  problem code `interpolation-off`
 
 ## Bug Fixes
 

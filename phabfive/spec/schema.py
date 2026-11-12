@@ -508,6 +508,13 @@ def _envelope_properties(kind: Kind) -> dict[str, Any]:
             "description": "The verb: what this spec asks for.",
         },
         "metadata": _metadata_schema(),
+        "interpolate": {
+            "type": "boolean",
+            "description": (
+                "false sends every string as written, so {{ name }} is text "
+                "rather than a variable."
+            ),
+        },
         VARIABLES_KEY: {
             "type": "object",
             "description": (

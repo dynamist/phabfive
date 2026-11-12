@@ -218,7 +218,65 @@ def _check_envelope(spec: "Spec") -> list[Problem]:
             )
         )
 
+    if not isinstance(envelope.interpolate, bool):
+        problems.append(
+            problem(
+                DOCUMENT,
+                field="interpolate",
+                value=envelope.interpolate,
+                reason=(
+                    f"interpolate is true or false, not a "
+                    f"{_type_name(envelope.interpolate)}."
+                ),
+                code="wrong-type",
+            )
+        )
+
     problems += _check_metadata(spec)
+
+    return problems
+
+
+def _check_literal(spec: "Spec", overrides: Mapping[str, Any]) -> list[Problem]:
+    """A document that says `interpolate: false`, given variables anyway.
+
+    Its strings are sent as written, so a value declared for it or supplied
+    to it has nowhere to go. Reported rather than ignored: a `--set` that
+    silently does nothing is how a title ends up reading `{{ sprint }}`.
+    """
+    problems: list[Problem] = []
+
+    for name, value in spec.variables.items():
+        problems.append(
+            problem(
+                "variables",
+                field=name,
+                value=value,
+                reason=(
+                    f"Variable {name!r} is declared, but the document says "
+                    f"interpolate: false, so nothing reads it. Remove one of "
+                    f"the two."
+                ),
+                code="interpolation-off",
+            )
+        )
+
+    for name, value in overrides.items():
+        if name in spec.variables:
+            continue
+
+        problems.append(
+            problem(
+                "variables",
+                field=name,
+                value=value,
+                reason=(
+                    f"Variable {name!r} was supplied, but the document says "
+                    f"interpolate: false, so nothing reads it."
+                ),
+                code="interpolation-off",
+            )
+        )
 
     return problems
 
@@ -1735,6 +1793,15 @@ def validate_offline(
     overrides = dict(variables or {})
 
     problems = _check_envelope(spec)
+
+    if not spec.interpolates:
+        # Every string is text: no name to look up, nothing to render, and
+        # no value check to skip because it still holds a `{{`
+        problems += _check_literal(spec, overrides)
+        problems += _check_schema(spec, frozenset())
+        problems += _check_semantics(spec)
+
+        return problems
 
     variable_problems, effective = _check_variables(spec, overrides)
     problems += variable_problems
