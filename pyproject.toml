@@ -57,13 +57,13 @@ test = [
   # offline validator is hand-rolled so it can name the field and the code a
   # frontend renders, and so the frozen builds stay free of a native wheel.
   "jsonschema>=4.26.0",
-  "mypy>=2.3.1",
+  "mypy>=2.4.1",
   "pytest>=9.2.0",
   "pytest-cov>=7.1.0",
   # Capped until dynamist/phabfive#322, 0.16 widened the default rule set
   "ruff>=0.15.22,<0.16",
   "types-appdirs>=1.4.3.5",
-  "types-pyyaml>=6.0.12.20261103",
+  "types-pyyaml>=6.0.12.20261111",
   "types-requests>=2.33.0.20261030",
 ]
 dev = [{ include-group = "test" }, "tox>=4.67.13", "tox-uv>=1.37.7"]
