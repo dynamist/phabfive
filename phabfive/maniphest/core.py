@@ -545,10 +545,37 @@ class Maniphest(Phabfive):
         if any(not is_exact_monogram(pattern) for pattern in space_patterns):
             all_spaces = self._get_all_spaces()
 
+        # Every pattern is tried before any is refused. Stopping at the first
+        # one named a single Space out of several the viewer cannot see, and
+        # each of the others cost a run of its own to find out about.
         space_phids = []
+        missing = []
+        refusals = []
         for space_pattern in space_patterns:
-            space_phids.extend(
-                resolve_space_phids(self.phab, space_pattern, all_spaces=all_spaces)
+            try:
+                space_phids.extend(
+                    resolve_space_phids(self.phab, space_pattern, all_spaces=all_spaces)
+                )
+            except PhabfiveConfigException as refusal:
+                missing.append(space_pattern)
+                refusals.append(refusal)
+                # The refusal lists what the viewer can see, so the Spaces
+                # are enumerated by now; the patterns after this one share
+                # that probe rather than repeating it.
+                if all_spaces is None:
+                    all_spaces = self._get_all_spaces()
+
+        if len(refusals) == 1:
+            # One Space is refused in the words it always was
+            raise refusals[0]
+
+        if missing:
+            # Named as they were written, never by what the instance calls
+            # them: a Space the viewer cannot see has no name to give away.
+            listed = ", ".join(f"'{pattern}'" for pattern in missing)
+            raise PhabfiveConfigException(
+                f"Spaces {listed} not found. "
+                f"Available spaces: {', '.join(all_spaces or {})}"
             )
 
         # Remove duplicates while preserving order

@@ -37,6 +37,10 @@
 
 ## Bug Fixes
 
+* **A list of Spaces names every one that was not found.** `--space=S1,S5,S6,S8`, and
+  `space:` in a search spec, stopped at the first Space the viewer cannot see, so a
+  restricted token learned about S6 and S8 one failed run at a time. They are named
+  together now, as they were written; a single missing Space keeps its sentence
 * **`maniphest create --tag` takes a `#hashtag`.** The `#` is optional everywhere else,
   `maniphest edit` included, but create looked the name up with it and answered "Project(s)
   not found", so a workboard written as `#name` in `.arcconfig` failed every create

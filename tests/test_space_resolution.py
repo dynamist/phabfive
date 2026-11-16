@@ -294,3 +294,69 @@ class TestOneProbePerCommand:
         maniphest.task_search(space="*")
 
         assert phab.phid.lookup.call_count == calls_after_first
+
+
+@patch("phabfive.maniphest.core.Phabfive.__init__", return_value=None)
+class TestEveryMissingSpaceIsNamed:
+    """A list of Spaces is refused once, naming all the viewer cannot see."""
+
+    def _maniphest(self, phab):
+        maniphest = Maniphest()
+        maniphest.phab = phab
+        return maniphest
+
+    def test_every_space_the_viewer_cannot_see_is_named(self, mock_init):
+        # The regression: S5 was named, and S6 and S8 each took another run.
+        phab = _phab({1: "Global"})
+
+        with pytest.raises(PhabfiveConfigException) as excinfo:
+            self._maniphest(phab)._resolve_space_patterns(["S1", "S5", "S6", "S8"])
+
+        assert str(excinfo.value) == (
+            "Spaces 'S5', 'S6', 'S8' not found. Available spaces: S1"
+        )
+
+    def test_one_missing_space_keeps_its_sentence(self, mock_init):
+        phab = _phab({1: "Global"})
+
+        with pytest.raises(PhabfiveConfigException) as excinfo:
+            self._maniphest(phab)._resolve_space_patterns(["S1", "S5"])
+
+        assert str(excinfo.value) == "Space 'S5' not found. Available spaces: S1"
+
+    def test_a_pattern_that_matches_nothing_is_named_with_the_rest(self, mock_init):
+        phab = _phab({1: "Global"})
+
+        with pytest.raises(PhabfiveConfigException) as excinfo:
+            self._maniphest(phab)._resolve_space_patterns(["Arch*", "S1", "S5"])
+
+        assert "Spaces 'Arch*', 'S5' not found" in str(excinfo.value)
+
+    def test_the_missing_spaces_share_one_probe(self, mock_init):
+        phab = _phab({1: "Global"})
+
+        with pytest.raises(PhabfiveConfigException):
+            self._maniphest(phab)._resolve_space_patterns(["S5", "S6", "S8"])
+
+        # A direct lookup for S5 and the enumeration its refusal lists, then
+        # one more enumeration that S6, S8 and the sentence all read from -
+        # not one for each of them.
+        probe = SPACE_PROBE_MAX // SPACE_PROBE_CHUNK
+        assert phab.phid.lookup.call_count == 1 + 2 * probe
+
+    def test_spaces_that_all_resolve_are_unchanged(self, mock_init):
+        phab = _phab({1: "Global", 2: "Secret"})
+
+        phids = self._maniphest(phab)._resolve_space_patterns(["S1", "S2", "S1"])
+
+        assert phids == ["PHID-SPCE-1", "PHID-SPCE-2"]
+        assert _names_asked(phab) == ["S1", "S2", "S1"]
+
+    def test_a_failed_lookup_is_not_collected(self, mock_init):
+        # Only "the instance said no" waits for the others; an instance that
+        # could not be asked is reported at once.
+        phab = _phab({1: "Global"})
+        phab.phid.lookup.side_effect = RuntimeError("boom")
+
+        with pytest.raises(PhabfiveRemoteException):
+            self._maniphest(phab)._resolve_space_patterns(["S5", "S6"])
