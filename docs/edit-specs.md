@@ -67,19 +67,19 @@ phabfive apply -f FILE [--dry-run] [--force]
 - `export` takes monograms or links, or reads them from standard input: bare monograms, or
   what a search prints in `--format=yaml`, `json` or `jsonl`.
 
-  ```bash
-  phabfive export T123 T124 -o tasks.yaml
-  phabfive maniphest search --tag=backend | phabfive export > backend.yaml
-  ```
+```bash
+phabfive export T123 T124 -o tasks.yaml
+phabfive maniphest search --tag=backend | phabfive export > backend.yaml
+```
 
 - The output is YAML, on a terminal and off one. `--format=json` and `--format=jsonl` write
   the same document in those serializations; the terminal formats are refused, because the
   output is a file.
 - `apply -f -` reads the spec from standard input, so the two compose:
 
-  ```bash
-  phabfive export T123 | phabfive apply -f - --dry-run
-  ```
+```bash
+phabfive export T123 | phabfive apply -f - --dry-run
+```
 
 - Tasks are exported today. Pastes, projects and repositories have edit endpoints and will
   follow. A passphrase cannot be created or edited through Conduit at all, so it never will

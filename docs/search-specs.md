@@ -23,13 +23,13 @@ phabfive search -f FILE [--set NAME=VALUE]...
 - The file may be YAML, JSON, JSONL or TOML.
 - Hand it a **create** spec and it refuses by name:
 
-  ```console
-  $ phabfive search -f specs/create/sprint-tasks.yaml
-  Error: specs/create/sprint-tasks.yaml is a create spec. Run it with
-    phabfive apply -f specs/create/sprint-tasks.yaml
-  ```
+```console
+$ phabfive search -f specs/create/sprint-tasks.yaml
+Error: specs/create/sprint-tasks.yaml is a create spec. Run it with
+  phabfive apply -f specs/create/sprint-tasks.yaml
+```
 
-  Exit 1, on stderr, in every format.
+Exit 1, on stderr, in every format.
 
 ## Your first spec
 
@@ -326,21 +326,21 @@ project cannot be deleted through Conduit and a hashtag is taken once.
 
 | File | Shows |
 |---|---|
-| `specs/search/blocked-tasks.yaml` | one search; `column:` transition patterns |
-| `specs/search/high-priority-stale-tasks.yaml` | time filters |
-| `specs/search/recently-moved-to-review.yaml` | `to:` column history patterns |
-| `specs/search/escalated-priorities.yaml` | `priority: raised` — priority transitions |
-| `specs/search/tasks-resolved-but-not-in-done.yaml` | a status scope AND a column pattern |
-| `specs/search/project-status-overview.yaml` | four task searches: urgent, resolved, stuck, escalated |
-| `specs/search/development-workflow-audit.yaml` | four task searches across the pipeline, with `forward`/`backward` |
-| `specs/search/team-productivity-report.yaml` | four task searches: in, out, load, age |
-| `specs/search/active-projects.yaml` | `type: project` |
-| `specs/search/my-pastes.yaml` | `type: paste`, `author: "@me"` |
-| `specs/search/deploy-credentials.yaml` | `type: passphrase`, with the walk cost in its `metadata.description` |
-| `specs/search/release-readiness.yaml` | task, project and paste in one document |
-| `specs/search/weekly-throughput.yaml` | `type: task-stats`: created and resolved per week, and closed per owner |
-| `specs/formats/audit.{yaml,json,jsonl,toml}` | one search spec, four serializations |
-| `specs/broken/*.yaml` | one file per failure, each named after the code it produces |
+| [`specs/search/blocked-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/blocked-tasks.yaml) | one search; `column:` transition patterns |
+| [`specs/search/high-priority-stale-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/high-priority-stale-tasks.yaml) | time filters |
+| [`specs/search/recently-moved-to-review.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/recently-moved-to-review.yaml) | `to:` column history patterns |
+| [`specs/search/escalated-priorities.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/escalated-priorities.yaml) | `priority: raised` — priority transitions |
+| [`specs/search/tasks-resolved-but-not-in-done.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/tasks-resolved-but-not-in-done.yaml) | a status scope AND a column pattern |
+| [`specs/search/project-status-overview.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/project-status-overview.yaml) | four task searches: urgent, resolved, stuck, escalated |
+| [`specs/search/development-workflow-audit.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/development-workflow-audit.yaml) | four task searches across the pipeline, with `forward`/`backward` |
+| [`specs/search/team-productivity-report.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/team-productivity-report.yaml) | four task searches: in, out, load, age |
+| [`specs/search/active-projects.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/active-projects.yaml) | `type: project` |
+| [`specs/search/my-pastes.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/my-pastes.yaml) | `type: paste`, `author: "@me"` |
+| [`specs/search/deploy-credentials.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/deploy-credentials.yaml) | `type: passphrase`, with the walk cost in its `metadata.description` |
+| [`specs/search/release-readiness.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/release-readiness.yaml) | task, project and paste in one document |
+| [`specs/search/weekly-throughput.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/weekly-throughput.yaml) | `type: task-stats`: created and resolved per week, and closed per owner |
+| `specs/formats/audit.`[`yaml`](https://github.com/dynamist/phabfive/blob/main/specs/formats/audit.yaml), [`json`](https://github.com/dynamist/phabfive/blob/main/specs/formats/audit.json), [`jsonl`](https://github.com/dynamist/phabfive/blob/main/specs/formats/audit.jsonl), [`toml`](https://github.com/dynamist/phabfive/blob/main/specs/formats/audit.toml) | one search spec, four serializations |
+| [`specs/broken/*.yaml`](https://github.com/dynamist/phabfive/tree/main/specs/broken) | one file per failure, each named after the code it produces |
 
 ## Coming from `--with`
 
@@ -365,17 +365,17 @@ through the same loader `-f` does, so all four serializations load at either spe
 - **`maniphest search --with` runs task searches only.** An item whose `type:` is not `task` is
   refused by name:
 
-  ```console
-  $ phabfive maniphest search --with specs/search/my-pastes.yaml
-  WARNING - --with is deprecated; run `phabfive search -f FILE` instead
-  ERROR: My pastes: 'maniphest search' runs a task search, and this one is a 'paste' search. Run the spec with 'phabfive search -f FILE' instead, which runs every type a spec holds.
-  ```
+```console
+$ phabfive maniphest search --with specs/search/my-pastes.yaml
+WARNING - --with is deprecated; run `phabfive search -f FILE` instead
+ERROR: My pastes: 'maniphest search' runs a task search, and this one is a 'paste' search. Run the spec with 'phabfive search -f FILE' instead, which runs every type a spec holds.
+```
 
-  `project`, `paste` and `passphrase search --with` each run every type a spec holds, so which
-  of the three you start from decides nothing but where the first connection comes from. That
-  is a quirk of the deprecated path, and it is why the sentence above names `search -f` rather
-  than one of the other three: answering a deprecated flag with a second deprecated flag would
-  only move the migration.
+`project`, `paste` and `passphrase search --with` each run every type a spec holds, so which
+of the three you start from decides nothing but where the first connection comes from. That
+is a quirk of the deprecated path, and it is why the sentence above names `search -f` rather
+than one of the other three: answering a deprecated flag with a second deprecated flag would
+only move the migration.
 
 And the vocabulary changed, which is more than a rename:
 

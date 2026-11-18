@@ -499,16 +499,16 @@ Phorge runs in a local [k3d](https://k3d.io) cluster, which is k3s in Docker. Th
 - **Phorge:** `k8s/base` holds the `phorge` namespace, MariaDB (StatefulSet `mariadb`), Phorge (Deployment `phorge`, `Recreate` so two pods never upgrade the same database), the Ingress, a ResourceQuota with default limits and NetworkPolicies. The Phorge pod has two containers, `web` (the default for `kubectl exec` and `logs`) and `sshd`, see [Git over SSH](#git-over-ssh). Only Traefik and Dynatron's Conduit clients reach Phorge - the `dynatron` and `worker` pods (`app.kubernetes.io/name`) of every Dynatron instance, main checkout or worktree (namespaces labelled `app.kubernetes.io/part-of: dynatron`), nothing reaches its sshd except `make ssh-forward`, and only Phorge reaches MariaDB, whose port is not published on the host. Overlays: `local` (with `config.local.env`) and `ci`.
 - **In-cluster clients:** a pod cannot use `phorge.localhost`, which resolves to the pod itself. Phorge also answers to its Service name (`PHORGE_ALLOWED_URIS`), so a client the NetworkPolicy `phorge-from-dev-apps` admits reaches it at `http://web.phorge.svc.cluster.local/api/` and needs no `hostAlias`. Configure the Service name as `PHORGE_API_HOST`, with `PHORGE_WEB_HOST=http://phorge.localhost` beside it, so the links in whatever the pod renders still open on the host:
 
-    ```bash
-    PHORGE_API_HOST=http://web.phorge.svc.cluster.local
-    PHORGE_WEB_HOST=http://phorge.localhost
-    ```
+```bash
+PHORGE_API_HOST=http://web.phorge.svc.cluster.local
+PHORGE_WEB_HOST=http://phorge.localhost
+```
 
-    Setting `PHORGE_HOST` to the Service name instead makes every link phabfive returns a `*.svc.cluster.local` address, which resolves nowhere outside the cluster.
+Setting `PHORGE_HOST` to the Service name instead makes every link phabfive returns a `*.svc.cluster.local` address, which resolves nowhere outside the cluster.
 
-    The policy admits a pod by two labels, its namespace's `app.kubernetes.io/part-of` and its own `app.kubernetes.io/name`, and a new client needs both. Neither is proof of who the caller is: a namespace label is only as trustworthy as whoever may edit namespaces, and the pod selector narrows the grant, but anyone who can create pods in an admitted namespace can still give one an admitted name. That is fine in a local dev cluster, where the same people could edit the policy, and not something to copy into production unchanged.
+The policy admits a pod by two labels, its namespace's `app.kubernetes.io/part-of` and its own `app.kubernetes.io/name`, and a new client needs both. Neither is proof of who the caller is: a namespace label is only as trustworthy as whoever may edit namespaces, and the pod selector narrows the grant, but anyone who can create pods in an admitted namespace can still give one an admitted name. That is fine in a local dev cluster, where the same people could edit the policy, and not something to copy into production unchanged.
 
-    Dynatron authenticates with the `dynatron` bot's token, `PHORGE_DYNATRON_TOKEN` in `k8s/base/secret.env`, not the admin's `PHORGE_ADMIN_TOKEN`: its standup page only reads, and a bot can do that without being an admin. See [Dynatron's Bot Account](#dynatrons-bot-account).
+Dynatron authenticates with the `dynatron` bot's token, `PHORGE_DYNATRON_TOKEN` in `k8s/base/secret.env`, not the admin's `PHORGE_ADMIN_TOKEN`: its standup page only reads, and a bot can do that without being an admin. See [Dynatron's Bot Account](#dynatrons-bot-account).
 - **Images:** `make phorge-image` builds `dynamist/phorge`, tags it by content and imports it with `k3d image import`, no registry is involved.
 
 Every `make` target passes `--context k3d-dynamist`, so it never acts on another cluster.
