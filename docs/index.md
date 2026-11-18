@@ -1,6 +1,6 @@
 # Phabfive Documentation
 
-Phabfive is a command line tool to interact with Phabricator/Phorge, providing a fast and efficient way to work with your Phabricator instance from the terminal.
+Phabfive is a command line tool for Phorge and Phabricator, providing a fast and efficient way to work with your instance from the terminal.
 
 ## Features
 
