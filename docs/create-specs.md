@@ -27,14 +27,14 @@ phabfive apply -f FILE [--dry-run] [--set NAME=VALUE]...
   `phabfive spec validate --offline FILE` for that.
 - Hand it a **search** spec and it refuses by name rather than guessing:
 
-  ```console
-  $ phabfive apply -f specs/search/blocked-tasks.yaml
-  Error: specs/search/blocked-tasks.yaml is a search spec. Run it with
-    phabfive search -f specs/search/blocked-tasks.yaml
-  ```
+```console
+$ phabfive apply -f specs/search/blocked-tasks.yaml
+Error: specs/search/blocked-tasks.yaml is a search spec. Run it with
+  phabfive search -f specs/search/blocked-tasks.yaml
+```
 
-  Exit 1. That sentence goes to stderr in every `--format`; it is a usage refusal, not a
-  validation problem, so it never appears in a JSON problem stream.
+Exit 1. That sentence goes to stderr in every `--format`; it is a usage refusal, not a
+validation problem, so it never appears in a JSON problem stream.
 
 ## Your first spec
 
@@ -226,15 +226,15 @@ phabfive --format=json apply -f specs/create/sprint-tasks.yaml --dry-run
 - `--dry-run` with a machine format emits the plan's own records on stdout and the
   `would create …` sentence on stderr, so a reader can pipe stdout straight into `jq`:
 
-  ```console
-  $ phabfive --format=json apply -f specs/create/platform-bootstrap.yaml --dry-run |
-      jq -r '.[] | "\(.type)\t\(.id // "-")\t\(.display.title // .display.name)"'
-  project	observability	Observability Platform
-  project	first-milestone	Foundations
-  task	epic	Stand up the observability platform
-  task	-	Deploy the metrics collector
-  task	-	Write the alerting runbook
-  ```
+```console
+$ phabfive --format=json apply -f specs/create/platform-bootstrap.yaml --dry-run |
+    jq -r '.[] | "\(.type)\t\(.id // "-")\t\(.display.title // .display.name)"'
+project	observability	Observability Platform
+project	first-milestone	Foundations
+task	epic	Stand up the observability platform
+task	-	Deploy the metrics collector
+task	-	Write the alerting runbook
+```
 
 - A real run emits one record per object. With `--format=jsonl` each is flushed as it is
   created, which for a run that stops partway is the difference between knowing what exists
@@ -379,15 +379,15 @@ project cannot be deleted through Conduit and a hashtag is taken once.
 
 | File | Shows |
 |---|---|
-| `specs/create/sprint-tasks.yaml` | the smallest useful spec: an envelope, variables, three tasks, projects by name |
-| `specs/create/feature-epic.yaml` | nested subtasks, a YAML anchor reused as a subscriber list, assignments, links onto tasks that already exist |
-| `specs/create/large-programme.yaml` | scale — 66 tasks across four quarters — and variables built out of other variables |
-| `specs/create/platform-bootstrap.yaml` | a project, a milestone of it, and the tasks tagged into both, tied together with `$local-id`s |
-| `specs/create/platform-project.yaml` | a project on its own: slugs, members, icon, colour, policies |
-| `specs/create/anchor-existing-task.yaml` | the anchor form, and the same relationship written flat |
-| `specs/create/release-notes-paste.yaml` | a paste — **not runnable yet**, see above |
-| `specs/formats/sprint.{yaml,json,jsonl,toml}` | one create spec, four serializations, one plan |
-| `specs/broken/*.yaml` | one file per failure, each named after the code it produces; `specs/broken/README.md` says which |
+| [`specs/create/sprint-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/sprint-tasks.yaml) | the smallest useful spec: an envelope, variables, three tasks, projects by name |
+| [`specs/create/feature-epic.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/feature-epic.yaml) | nested subtasks, a YAML anchor reused as a subscriber list, assignments, links onto tasks that already exist |
+| [`specs/create/large-programme.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/large-programme.yaml) | scale — 66 tasks across four quarters — and variables built out of other variables |
+| [`specs/create/platform-bootstrap.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/platform-bootstrap.yaml) | a project, a milestone of it, and the tasks tagged into both, tied together with `$local-id`s |
+| [`specs/create/platform-project.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/platform-project.yaml) | a project on its own: slugs, members, icon, colour, policies |
+| [`specs/create/anchor-existing-task.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/anchor-existing-task.yaml) | the anchor form, and the same relationship written flat |
+| [`specs/create/release-notes-paste.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/release-notes-paste.yaml) | a paste — **not runnable yet**, see above |
+| `specs/formats/sprint.`[`yaml`](https://github.com/dynamist/phabfive/blob/main/specs/formats/sprint.yaml), [`json`](https://github.com/dynamist/phabfive/blob/main/specs/formats/sprint.json), [`jsonl`](https://github.com/dynamist/phabfive/blob/main/specs/formats/sprint.jsonl), [`toml`](https://github.com/dynamist/phabfive/blob/main/specs/formats/sprint.toml) | one create spec, four serializations, one plan |
+| [`specs/broken/*.yaml`](https://github.com/dynamist/phabfive/tree/main/specs/broken) | one file per failure, each named after the code it produces; [`specs/broken/README.md`](https://github.com/dynamist/phabfive/blob/main/specs/broken/README.md) says which |
 
 ## Coming from `--with`
 

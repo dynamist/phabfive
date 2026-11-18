@@ -649,13 +649,13 @@ phabfive maniphest search --include T2069,T2257
 - Both are supported in [search specs](search-specs.md) as a
   comma-separated string (`include: "T2069,T2257"`) or a YAML list:
 
-  ```yaml
-  search:
-    include:
-      - T2069
-      - T2257
-    exclude: "T1500"
-  ```
+```yaml
+search:
+  include:
+    - T2069
+    - T2257
+  exclude: "T1500"
+```
 
 ### Result Ordering
 
@@ -701,11 +701,11 @@ field:
   project (deterministically, but grouped).
 - `order` is supported in [search specs](search-specs.md):
 
-  ```yaml
-  search:
-    tag: "Sprint*"
-    order: updated:asc
-  ```
+```yaml
+search:
+  tag: "Sprint*"
+  order: updated:asc
+```
 
 - Phorge's own order names are not accepted, since `outdated` is opaque and
   `newest` never says newest what. Typing one tells you the phabfive spelling:
