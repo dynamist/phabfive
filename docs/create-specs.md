@@ -38,7 +38,7 @@ validation problem, so it never appears in a JSON problem stream.
 
 ## Your first spec
 
-`specs/create/sprint-tasks.yaml` is the smallest one worth copying:
+[`specs/create/sprint-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/sprint-tasks.yaml) is the smallest one worth copying:
 
 ```yaml
 # specs/create/sprint-tasks.yaml
@@ -164,14 +164,14 @@ $ phabfive apply -f specs/create/platform-bootstrap.yaml --dry-run
   - task 'Write the alerting runbook'
 ```
 
-Read `specs/create/platform-bootstrap.yaml` for the file; the `$ref` grammar it uses is
+Read [`specs/create/platform-bootstrap.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/platform-bootstrap.yaml) for the file; the `$ref` grammar it uses is
 [specified here](phorge-spec.md). The order the objects are created in is the order that makes
 each reference resolvable, not the order they are written in.
 
 **A project cannot be deleted or archived through Conduit, and a hashtag can only be taken
 once.** So this is a file to dry-run first and to apply once.
 
-`specs/create/platform-project.yaml` is the same thing shrunk to one project, if all you want
+[`specs/create/platform-project.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/platform-project.yaml) is the same thing shrunk to one project, if all you want
 is the project keys.
 
 ## Hanging new tasks off one that already exists
@@ -198,7 +198,7 @@ The last line is the same relationship written flat, one item per child carrying
 
 ## One spec, four serializations
 
-`specs/formats/` holds the same create spec written four ways, and the same search spec beside
+[`specs/formats/`](https://github.com/dynamist/phabfive/tree/main/specs/formats) holds the same create spec written four ways, and the same search spec beside
 it. They plan identically:
 
 ```console
@@ -265,7 +265,7 @@ tasks[0]
 specs/broken/dangling-local-id.yaml: 1 error, 0 warnings
 ```
 
-`specs/broken/` holds one file per code, which is the fastest way to see what a given failure
+[`specs/broken/`](https://github.com/dynamist/phabfive/tree/main/specs/broken) holds one file per code, which is the fastest way to see what a given failure
 looks like before you meet it.
 
 **The online layer** asks the instance whether the names resolve. `phabfive spec validate`
@@ -365,15 +365,18 @@ a paste can be tagged into a project the same document creates by naming its `$l
 `passphrase.query` and no `passphrase.edit`, so no file can create a credential. A passphrase
 can still be *searched* — see [Searching with Specs](search-specs.md).
 
-## What ships under `specs/`
+## Example create specs
+
+The examples live under [`specs/`](https://github.com/dynamist/phabfive/tree/main/specs) in the phabfive repository. They are not installed with
+phabfive, so clone the repository or download the file you want.
 
 Every file here is loaded and put through the offline validation layer by CI on every
 run (`tests/test_spec_corpus.py`), so a file named here is a file that loads — except the
-ones under `specs/broken/`, which that walk excludes on purpose and
+ones under [`specs/broken/`](https://github.com/dynamist/phabfive/tree/main/specs/broken), which that walk excludes on purpose and
 `tests/test_spec_broken_corpus.py` checks the other way round, by the problem each one
 produces. The **online** layer runs over the same corpus in the Kubernetes job
 (`tests/e2e/test_spec_corpus_online.py`), which also plans every create spec with
-`--dry-run` — so a shipped example naming a user or a project nobody has goes red there
+`--dry-run` — so an example naming a user or a project nobody has goes red there
 rather than in your terminal. Nothing in that gate ever applies an example for real: a
 project cannot be deleted through Conduit and a hashtag is taken once.
 
@@ -389,49 +392,6 @@ project cannot be deleted through Conduit and a hashtag is taken once.
 | `specs/formats/sprint.`[`yaml`](https://github.com/dynamist/phabfive/blob/main/specs/formats/sprint.yaml), [`json`](https://github.com/dynamist/phabfive/blob/main/specs/formats/sprint.json), [`jsonl`](https://github.com/dynamist/phabfive/blob/main/specs/formats/sprint.jsonl), [`toml`](https://github.com/dynamist/phabfive/blob/main/specs/formats/sprint.toml) | one create spec, four serializations, one plan |
 | [`specs/broken/*.yaml`](https://github.com/dynamist/phabfive/tree/main/specs/broken) | one file per failure, each named after the code it produces; [`specs/broken/README.md`](https://github.com/dynamist/phabfive/blob/main/specs/broken/README.md) says which |
 
-## Coming from `--with`
-
-`--with` still works on all three create commands — `maniphest create`, `project create` and
-`paste create` — and each of the three now reads the file through the same loader `apply -f`
-does. It warns once and names what replaces it:
-
-```console
-$ phabfive maniphest create --with specs/create/sprint-tasks.yaml --dry-run
-WARNING - --with is deprecated; run `phabfive apply -f FILE` instead
-[DRY RUN] specs/create/sprint-tasks.yaml: would create 3 tasks.
-  - task 'Plan sprint 12'
-  - task 'Build release 2024.4'
-  - task 'Review release 2024.4 against the security checklist'
-```
-
-That is the same preview, the same records and the same exit codes `apply -f` gives, because
-it is the same code path: which of the three commands you reach it through decides nothing.
-A spec that creates a project and the tasks tagged into it is created whole and reported
-whole from `paste create --with` just as from `apply -f`, which is the strongest argument for
-not reaching it through a create command at all.
-
-It will be removed when the format promotes from `phorge/v1alpha1` to `phorge/v1`. One thing
-about it is worth knowing until then:
-
-- **every other option on the line is refused, not ignored.** A create spec is applied as it
-  stands, so `--priority` beside `--with` would be dropped in silence; it answers
-  `--with cannot be combined with --priority` and creates nothing. Put the value in the spec.
-
-What changed is the vocabulary, and it is not only a rename:
-
-| Then | Now |
-|---|---|
-| a **template**: a YAML file that one command read | a **spec**: a document any command reads, in YAML, JSON, JSONL or TOML |
-| `tasks:` at the root, and nothing else | an envelope (`spec:`, `kind:`, `metadata:`) around `tasks:` and `projects:` |
-| tasks only | whatever object types the `kind:` admits, in one document |
-| `phabfive maniphest create --with F` | `phabfive apply -f F` |
-| a partial failure exits 1 | a partial failure exits **4**, so a retry can tell it from "nothing happened" |
-| no way to check a file without running it | `phabfive spec validate [--offline] F` |
-
-The shipped files under `specs/` are all in the new format. There is no compatibility shim for
-the old one and none is planned: `v1alpha1` promises nothing about key names, and
-[the format page states that policy](phorge-spec.md).
-
 ## See Also
 
 - [The Phorge spec format](phorge-spec.md) — the normative definition: every key, every rule
@@ -439,4 +399,4 @@ the old one and none is planned: `v1alpha1` promises nothing about key names, an
 - [Exporting and Editing with Specs](edit-specs.md) — `kind: edit`, for objects that already exist
 - [Maniphest CLI](maniphest-cli.md) — the single-task commands
 - [Project CLI](project-cli.md) — the single-project commands
-- [Phorge Setup](phorge-setup.md) — the local instance the shipped specs are written against
+- [Phorge Setup](phorge-setup.md) — the local instance the example specs are written against

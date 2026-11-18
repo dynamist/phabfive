@@ -33,7 +33,7 @@ Exit 1, on stderr, in every format.
 
 ## Your first spec
 
-`specs/search/blocked-tasks.yaml`, whole:
+[`specs/search/blocked-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/blocked-tasks.yaml), whole:
 
 ```yaml
 # specs/search/blocked-tasks.yaml
@@ -81,18 +81,18 @@ No results, and that is still exit 0: an empty answer is an answer.
 ## Several searches in one file
 
 A `searches:` list with more than one item runs them in order, each with its own banner. Of the
-eight task search specs that ship, three are four-search reports —
-`specs/search/project-status-overview.yaml`,
-`specs/search/development-workflow-audit.yaml` and
-`specs/search/team-productivity-report.yaml` — and they are the reason the form exists: one
+eight task search examples, three are four-search reports —
+[`specs/search/project-status-overview.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/project-status-overview.yaml),
+[`specs/search/development-workflow-audit.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/development-workflow-audit.yaml) and
+[`specs/search/team-productivity-report.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/team-productivity-report.yaml) — and they are the reason the form exists: one
 command, one connection, a whole status meeting. The other five are single searches:
-`blocked-tasks.yaml`, `escalated-priorities.yaml`, `high-priority-stale-tasks.yaml`,
-`recently-moved-to-review.yaml` and `tasks-resolved-but-not-in-done.yaml`.
+[`blocked-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/blocked-tasks.yaml), [`escalated-priorities.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/escalated-priorities.yaml), [`high-priority-stale-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/high-priority-stale-tasks.yaml),
+[`recently-moved-to-review.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/recently-moved-to-review.yaml) and [`tasks-resolved-but-not-in-done.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/tasks-resolved-but-not-in-done.yaml).
 
 ## Several applications in one file
 
 `kind:` carries the verb and never the object type, so one document can ask Maniphest, Project
-and Paste in one run. `specs/search/release-readiness.yaml` does exactly that — here is its
+and Paste in one run. [`specs/search/release-readiness.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/release-readiness.yaml) does exactly that — here is its
 `searches:` list with the per-item descriptions stripped out, so the shape is visible:
 
 ```yaml
@@ -125,9 +125,9 @@ No pastes found
 Text search matches whole words, not parts of words. To match part of a word, prefix it with ~: '~release ~notes'
 ```
 
-The single-application examples are `specs/search/active-projects.yaml` (`type: project`),
-`specs/search/my-pastes.yaml` (`type: paste`, `author: "@me"`) and
-`specs/search/deploy-credentials.yaml` (`type: passphrase`).
+The single-application examples are [`specs/search/active-projects.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/active-projects.yaml) (`type: project`),
+[`specs/search/my-pastes.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/my-pastes.yaml) (`type: paste`, `author: "@me"`) and
+[`specs/search/deploy-credentials.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/deploy-credentials.yaml) (`type: passphrase`).
 
 ## What a passphrase search costs
 
@@ -141,17 +141,12 @@ single credential had been tested, so a limit of 2 with `type: key` could report
 keys that exist. Reading stops as soon as enough have matched, which shortens the walk but
 does not make the query cheap. On a large instance, expect a passphrase search to cost roughly
 what listing every credential costs — which is why
-`specs/search/deploy-credentials.yaml` carries a small `limit` and says so in its
+[`specs/search/deploy-credentials.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/deploy-credentials.yaml) carries a small `limit` and says so in its
 `metadata.description`.
 
-**A search spec never fetches secret material.** `--show-secret` is refused outright next to a
-spec, because the walk above would fetch the secret of every credential on the instance rather
-than of the ones that matched:
-
-```console
-$ phabfive passphrase search --with specs/search/deploy-credentials.yaml --show-secret
-ERROR: --show-secret cannot be combined with --with; a search spec never fetches secret material, use `passphrase show` for one credential
-```
+**A search spec never fetches secret material.** `phabfive search -f` has no `--show-secret`,
+because the walk above would fetch the secret of every credential on the instance rather
+than of the ones that matched.
 
 Read one secret with `phabfive passphrase show K1 --show-secret`.
 
@@ -161,7 +156,7 @@ A `type: task-stats` item counts tasks rather than listing them: one record per 
 month or quarter, holding the tasks created and closed in it, exactly what
 [`maniphest stats`](maniphest-cli.md#statistics) prints. Its `search:` takes the task
 filters, plus `since:` (required), `until:`, `period:`, `by:` and `all-closed:`.
-`specs/search/weekly-throughput.yaml` is the shipped one:
+[`specs/search/weekly-throughput.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/weekly-throughput.yaml) is the example:
 
 ```yaml
 searches:
@@ -196,8 +191,8 @@ WARNING - Filtering 476 tasks may take a while as each task requires fetching tr
 
 Narrow the candidate set first — a `tag:`, a `status:` scope, a `created-after:` — or use an
 `order:` where you only wanted the important ones first.
-`specs/search/release-readiness.yaml` takes the second route deliberately, and its own comment
-explains why; `specs/search/escalated-priorities.yaml` is where the pattern spelling earns its
+[`specs/search/release-readiness.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/release-readiness.yaml) takes the second route deliberately, and its own comment
+explains why; [`specs/search/escalated-priorities.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/escalated-priorities.yaml) is where the pattern spelling earns its
 cost.
 
 ## Supplying values from outside the file
@@ -210,7 +205,7 @@ phabfive search -f my-searches.yaml --set team=core
 
 Variables render into the filters the same way they render into a task title - a
 `tag: "{{ team }}"` becomes a real project name before the search is built.
-`specs/search/high-priority-stale-tasks.yaml` is the shipped one to try it on:
+[`specs/search/high-priority-stale-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/high-priority-stale-tasks.yaml) is the example to try it on:
 
 ```console
 $ phabfive search -f specs/search/high-priority-stale-tasks.yaml --set stale_days=30
@@ -278,11 +273,6 @@ ERROR: No such user: 'nobody.here'
 The message says which it is: a usage error prints `Usage: …` and
 `Try 'phabfive search --help'`.
 
-Note that the deprecated `--with` path answers the *same* unresolvable reference with **1**,
-not 2. That is the one behavioural difference between the two entry points, and `search -f` is
-the one that is right: 1 means "the spec is wrong", and a user who has been deleted is not a
-mistake in the file.
-
 ### The errors you will actually hit
 
 Every row below was produced on a live instance while this page was written, not recalled from
@@ -303,7 +293,7 @@ the source. Each `Problem` record carries a stable `code`, which is what a CI jo
 | `unknown-project` | online | `tag:` names no project | check the name or hashtag |
 | `unknown-space` | online | `space:` names no Space | the message lists the Spaces you can see |
 
-The full vocabulary of codes is [on the format page](phorge-spec.md). `specs/broken/` holds a
+The full vocabulary of codes is [on the format page](phorge-spec.md). [`specs/broken/`](https://github.com/dynamist/phabfive/tree/main/specs/broken) holds a
 runnable file for four of the codes in it, if you want to see a failure before you meet it.
 They are create specs, and four of the five rows above that they demonstrate
 (`undefined-variable`, `unknown-user`, and the two local-id codes from
@@ -312,15 +302,18 @@ way for either kind. `unknown-key` is the one that is not: a search item's key s
 complete and a create item's is not, which is the precondition the
 [format page](phorge-spec.md#layer-1-offline) states.
 
-## What ships under `specs/`
+## Example search specs
+
+The examples live under [`specs/`](https://github.com/dynamist/phabfive/tree/main/specs) in the phabfive repository. They are not installed with
+phabfive, so clone the repository or download the file you want.
 
 Every file here is loaded and put through the offline validation layer by CI on every
 run (`tests/test_spec_corpus.py`), so a file named here is a file that loads — except the
-ones under `specs/broken/`, which that walk excludes on purpose and
+ones under [`specs/broken/`](https://github.com/dynamist/phabfive/tree/main/specs/broken), which that walk excludes on purpose and
 `tests/test_spec_broken_corpus.py` checks the other way round, by the problem each one
 produces. The **online** layer runs over the same corpus in the Kubernetes job
 (`tests/e2e/test_spec_corpus_online.py`), which also plans every create spec with
-`--dry-run` — so a shipped example naming a user or a project nobody has goes red there
+`--dry-run` — so an example naming a user or a project nobody has goes red there
 rather than in your terminal. Nothing in that gate ever applies an example for real: a
 project cannot be deleted through Conduit and a hashtag is taken once.
 
@@ -341,56 +334,6 @@ project cannot be deleted through Conduit and a hashtag is taken once.
 | [`specs/search/weekly-throughput.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/weekly-throughput.yaml) | `type: task-stats`: created and resolved per week, and closed per owner |
 | `specs/formats/audit.`[`yaml`](https://github.com/dynamist/phabfive/blob/main/specs/formats/audit.yaml), [`json`](https://github.com/dynamist/phabfive/blob/main/specs/formats/audit.json), [`jsonl`](https://github.com/dynamist/phabfive/blob/main/specs/formats/audit.jsonl), [`toml`](https://github.com/dynamist/phabfive/blob/main/specs/formats/audit.toml) | one search spec, four serializations |
 | [`specs/broken/*.yaml`](https://github.com/dynamist/phabfive/tree/main/specs/broken) | one file per failure, each named after the code it produces |
-
-## Coming from `--with`
-
-`--with` still works on all four search commands, and still does what it did. It now warns once
-and names what replaces it:
-
-```console
-$ phabfive maniphest search --with specs/search/high-priority-stale-tasks.yaml
-WARNING - --with is deprecated; run `phabfive search -f FILE` instead
-...
-```
-
-It will be removed when the format promotes from `phorge/v1alpha1` to `phorge/v1`. Until then,
-two differences are worth knowing. Reading the file is no longer one of them: `--with` goes
-through the same loader `-f` does, so all four serializations load at either spelling.
-
-- **`--with` still lets command-line flags override the file.**
-  `phabfive maniphest search --with FILE --tag Development` runs the spec's search with that tag,
-  and `--limit 2` truncates it. `phabfive search -f` has no such overrides; it takes `--set`
-  for variables and nothing else. Where you relied on flag overrides, declare a variable and
-  `--set` it.
-- **`maniphest search --with` runs task searches only.** An item whose `type:` is not `task` is
-  refused by name:
-
-```console
-$ phabfive maniphest search --with specs/search/my-pastes.yaml
-WARNING - --with is deprecated; run `phabfive search -f FILE` instead
-ERROR: My pastes: 'maniphest search' runs a task search, and this one is a 'paste' search. Run the spec with 'phabfive search -f FILE' instead, which runs every type a spec holds.
-```
-
-`project`, `paste` and `passphrase search --with` each run every type a spec holds, so which
-of the three you start from decides nothing but where the first connection comes from. That
-is a quirk of the deprecated path, and it is why the sentence above names `search -f` rather
-than one of the other three: answering a deprecated flag with a second deprecated flag would
-only move the migration.
-
-And the vocabulary changed, which is more than a rename:
-
-| Then | Now |
-|---|---|
-| a **template**: a YAML file that one command read | a **spec**: a document any command reads, in YAML, JSON, JSONL or TOML |
-| `search:` at the root, several documents separated by `---` | an envelope (`spec:`, `kind:`, `metadata:`) around one `searches:` list |
-| `title:`/`description:` at the root of each document | on each `searches:` item, beside its `search:` |
-| tasks only, unless you knew to start from `project search --with` | any `type:` the `kind:` admits, from `phabfive search -f` |
-| `phabfive maniphest search --with F` | `phabfive search -f F` |
-| no way to check a file without running it | `phabfive spec validate [--offline] F` |
-
-The shipped files under `specs/` are all in the new format. There is no compatibility shim for
-the old one and none is planned: `v1alpha1` promises nothing about key names, and
-[the format page states that policy](phorge-spec.md).
 
 ## See Also
 

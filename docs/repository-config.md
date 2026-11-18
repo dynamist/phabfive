@@ -61,7 +61,6 @@ The workboard is left out when:
 
 - **you pass `--tag`.** Yours replaces the workboard; the two are not combined
 - **you ask for tasks by `--ids` or `--phids`.** Those are found wherever they are
-- **the search comes from a spec given with `--with`.** A spec names its own filters
 - **the command is `edit`.** Tags on an existing task are never changed unless you ask
 
 To search every project for one command, clear it:
@@ -191,7 +190,7 @@ Not tagged: security-risk, policy (repository hints; see phabfive hints)
 ```
 
 It is a reminder only, and the task is created with exactly the tags given. A
-spec given to `maniphest create --with` or `phabfive apply -f` gets the same line
+spec given to `phabfive apply -f` gets the same line
 for the hinted tags that any of its tasks lack, as `Not tagged on every task: ...`. Tags are compared by name,
 ignoring case, a leading `#`, and `-`, `_` or a space, so `security-risk`,
 `#Security_Risk` and `Security Risk` are one tag. A tag given by ID or PHID
