@@ -1,0 +1,24 @@
+# Wrong on purpose: reports `unknown-project`, online.
+#
+# Offline this file is clean: a hashtag and a project name are both
+# well-formed, and whether the instance has a project by either one is not
+# a question the file can answer. A project created by this same spec is
+# written `$id` and checked offline instead - see dangling-local-id.yaml.
+# The online layer asks for every project in one pass, so both are
+# reported together.
+#
+#   phabfive spec validate specs/broken/unknown-project.yaml
+spec: phorge/v1alpha1
+kind: create
+metadata:
+  name: unknown-project
+  description: A tag by hashtag and a tag by name the instance does not have.
+  version: "1"
+  author: phabfive
+
+tasks:
+  - title: Rotate the build server host keys
+    description: Both projects below are well-formed and neither one exists.
+    projects:
+      - "#no-such-team"
+      - Nobody's Board
