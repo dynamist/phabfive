@@ -18,8 +18,9 @@ the exclusion is one fact in one place rather than a skip in each test.
 | `duplicate-local-id.yaml` | `duplicate-local-id` | offline |
 | `dangling-local-id.yaml` | `unknown-local-id` | offline |
 | `unknown-user.yaml` | `unknown-user` | online |
+| `unknown-project.yaml` | `unknown-project` | online |
 
 The first three need no instance: they are questions a file answers about
-itself. The fourth needs one, because whether `nobody.here` is a user is not
-something the file can know - which is the whole reason validation has two
-layers.
+itself. The last two need one, because whether `nobody.here` is a user or
+`#no-such-team` is a project is not something the file can know - which is
+the whole reason validation has two layers.

@@ -14,10 +14,10 @@ glob rather than in a skip list here - one fact in one place. If a run of
 `tests/test_spec_corpus.py` ever fails naming a file under `specs/broken/`,
 the glob is what to fix; these files are supposed to fail.
 
-Three of the four are decided offline, because they are questions a file
-answers about itself. The fourth - a user the instance does not have - is
-not, and that is the whole reason validation has two layers. Its online pass
-runs here against a mocked client, the way `tests/test_spec_validate_online.py`
+Three of the five are decided offline, because they are questions a file
+answers about itself. The other two - a user and a project the instance does
+not have - are not, and that is the whole reason validation has two layers.
+Their online pass runs here against a mocked client, the way `tests/test_spec_validate_online.py`
 does it: `Phabfive.__init__` is faked, `.phab` is a `MagicMock`, and no
 socket is opened.
 """
@@ -43,6 +43,7 @@ EXPECTED = {
     "duplicate-local-id.yaml": "duplicate-local-id",
     "dangling-local-id.yaml": "unknown-local-id",
     "unknown-user.yaml": "unknown-user",
+    "unknown-project.yaml": "unknown-project",
 }
 
 #: The ones whose answer needs no instance.
@@ -51,6 +52,13 @@ OFFLINE = (
     "duplicate-local-id.yaml",
     "dangling-local-id.yaml",
 )
+
+#: The ones only an instance can answer, and the fields each one reports
+#: under - all of them, in one pass.
+ONLINE = {
+    "unknown-user.yaml": {"assignment", "subscribers[0]"},
+    "unknown-project.yaml": {"projects[0]", "projects[1]"},
+}
 
 NAMES = sorted(EXPECTED)
 
@@ -64,7 +72,7 @@ def _errors(problems):
 
 
 def _phab_knowing_nobody():
-    """A client with an empty user directory, and a caller for `@me`."""
+    """A client with no users and no projects, and a caller for `@me`."""
     phab = MagicMock()
     phab.user.whoami.return_value = {
         "phid": "PHID-USER-caller",
@@ -155,28 +163,29 @@ def test_the_offline_fixture_reports_exactly_its_code(name):
     assert problem.reason.strip()
 
 
-def test_the_unknown_user_fixture_is_clean_until_an_instance_is_asked():
-    """Offline it is a well-formed username; only the instance knows.
+@pytest.mark.parametrize("name", sorted(ONLINE))
+def test_the_online_fixture_is_clean_until_an_instance_is_asked(name):
+    """Offline the names are well-formed; only the instance knows.
 
-    This is the fixture that shows why there are two layers at all. Asserted
-    from the other end as well - that it reports nothing offline - because a
-    file that failed offline would never reach the online pass and the
-    online assertion below would be vacuous.
+    These are the fixtures that show why there are two layers at all.
+    Asserted from the other end as well - that they report nothing offline -
+    because a file that failed offline would never reach the online pass and
+    the online assertion below would be vacuous.
     """
-    assert _errors(validate_offline(_spec("unknown-user.yaml"))) == []
+    assert _errors(validate_offline(_spec(name))) == []
 
 
-def test_the_unknown_user_fixture_reports_every_missing_name_at_once():
-    """Both names in one pass, which is the rule the online layer exists for."""
-    spec = _spec("unknown-user.yaml")
-    problems = _errors(validate_online(spec, _app(_phab_knowing_nobody())))
+@pytest.mark.parametrize("name", sorted(ONLINE))
+def test_the_online_fixture_reports_every_missing_name_at_once(name):
+    """Every name in one pass, which is the rule the online layer exists for."""
+    problems = _errors(validate_online(_spec(name), _app(_phab_knowing_nobody())))
 
-    assert problems, "the mocked instance knows nobody, so both names are unknown"
-    assert {problem.code for problem in problems} == {"unknown-user"}
+    assert problems, "the mocked instance knows nobody and no project"
+    assert {problem.code for problem in problems} == {EXPECTED[name]}
     assert all(problem.layer == Layer.ONLINE for problem in problems)
 
     fields = {problem.field for problem in problems}
 
-    assert fields == {"assignment", "subscribers[0]"}, (
+    assert fields == ONLINE[name], (
         f"one pass reports every unresolvable reference; got {sorted(fields)}"
     )

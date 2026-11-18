@@ -294,10 +294,10 @@ the source. Each `Problem` record carries a stable `code`, which is what a CI jo
 | `unknown-space` | online | `space:` names no Space | the message lists the Spaces you can see |
 
 The full vocabulary of codes is [on the format page](phorge-spec.md). [`specs/broken/`](https://github.com/dynamist/phabfive/tree/main/specs/broken) holds a
-runnable file for four of the codes in it, if you want to see a failure before you meet it.
-They are create specs, and four of the five rows above that they demonstrate
-(`undefined-variable`, `unknown-user`, and the two local-id codes from
-[Creating with Specs](create-specs.md#the-errors-you-will-actually-hit)) are reported the same
+runnable file for five of the codes in it, if you want to see a failure before you meet it.
+They are create specs, and every code they demonstrate (`undefined-variable`, `unknown-user`,
+`unknown-project`, and the two local-id codes from
+[Creating with Specs](create-specs.md#the-errors-you-will-actually-hit)) is reported the same
 way for either kind. `unknown-key` is the one that is not: a search item's key set is declared
 complete and a create item's is not, which is the precondition the
 [format page](phorge-spec.md#layer-1-offline) states.
