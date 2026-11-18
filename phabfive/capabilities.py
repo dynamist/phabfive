@@ -19,6 +19,10 @@ A caller that already sends the constraint should not probe first: it sends
 its real request, and on `rejects_constraint` records the answer with
 `remember_constraint` and falls back. That keeps a server that has the
 constraint answering exactly the requests it always did.
+
+A server bug is learned the same way, as a quirk: the request goes out as it
+always did, and only when the server fails on it in the known way is the
+workaround tried, and remembered with `remember_quirk` once it worked.
 """
 
 import logging
@@ -29,7 +33,8 @@ from phabfive.exceptions import PhabfiveAPIException
 log = logging.getLogger(__name__)
 
 #: What each client is known to accept: ``(method, constraint)`` to a bool,
-#: and ``(method, None)`` for whether a method exists.
+#: ``(method, None)`` for whether a method exists, and ``(method,
+#: "quirk:<name>")`` to True for a server bug it has.
 _known: "weakref.WeakKeyDictionary[object, dict[tuple[str, str | None], bool]]" = (
     weakref.WeakKeyDictionary()
 )
@@ -89,6 +94,46 @@ def remember_constraint(phab, method, key, supported):
         log.debug(f"{method} {'takes' if supported else 'has no'} constraint '{key}'")
 
     memo[(method, key)] = supported
+
+
+#: maniphest.search's quirk in Phorge before 2023.49 run on PHP 8.1 or newer
+#: (upstream T15604): it splits a cursor at "." and calls strlen() on the
+#: missing second half, which PHP reports as a deprecation and Phorge as an
+#: error, so every page after the first fails. A cursor ending in "." splits
+#: into the same task and an empty project, which every version reads as none.
+BARE_CURSOR = "bare-cursor"
+
+
+def rejects_bare_cursor(error):
+    """Whether `error` is maniphest.search failing on a cursor with no ".".
+
+    Parameters
+    ----------
+    error : Exception
+        What a ``maniphest.search`` call with ``after`` raised
+
+    Returns
+    -------
+    bool
+    """
+    return isinstance(error, PhabfiveAPIException) and (
+        "strlen(): Passing null to parameter #1" in str(error.message)
+    )
+
+
+def has_quirk(phab, method, quirk):
+    """Whether `method` is known to have the server bug `quirk`."""
+    return _memo(phab).get((method, f"quirk:{quirk}"), False)
+
+
+def remember_quirk(phab, method, quirk):
+    """Record that `method` has the server bug `quirk`."""
+    memo = _memo(phab)
+
+    if not memo.get((method, f"quirk:{quirk}")):
+        log.debug(f"{method} has the quirk '{quirk}', working around it")
+
+    memo[(method, f"quirk:{quirk}")] = True
 
 
 def supports_constraint(phab, method, key, value):
@@ -164,9 +209,13 @@ def supports_method(phab, method):
 
 
 __all__ = [
+    "BARE_CURSOR",
+    "has_quirk",
     "known_constraint",
+    "rejects_bare_cursor",
     "rejects_constraint",
     "remember_constraint",
+    "remember_quirk",
     "supports_constraint",
     "supports_method",
 ]

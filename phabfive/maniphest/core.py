@@ -11,6 +11,12 @@ from pathlib import Path
 
 from ruamel.yaml import YAML
 
+from phabfive.capabilities import (
+    BARE_CURSOR,
+    has_quirk,
+    rejects_bare_cursor,
+    remember_quirk,
+)
 from phabfive.commits import describe_commits, resolve_commit_phids
 from phabfive.constants import (
     MANIPHEST_ORDER_DEFAULT,
@@ -1439,7 +1445,22 @@ class Maniphest(Phabfive):
         other app. A caller that already holds a plain mapping, which is
         what a stub hands back, is passed through unchanged.
         """
-        result = self.phab.maniphest.search(**kwargs)
+        after = kwargs.get("after")
+        bare = isinstance(after, str) and after != "" and "." not in after
+
+        if bare and has_quirk(self.phab, "maniphest.search", BARE_CURSOR):
+            kwargs["after"] = f"{after}."
+
+        try:
+            result = self.phab.maniphest.search(**kwargs)
+        except PhabfiveAPIException as e:
+            # Asked as always, and only on this failure asked again, see
+            # BARE_CURSOR - so a server without the bug is never sent the
+            # workaround
+            if not bare or kwargs["after"] != after or not rejects_bare_cursor(e):
+                raise
+            result = self.phab.maniphest.search(**{**kwargs, "after": f"{after}."})
+            remember_quirk(self.phab, "maniphest.search", BARE_CURSOR)
 
         return getattr(result, "response", result)
 
