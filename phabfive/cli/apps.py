@@ -95,7 +95,7 @@ def connection_error(error):
     """
     if error.host:
         return str(error)
-    return f"Failed to connect to Phabricator API: {error}"
+    return f"Failed to connect to the Conduit API: {error}"
 
 
 __all__ = ["connection_error", "get_app", "new_app", "prompt_host"]

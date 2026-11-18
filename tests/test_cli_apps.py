@@ -66,7 +66,7 @@ class TestGetApp:
 
         assert exit_info.value.exit_code == 1
         assert capsys.readouterr().err == (
-            "Error: Failed to connect to Phabricator API: down\n"
+            "Error: Failed to connect to the Conduit API: down\n"
         )
 
     def test_a_host_that_answered_an_error_is_named(self, capsys):
@@ -114,7 +114,7 @@ class TestEntrypoint:
         )
 
         assert code == 1
-        assert err == "Error: Failed to connect to Phabricator API: refused\n"
+        assert err == "Error: Failed to connect to the Conduit API: refused\n"
 
     def test_a_connection_error_naming_its_host(self, monkeypatch, capsys):
         error = PhabfiveConnectionException(

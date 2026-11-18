@@ -217,7 +217,7 @@ def fetch_all_transactions(
     except AttributeError as e:
         log.warning(
             f"Unexpected API response structure for {task_phid}: {e}. "
-            "The Phabricator API format may have changed."
+            "The Conduit API format may have changed."
         )
         return result_dict
     except KeyError as e:
@@ -317,7 +317,7 @@ def fetch_task_transactions(phab, task_phid):
         # API structure changed or unexpected response format
         log.warning(
             f"Unexpected API response structure for {task_phid}: {e}. "
-            "The Phabricator API format may have changed."
+            "The Conduit API format may have changed."
         )
         return []
     except KeyError as e:
@@ -418,7 +418,7 @@ def fetch_priority_transactions(phab, task_phid, priority_map_func):
     except AttributeError as e:
         log.warning(
             f"Unexpected API response structure for {task_phid}: {e}. "
-            "The Phabricator API format may have changed."
+            "The Conduit API format may have changed."
         )
         return []
     except KeyError as e:

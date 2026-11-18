@@ -21,7 +21,7 @@ except ImportError:
 class Repl(Phabfive):
     def run(self):
         print("phabfive REPL")
-        print("  phab  - Phabricator API client")
+        print("  phab  - Conduit API client")
         print("  conf  - Current configuration")
         print("  url   - Server address")
         print("  pp()  - Pretty print API responses")
