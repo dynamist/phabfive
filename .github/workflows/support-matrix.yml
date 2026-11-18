@@ -1,0 +1,128 @@
+---
+# docs/support-matrix.md says which Phorge and Phabricator versions phabfive
+# works with, measured by a Kubernetes run that tests every version. The weekly
+# Kubernetes run is such a measurement, and this reads it once it completes.
+#
+# When it agrees with the run the doc cites - every version deployed, nothing
+# failed, no known gap closed, the same versions tested - the doc's "Last
+# measured on" line moves to it, committed straight to main. A GITHUB_TOKEN
+# push starts no workflow, so it costs no deployment on main. Read the Docs
+# builds from its webhook, not a workflow, so latest should still rebuild.
+#
+# When it does not, the Versions table and Known Gaps need a person: they are
+# prose, and the missing_before() markers in tests/ move with them. So the doc
+# is left alone and an issue carries the grid instead.
+#
+# workflow_run and workflow_dispatch only see this file on the default branch.
+name: Support matrix
+
+on:
+  workflow_run:
+    workflows: [Kubernetes]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The Kubernetes run to read, a full measurement
+        required: true
+      dry_run:
+        description: Only report, do not commit or touch the issue
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: Update the support matrix
+    runs-on: ubuntu-latest
+    # Only the weekly run tests every version. A cancelled run measured nothing
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'schedule' &&
+      github.event.workflow_run.conclusion != 'cancelled')
+    # On the job, not the workflow: every Kubernetes run of a pull request
+    # starts this workflow too, and a skipped one queued in the group would
+    # replace the weekly one waiting there
+    concurrency:
+      group: ${{ github.workflow }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+      DRY_RUN: ${{ inputs.dry_run || false }}
+      TITLE: The support matrix no longer matches the weekly run
+    steps:
+      # The doc as it is now, not as it was when the run started
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          # the push rebases onto whatever reached main meanwhile
+          fetch-depth: 0
+
+      - name: Judge the run against the doc
+        id: judge
+        run: |
+          set +e
+          python3 scripts/support_matrix.py "$RUN_ID" \
+            --update-doc docs/support-matrix.md --report report.md
+          status=$?
+          set -e
+          cat report.md >> "$GITHUB_STEP_SUMMARY" || true
+          case $status in
+            0) echo "verdict=agrees" >> "$GITHUB_OUTPUT" ;;
+            3) echo "verdict=drift" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+
+      - name: Commit the new measurement
+        if: steps.judge.outputs.verdict == 'agrees' && env.DRY_RUN != 'true'
+        run: |
+          if git diff --quiet docs/support-matrix.md; then
+            echo "The doc already cites run $RUN_ID"
+            exit 0
+          fi
+          date=$(sed -n 's/^Last measured on \[\([0-9-]*\)\].*/\1/p' docs/support-matrix.md)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: support matrix measured on $date" docs/support-matrix.md
+          # main may have moved while the run was reading
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt * 10))
+          done
+          exit 1
+
+      - name: Close the drift issue
+        if: steps.judge.outputs.verdict == 'agrees' && env.DRY_RUN != 'true'
+        run: |
+          existing=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "Run $RUN_URL agrees with the doc again, which now cites it."
+          fi
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.run_id || github.event.workflow_run.id }}
+
+      - name: Open or update the drift issue
+        if: steps.judge.outputs.verdict == 'drift' && env.DRY_RUN != 'true'
+        run: |
+          {
+            cat report.md
+            printf '%s\n' "" \
+              "Either phabfive broke on a version, and wants fixing, or the support matrix" \
+              "changed: a version is new or gone, or a known gap closed. Then update the" \
+              "Versions table and Known Gaps in docs/support-matrix.md, and the" \
+              "missing_before() marker in tests/ with them, and cite this run in its" \
+              "\"Last measured on\" line. The next weekly run that agrees closes this issue."
+          } > body.md
+          existing=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "$TITLE" --body-file body.md
+          fi

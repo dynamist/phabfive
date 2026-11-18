@@ -540,7 +540,7 @@ CI (`.github/workflows/k8s.yml`) validates the manifests, then creates a k3d clu
 
 - a push to `main`, and a pull request, test `stable`
 - a pull request labelled `ci:phorge-<branch or tag>` or `ci:phabricator-<branch>`, such as `ci:phorge-master`, `ci:phorge-2025.51` or `ci:phabricator-stable`, tests exactly the labelled versions instead, and deploys even when the gate would have skipped it. Any branch or tag works once the label exists
-- the weekly run and a manual run test `stable`, `master`, the two newest release tags, found when the run starts, and `phabricator-stable`. A manual run can name other versions in its `versions` input
+- the weekly run and a manual run are a full measurement: `stable`, `master`, every release tag, found when the run starts, `phabricator-stable` and `phabricator-master`. A manual run can name other versions in its `versions` input. The [Support Matrix](support-matrix.md#how-this-is-tested) is kept from the weekly run
 
 `master` may fail without failing the workflow, it is a heads-up about the next release. A coexistence job deploys the apps listed in the repository variable `COEXISTENCE_REPOS` (space separated `owner/name`) into the same cluster and runs every app's tests, which also checks that the apps cannot reach each other and that all repos pin the same `k8s/cluster/k3d.yaml`. Each of those repos must provide the make targets `ci-deploy` and `ci-test`.
 

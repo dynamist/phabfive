@@ -39,18 +39,19 @@ A repository's `Hosted` works everywhere, by another route before 2025.51: those
 The `Kubernetes` workflow deploys a Phorge, or Phabricator, built from upstream at a branch or tag, on the newest PHP it runs on, and runs the `tests/k8s` and `tests/e2e` suites against it. Each version uploads its JUnit results as the artifact `test-results-<version>`. [Phorge Setup](phorge-setup.md#phorge-versions) explains how the versions are built.
 
 - Every pull request tests `stable`, or the versions of its `ci:phorge-*` and `ci:phabricator-*` labels.
-- The weekly run tests `stable`, `master`, the two newest Phorge releases and `phabricator-stable`.
-- A full measurement tests every version:
+- The weekly run, every Monday, is a full measurement: `stable`, `master`, every Phorge release, found when the run starts, `phabricator-stable` and `phabricator-master`.
 
-```bash
-versions="stable master phabricator-stable phabricator-master $(git ls-remote --tags --refs https://github.com/phorgeit/phorge.git | sed -n 's|.*refs/tags/||p' | grep -E '^[0-9]{4}\.[0-9]+$' | sort -V | tr '\n' ' ')"
-gh workflow run k8s.yml -f versions="$versions"
-```
-
-When the run is done, `scripts/support_matrix.py` turns it into a grid of the tests that do not pass on every version, and shows the end of the log of any version that did not deploy. Write this page from that grid:
+`scripts/support_matrix.py` turns a run into a grid of the tests that do not pass on every version, and shows the end of the log of any version that did not deploy. This page is written from that grid:
 
 ```bash
 python3 scripts/support_matrix.py <run id>
+```
+
+When the weekly run is done, the `Support matrix` workflow compares it with the run this page cites. If every version deployed, nothing failed, no known gap closed and the same versions were tested, it moves "Last measured on" to the new run. Otherwise it leaves the page alone and opens an issue with the grid, since what changed has to be written here by hand. A full measurement can also be started by hand, and read the same way once it completes:
+
+```bash
+gh workflow run k8s.yml
+gh workflow run support-matrix.yml -f run_id=<run id> -f dry_run=false
 ```
 
 A test that fails on an older version because that version lacks something is expected to fail there, through `missing_before()` in `tests/phorge_versions.py`, rather than skipped, so a gap that closes shows up as an unexpected pass.

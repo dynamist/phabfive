@@ -102,10 +102,10 @@ gh pr edit <number> --add-label ci:k8s
 The same job picks the Phorge versions the deploy matrix tests. A push to `main` and a pull request
 test `stable`. A pull request labelled `ci:phorge-<branch or tag>` or `ci:phabricator-<branch>`
 tests exactly those versions instead - any ref Phorge and Arcanist both have works once the label
-exists, `master`, the release tags and `ci:phabricator-stable` are created. The weekly and manual runs test `stable`, `master`, the two newest
-release tags, found at run time, so a new Phorge release needs no workflow change, and
+exists, `master`, the release tags and `ci:phabricator-stable` are created. The weekly and manual runs are a full measurement: `stable`, `master`,
+every release tag, found at run time, so a new Phorge release needs no workflow change,
 `phabricator-stable` - Phabricator as Phacility left it, the closest stand-in for a Phacility-hosted
-instance, which may carry patches that were never published. `master` runs
+instance, which may carry patches that were never published - and `phabricator-master`. `master` runs
 with `continue-on-error`: its breakage is a heads-up, not a failure.
 
 ```bash
@@ -146,10 +146,15 @@ what fails where and why. Keep it true:
   constraint sends it as before, and only on `rejects_constraint` remembers that and falls back,
   so a server that has it is asked exactly what it always was - `search_projects` in
   `phabfive/project/fetchers.py` is the pattern
-- After a new Phorge release, or a change to `scripts/phorge-build-args.sh`, run the full
-  measurement the doc describes, read the run with `python3 scripts/support_matrix.py <run id>`,
-  and update the Versions table and the run it cites. A strict xfail that passes shows as `X`:
-  a gap has closed, so remove its marker and its Known Gaps row
+- The weekly Kubernetes run is the full measurement. `.github/workflows/support-matrix.yml`
+  reads it with `scripts/support_matrix.py --update-doc`: when it agrees with the run the doc
+  cites, a bot commit to `main` moves "Last measured on" to it, and nothing else in the doc is
+  ever written by a bot. Otherwise it opens or updates the issue "The support matrix no longer
+  matches the weekly run" with the grid - a new release, a failure, or a strict xfail that
+  passes (`X`: a gap has closed, so remove its marker and its Known Gaps row). Answer it by
+  updating the Versions table and Known Gaps and citing that run; the next agreeing run closes
+  it. After a change to `scripts/phorge-build-args.sh`, start a measurement by hand as the doc
+  describes rather than waiting for Monday
 
 ## Architecture
 

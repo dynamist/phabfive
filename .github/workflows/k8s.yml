@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       versions:
-        description: Phorge branches or tags to test, space separated, phabricator-stable for Phabricator (blank for stable, master, the two newest releases and phabricator-stable)
+        description: Phorge branches or tags to test, space separated, phabricator-stable for Phabricator (blank for a full measurement - every release, stable, master, phabricator-stable and phabricator-master)
         required: false
         default: ""
 
@@ -66,9 +66,11 @@ jobs:
       matrix: ${{ steps.versions.outputs.matrix }}
     steps:
       # stable on every change, or the versions of the ci:phorge-* and
-      # ci:phabricator-* labels on a pull request. Weekly, stable, master and
-      # the two newest releases, which upstream tags YYYY.WW, so a new release
-      # needs no change here, and Phabricator, which Phacility still hosts
+      # ci:phabricator-* labels on a pull request. Weekly, a full measurement:
+      # stable, master, every release, which upstream tags YYYY.WW, so a new
+      # release needs no change here, and Phabricator, which Phacility still
+      # hosts. The support-matrix workflow reads that run into
+      # docs/support-matrix.md
       - name: Pick the versions
         id: versions
         env:
@@ -80,9 +82,10 @@ jobs:
 
           if [ "$EVENT" = schedule ] || { [ "$EVENT" = workflow_dispatch ] && [ -z "$INPUT" ]; }; then
             releases=$(git ls-remote --tags --refs https://github.com/phorgeit/phorge.git |
-              sed -n 's|.*refs/tags/||p' | grep -E '^[0-9]{4}\.[0-9]+$' | sort -V | tail -2)
+              sed -n 's|.*refs/tags/||p' | grep -E '^[0-9]{4}\.[0-9]+$' | sort -V)
             # shellcheck disable=SC2086
-            versions=$(printf '%s\n' stable master $releases phabricator-stable | jq -Rnc '[inputs]')
+            versions=$(printf '%s\n' stable master $releases phabricator-stable phabricator-master |
+              jq -Rnc '[inputs]')
           elif [ "$EVENT" = workflow_dispatch ]; then
             # shellcheck disable=SC2086
             versions=$(printf '%s\n' $INPUT | jq -Rnc '[inputs]')
