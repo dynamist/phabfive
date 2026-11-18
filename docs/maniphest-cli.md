@@ -299,10 +299,6 @@ exist, Jinja2 variables, assignments, subscribers, Spaces and per-task projects.
 [Creating with Specs](create-specs.md) for the guide and
 [the format page](phorge-spec.md) for every key.
 
-`phabfive maniphest create --with FILE` still reads the same file and still works, but warns
-that `phabfive apply -f FILE` replaces it. `project create` and `paste create` take `--with`
-too, and all three read every spec a create spec may be, whatever it creates.
-
 ## Task Search
 
 Search for tasks using free-text queries and various filtering options, including advanced project pattern matching with AND/OR logic.
@@ -327,10 +323,6 @@ Everything inside a spec's `search:` block is the same vocabulary as the flags b
 `column:` is `--column`, `show-history:` is `--show-history`. See
 [Searching with Specs](search-specs.md) for the guide and [the format page](phorge-spec.md)
 for every key.
-
-`phabfive maniphest search --with FILE` still works and still lets command-line flags override
-what the file says, but warns that `phabfive search -f FILE` replaces it - and unlike
-`--with`, `search -f` runs project, paste and passphrase items too.
 
 ### Free-Text Search
 
@@ -1638,10 +1630,10 @@ This helps you understand exactly why a task appeared in your search results.
 
 ## Real-World Workflows
 
-**💡 Tip**: Many of these common workflows already ship as search specs under `specs/search/`:
-- `project-status-overview.yaml` - Comprehensive project health check
-- `development-workflow-audit.yaml` - Development process analysis
-- `blocked-tasks.yaml` - Find workflow bottlenecks
+**💡 Tip**: Many of these common workflows already exist as example search specs under [`specs/search/`](https://github.com/dynamist/phabfive/tree/main/specs/search):
+- [`project-status-overview.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/project-status-overview.yaml) - Comprehensive project health check
+- [`development-workflow-audit.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/development-workflow-audit.yaml) - Development process analysis
+- [`blocked-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/blocked-tasks.yaml) - Find workflow bottlenecks
 
 Run one with `phabfive search -f specs/search/blocked-tasks.yaml`. See
 [Searching with Specs](search-specs.md) for the complete list.

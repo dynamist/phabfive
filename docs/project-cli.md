@@ -226,7 +226,6 @@ Subprojects and milestones are included.
 | `--watcher` | That any of these users watches: `@user`, `user` or `@me` |
 | `--order`, `-o` | How to sort: see [Ordering](#ordering) |
 | `--limit`, `-l` | This many at most; `0` for all. Defaults to 100 |
-| `--with` | Reads the searches from a YAML search spec |
 
 Watching can only be searched on. Conduit's `project.edit` has no watchers
 transaction, so a project is watched and unwatched in the web UI, with the
@@ -236,17 +235,7 @@ and `--leave` change.
 `--status=any` is the same word `maniphest search` uses. `--all` is a
 deprecated alias for it and prints a warning on stderr.
 
-`--with` runs what the spec says. The options a spec has a key for -
-`QUERY`, `--member`, `--parent`, `--ancestor`, `--milestones`, `--status`,
-`--icon`, `--color`, `--space`, `--show-policy`, `--show-members` and
-`--limit` - override the spec's value for every search in it. The five that a
-spec has no key for yet - `--ids`, `--phids`, `--slug`, `--watcher` and
-`--order` - are **refused** together with `--with` rather than accepted and
-ignored, because silently dropping a filter answers a narrower question than
-the one asked.
-
-A saved search is a search spec, the same format `maniphest search --with`
-reads:
+A saved search is a search spec, run with `phabfive search -f FILE`:
 
 ```yaml
 kind: search
@@ -257,10 +246,7 @@ searches:
 ```
 
 One document may hold searches of several kinds - projects, tasks, pastes and
-credentials - and they run in the order they are written. Run a mixed document
-from `project search`, `paste search` or `passphrase search`: `maniphest
-search --with` runs task searches only, and refuses an item of another type by
-name rather than running it as one. See
+credentials - and they run in the order they are written. See
 [Searching with Specs](search-specs.md#several-applications-in-one-file).
 
 ### Ordering
@@ -489,4 +475,4 @@ renamed project completes straight away. See [Caching](caching.md).
 - [Policies](policies.md): the policy grammar and how policies are displayed
 - [Maniphest CLI](maniphest-cli.md): filing tasks under projects with `--tag`
 - [Caching](caching.md): the `projects` and `project-icons` caches
-- [Searching with Specs](search-specs.md): saving a search as a spec, and `--with`
+- [Searching with Specs](search-specs.md): saving a search as a spec

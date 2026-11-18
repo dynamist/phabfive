@@ -29,7 +29,7 @@ without `--tag` puts the new task on it; stderr then says `Searching workboard <
 `Counting workboard <name>` or `Tagging with workboard <name>`. So a bare
 `phabfive maniphest search` lists the repository's open tasks. Pass `--tag` for a
 different project, or prefix the command with `PHORGE_WORKBOARD=` to search every project.
-`--ids`, `--phids`, `--with` and `edit` are never scoped.
+`--ids`, `--phids` and `edit` are never scoped.
 
 The same object can list `"hints"`: other tags this repository's tasks often need, as
 `"tags": {"hints": {"<tag>": "<when it applies here>"}}`.
@@ -163,8 +163,6 @@ object it would create, because the plan is the thing you asked for.
 children alike, in the order they were created - `status`, `monogram`, `phid` and the
 `path` in the file that asked for it. A run that stopped partway still answers with the
 whole list, the objects that were not reached marked `skipped`, and exits 4.
-`maniphest create --with=SPEC`, the deprecated spelling, answers with one `show` record
-per task instead.
 
 `cache clear` is the one write with no Phorge object behind it, so it has no `show`
 record to give. It answers with what it did instead, in `cache info`'s vocabulary:
@@ -1035,16 +1033,6 @@ objects exist. `search` is the same without `4`, and adds a search item that nam
 filter at all to `1`. `spec validate` is the same without `4` too. A usage mistake - a
 missing `-f`, an unknown flag - is click's own exit 2, so a `2` from any of the three is
 not always an online failure; the message says which.
-
-`--with` is the deprecated spelling, on seven commands: `maniphest`, `project` and
-`paste create`, and `maniphest`, `project`, `paste` and `passphrase search`. It is the
-same reader as `-f`, so all four serializations load at every one of them, and it warns
-once naming `apply -f` or `search -f`. Two differences from `-f` are worth knowing:
-a `create --with` **refuses** any other option on the line rather than dropping it,
-because a create spec is applied as it stands; a `search --with` lets the options beside
-it override what the spec says. `maniphest search` runs task searches only, so a spec
-holding a project, paste or passphrase search is refused by name there — every other
-`search --with` runs all of them. Prefer `apply -f` and `search -f`.
 
 `specs/` in the repository holds runnable examples of every kind and of all four
 serializations; `specs/broken/` holds files that are wrong on purpose, each named after

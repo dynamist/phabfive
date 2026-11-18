@@ -398,7 +398,7 @@ After configuring phabfive, you can populate Phorge with a year of realistic tes
 uv run phabfive apply -f specs/create/large-programme.yaml
 ```
 
-This creates a full year simulation of project work, including epics with subtasks, varied priorities, and assignments across the default projects. It is the largest spec that ships - about seventy objects - which is what makes it the one worth running against a disposable instance.
+This creates a full year simulation of project work, including epics with subtasks, varied priorities, and assignments across the default projects. It is the largest example spec - about seventy objects - which is what makes it the one worth running against a disposable instance.
 
 Use `--dry-run` to plan it without creating anything:
 
@@ -406,7 +406,7 @@ Use `--dry-run` to plan it without creating anything:
 uv run phabfive apply -f specs/create/large-programme.yaml --dry-run
 ```
 
-`specs/` holds smaller ones too: `specs/create/sprint-tasks.yaml` is three tasks, and `specs/search/blocked-tasks.yaml` is a search to run afterwards with `phabfive search -f`.
+[`specs/`](https://github.com/dynamist/phabfive/tree/main/specs) holds smaller ones too: [`specs/create/sprint-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/create/sprint-tasks.yaml) is three tasks, and [`specs/search/blocked-tasks.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/search/blocked-tasks.yaml) is a search to run afterwards with `phabfive search -f`.
 
 ## Using the API Token
 

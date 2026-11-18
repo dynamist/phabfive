@@ -154,7 +154,7 @@ entry YAML would read as a number: `"+1"`.
 `assignment: "@none"` clears the assignee. `priority: raise` and `column: forward` are
 refused: they are moves, and a file that is applied twice has to name where the task ends up.
 
-`specs/edit/close-out.yaml` is a small one to copy.
+[`specs/edit/close-out.yaml`](https://github.com/dynamist/phabfive/blob/main/specs/edit/close-out.yaml) is a small one to copy.
 
 ### The column follows the projects
 
