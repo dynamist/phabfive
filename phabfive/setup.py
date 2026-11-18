@@ -105,11 +105,11 @@ class SetupWizard:
 
     def _prompt_url(self) -> bool:
         """Prompt for and validate the Phabricator URL."""
-        self.console.print("[bold][1/3] Phabricator URL[/bold]")
+        self.console.print("[bold][1/3] Instance URL[/bold]")
 
         while True:
             url = Prompt.ask(
-                "Enter your Phabricator URL (e.g., https://phorge.example.com)"
+                "Enter your Phorge or Phabricator URL (e.g., https://phorge.example.com)"
             )
 
             if not url:
@@ -327,7 +327,7 @@ def _setup_arcconfig(console) -> bool:
 
     while True:
         url = Prompt.ask(
-            "Enter your Phabricator URL (e.g., https://phorge.example.com)"
+            "Enter your Phorge or Phabricator URL (e.g., https://phorge.example.com)"
         )
 
         if not url:

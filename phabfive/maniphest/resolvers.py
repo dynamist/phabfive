@@ -996,7 +996,7 @@ def resolve_space_phids(phab, space: str, all_spaces: dict | None = None) -> lis
             all_spaces = fetch_all_spaces(phab)
 
         if not all_spaces:
-            log.warning("No spaces found in Phabricator instance")
+            log.warning("No spaces found on this instance")
             return []
 
         # Check if wildcard search is needed

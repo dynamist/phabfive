@@ -1360,10 +1360,7 @@ class TaskResolver:
         return ResolveResult(
             value=value,
             problem="unknown-reference",
-            reason=(
-                f"No such task: {value!r}. Unable to find it in this "
-                "phabricator instance"
-            ),
+            reason=(f"No such task: {value!r}. Unable to find it on this instance"),
         )
 
 

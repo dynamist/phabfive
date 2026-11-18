@@ -284,7 +284,7 @@ def search(
 
 @user_app.command()
 def setup(ctx: typer.Context) -> None:
-    """Configure phabfive with your Phabricator URL and API token."""
+    """Configure phabfive with your Phorge or Phabricator URL and API token."""
     from phabfive.setup import SetupWizard
 
     wizard = SetupWizard()

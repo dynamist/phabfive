@@ -12,7 +12,7 @@ repl_app = typer.Typer(
 
 @repl_app.callback(invoke_without_command=True)
 def repl_callback(ctx: typer.Context) -> None:
-    """Start an interactive REPL session with Phabricator API access."""
+    """Start an interactive REPL session with Conduit API access."""
     from phabfive.cli.apps import get_app
     from phabfive.repl import Repl
 
