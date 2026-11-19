@@ -88,15 +88,10 @@ def test_exactly_these_commands_take_with():
 @pytest.mark.parametrize("path", sorted(EXPECTED), ids=lambda path: " ".join(path))
 def test_the_option_is_the_shared_declaration(path):
     """Help and completer come from the factory, not from a local copy."""
-    from typer.main import get_click_param
-    from typer.models import ParamMeta
-
-    kind = EXPECTED[path]
-    wanted, _ = get_click_param(
-        ParamMeta(name="with_template", default=with_spec_option(kind), annotation=str)
-    )
-
-    assert FOUND[path].help == wanted.help
+    # Read off the declaration itself: typer hands an option's help to click
+    # unchanged, and the function that built a click parameter from a
+    # declaration was private to typer, and gone in 0.29.
+    assert FOUND[path].help == with_spec_option(EXPECTED[path]).help
 
 
 @pytest.mark.parametrize("path", sorted(EXPECTED), ids=lambda path: " ".join(path))
