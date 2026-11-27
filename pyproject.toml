@@ -52,7 +52,7 @@ repl = ["ptpython>=3.0.32"]
 [dependency-groups]
 docs = ["mkdocs>=1.6.1"]
 test = [
-  "coverage>=7.17.2",
+  "coverage>=7.17.4",
   # A test oracle for phabfive.spec.schema, never a runtime dependency: the
   # offline validator is hand-rolled so it can name the field and the code a
   # frontend renders, and so the frozen builds stay free of a native wheel.
@@ -63,10 +63,10 @@ test = [
   # Capped until dynamist/phabfive#322, 0.16 widened the default rule set
   "ruff>=0.15.22,<0.16",
   "types-appdirs>=1.4.3.5",
-  "types-pyyaml>=6.0.12.20261111",
+  "types-pyyaml>=6.0.12.20261122",
   "types-requests>=2.33.0.20261030",
 ]
-dev = [{ include-group = "test" }, "tox>=4.67.13", "tox-uv>=1.37.7"]
+dev = [{ include-group = "test" }, "tox>=4.67.15", "tox-uv>=1.37.9"]
 
 [project.scripts]
 phabfive = "phabfive.cli:cli_entrypoint"
